@@ -55,6 +55,7 @@ model Tenant {
   notes         Note[]
   tasks         Task[]
   auditLogs     AuditLog[]
+  invites       Invite[]
 
   @@map("tenants")
 }
@@ -74,6 +75,7 @@ model User {
   notes            Note[]
   assignedTasks    Task[]              @relation("AssignedTasks")
   auditLogs        AuditLog[]
+  invitesIssued    Invite[]            @relation("InviteIssuer")
 
   @@map("users")
 }
@@ -283,5 +285,26 @@ model AuditLog {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user   User?  @relation(fields: [userId], references: [id])
 
+  @@index([tenantId, createdAt])
   @@map("audit_logs")
+}
+
+model Invite {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  email      String
+  role       Role     @default(agent)
+  token      String   @unique
+  invitedBy  String?  @map("invited_by")
+  status     String   @default("pending") // pending | accepted | revoked | expired
+  expiresAt  DateTime @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter  User?  @relation("InviteIssuer", fields: [invitedBy], references: [id])
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("invites")
 }

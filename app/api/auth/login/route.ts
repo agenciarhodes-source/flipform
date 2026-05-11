@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword, setSessionCookie } from '@/lib/auth';
 import { loginSchema } from '@/lib/schemas';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
       include: { tenant: true },
       orderBy: { createdAt: 'asc' },
     });
-    if (!tu) return NextResponse.json({ error: 'Sem empresa associada' }, { status: 403 });
+    if (!tu) return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
 
     await setSessionCookie({
       userId: user.id,
@@ -31,6 +32,12 @@ export async function POST(req: Request) {
       email: user.email,
       name: user.name,
       tenantSlug: tu.tenant.slug,
+    });
+
+    await logAudit({
+      tenantId: tu.tenantId, userId: user.id,
+      entityType: 'session', entityId: user.id, action: 'auth.login',
+      metadata: { email: user.email, role: tu.role },
     });
 
     return NextResponse.json({ ok: true });

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withAuth } from '@/lib/auth';
+import { withPermission } from '@/lib/rbac-server';
+import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 
-export const GET = withAuth(async (_req, session, ctx: { params: { id: string } }) => {
+export const GET = withPermission('FORMS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const form = await prisma.form.findFirst({
     where: { id: ctx.params.id, tenantId: session.tenantId },
     include: { fields: { orderBy: { orderIndex: 'asc' } } },
@@ -12,7 +13,7 @@ export const GET = withAuth(async (_req, session, ctx: { params: { id: string } 
   return NextResponse.json({ form });
 });
 
-export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {
+export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
   try {
     const body = await req.json();
     const parsed = formCreateSchema.safeParse(body);
@@ -63,9 +64,14 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
   }
 });
 
-export const DELETE = withAuth(async (_req, session, ctx: { params: { id: string } }) => {
+export const DELETE = withPermission('FORMS_DELETE', async (_req, session, ctx: { params: { id: string } }) => {
   const existing = await prisma.form.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!existing) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   await prisma.form.delete({ where: { id: ctx.params.id } });
+  await logAudit({
+    tenantId: session.tenantId, userId: session.userId,
+    entityType: 'form', entityId: existing.id, action: 'form.deleted',
+    metadata: { name: existing.name, slug: existing.slug },
+  });
   return NextResponse.json({ ok: true });
 });

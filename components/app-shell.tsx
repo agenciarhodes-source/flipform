@@ -4,19 +4,22 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { can } from '@/lib/rbac';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LayoutDashboard, KanbanSquare, Users, FileText, Settings, BarChart3, LogOut, Zap, ChevronDown, Menu } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Users, FileText, Settings, BarChart3, LogOut, Zap, ChevronDown, Menu, UserCog } from 'lucide-react';
 import type { SessionPayload } from '@/lib/auth';
 
-const nav = [
+type NavItem = { href: string; label: string; icon: any; show?: (role: string) => boolean };
+const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/kanban',    label: 'Kanban',    icon: KanbanSquare },
   { href: '/leads',     label: 'Leads',     icon: Users },
   { href: '/forms',     label: 'Formulários', icon: FileText },
-  { href: '/reports',   label: 'Relatórios', icon: BarChart3 },
-  { href: '/settings',  label: 'Configurações', icon: Settings },
+  { href: '/reports',   label: 'Relatórios', icon: BarChart3, show: (r) => can(r, 'REPORTS_VIEW') },
+  { href: '/users',     label: 'Usuários',  icon: UserCog, show: (r) => can(r, 'USERS_VIEW') },
+  { href: '/settings',  label: 'Configurações', icon: Settings, show: (r) => can(r, 'SETTINGS_VIEW') },
 ];
 
 export function AppShell({ children, session }: { children: React.ReactNode; session: SessionPayload }) {
@@ -47,7 +50,7 @@ export function AppShell({ children, session }: { children: React.ReactNode; ses
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
-          {nav.map((item) => {
+          {NAV.filter((item) => !item.show || item.show(session.role)).map((item) => {
             const active = pathname.startsWith(item.href);
             const Icon = item.icon;
             return (
@@ -87,7 +90,7 @@ export function AppShell({ children, session }: { children: React.ReactNode; ses
             </Button>
             <div>
               <div className="font-heading font-semibold">
-                {nav.find((n) => pathname.startsWith(n.href))?.label || 'LeadFlow'}
+                {NAV.find((n) => pathname.startsWith(n.href))?.label || 'LeadFlow'}
               </div>
             </div>
           </div>

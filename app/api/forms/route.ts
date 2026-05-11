@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withAuth } from '@/lib/auth';
+import { withPermission } from '@/lib/rbac-server';
+import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { slugify } from '@/lib/utils';
 
-export const GET = withAuth(async (_req, session) => {
+export const GET = withPermission('FORMS_VIEW', async (_req, session) => {
   const forms = await prisma.form.findMany({
     where: { tenantId: session.tenantId },
     include: { _count: { select: { leads: true, fields: true } } },
@@ -13,7 +14,7 @@ export const GET = withAuth(async (_req, session) => {
   return NextResponse.json({ forms });
 });
 
-export const POST = withAuth(async (req, session) => {
+export const POST = withPermission('FORMS_CREATE', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = formCreateSchema.safeParse(body);
