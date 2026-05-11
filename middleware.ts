@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 
 const COOKIE = 'leadflow_token';
-const PROTECTED = ['/dashboard', '/kanban', '/leads', '/forms', '/reports', '/settings', '/users'];
+const PROTECTED = ['/dashboard', '/kanban', '/leads', '/forms', '/pipelines', '/reports', '/settings', '/users'];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -14,5 +14,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/kanban/:path*', '/leads/:path*', '/forms/:path*', '/reports/:path*', '/settings/:path*', '/users/:path*'],
+  matcher: ['/dashboard/:path*', '/kanban/:path*', '/leads/:path*', '/forms/:path*', '/pipelines/:path*', '/reports/:path*', '/settings/:path*', '/users/:path*'],
 };

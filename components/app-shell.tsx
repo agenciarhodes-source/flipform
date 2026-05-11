@@ -8,7 +8,7 @@ import { can } from '@/lib/rbac';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { LayoutDashboard, KanbanSquare, Users, FileText, Settings, BarChart3, LogOut, Zap, ChevronDown, Menu, UserCog } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Users, FileText, Settings, BarChart3, LogOut, Zap, ChevronDown, Menu, UserCog, Workflow } from 'lucide-react';
 import type { SessionPayload } from '@/lib/auth';
 
 type NavItem = { href: string; label: string; icon: any; show?: (role: string) => boolean };
@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { href: '/kanban',    label: 'Kanban',    icon: KanbanSquare },
   { href: '/leads',     label: 'Leads',     icon: Users },
   { href: '/forms',     label: 'Formulários', icon: FileText },
+  { href: '/pipelines', label: 'Pipelines', icon: Workflow, show: (r) => can(r, 'PIPELINES_VIEW') },
   { href: '/reports',   label: 'Relatórios', icon: BarChart3, show: (r) => can(r, 'REPORTS_VIEW') },
   { href: '/users',     label: 'Usuários',  icon: UserCog, show: (r) => can(r, 'USERS_VIEW') },
   { href: '/settings',  label: 'Configurações', icon: Settings, show: (r) => can(r, 'SETTINGS_VIEW') },

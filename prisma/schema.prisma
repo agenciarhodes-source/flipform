@@ -96,12 +96,13 @@ model TenantUser {
 }
 
 model Pipeline {
-  id        String   @id @default(uuid())
-  tenantId  String   @map("tenant_id")
-  name      String
-  isDefault Boolean  @default(false) @map("is_default")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  name       String
+  isDefault  Boolean  @default(false) @map("is_default")
+  isArchived Boolean  @default(false) @map("is_archived")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   stages PipelineStage[]
@@ -117,14 +118,15 @@ model PipelineStage {
   name       String
   color      String   @default("#3B82F6")
   orderIndex Int      @map("order_index")
+  isArchived Boolean  @default(false) @map("is_archived")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipeline       Pipeline           @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   formsAsInitial Form[]
-  leads    Lead[]
-  fromHistory LeadStageHistory[] @relation("FromStage")
-  toHistory   LeadStageHistory[] @relation("ToStage")
+  leads          Lead[]
+  fromHistory    LeadStageHistory[] @relation("FromStage")
+  toHistory      LeadStageHistory[] @relation("ToStage")
 
   @@map("pipeline_stages")
 }

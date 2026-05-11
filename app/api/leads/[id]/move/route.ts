@@ -20,6 +20,11 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     });
     if (!newStage) return NextResponse.json({ error: 'Etapa inválida' }, { status: 400 });
 
+    // Bloquear etapas arquivadas
+    if ((newStage as any).isArchived) {
+      return NextResponse.json({ error: 'Esta etapa está arquivada. Reative-a antes de mover leads.' }, { status: 400 });
+    }
+
     if (lead.stageId === stageId) {
       return NextResponse.json({ ok: true });
     }

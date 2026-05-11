@@ -6,11 +6,14 @@ import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow } from 'lucide-react';
+import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
 
-interface Stage { id: string; name: string; color: string; orderIndex: number; }
+interface Stage { id: string; name: string; color: string; orderIndex: number; isArchived?: boolean; }
+interface Pipeline { id: string; name: string; isDefault: boolean; isArchived: boolean; stages: Stage[]; }
 interface Lead {
   id: string; name: string; email: string | null; phone: string | null;
   stageId: string; source: string; temperature: 'cold' | 'warm' | 'hot'; tags: string[];
@@ -72,6 +75,8 @@ function Column({ stage, leads, onCardClick }: { stage: Stage; leads: Lead[]; on
 }
 
 export default function KanbanPage() {
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [search, setSearch] = useState('');
@@ -80,19 +85,31 @@ export default function KanbanPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
-  const load = async () => {
-    const [pipRes, leadsRes] = await Promise.all([
-      fetch('/api/pipelines').then((r) => r.json()),
-      fetch(`/api/leads${search ? `?q=${encodeURIComponent(search)}` : ''}`).then((r) => r.json()),
-    ]);
-    const def = pipRes.pipelines.find((p: any) => p.isDefault) || pipRes.pipelines[0];
-    if (def) setStages(def.stages);
-    setLeads(leadsRes.leads);
+  const loadPipelines = async () => {
+    const data = await fetch('/api/pipelines').then((r) => r.json());
+    const list: Pipeline[] = data.pipelines || [];
+    setPipelines(list);
+    if (list.length && !pipelineId) {
+      const def = list.find((p) => p.isDefault && !p.isArchived) || list.find((p) => !p.isArchived) || list[0];
+      if (def) setPipelineId(def.id);
+    }
+  };
+
+  const loadLeads = async () => {
+    if (!pipelineId) { setLoading(false); return; }
+    const url = `/api/leads?pipelineId=${pipelineId}${search ? `&q=${encodeURIComponent(search)}` : ''}`;
+    const data = await fetch(url).then((r) => r.json());
+    setLeads(data.leads || []);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { loadPipelines(); }, []);
+  useEffect(() => {
+    const p = pipelines.find((x) => x.id === pipelineId);
+    setStages((p?.stages || []).filter((s) => !s.isArchived));
+    loadLeads();
+  /* eslint-disable-next-line */ }, [pipelineId, pipelines]);
+  useEffect(() => { const t = setTimeout(loadLeads, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
 
   const onDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
   const onDragEnd = async (e: DragEndEvent) => {
@@ -111,11 +128,14 @@ export default function KanbanPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stageId: newStageId }),
       });
-      if (!res.ok) throw new Error('Falha ao mover');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Falha ao mover');
+      }
       toast.success('Lead movido');
-    } catch {
-      toast.error('Erro ao mover lead');
-      load();
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao mover lead');
+      loadLeads();
     }
   };
 
@@ -124,9 +144,18 @@ export default function KanbanPage() {
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 lg:p-6 border-b bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-xl lg:text-2xl font-bold">Funil de Vendas</h1>
-          <p className="text-xs text-muted-foreground">Arraste cards entre etapas para atualizar o status.</p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Select value={pipelineId || ''} onValueChange={(v) => setPipelineId(v)}>
+            <SelectTrigger className="w-64 font-semibold">
+              <div className="flex items-center gap-2"><Workflow className="w-4 h-4 text-muted-foreground" /><SelectValue placeholder="Selecione um pipeline" /></div>
+            </SelectTrigger>
+            <SelectContent>
+              {pipelines.filter((p) => !p.isArchived).map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}{p.isDefault ? ' • padrão' : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground hidden lg:block">Arraste cards entre etapas para atualizar o status.</p>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -136,6 +165,12 @@ export default function KanbanPage() {
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 lg:p-6">
         {loading ? (
           <div className="text-muted-foreground">Carregando...</div>
+        ) : stages.length === 0 ? (
+          <div className="rounded-md border border-dashed p-12 text-center max-w-md mx-auto">
+            <Workflow className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+            <h3 className="font-heading font-semibold mb-1">Pipeline sem etapas ativas</h3>
+            <p className="text-sm text-muted-foreground mb-3">Configure as etapas em <Link href="/pipelines" className="text-primary underline">Pipelines</Link>.</p>
+          </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
             <div className="flex gap-4 h-full">
@@ -164,7 +199,7 @@ export default function KanbanPage() {
           leadId={selectedLeadId}
           stages={stages}
           onClose={() => setSelectedLeadId(null)}
-          onChange={load}
+          onChange={loadLeads}
         />
       )}
     </div>

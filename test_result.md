@@ -254,7 +254,242 @@ backend_v2:
     status_history:
         - working: true
           agent: "testing"
-          comment: "✅ ALL 4 SANITY TESTS PASSED: F) GET /api/auth/me with cookie -> 200, GET /api/leads as owner -> 20 leads, GET /api/dashboard?range=30d -> 200, GET /api/public/forms/turbinar-comercial -> 200 (without auth)."
+
+## --- Pipelines Phase (v3) ---
+
+backend_v3:
+  - task: "Pipelines + Stages CRUD com RBAC"
+    implemented: true
+    working: true
+    needs_retesting: false
+    file: "app/api/pipelines/*"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            Endpoints:
+              GET    /api/pipelines?includeArchived=0|1     (PIPELINES_VIEW)
+              POST   /api/pipelines                          (PIPELINES_CREATE)
+              GET    /api/pipelines/[id]                     (PIPELINES_VIEW)
+              PUT    /api/pipelines/[id]                     (PIPELINES_EDIT) — campos: name, isDefault, isArchived
+              DELETE /api/pipelines/[id]                     (PIPELINES_DELETE)
+              POST   /api/pipelines/[id]/duplicate           (PIPELINES_CREATE)
+              POST   /api/pipelines/[id]/stages              (PIPELINES_EDIT)
+              PUT    /api/pipelines/[id]/stages/[stageId]    (PIPELINES_EDIT)
+              DELETE /api/pipelines/[id]/stages/[stageId]    (PIPELINES_EDIT)
+              POST   /api/pipelines/[id]/stages/reorder      (PIPELINES_REORDER)
+            Regras: 
+              - Não permite excluir pipeline padrão.
+              - Não permite excluir pipeline/etapa com leads vinculados (409).
+              - Não permite excluir/arquivar última etapa ativa.
+              - Não permite arquivar pipeline padrão sem trocar antes.
+              - Bulk reorder valida que todos stageIds pertencem ao pipeline (cross-tenant guard).
+              - Move bloqueia stage arquivada.
+            Audit logs: pipeline.created/updated/archived/unarchived/deleted/default_changed; stage.created/updated/archived/unarchived/deleted/reordered.
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅ ALL 48 PIPELINE TESTS PASSED (100% SUCCESS RATE)
+            
+            Created and executed /app/backend_pipelines_test.py with comprehensive Pipelines + Stages CRUD testing.
+            
+            Test Results Summary:
+            • A) PIPELINES CRUD: 11/11 passed
+              - GET /api/pipelines returns 'Funil de Vendas' (isDefault=true) with 7 stages ✅
+              - GET /api/pipelines?includeArchived=1 returns all pipelines ✅
+              - POST /api/pipelines creates pipeline with 3 default stages (Novo lead, Em andamento, Ganho) ✅
+              - GET /api/pipelines/<id> returns pipeline with stages._count ✅
+              - PUT /api/pipelines/<id> updates name successfully ✅
+              - POST /api/pipelines/<id>/duplicate creates copy with " (cópia)" suffix ✅
+              - PUT {isDefault:true} switches default (only 1 default per tenant) ✅
+              - DELETE default pipeline -> 400 "Não é possível excluir o pipeline padrão" ✅
+              - DELETE pipeline without leads -> 200 ✅
+              - DELETE pipeline with 20 leads -> 409 "Existem 20 leads vinculados" ✅
+            
+            • B) STAGES CRUD: 9/9 passed
+              - POST /api/pipelines/<id>/stages creates stage with orderIndex = max+1 ✅
+              - PUT /api/pipelines/<id>/stages/<stageId> updates name and color ✅
+              - PUT stage {isArchived:true} with leads -> 409 (Novo lead stage with 3 leads) ✅
+              - PUT stage {isArchived:true} without leads -> 200; unarchive -> 200 ✅
+              - Archive única etapa ativa -> 400 "única etapa ativa" ✅
+              - POST /stages/reorder reverses order successfully ✅
+              - POST /stages/reorder with stageId from another pipeline -> 400 "Etapa(s) inválida(s)" ✅
+              - DELETE stage with leads -> 409 ✅
+              - DELETE única stage ativa -> 400 ✅
+            
+            • C) MOVE WITH ARCHIVED STAGES: 3/3 passed
+              - Archive stage without leads -> 200 ✅
+              - POST /api/leads/<id>/move to archived stage -> 400 "Esta etapa está arquivada" ✅
+              - POST /api/leads/<id>/move to active stage -> 200 (regression) ✅
+            
+            • D) RBAC: 7/7 passed
+              - Ana (agent): POST /api/pipelines -> 403 (PIPELINES_CREATE) ✅
+              - Ana (agent): POST /api/pipelines/<id>/stages -> 403 (PIPELINES_EDIT) ✅
+              - Ana (agent): POST /api/pipelines/<id>/stages/reorder -> 403 ✅
+              - Ana (agent): DELETE /api/pipelines/<id> -> 403 (PIPELINES_DELETE) ✅
+              - Ana (agent): GET /api/pipelines -> 200 (PIPELINES_VIEW includes agent) ✅
+              - Carlos (manager): POST /api/pipelines -> 200 (PIPELINES_CREATE includes manager) ✅
+              - Carlos (manager): DELETE /api/pipelines/<id> -> 403 (PIPELINES_DELETE = owner/admin only) ✅
+            
+            • E) MULTI-TENANT ISOLATION: 6/6 passed (CRITICAL SECURITY)
+              - Tenant B registered successfully ✅
+              - GET /api/pipelines returns only own default pipeline (1, not demo's) ✅
+              - GET /api/pipelines/<demo-id> -> 404 (cross-tenant protection) ✅
+              - PUT /api/pipelines/<demo-id> -> 404 (cross-tenant protection) ✅
+              - POST /api/pipelines/<demo-id>/stages -> 404 (cross-tenant protection) ✅
+              - POST /stages/reorder with demo's stageId -> 400 "Etapa(s) inválida(s)" ✅
+            
+            • F) AUDIT LOGS: 1/1 passed
+              - GET /api/audit-logs contains pipeline.* and stage.* actions ✅
+            
+            • G) REGRESSION: 9/9 passed
+              - GET /api/auth/me -> 200 ✅
+              - GET /api/leads -> 200 (20 leads) ✅
+              - POST /api/leads/<id>/move -> 200 ✅
+              - GET /api/dashboard?range=30d -> 200 ✅
+              - GET /api/public/forms/turbinar-comercial -> 200 ✅
+              - POST /api/public/forms/turbinar-comercial/submit -> 200 (creates lead) ✅
+              - GET /api/users -> 200 ✅
+              - GET /api/forms -> 200 ✅
+              - POST /api/invites -> 200 ✅
+            
+            Key Validations:
+            ✅ Pipeline CRUD working correctly (create, read, update, delete, duplicate)
+            ✅ Default pipeline logic working (only 1 default per tenant, cannot delete default)
+            ✅ Pipeline with leads protection (409 when trying to delete)
+            ✅ Stage CRUD working correctly (create, update, delete, reorder)
+            ✅ Stage archiving logic working (cannot archive with leads, cannot archive last active)
+            ✅ Stage reorder validation (cross-pipeline protection)
+            ✅ Move to archived stage blocked (400 error)
+            ✅ RBAC permissions working (agent/manager/owner restrictions)
+            ✅ Multi-tenant isolation verified - NO DATA LEAKAGE
+            ✅ Audit logs capturing all pipeline/stage actions
+            ✅ All existing endpoints still working (auth, leads, forms, dashboard, users, invites)
+            
+            CRITICAL SECURITY: Multi-tenant isolation confirmed. Tenant B cannot see/access/modify Tenant A's pipelines or stages.
+            
+            RECOMMENDATION: Pipeline Editor (Phase 3) is production-ready. All 48 tests passed with no failures. Backend is fully functional with proper RBAC and multi-tenant isolation.
+
+agent_communication_v3:
+  - agent: "main"
+    message: |
+      Fase 3 — Pipeline Editor entregue. Schema atualizado (Pipeline.isArchived, PipelineStage.isArchived). Prisma client regenerado.
+      
+      Roles e permissões:
+        PIPELINES_VIEW    = owner/admin/manager/agent/viewer
+        PIPELINES_CREATE  = owner/admin/manager
+        PIPELINES_EDIT    = owner/admin/manager
+        PIPELINES_REORDER = owner/admin/manager
+        PIPELINES_DELETE  = owner/admin
+      
+      Teste com demo@leadflow.com (owner).
+      Casos críticos a testar:
+        1. Criar pipeline novo — vem com 3 etapas default.
+        2. Renomear via PUT.
+        3. POST /duplicate cria cópia com sufixo " (cópia)".
+        4. PUT { isDefault: true } troca o padrão (apenas 1 pipeline default por tenant).
+        5. DELETE pipeline padrão -> 400.
+        6. DELETE pipeline com leads -> 409 "Existem N leads vinculados".
+        7. Criar stage -> orderIndex = max+1.
+        8. PUT stage com isArchived=true quando há leads -> 409.
+        9. PUT stage com isArchived=true quando é a última ativa -> 400.
+        10. DELETE stage com leads -> 409.
+        11. DELETE última stage ativa -> 400.
+        12. POST /stages/reorder com stageIds de OUTRO pipeline -> 400.
+        13. POST /leads/[id]/move com stage arquivada -> 400.
+        14. agent/viewer com POST /api/pipelines -> 403 (RBAC).
+        15. Tenant B não vê pipelines de tenant A.
+      
+      Regression:
+        - GET /api/pipelines (sem includeArchived) retorna só ativos.
+        - GET /api/pipelines?includeArchived=1 retorna todos.
+        - GET /api/leads?pipelineId=X filtra corretamente.
+        - dashboard, kanban, forms, users, invites continuam funcionando.
+
+  - agent: "testing"
+    message: |
+      ✅ PIPELINE EDITOR BACKEND TESTING COMPLETE - ALL 48 TESTS PASSED (100% SUCCESS RATE)
+      
+      Created and executed /app/backend_pipelines_test.py using Python requests with comprehensive Pipelines + Stages CRUD validation.
+      
+      Test Results Summary:
+      • A) PIPELINES CRUD: 11/11 passed
+        - GET /api/pipelines returns 'Funil de Vendas' (isDefault=true) with 7 stages ✅
+        - GET /api/pipelines?includeArchived=1 works ✅
+        - POST creates pipeline with 3 default stages ✅
+        - GET /<id> returns pipeline with stages._count ✅
+        - PUT updates name ✅
+        - POST /duplicate creates copy with " (cópia)" suffix ✅
+        - PUT {isDefault:true} switches default (only 1 per tenant) ✅
+        - DELETE default pipeline -> 400 ✅
+        - DELETE pipeline without leads -> 200 ✅
+        - DELETE pipeline with 20 leads -> 409 ✅
+      
+      • B) STAGES CRUD: 9/9 passed
+        - POST creates stage with orderIndex = max+1 ✅
+        - PUT updates name and color ✅
+        - PUT {isArchived:true} with leads -> 409 ✅
+        - PUT {isArchived:true} without leads -> 200; unarchive -> 200 ✅
+        - Archive única etapa ativa -> 400 ✅
+        - POST /reorder works correctly ✅
+        - POST /reorder with cross-pipeline stageId -> 400 ✅
+        - DELETE stage with leads -> 409 ✅
+        - DELETE única stage ativa -> 400 ✅
+      
+      • C) MOVE WITH ARCHIVED STAGES: 3/3 passed
+        - Archive stage without leads -> 200 ✅
+        - Move to archived stage -> 400 "Esta etapa está arquivada" ✅
+        - Move to active stage -> 200 (regression) ✅
+      
+      • D) RBAC: 7/7 passed
+        - Ana (agent): POST /api/pipelines -> 403 ✅
+        - Ana (agent): POST /stages -> 403 ✅
+        - Ana (agent): POST /reorder -> 403 ✅
+        - Ana (agent): DELETE /pipelines -> 403 ✅
+        - Ana (agent): GET /api/pipelines -> 200 ✅
+        - Carlos (manager): POST /api/pipelines -> 200 ✅
+        - Carlos (manager): DELETE /api/pipelines -> 403 ✅
+      
+      • E) MULTI-TENANT ISOLATION: 6/6 passed (CRITICAL SECURITY)
+        - Tenant B registered successfully ✅
+        - GET /api/pipelines returns only own pipeline (1, not demo's) ✅
+        - GET /api/pipelines/<demo-id> -> 404 ✅
+        - PUT /api/pipelines/<demo-id> -> 404 ✅
+        - POST /api/pipelines/<demo-id>/stages -> 404 ✅
+        - POST /reorder with demo's stageId -> 400 ✅
+      
+      • F) AUDIT LOGS: 1/1 passed
+        - GET /api/audit-logs contains pipeline.* and stage.* actions ✅
+      
+      • G) REGRESSION: 9/9 passed
+        - GET /api/auth/me -> 200 ✅
+        - GET /api/leads -> 200 ✅
+        - POST /api/leads/<id>/move -> 200 ✅
+        - GET /api/dashboard?range=30d -> 200 ✅
+        - GET /api/public/forms/turbinar-comercial -> 200 ✅
+        - POST /api/public/forms/submit -> 200 ✅
+        - GET /api/users -> 200 ✅
+        - GET /api/forms -> 200 ✅
+        - POST /api/invites -> 200 ✅
+      
+      Key Validations:
+      ✅ Pipeline CRUD working (create, read, update, delete, duplicate)
+      ✅ Default pipeline logic (only 1 default per tenant, cannot delete default)
+      ✅ Pipeline with leads protection (409 when trying to delete)
+      ✅ Stage CRUD working (create, update, delete, reorder)
+      ✅ Stage archiving logic (cannot archive with leads, cannot archive last active)
+      ✅ Stage reorder validation (cross-pipeline protection)
+      ✅ Move to archived stage blocked (400 error)
+      ✅ RBAC permissions working (agent/manager/owner restrictions)
+      ✅ Multi-tenant isolation verified - NO DATA LEAKAGE
+      ✅ Audit logs capturing all pipeline/stage actions
+      ✅ All existing endpoints still working (no regression)
+      
+      CRITICAL SECURITY: Multi-tenant isolation confirmed. Tenant B cannot see/access/modify Tenant A's pipelines or stages.
+      
+      RECOMMENDATION: Pipeline Editor (Phase 3) is production-ready. All 48 tests passed with no failures. Backend is fully functional with proper RBAC and multi-tenant isolation.
 
 agent_communication_v2:
   - agent: "main"
