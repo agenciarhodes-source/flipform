@@ -23,7 +23,9 @@ const NAV: NavItem[] = [
   { href: '/settings',  label: 'Configurações', icon: Settings, show: (r) => can(r, 'SETTINGS_VIEW') },
 ];
 
-export function AppShell({ children, session }: { children: React.ReactNode; session: SessionPayload }) {
+interface TenantBrand { name: string; slug: string; primaryColor: string; logoUrl: string | null }
+
+export function AppShell({ children, session, tenant }: { children: React.ReactNode; session: SessionPayload; tenant: TenantBrand | null }) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -34,20 +36,28 @@ export function AppShell({ children, session }: { children: React.ReactNode; ses
     router.refresh();
   };
 
+  const brandColor = tenant?.primaryColor || '#2563EB';
+  const tenantName = tenant?.name || 'LeadFlow';
+  const tenantInitials = tenantName.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
+
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-background" style={{ ['--brand-color' as any]: brandColor }}>
       {/* Sidebar */}
       <aside className={cn(
         'fixed inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform lg:translate-x-0',
         open ? 'translate-x-0' : '-translate-x-full'
       )}>
         <div className="h-16 flex items-center gap-2 px-5 border-b border-sidebar-border">
-          <div className="w-9 h-9 rounded-md bg-brand-600 flex items-center justify-center text-white">
-            <Zap className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="font-heading font-bold leading-tight">LeadFlow</div>
-            <div className="text-xs text-muted-foreground -mt-0.5">CRM</div>
+          {tenant?.logoUrl ? (
+            <img src={tenant.logoUrl} alt={tenantName} className="w-9 h-9 rounded-md object-contain bg-white border" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+          ) : (
+            <div className="w-9 h-9 rounded-md flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: brandColor }}>
+              {tenantInitials || <Zap className="w-4 h-4" />}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="font-heading font-bold leading-tight truncate" title={tenantName}>{tenantName}</div>
+            <div className="text-xs text-muted-foreground -mt-0.5">via LeadFlow</div>
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
@@ -73,7 +83,7 @@ export function AppShell({ children, session }: { children: React.ReactNode; ses
         <div className="p-3 border-t border-sidebar-border">
           <div className="px-3 py-2 rounded-md bg-muted/50">
             <div className="text-xs text-muted-foreground">Empresa</div>
-            <div className="text-sm font-medium truncate">{session.tenantSlug}</div>
+            <div className="text-sm font-medium truncate">{tenant?.slug || session.tenantSlug}</div>
           </div>
         </div>
       </aside>

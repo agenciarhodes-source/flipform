@@ -17,7 +17,7 @@ interface PublicField {
 }
 
 interface Props {
-  form: { publicTitle: string; publicDescription?: string | null; primaryColor: string; successMessage: string; fields: PublicField[] };
+  form: { publicTitle: string; publicDescription?: string | null; primaryColor: string; successMessage: string; logoUrl?: string | null; tenantName?: string; fields: PublicField[] };
   onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<void>;
   previewMode?: boolean;
 }
@@ -29,6 +29,8 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+
+  const tenantInitials = (form.tenantName || '').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   if (fields.length === 0) {
     return <div className="min-h-full flex items-center justify-center bg-white p-8"><div className="text-muted-foreground">Adicione perguntas para visualizar.</div></div>;
@@ -93,6 +95,20 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
 
       <div className="flex-1 flex items-center justify-center p-6 lg:p-10">
         <div className="max-w-xl w-full animate-fade-in" key={step}>
+          {/* Branding do tenant */}
+          {(form.logoUrl || form.tenantName) && (
+            <div className="flex items-center gap-2 mb-6">
+              {form.logoUrl ? (
+                <img src={form.logoUrl} alt={form.tenantName || ''} className="w-9 h-9 rounded-md object-contain bg-white border p-0.5" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+              ) : (
+                <div className="w-9 h-9 rounded-md flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: form.primaryColor }}>
+                  {tenantInitials || '?'}
+                </div>
+              )}
+              {form.tenantName && <span className="text-sm font-medium text-foreground/80">{form.tenantName}</span>}
+            </div>
+          )}
+
           {step === 0 && form.publicTitle && (
             <div className="mb-6">
               <h1 className="font-heading text-2xl lg:text-3xl font-bold mb-2">{form.publicTitle}</h1>

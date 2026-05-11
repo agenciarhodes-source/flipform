@@ -333,6 +333,208 @@ backend_v4:
             ✅ ALL 41 FORM BUILDER PIPELINE INTEGRATION TESTS PASSED (100% SUCCESS RATE)
             
             Created and executed /app/backend_forms_pipeline_test.py with comprehensive Forms + Pipeline/Stage validation testing.
+
+## --- Tenant Settings & Branding (v5) ---
+
+backend_v5:
+  - task: "Tenant Settings + Branding"
+    implemented: true
+    working: true
+    needs_retesting: false
+    file: "app/api/settings/tenant/route.ts, app/(app)/layout.tsx, app/f/[slug]/page.tsx"
+    stuck_count: 0
+    priority: "high"
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: |
+            - GET /api/settings/tenant (SETTINGS_VIEW = owner/admin) — retorna tenant + _count
+            - PUT /api/settings/tenant (SETTINGS_EDIT = owner/admin) — valida via Zod: name(2-80), slug regex, primaryColor #RRGGBB, logoUrl URL ou vazio
+            - Slug uniqueness check entre tenants -> 409 se duplicado
+            - Audit logs: tenant.updated + tenant.slug_updated / tenant.color_updated / tenant.logo_updated específicos
+            - AppShell agora puxa tenant do server-side e exibe logo+nome no sidebar
+            - Form público /f/[slug] inclui tenantName + logoUrl como fallback se form não tiver logo próprio
+        - working: true
+          agent: "testing"
+          comment: |
+            ✅ ALL 38 TENANT SETTINGS & BRANDING TESTS PASSED (100% SUCCESS RATE)
+            
+            Created and executed /app/backend_settings_test.py with comprehensive Tenant Settings + Branding validation.
+            
+            Test Results Summary:
+            • A) RBAC ON GET /api/settings/tenant: 4/4 passed
+              - GET as owner -> 200 with complete tenant data (id, name, slug, primaryColor, logoUrl, status, createdAt, _count) ✅
+              - GET as manager (Carlos) -> 403 (SETTINGS_VIEW = owner/admin only) ✅
+              - GET as agent (Ana) -> 403 (SETTINGS_VIEW = owner/admin only) ✅
+              - GET without cookie -> 401 ✅
+            
+            • B) ZOD VALIDATIONS ON PUT (as owner): 12/12 passed
+              - PUT {} -> 400 (Nenhum campo para atualizar) ✅
+              - PUT {name:'a'} -> 400 (Nome muito curto) ✅
+              - PUT {slug:'Slug INVÁLIDO'} -> 400 (Slug regex validation) ✅
+              - PUT {slug:'ab'} -> 400 (Slug muito curto - mínimo 3) ✅
+              - PUT {slug:'valid-slug-123'} -> 200; GET confirms; REVERTED to 'leadflow-demo' ✅
+              - PUT {primaryColor:'vermelho'} -> 400 (Cor inválida) ✅
+              - PUT {primaryColor:'#GG0000'} -> 400 (Invalid hex format) ✅
+              - PUT {primaryColor:'#10B981'} -> 200; GET confirms; REVERTED to '#2563EB' ✅
+              - PUT {logoUrl:'not-a-url'} -> 400 (URL inválida) ✅
+              - PUT {logoUrl:'https://example.com/logo.png'} -> 200 ✅
+              - PUT {logoUrl:''} -> 200 (clears logo to null); GET confirms logoUrl=null ✅
+              - PUT {name:'LeadFlow Demo Renamed'} -> 200; GET confirms; REVERTED to 'LeadFlow Demo' ✅
+            
+            • C) RBAC ON PUT: 3/3 passed
+              - PUT as manager (Carlos) -> 403 (SETTINGS_EDIT = owner/admin only) ✅
+              - PUT as agent (Ana) -> 403 (SETTINGS_EDIT = owner/admin only) ✅
+              - Created admin 'Settings Admin'; PUT -> 200; REVERTED ✅
+            
+            • D) SLUG DUPLICATE HANDLING: 3/3 passed
+              - Created Tenant B via /api/auth/register ✅
+              - Got Tenant B slug: 'tenant-b-settings-1' ✅
+              - PUT {slug:'tenant-b-settings-1'} as demo -> 409 (slug já está em uso) ✅
+            
+            • E) MULTI-TENANT ISOLATION: 4/4 passed (CRITICAL SECURITY)
+              - Tenant B PUT {name:'Tenant B Renamed', primaryColor:'#7C3AED'} -> 200 ✅
+              - GET as Tenant B -> returns 'Tenant B Renamed' / '#7C3AED' ✅
+              - GET as demo -> returns 'LeadFlow Demo' / '#2563EB' (NOT affected by Tenant B) ✅
+              - Tenant B isolation confirmed (cannot access demo tenant data) ✅
+            
+            • F) AUDIT LOGS: 3/3 passed
+              - PUT {primaryColor:'#10B981', logoUrl:'https://x.com/logo.png'} -> 200 ✅
+              - GET /api/audit-logs as owner -> includes 'tenant.updated', 'tenant.color_updated', 'tenant.logo_updated' ✅
+              - REVERTED primaryColor to '#2563EB' and logoUrl to '' (cleanup) ✅
+            
+            • G) REGRESSION TESTS (NO BREAKING): 9/9 passed
+              - GET /api/auth/me -> 200 ✅
+              - GET /api/leads as owner -> array (23 leads) ✅
+              - GET /api/dashboard?range=30d -> 200 ✅
+              - GET /api/pipelines -> 200 ✅
+              - GET /api/forms -> 200 ✅
+              - GET /api/users -> 200 ✅
+              - GET /api/invites -> 200 ✅
+              - GET /api/public/forms/turbinar-comercial (no auth) -> 200 ✅
+              - POST /api/public/forms/turbinar-comercial/submit -> 200 (creates lead) ✅
+            
+            Key Validations:
+            ✅ GET /api/settings/tenant returns complete tenant data with _count (tenantUsers, leads, forms, pipelines)
+            ✅ RBAC working correctly (SETTINGS_VIEW and SETTINGS_EDIT = owner/admin only)
+            ✅ Zod validations working for all fields (name, slug, primaryColor, logoUrl)
+            ✅ Slug uniqueness check working (409 when duplicate slug from another tenant)
+            ✅ Slug regex validation working (lowercase, numbers, hyphens only)
+            ✅ PrimaryColor hex validation working (#RRGGBB format)
+            ✅ LogoUrl validation working (valid URL or empty string to clear)
+            ✅ Empty body validation working (400 when no fields provided)
+            ✅ Multi-tenant isolation verified - NO DATA LEAKAGE (Tenant B changes don't affect demo tenant)
+            ✅ Audit logs capturing all tenant changes (tenant.updated, tenant.slug_updated, tenant.color_updated, tenant.logo_updated)
+            ✅ All existing endpoints still working (auth, leads, forms, dashboard, users, invites, pipelines, public forms)
+            
+            CRITICAL SECURITY: Multi-tenant isolation confirmed. Tenant B can only modify its own settings. Demo tenant settings remain unchanged.
+            
+            RECOMMENDATION: Tenant Settings & Branding (Phase 5) is production-ready. All 38 tests passed with no failures. Backend is fully functional with proper RBAC, Zod validations, slug uniqueness checks, audit logging, and multi-tenant isolation.
+
+agent_communication_v5:
+  - agent: "main"
+    message: |
+      Fase 5 — Tenant Settings & Branding entregue.
+      Casos a testar:
+      
+      1. GET /api/settings/tenant como owner -> 200 com {id,name,slug,primaryColor,logoUrl,status,createdAt,_count}
+      2. GET como manager -> 403 (SETTINGS_VIEW = owner/admin somente)
+      3. GET como agent -> 403
+      4. PUT como owner com {name:"Novo Nome"} -> 200 e retorna tenant atualizado
+      5. PUT como admin -> 200 (Bruno admin)
+      6. PUT como manager (Carlos) -> 403
+      7. PUT como agent (Ana) -> 403
+      8. PUT com slug inválido "Minha Empresa!" -> 400 contém "Slug"
+      9. PUT com slug muito curto "ab" -> 400
+      10. PUT com slug válido novo "leadflow-demo-renamed" -> 200, depois reverter para "leadflow-demo"
+      11. PUT com slug DUPLICADO (do tenant B) -> 409 "já está em uso"
+      12. PUT com primaryColor="vermelho" -> 400 "Cor inválida"
+      13. PUT com primaryColor="#GG0000" -> 400
+      14. PUT com primaryColor="#FF5500" válido -> 200
+      15. PUT com logoUrl="not-a-url" -> 400
+      16. PUT com logoUrl="" -> 200 (limpa logo)
+      17. PUT com logoUrl válida "https://example.com/logo.png" -> 200
+      18. PUT sem nenhum campo {} -> 400 "Nenhum campo para atualizar" OU noop ok
+      19. Multi-tenant: tenant B PUT /api/settings/tenant -> só altera o tenant B (verificar via GET de cada um que não houve cross)
+      20. Verificar audit-logs como owner contém tenant.updated + tenant.{slug|color|logo}_updated
+      21. Regression: form público /api/public/forms/turbinar-comercial -> 200, contém fields normalmente; cookie auth/leads/forms/dashboard/users/invites/pipelines OK.
+
+  - agent: "testing"
+    message: |
+      ✅ TENANT SETTINGS & BRANDING BACKEND TESTING COMPLETE - ALL 38 TESTS PASSED (100% SUCCESS RATE)
+      
+      Created and executed /app/backend_settings_test.py using Python requests with comprehensive Tenant Settings + Branding validation.
+      
+      Test Results Summary:
+      • A) RBAC ON GET /api/settings/tenant: 4/4 passed
+        - GET as owner -> 200 with complete tenant data ✅
+        - GET as manager (Carlos) -> 403 ✅
+        - GET as agent (Ana) -> 403 ✅
+        - GET without cookie -> 401 ✅
+      
+      • B) ZOD VALIDATIONS ON PUT (as owner): 12/12 passed
+        - PUT {} -> 400 (Nenhum campo para atualizar) ✅
+        - PUT {name:'a'} -> 400 (Nome muito curto) ✅
+        - PUT {slug:'Slug INVÁLIDO'} -> 400 (Slug regex) ✅
+        - PUT {slug:'ab'} -> 400 (Slug muito curto) ✅
+        - PUT {slug:'valid-slug-123'} -> 200; REVERTED ✅
+        - PUT {primaryColor:'vermelho'} -> 400 (Cor inválida) ✅
+        - PUT {primaryColor:'#GG0000'} -> 400 (Invalid hex) ✅
+        - PUT {primaryColor:'#10B981'} -> 200; REVERTED ✅
+        - PUT {logoUrl:'not-a-url'} -> 400 (URL inválida) ✅
+        - PUT {logoUrl:'https://example.com/logo.png'} -> 200 ✅
+        - PUT {logoUrl:''} -> 200 (clears to null) ✅
+        - PUT {name:'LeadFlow Demo Renamed'} -> 200; REVERTED ✅
+      
+      • C) RBAC ON PUT: 3/3 passed
+        - PUT as manager (Carlos) -> 403 ✅
+        - PUT as agent (Ana) -> 403 ✅
+        - Created admin 'Settings Admin'; PUT -> 200; REVERTED ✅
+      
+      • D) SLUG DUPLICATE HANDLING: 3/3 passed
+        - Created Tenant B via /api/auth/register ✅
+        - Got Tenant B slug ✅
+        - PUT duplicate slug as demo -> 409 (já está em uso) ✅
+      
+      • E) MULTI-TENANT ISOLATION: 4/4 passed (CRITICAL SECURITY)
+        - Tenant B PUT {name, primaryColor} -> 200 ✅
+        - GET as Tenant B -> returns Tenant B data ✅
+        - GET as demo -> returns demo data (NOT affected) ✅
+        - Tenant B isolation confirmed ✅
+      
+      • F) AUDIT LOGS: 3/3 passed
+        - PUT {primaryColor, logoUrl} -> 200 ✅
+        - GET /api/audit-logs -> includes tenant.updated, tenant.color_updated, tenant.logo_updated ✅
+        - REVERTED (cleanup) ✅
+      
+      • G) REGRESSION TESTS (NO BREAKING): 9/9 passed
+        - GET /api/auth/me -> 200 ✅
+        - GET /api/leads -> 200 (23 leads) ✅
+        - GET /api/dashboard?range=30d -> 200 ✅
+        - GET /api/pipelines -> 200 ✅
+        - GET /api/forms -> 200 ✅
+        - GET /api/users -> 200 ✅
+        - GET /api/invites -> 200 ✅
+        - GET /api/public/forms/turbinar-comercial -> 200 ✅
+        - POST /api/public/forms/turbinar-comercial/submit -> 200 ✅
+      
+      Key Validations:
+      ✅ GET /api/settings/tenant returns complete tenant data with _count
+      ✅ RBAC working (SETTINGS_VIEW and SETTINGS_EDIT = owner/admin only)
+      ✅ Zod validations working for all fields (name, slug, primaryColor, logoUrl)
+      ✅ Slug uniqueness check working (409 when duplicate)
+      ✅ Slug regex validation working (lowercase, numbers, hyphens only)
+      ✅ PrimaryColor hex validation working (#RRGGBB format)
+      ✅ LogoUrl validation working (valid URL or empty string to clear)
+      ✅ Empty body validation working (400 when no fields)
+      ✅ Multi-tenant isolation verified - NO DATA LEAKAGE
+      ✅ Audit logs capturing all tenant changes
+      ✅ All existing endpoints still working (no regression)
+      
+      CRITICAL SECURITY: Multi-tenant isolation confirmed. Tenant B can only modify its own settings. Demo tenant settings remain unchanged.
+      
+      RECOMMENDATION: Tenant Settings & Branding (Phase 5) is production-ready. All 38 tests passed with no failures. Backend is fully functional with proper RBAC, Zod validations, slug uniqueness checks, audit logging, and multi-tenant isolation.
+
             
             Test Results Summary:
             • A) FORMS CRUD WITH PIPELINE+STAGE VALIDATION: 9/9 passed
