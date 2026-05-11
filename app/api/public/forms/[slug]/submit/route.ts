@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
+import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request, ctx: { params: { slug: string } }) {
   try {
@@ -12,9 +13,21 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
 
     const form = await prisma.form.findFirst({
       where: { slug: ctx.params.slug, isActive: true },
-      include: { fields: true },
+      include: {
+        fields: true,
+        pipeline: { select: { id: true, isArchived: true } },
+        initialStage: { select: { id: true, isArchived: true } },
+      },
     });
     if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 });
+
+    // Validar pipeline e etapa não arquivados (forms existentes que tiveram pipeline/stage arquivado depois)
+    if (form.pipeline?.isArchived) {
+      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível.' }, { status: 410 });
+    }
+    if (form.initialStage?.isArchived) {
+      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível.' }, { status: 410 });
+    }
 
     const answers = parsed.data.answers;
 
@@ -53,6 +66,17 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           create: [{ fromStageId: null, toStageId: form.initialStageId }],
         },
       },
+    });
+
+    await logAudit({
+      tenantId: form.tenantId, userId: null,
+      entityType: 'form', entityId: form.id, action: 'form.submitted',
+      metadata: { leadId: lead.id, source: 'public_form', slug: ctx.params.slug },
+    });
+    await logAudit({
+      tenantId: form.tenantId, userId: null,
+      entityType: 'lead', entityId: lead.id, action: 'lead.created',
+      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario' },
     });
 
     return NextResponse.json({ ok: true, leadId: lead.id, successMessage: form.successMessage });

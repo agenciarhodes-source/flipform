@@ -4,10 +4,27 @@ import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 
+async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: pipelineId, tenantId },
+    include: { stages: { where: { id: stageId } } },
+  });
+  if (!pipeline) return { error: 'Pipeline inválido para este tenant.', status: 400 };
+  if (pipeline.isArchived) return { error: 'Pipeline arquivado não pode ser usado em formulários.', status: 400 };
+  const stage = pipeline.stages[0];
+  if (!stage) return { error: 'Etapa inicial não pertence ao pipeline selecionado.', status: 400 };
+  if (stage.isArchived) return { error: 'Etapa inicial está arquivada.', status: 400 };
+  return { pipeline, stage };
+}
+
 export const GET = withPermission('FORMS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const form = await prisma.form.findFirst({
     where: { id: ctx.params.id, tenantId: session.tenantId },
-    include: { fields: { orderBy: { orderIndex: 'asc' } } },
+    include: {
+      fields: { orderBy: { orderIndex: 'asc' } },
+      pipeline: { select: { id: true, name: true, isArchived: true, isDefault: true } },
+      initialStage: { select: { id: true, name: true, color: true, isArchived: true } },
+    },
   });
   if (!form) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   return NextResponse.json({ form });
@@ -22,9 +39,16 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
     }
     const data = parsed.data;
 
-    // tenant check
     const existing = await prisma.form.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
     if (!existing) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+
+    // Validar pipeline+stage SE foi informado nesta edição
+    const newPipelineId = data.pipelineId || existing.pipelineId;
+    const newStageId = data.initialStageId || existing.initialStageId;
+    if (newPipelineId !== existing.pipelineId || newStageId !== existing.initialStageId) {
+      const validation = await validatePipelineAndStage(session.tenantId, newPipelineId, newStageId);
+      if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.form.update({
@@ -36,8 +60,8 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
           primaryColor: data.primaryColor || existing.primaryColor,
           successMessage: data.successMessage || existing.successMessage,
           isActive: data.isActive ?? existing.isActive,
-          pipelineId: data.pipelineId || existing.pipelineId,
-          initialStageId: data.initialStageId || existing.initialStageId,
+          pipelineId: newPipelineId,
+          initialStageId: newStageId,
         },
       });
       await tx.formField.deleteMany({ where: { formId: ctx.params.id } });
@@ -57,6 +81,13 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
         });
       }
     });
+
+    await logAudit({
+      tenantId: session.tenantId, userId: session.userId,
+      entityType: 'form', entityId: ctx.params.id, action: 'form.updated',
+      metadata: { pipelineId: newPipelineId, initialStageId: newStageId },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error('form update error', e);

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,8 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
 
 const FIELD_TYPES = [
@@ -55,9 +55,21 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Pipelines / Stages
+  const [pipelines, setPipelines] = useState<any[]>([]);
+  const [pipelineId, setPipelineId] = useState<string>('');
+  const [initialStageId, setInitialStageId] = useState<string>('');
+  const [pipelinesLoaded, setPipelinesLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/pipelines?includeArchived=1').then((r) => r.json()).then((d) => {
+      setPipelines(d.pipelines || []);
+      setPipelinesLoaded(true);
+    });
+  }, []);
+
   useEffect(() => {
     if (!formId) {
-      // Defaults p/ novo
       setName('Formulário sem título');
       setPublicTitle('Como podemos ajudar?');
       setFields([
@@ -74,12 +86,33 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setPrimaryColor(f.primaryColor);
       setSuccessMessage(f.successMessage);
       setIsActive(f.isActive);
+      setPipelineId(f.pipelineId || '');
+      setInitialStageId(f.initialStageId || '');
       setFields(f.fields.map((ff: any) => ({
         id: ff.id, label: ff.label, placeholder: ff.placeholder, description: ff.description,
         fieldType: ff.fieldType, options: ff.options, isRequired: ff.isRequired, orderIndex: ff.orderIndex,
       })));
     });
   }, [formId]);
+
+  // Auto-selecionar default ao criar novo form
+  useEffect(() => {
+    if (!formId && pipelinesLoaded && !pipelineId && pipelines.length) {
+      const def = pipelines.find((p) => p.isDefault && !p.isArchived) || pipelines.find((p) => !p.isArchived);
+      if (def) {
+        setPipelineId(def.id);
+        const firstStage = def.stages.find((s: any) => !s.isArchived);
+        if (firstStage) setInitialStageId(firstStage.id);
+      }
+    }
+  /* eslint-disable-next-line */ }, [pipelinesLoaded, pipelines, formId]);
+
+  const currentPipeline = pipelines.find((p) => p.id === pipelineId);
+  const availableStages = (currentPipeline?.stages || []).filter((s: any) => !s.isArchived);
+  const currentStage = currentPipeline?.stages.find((s: any) => s.id === initialStageId);
+  const pipelineArchived = currentPipeline?.isArchived;
+  const stageArchived = currentStage?.isArchived;
+  const noActivePipelines = pipelinesLoaded && pipelines.filter((p) => !p.isArchived).length === 0;
 
   const addField = () => {
     setFields([...fields, { label: 'Nova pergunta', fieldType: 'short_text', isRequired: false, orderIndex: fields.length }]);
@@ -105,9 +138,17 @@ export function FormBuilder({ formId }: { formId?: string }) {
   };
 
   const save = async () => {
+    if (!pipelineId || !initialStageId) {
+      toast.error('Selecione pipeline e etapa inicial.');
+      return;
+    }
+    if (pipelineArchived || stageArchived) {
+      toast.error('Pipeline ou etapa estão arquivados. Escolha ativos antes de salvar.');
+      return;
+    }
     setSaving(true);
     try {
-      const payload = { name, publicTitle, publicDescription, primaryColor, successMessage, isActive, fields };
+      const payload = { name, publicTitle, publicDescription, primaryColor, successMessage, isActive, fields, pipelineId, initialStageId };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,6 +213,72 @@ export function FormBuilder({ formId }: { formId?: string }) {
         {/* Editor */}
         <div className="flex-1 overflow-y-auto bg-muted/30">
           <div className="max-w-2xl mx-auto p-6 space-y-6">
+            <Card className="p-5">
+              <h3 className="font-heading font-semibold mb-1 flex items-center gap-2"><Workflow className="w-4 h-4 text-brand-600" />Destino do lead</h3>
+              <p className="text-xs text-muted-foreground mb-4">Para qual pipeline e etapa este lead entra ao enviar.</p>
+              {noActivePipelines ? (
+                <div className="rounded-md border border-dashed p-5 text-center text-sm">
+                  <AlertTriangle className="w-5 h-5 mx-auto text-amber-500 mb-2" />
+                  <p className="font-medium mb-1">Nenhum pipeline ativo</p>
+                  <p className="text-xs text-muted-foreground mb-3">Crie um pipeline antes de salvar este formulário.</p>
+                  <Link href="/pipelines"><Button size="sm" variant="outline">Criar pipeline</Button></Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Label>Pipeline</Label>
+                    <Select value={pipelineId} onValueChange={(v) => {
+                      setPipelineId(v);
+                      const p = pipelines.find((x) => x.id === v);
+                      const first = p?.stages.find((s: any) => !s.isArchived);
+                      setInitialStageId(first?.id || '');
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Escolha um pipeline" /></SelectTrigger>
+                      <SelectContent>
+                        {pipelines.filter((p) => !p.isArchived).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}{p.isDefault ? ' • padrão' : ''}</SelectItem>
+                        ))}
+                        {/* Pipeline atual arquivado: exibir para sinalizar */}
+                        {pipelineArchived && currentPipeline && (
+                          <SelectItem value={currentPipeline.id}>{currentPipeline.name} (arquivado)</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {pipelineArchived && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Pipeline arquivado. Escolha um pipeline ativo.</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>Etapa inicial</Label>
+                    <Select value={initialStageId} onValueChange={setInitialStageId} disabled={!pipelineId || availableStages.length === 0}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={!pipelineId ? 'Selecione um pipeline primeiro' : (availableStages.length === 0 ? 'Pipeline sem etapas ativas' : 'Escolha a etapa inicial')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableStages.map((s: any) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />{s.name}</span>
+                          </SelectItem>
+                        ))}
+                        {stageArchived && currentStage && (
+                          <SelectItem value={currentStage.id}>{currentStage.name} (arquivada)</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {stageArchived && (
+                      <p className="text-xs text-amber-600 mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />Etapa arquivada. Escolha uma etapa ativa.</p>
+                    )}
+                  </div>
+                  {currentPipeline && currentStage && !pipelineArchived && !stageArchived && (
+                    <div className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2 flex items-center gap-2">
+                      <ChevronRight className="w-3 h-3" />
+                      Leads cairão em <strong className="text-foreground">{currentPipeline.name}</strong> → <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ backgroundColor: currentStage.color }} /><strong className="text-foreground">{currentStage.name}</strong></span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Card>
+
             <Card className="p-5">
               <h3 className="font-heading font-semibold mb-4">Configurações públicas</h3>
               <div className="space-y-3">

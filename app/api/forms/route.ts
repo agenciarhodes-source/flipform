@@ -5,14 +5,33 @@ import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { slugify } from '@/lib/utils';
 
-export const GET = withPermission('FORMS_VIEW', async (_req, session) => {
+export const GET = withPermission('FORMS_VIEW', async (req, session) => {
+  const { searchParams } = new URL(req.url);
+  const pipelineFilter = searchParams.get('pipelineId');
   const forms = await prisma.form.findMany({
-    where: { tenantId: session.tenantId },
-    include: { _count: { select: { leads: true, fields: true } } },
+    where: { tenantId: session.tenantId, ...(pipelineFilter ? { pipelineId: pipelineFilter } : {}) },
+    include: {
+      _count: { select: { leads: true, fields: true } },
+      pipeline: { select: { id: true, name: true, isArchived: true, isDefault: true } },
+      initialStage: { select: { id: true, name: true, color: true, isArchived: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
   return NextResponse.json({ forms });
 });
+
+async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: pipelineId, tenantId },
+    include: { stages: { where: { id: stageId } } },
+  });
+  if (!pipeline) return { error: 'Pipeline inválido para este tenant.', status: 400 };
+  if (pipeline.isArchived) return { error: 'Pipeline arquivado não pode ser usado em formulários.', status: 400 };
+  const stage = pipeline.stages[0];
+  if (!stage) return { error: 'Etapa inicial não pertence ao pipeline selecionado.', status: 400 };
+  if (stage.isArchived) return { error: 'Etapa inicial está arquivada.', status: 400 };
+  return { pipeline, stage };
+}
 
 export const POST = withPermission('FORMS_CREATE', async (req, session) => {
   try {
@@ -28,12 +47,17 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
     let initialStageId = data.initialStageId;
     if (!pipelineId) {
       const def = await prisma.pipeline.findFirst({
-        where: { tenantId: session.tenantId, isDefault: true },
-        include: { stages: { orderBy: { orderIndex: 'asc' }, take: 1 } },
+        where: { tenantId: session.tenantId, isDefault: true, isArchived: false },
+        include: { stages: { where: { isArchived: false }, orderBy: { orderIndex: 'asc' }, take: 1 } },
       });
-      if (!def) return NextResponse.json({ error: 'Sem pipeline padrão' }, { status: 400 });
+      if (!def) return NextResponse.json({ error: 'Sem pipeline padrão ativo. Crie um pipeline antes.' }, { status: 400 });
+      if (!def.stages.length) return NextResponse.json({ error: 'O pipeline padrão não possui etapas ativas.' }, { status: 400 });
       pipelineId = def.id;
       initialStageId = def.stages[0].id;
+    } else {
+      if (!initialStageId) return NextResponse.json({ error: 'Etapa inicial obrigatória quando o pipeline for especificado.' }, { status: 400 });
+      const validation = await validatePipelineAndStage(session.tenantId, pipelineId, initialStageId);
+      if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
     // Slug único
@@ -69,6 +93,11 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
         },
       },
       include: { fields: true },
+    });
+    await logAudit({
+      tenantId: session.tenantId, userId: session.userId,
+      entityType: 'form', entityId: form.id, action: 'form.created',
+      metadata: { name: form.name, slug: form.slug, pipelineId: form.pipelineId, initialStageId: form.initialStageId },
     });
     return NextResponse.json({ form });
   } catch (e: any) {
