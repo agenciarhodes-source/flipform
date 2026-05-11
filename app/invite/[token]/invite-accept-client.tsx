@@ -51,7 +51,7 @@ export function InviteAcceptClient({ token, invite }: { token: string; invite: a
       <Card className="w-full max-w-md p-8 shadow-sm">
         <div className="flex items-center gap-2 mb-6">
           <div className="w-9 h-9 rounded-md bg-brand-600 flex items-center justify-center text-white"><Zap className="w-4 h-4" /></div>
-          <span className="font-heading font-bold text-lg">LeadFlow CRM</span>
+          <span className="font-heading font-bold text-lg">FlipForm</span>
         </div>
         <div className="mb-5">
           <div className="text-xs text-muted-foreground mb-1">Você foi convidado a participar de</div>

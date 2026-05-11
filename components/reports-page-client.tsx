@@ -128,7 +128,7 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
       const blob = await res.blob();
       const cd = res.headers.get('content-disposition') || '';
       const match = cd.match(/filename="([^"]+)"/);
-      const filename = match ? match[1] : 'leadflow-leads.csv';
+      const filename = match ? match[1] : 'flipform-leads.csv';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

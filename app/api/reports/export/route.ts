@@ -98,7 +98,7 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     },
   });
 
-  const filename = `leadflow-leads-${ctx.from.toISOString().slice(0, 10)}_${ctx.to.toISOString().slice(0, 10)}.csv`;
+  const filename = `flipform-leads-${ctx.from.toISOString().slice(0, 10)}_${ctx.to.toISOString().slice(0, 10)}.csv`;
   return new NextResponse(csv, {
     status: 200,
     headers: {

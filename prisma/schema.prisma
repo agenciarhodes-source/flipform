@@ -17,7 +17,36 @@ enum Role {
 
 enum TenantStatus {
   active
+  trial
+  past_due
+  suspended
+  blocked
+  canceled
+  // legacy: inactive — mantido para compat com dados antigos
   inactive
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  unpaid
+  paused
+}
+
+enum PaymentStatus {
+  pending
+  confirmed
+  received
+  overdue
+  refunded
+  failed
 }
 
 enum LeadStatus {
@@ -45,23 +74,31 @@ enum TaskPriority {
 }
 
 model Tenant {
-  id            String       @id @default(uuid())
-  name          String
-  slug          String       @unique
-  logoUrl       String?      @map("logo_url")
-  primaryColor  String       @default("#2563EB") @map("primary_color")
-  status        TenantStatus @default(active)
-  createdAt     DateTime     @default(now()) @map("created_at")
-  updatedAt     DateTime     @updatedAt @map("updated_at")
+  id              String       @id @default(uuid())
+  name            String
+  slug            String       @unique
+  logoUrl         String?      @map("logo_url")
+  primaryColor    String       @default("#2563EB") @map("primary_color")
+  status          TenantStatus @default(active)
+  planId          String?      @map("plan_id")
+  nextDueDate     DateTime?    @map("next_due_date")
+  internalNotes   String?      @map("internal_notes")
+  lastLoginAt     DateTime?    @map("last_login_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
-  tenantUsers   TenantUser[]
-  forms         Form[]
-  pipelines     Pipeline[]
-  leads         Lead[]
-  notes         Note[]
-  tasks         Task[]
-  auditLogs     AuditLog[]
-  invites       Invite[]
+  tenantUsers      TenantUser[]
+  forms            Form[]
+  pipelines        Pipeline[]
+  leads            Lead[]
+  notes            Note[]
+  tasks            Task[]
+  auditLogs        AuditLog[]
+  invites          Invite[]
+  plan             Plan?                  @relation(fields: [planId], references: [id])
+  subscriptions    Subscription[]
+  payments         Payment[]
+  statusHistory    TenantStatusHistory[]
 
   @@map("tenants")
 }
@@ -72,17 +109,19 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   avatarUrl    String?  @map("avatar_url")
+  globalRole   String?  @map("global_role") // null | "platform_admin"
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenantUsers      TenantUser[]
-  assignedLeads    Lead[]              @relation("AssignedLeads")
-  stageChanges     LeadStageHistory[]  @relation("StageChanger")
-  notes            Note[]
-  assignedTasks    Task[]              @relation("AssignedTasks")
-  createdTasks     Task[]              @relation("CreatedTasks")
-  auditLogs        AuditLog[]
-  invitesIssued    Invite[]            @relation("InviteIssuer")
+  tenantUsers          TenantUser[]
+  assignedLeads        Lead[]                  @relation("AssignedLeads")
+  stageChanges         LeadStageHistory[]      @relation("StageChanger")
+  notes                Note[]
+  assignedTasks        Task[]                  @relation("AssignedTasks")
+  createdTasks         Task[]                  @relation("CreatedTasks")
+  auditLogs            AuditLog[]
+  invitesIssued        Invite[]                @relation("InviteIssuer")
+  tenantStatusChanges  TenantStatusHistory[]   @relation("StatusChanger")
 
   @@map("users")
 }
@@ -146,7 +185,12 @@ model Form {
   publicDescription String?  @map("public_description")
   slug              String   @unique
   primaryColor      String   @default("#2563EB") @map("primary_color")
+  bgColor           String?  @map("bg_color")
+  buttonColor       String?  @map("button_color")
+  textColor         String?  @map("text_color")
+  theme             String   @default("light") // light | dark
   logoUrl           String?  @map("logo_url")
+  coverImageUrl     String?  @map("cover_image_url")
   successMessage    String   @default("Obrigado pelo envio!") @map("success_message")
   pipelineId        String   @map("pipeline_id")
   initialStageId    String   @map("initial_stage_id")
@@ -325,3 +369,89 @@ model Invite {
   @@index([email])
   @@map("invites")
 }
+
+// ============================================================================
+// Fase 8 — Billing / Plataforma (preparação para Asaas; sem integração real)
+// ============================================================================
+
+model Plan {
+  id           String       @id @default(uuid())
+  name         String
+  description  String?
+  price        Decimal      @db.Decimal(10, 2)
+  billingCycle BillingCycle @default(monthly) @map("billing_cycle")
+  maxUsers     Int          @default(0) @map("max_users")
+  maxForms     Int          @default(0) @map("max_forms")
+  maxLeads     Int          @default(0) @map("max_leads")
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  tenants       Tenant[]
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                     String             @id @default(uuid())
+  tenantId               String             @map("tenant_id")
+  planId                 String             @map("plan_id")
+  status                 SubscriptionStatus @default(trialing)
+  currentPeriodStart     DateTime?          @map("current_period_start")
+  currentPeriodEnd       DateTime?          @map("current_period_end")
+  nextDueDate            DateTime?          @map("next_due_date")
+  paymentProvider        String?            @default("asaas") @map("payment_provider")
+  providerCustomerId     String?            @map("provider_customer_id")
+  providerSubscriptionId String?            @map("provider_subscription_id")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+
+  @@index([tenantId])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  tenantId          String        @map("tenant_id")
+  subscriptionId    String?       @map("subscription_id")
+  provider          String        @default("asaas")
+  providerPaymentId String?       @map("provider_payment_id")
+  status            PaymentStatus @default(pending)
+  value             Decimal       @db.Decimal(10, 2)
+  dueDate           DateTime?     @map("due_date")
+  paidAt            DateTime?     @map("paid_at")
+  invoiceUrl        String?       @map("invoice_url")
+  billingType       String?       @map("billing_type")
+  rawPayload        Json?         @map("raw_payload")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("payments")
+}
+
+model TenantStatusHistory {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  previousStatus String?  @map("previous_status")
+  newStatus      String   @map("new_status")
+  reason         String?
+  changedBy      String?  @map("changed_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  changer User?  @relation("StatusChanger", fields: [changedBy], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@map("tenant_status_history")
+}
+

@@ -91,7 +91,7 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           <div className="flex-1">
             <h2 className="font-heading text-xl font-bold">{name || 'Sua empresa'}</h2>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1"><Globe className="w-3 h-3" />leadflow.com/<strong className="text-foreground">{slug || 'sua-empresa'}</strong></span>
+              <span className="flex items-center gap-1"><Globe className="w-3 h-3" />flipform.com.br/<strong className="text-foreground">{slug || 'sua-empresa'}</strong></span>
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1"><ShieldCheck className="w-3 h-3" />{tenant.status}</Badge>
             </div>
           </div>

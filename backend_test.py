@@ -66,8 +66,8 @@ def test_auth():
         })
         
         if resp.status_code == 200 and resp.json().get("ok"):
-            # Check if cookie is set
-            has_cookie = "leadflow_token" in demo_session.cookies
+            # Check if cookie is set (flipform_token or leadflow_token for backward compat)
+            has_cookie = "flipform_token" in demo_session.cookies or "leadflow_token" in demo_session.cookies
             log_test("A1: Login with correct credentials", 
                     resp.status_code == 200 and has_cookie,
                     f"Status: {resp.status_code}, Cookie set: {has_cookie}")
@@ -124,7 +124,7 @@ def test_auth():
         })
         
         if resp.status_code == 200:
-            has_cookie = "leadflow_token" in new_session.cookies
+            has_cookie = "flipform_token" in new_session.cookies or "leadflow_token" in new_session.cookies
             log_test("A5: Register new user", 
                     resp.json().get("ok") and has_cookie,
                     f"Status: {resp.status_code}, Email: {random_email}, Cookie set: {has_cookie}")

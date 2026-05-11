@@ -28,7 +28,11 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro no login');
       toast.success('Bem-vindo!');
-      router.push('/dashboard');
+      if (data.platformAdmin) {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
       router.refresh();
     } catch (e: any) {
       toast.error(e.message);
@@ -44,7 +48,7 @@ export default function LoginPage() {
           <div className="w-10 h-10 rounded-md bg-white/20 backdrop-blur flex items-center justify-center">
             <Zap className="w-5 h-5" />
           </div>
-          <span className="font-heading font-bold text-xl">LeadFlow CRM</span>
+          <span className="font-heading font-bold text-xl">FlipForm</span>
         </div>
         <div>
           <h1 className="font-heading text-4xl font-bold leading-tight mb-4">
@@ -55,7 +59,7 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="text-brand-100 text-sm">
-          © {new Date().getFullYear()} LeadFlow — Multi-empresa SaaS
+          © {new Date().getFullYear()} FlipForm — Multi-empresa SaaS
         </div>
       </div>
 
@@ -65,7 +69,7 @@ export default function LoginPage() {
             <div className="w-9 h-9 rounded-md bg-brand-600 flex items-center justify-center text-white">
               <Zap className="w-4 h-4" />
             </div>
-            <span className="font-heading font-bold text-lg">LeadFlow CRM</span>
+            <span className="font-heading font-bold text-lg">FlipForm</span>
           </div>
           <h2 className="font-heading text-2xl font-bold mb-2">Entrar</h2>
           <p className="text-muted-foreground text-sm mb-6">Acesse sua conta para gerenciar seus leads.</p>

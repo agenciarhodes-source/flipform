@@ -4,6 +4,8 @@ import { verifyPassword, setSessionCookie } from '@/lib/auth';
 import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 
+const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -18,12 +20,39 @@ export async function POST(req: Request) {
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
 
+    // Platform admin: pode logar sem tenant
+    if (user.globalRole === 'platform_admin') {
+      await setSessionCookie({
+        userId: user.id,
+        tenantId: '',
+        role: 'platform_admin',
+        email: user.email,
+        name: user.name,
+        tenantSlug: '',
+        globalRole: 'platform_admin',
+      });
+      // Não há tenant para logar audit nessa fase — registra em audit do primeiro tenant se existir,
+      // ou apenas console (poderíamos ter audit global; por ora omitimos).
+      return NextResponse.json({ ok: true, platformAdmin: true });
+    }
+
     const tu = await prisma.tenantUser.findFirst({
       where: { userId: user.id, status: 'active' },
       include: { tenant: true },
       orderBy: { createdAt: 'asc' },
     });
     if (!tu) return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
+
+    if (BLOCKED.has(String(tu.tenant.status))) {
+      return NextResponse.json(
+        {
+          error: 'Acesso bloqueado para esta empresa. Entre em contato com o administrador.',
+          code: 'tenant_blocked',
+          status: tu.tenant.status,
+        },
+        { status: 403 },
+      );
+    }
 
     await setSessionCookie({
       userId: user.id,
@@ -32,7 +61,11 @@ export async function POST(req: Request) {
       email: user.email,
       name: user.name,
       tenantSlug: tu.tenant.slug,
+      globalRole: user.globalRole || null,
     });
+
+    // Atualiza lastLoginAt do tenant
+    await prisma.tenant.update({ where: { id: tu.tenantId }, data: { lastLoginAt: new Date() } });
 
     await logAudit({
       tenantId: tu.tenantId, userId: user.id,

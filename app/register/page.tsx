@@ -43,7 +43,7 @@ export default function RegisterPage() {
           <div className="w-9 h-9 rounded-md bg-brand-600 flex items-center justify-center text-white">
             <Zap className="w-4 h-4" />
           </div>
-          <span className="font-heading font-bold text-lg">LeadFlow CRM</span>
+          <span className="font-heading font-bold text-lg">FlipForm</span>
         </div>
         <h2 className="font-heading text-2xl font-bold mb-2">Crie sua conta</h2>
         <p className="text-muted-foreground text-sm mb-6">Comece a capturar leads em minutos.</p>

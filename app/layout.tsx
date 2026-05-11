@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
-  title: 'LeadFlow CRM — Capturação e gestão de leads',
+  title: 'FlipForm — Capture e gerencie leads em escala',
   description: 'Plataforma SaaS multi-empresa para capturação de leads via formulários e gestão em Kanban.',
 };
 

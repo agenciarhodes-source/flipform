@@ -391,7 +391,7 @@ def test_invites_endpoints(owner_session, admin_session):
             })
             
             if resp.status_code == 200:
-                has_cookie = "leadflow_token" in accept_session.cookies
+                has_cookie = "flipform_token" in accept_session.cookies or "leadflow_token" in accept_session.cookies
                 log_test("B5: POST /api/public/invites/<token>/accept creates user and sets cookie", 
                         has_cookie,
                         f"Status: {resp.status_code}, Cookie set: {has_cookie}")

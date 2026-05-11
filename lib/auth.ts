@@ -4,17 +4,20 @@ import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from './prisma';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'leadflow-dev-secret';
-const COOKIE_NAME = 'leadflow_token';
+const JWT_SECRET = process.env.JWT_SECRET || 'flipform-dev-secret';
+const COOKIE_NAME = 'flipform_token';
+const LEGACY_COOKIE = 'leadflow_token';
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface SessionPayload {
   userId: string;
+  // tenantId é '' apenas para sessões de platform admin sem tenant
   tenantId: string;
   role: string;
   email: string;
   name: string;
   tenantSlug: string;
+  globalRole?: string | null;
 }
 
 export async function hashPassword(plain: string): Promise<string> {
@@ -50,16 +53,22 @@ export async function setSessionCookie(payload: SessionPayload) {
 
 export function clearSessionCookie() {
   cookies().delete(COOKIE_NAME);
+  cookies().delete(LEGACY_COOKIE);
+}
+
+function readCookieToken(): string | undefined {
+  const c = cookies();
+  return c.get(COOKIE_NAME)?.value || c.get(LEGACY_COOKIE)?.value;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = readCookieToken();
   if (!token) return null;
   return verifyToken(token);
 }
 
 export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
-  const token = req.cookies.get(COOKIE_NAME)?.value;
+  const token = req.cookies.get(COOKIE_NAME)?.value || req.cookies.get(LEGACY_COOKIE)?.value;
   if (!token) return null;
   return verifyToken(token);
 }
@@ -73,8 +82,16 @@ export async function requireSession(): Promise<SessionPayload> {
 }
 
 /**
+ * Tenant statuses que BLOQUEIAM acesso à aplicação.
+ */
+const BLOCKED_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
+
+/**
  * Wraps an API handler. Verifies session and injects it.
  * All private endpoints MUST use this to ensure tenant isolation.
+ *
+ * Bloqueia tenant com status em BLOCKED_STATUSES (403 com error code).
+ * Platform admins sem tenantId não são afetados.
  */
 export function withAuth<T = any>(
   handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse> | NextResponse
@@ -83,6 +100,39 @@ export function withAuth<T = any>(
     const session = getSessionFromRequest(req);
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    // Tenant gating (apenas se a sessão tem tenantId)
+    if (session.tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { status: true },
+      });
+      if (!tenant) {
+        return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 401 });
+      }
+      if (BLOCKED_STATUSES.has(String(tenant.status))) {
+        return NextResponse.json(
+          { error: 'Acesso bloqueado. Entre em contato com o administrador.', code: 'tenant_blocked', status: tenant.status },
+          { status: 403 },
+        );
+      }
+    }
+    return handler(req, session, ctx);
+  };
+}
+
+/**
+ * Para rotas administrativas da plataforma (/admin/* APIs).
+ * Requer usuário com globalRole === 'platform_admin'.
+ */
+export function withPlatformAdmin<T = any>(
+  handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse> | NextResponse
+) {
+  return async (req: NextRequest, ctx: T) => {
+    const session = getSessionFromRequest(req);
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (session.globalRole !== 'platform_admin') {
+      return NextResponse.json({ error: 'Acesso restrito ao Super Admin da plataforma.' }, { status: 403 });
     }
     return handler(req, session, ctx);
   };
@@ -101,5 +151,6 @@ export async function loadUserSession(userId: string, tenantId: string): Promise
     email: tu.user.email,
     name: tu.user.name,
     tenantSlug: tu.tenant.slug,
+    globalRole: tu.user.globalRole || null,
   };
 }

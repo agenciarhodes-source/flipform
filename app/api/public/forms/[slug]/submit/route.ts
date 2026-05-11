@@ -37,10 +37,16 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         fields: { orderBy: { orderIndex: 'asc' } },
         pipeline: { select: { id: true, isArchived: true } },
         initialStage: { select: { id: true, isArchived: true, name: true } },
+        tenant: { select: { id: true, status: true } },
       },
     });
     if (!form) {
       return NextResponse.json({ error: 'Formulário não encontrado ou inativo.' }, { status: 404 });
+    }
+
+    const BLOCKED_TENANT_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
+    if (BLOCKED_TENANT_STATUSES.has(String(form.tenant.status))) {
+      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível.' }, { status: 410 });
     }
 
     if (form.pipeline?.isArchived) {

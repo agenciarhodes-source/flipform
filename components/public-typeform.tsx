@@ -17,7 +17,14 @@ interface PublicField {
 }
 
 interface Props {
-  form: { publicTitle: string; publicDescription?: string | null; primaryColor: string; successMessage: string; logoUrl?: string | null; tenantName?: string; fields: PublicField[] };
+  form: {
+    publicTitle: string; publicDescription?: string | null;
+    primaryColor: string;
+    bgColor?: string | null; buttonColor?: string | null; textColor?: string | null;
+    theme?: string | null; coverImageUrl?: string | null;
+    successMessage: string; logoUrl?: string | null; tenantName?: string;
+    fields: PublicField[];
+  };
   onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<void>;
   previewMode?: boolean;
 }
@@ -78,28 +85,46 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
 
   const prev = () => { if (step > 0) { setStep(step - 1); setError(''); } };
 
+  // Tema do formulário
+  const isDark = form.theme === 'dark';
+  const buttonColor = form.buttonColor || form.primaryColor;
+  const themeBgClass = isDark ? '' : 'bg-gradient-to-br from-white to-slate-50';
+  const themeBgStyle: React.CSSProperties = form.bgColor
+    ? { backgroundColor: form.bgColor, backgroundImage: 'none' as any }
+    : isDark
+    ? { backgroundColor: '#0f172a', backgroundImage: 'none' as any }
+    : {};
+  const textStyle: React.CSSProperties = form.textColor
+    ? { color: form.textColor }
+    : isDark
+    ? { color: '#e2e8f0' }
+    : {};
+
   if (done) {
     return (
-      <div className="min-h-full flex items-center justify-center p-6 bg-gradient-to-br from-white to-slate-50">
-        <div className="max-w-md w-full text-center animate-fade-in">
+      <div className={`min-h-full flex items-center justify-center p-6 ${themeBgClass}`} style={themeBgStyle}>
+        <div className="max-w-md w-full text-center animate-fade-in" style={textStyle}>
           <div className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: `${form.primaryColor}22` }}>
             <CheckCircle2 className="w-10 h-10" style={{ color: form.primaryColor }} />
           </div>
           <h2 className="font-heading text-2xl font-bold mb-2">{form.successMessage}</h2>
-          <p className="text-muted-foreground">Você já pode fechar esta janela.</p>
+          <p className={isDark ? 'text-slate-400' : 'text-muted-foreground'}>Você já pode fechar esta janela.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-full flex flex-col bg-gradient-to-br from-white to-slate-50">
+    <div className={`min-h-full flex flex-col ${themeBgClass}`} style={themeBgStyle}>
+      {form.coverImageUrl && (
+        <div className="w-full h-32 lg:h-40 bg-cover bg-center" style={{ backgroundImage: `url(${form.coverImageUrl})` }} />
+      )}
       {/* Progress */}
-      <div className="h-1.5 bg-slate-100">
+      <div className={`h-1.5 ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
         <div className="h-full transition-all duration-500" style={{ width: `${progress}%`, backgroundColor: form.primaryColor }} />
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-10">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-10" style={textStyle}>
         <div className="max-w-xl w-full animate-fade-in" key={step}>
           {/* Branding do tenant */}
           {(form.logoUrl || form.tenantName) && (
@@ -141,7 +166,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
             <div className="flex gap-2">
               <Button variant="ghost" onClick={prev} disabled={step === 0}><ArrowLeft className="w-4 h-4 mr-1" />Voltar</Button>
             </div>
-            <Button onClick={next} disabled={submitting} style={{ backgroundColor: form.primaryColor }} className="text-white hover:opacity-90 min-w-[110px]">
+            <Button onClick={next} disabled={submitting} style={{ backgroundColor: buttonColor }} className="text-white hover:opacity-90 min-w-[110px]">
               {submitting ? (
                 <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Enviando...</>
               ) : isLast ? (

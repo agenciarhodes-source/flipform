@@ -48,6 +48,12 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [publicTitle, setPublicTitle] = useState('');
   const [publicDescription, setPublicDescription] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#2563EB');
+  const [bgColor, setBgColor] = useState('');
+  const [buttonColor, setButtonColor] = useState('');
+  const [textColor, setTextColor] = useState('');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [formLogoUrl, setFormLogoUrl] = useState('');
   const [successMessage, setSuccessMessage] = useState('Obrigado pelo envio!');
   const [isActive, setIsActive] = useState(true);
   const [fields, setFields] = useState<Field[]>([]);
@@ -84,6 +90,12 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setPublicTitle(f.publicTitle);
       setPublicDescription(f.publicDescription || '');
       setPrimaryColor(f.primaryColor);
+      setBgColor(f.bgColor || '');
+      setButtonColor(f.buttonColor || '');
+      setTextColor(f.textColor || '');
+      setTheme((f.theme as any) || 'light');
+      setCoverImageUrl(f.coverImageUrl || '');
+      setFormLogoUrl(f.logoUrl || '');
       setSuccessMessage(f.successMessage);
       setIsActive(f.isActive);
       setPipelineId(f.pipelineId || '');
@@ -148,7 +160,16 @@ export function FormBuilder({ formId }: { formId?: string }) {
     }
     setSaving(true);
     try {
-      const payload = { name, publicTitle, publicDescription, primaryColor, successMessage, isActive, fields, pipelineId, initialStageId };
+      const payload = {
+        name, publicTitle, publicDescription, primaryColor,
+        bgColor: bgColor || null,
+        buttonColor: buttonColor || null,
+        textColor: textColor || null,
+        theme,
+        coverImageUrl: coverImageUrl || null,
+        logoUrl: formLogoUrl || null,
+        successMessage, isActive, fields, pipelineId, initialStageId,
+      };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -284,13 +305,43 @@ export function FormBuilder({ formId }: { formId?: string }) {
               <div className="space-y-3">
                 <div><Label>Título público</Label><Input value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} /></div>
                 <div><Label>Descrição</Label><Textarea value={publicDescription} onChange={(e) => setPublicDescription(e.target.value)} rows={2} /></div>
+                <div><Label>Mensagem de sucesso</Label><Input value={successMessage} onChange={(e) => setSuccessMessage(e.target.value)} /></div>
+              </div>
+            </Card>
+
+            <Card className="p-5">
+              <h3 className="font-heading font-semibold mb-1">Personalização visual</h3>
+              <p className="text-xs text-muted-foreground mb-4">Sobrescreve o branding do tenant para este formulário. Deixe em branco para herdar.</p>
+              <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Cor principal</Label>
                     <div className="flex gap-2"><Input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} className="w-14 p-1 h-9" /><Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} /></div>
                   </div>
-                  <div><Label>Mensagem de sucesso</Label><Input value={successMessage} onChange={(e) => setSuccessMessage(e.target.value)} /></div>
+                  <div>
+                    <Label>Cor do botão</Label>
+                    <div className="flex gap-2"><Input type="color" value={buttonColor || primaryColor} onChange={(e) => setButtonColor(e.target.value)} className="w-14 p-1 h-9" /><Input value={buttonColor} onChange={(e) => setButtonColor(e.target.value)} placeholder="herda" /></div>
+                  </div>
+                  <div>
+                    <Label>Fundo</Label>
+                    <div className="flex gap-2"><Input type="color" value={bgColor || '#ffffff'} onChange={(e) => setBgColor(e.target.value)} className="w-14 p-1 h-9" /><Input value={bgColor} onChange={(e) => setBgColor(e.target.value)} placeholder="herda" /></div>
+                  </div>
+                  <div>
+                    <Label>Texto</Label>
+                    <div className="flex gap-2"><Input type="color" value={textColor || '#1e293b'} onChange={(e) => setTextColor(e.target.value)} className="w-14 p-1 h-9" /><Input value={textColor} onChange={(e) => setTextColor(e.target.value)} placeholder="herda" /></div>
+                  </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Tema</Label>
+                    <Select value={theme} onValueChange={(v: any) => setTheme(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="light">Claro</SelectItem><SelectItem value="dark">Escuro</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div><Label>Logo do formulário (URL)</Label><Input value={formLogoUrl} onChange={(e) => setFormLogoUrl(e.target.value)} placeholder="https://... (deixe em branco para herdar do tenant)" /></div>
+                <div><Label>Imagem de capa (URL opcional)</Label><Input value={coverImageUrl} onChange={(e) => setCoverImageUrl(e.target.value)} placeholder="https://..." /></div>
               </div>
             </Card>
 
