@@ -65,11 +65,24 @@ export const leadCreateSchema = z.object({
 });
 
 export const publicSubmitSchema = z.object({
-  answers: z.array(z.object({
-    fieldId: z.string(),
-    label: z.string(),
-    value: z.any(),
-  })),
+  answers: z
+    .array(
+      z
+        .object({
+          fieldId: z.string().min(1, 'fieldId obrigatório'),
+          // label é opcional — derivamos do form no servidor por segurança
+          label: z.string().optional(),
+          // aceita tanto `value` quanto `answer` como nome do valor
+          value: z.any().optional(),
+          answer: z.any().optional(),
+        })
+        .transform((a) => ({
+          fieldId: a.fieldId,
+          label: a.label,
+          value: a.value !== undefined ? a.value : a.answer,
+        })),
+    )
+    .default([]),
 });
 
 export type FieldType = z.infer<typeof fieldTypeEnum>;

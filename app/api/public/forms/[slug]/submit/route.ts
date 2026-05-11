@@ -3,75 +3,147 @@ import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 
+/**
+ * Public form submit endpoint.
+ *
+ * Hardening:
+ * - Aceita tanto `value` quanto `answer` no payload (compat).
+ * - Deriva `label` do form no servidor (não confia no cliente).
+ * - Valida que `fieldId` pertence ao form.
+ * - Valida que todos os campos obrigatórios foram respondidos.
+ * - Cria lead + answers + history dentro de uma transaction Prisma.
+ * - Bloqueia formulário inativo, pipeline arquivado ou stage arquivado.
+ * - Retorna mensagens de erro amigáveis em português.
+ */
 export async function POST(req: Request, ctx: { params: { slug: string } }) {
+  const slug = ctx.params.slug;
   try {
-    const body = await req.json();
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: 'Corpo da requisição inválido (JSON malformado).' }, { status: 400 });
+    }
+
     const parsed = publicSubmitSchema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      const msg = parsed.error.errors[0]?.message || 'Dados inválidos.';
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
 
     const form = await prisma.form.findFirst({
-      where: { slug: ctx.params.slug, isActive: true },
+      where: { slug, isActive: true },
       include: {
-        fields: true,
+        fields: { orderBy: { orderIndex: 'asc' } },
         pipeline: { select: { id: true, isArchived: true } },
-        initialStage: { select: { id: true, isArchived: true } },
+        initialStage: { select: { id: true, isArchived: true, name: true } },
       },
     });
-    if (!form) return NextResponse.json({ error: 'Formulário não encontrado' }, { status: 404 });
+    if (!form) {
+      return NextResponse.json({ error: 'Formulário não encontrado ou inativo.' }, { status: 404 });
+    }
 
-    // Validar pipeline e etapa não arquivados (forms existentes que tiveram pipeline/stage arquivado depois)
     if (form.pipeline?.isArchived) {
-      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível.' }, { status: 410 });
+      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (pipeline arquivado).' }, { status: 410 });
     }
     if (form.initialStage?.isArchived) {
-      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível.' }, { status: 410 });
+      return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (etapa inicial arquivada).' }, { status: 410 });
     }
 
-    const answers = parsed.data.answers;
+    const fieldsById = new Map(form.fields.map((f) => [f.id, f]));
 
-    // Extrair name/email/phone
-    const findVal = (types: string[]) => {
-      for (const a of answers) {
-        const field = form.fields.find((f) => f.id === a.fieldId);
-        if (field && types.includes(field.fieldType) && a.value) return String(a.value);
+    // Filtra apenas answers com fieldId válido para este form
+    const cleanAnswers = parsed.data.answers
+      .filter((a) => fieldsById.has(a.fieldId))
+      .map((a) => {
+        const f = fieldsById.get(a.fieldId)!;
+        return {
+          fieldId: f.id,
+          label: f.label, // sempre derivamos do servidor
+          value: a.value,
+          fieldType: f.fieldType,
+        };
+      });
+
+    // Validar campos obrigatórios
+    const isEmpty = (v: any) =>
+      v === undefined ||
+      v === null ||
+      v === '' ||
+      (Array.isArray(v) && v.length === 0);
+
+    const missingRequired = form.fields
+      .filter((f) => f.isRequired)
+      .filter((f) => {
+        const a = cleanAnswers.find((x) => x.fieldId === f.id);
+        return !a || isEmpty(a.value);
+      });
+
+    if (missingRequired.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Campo obrigatório não preenchido: ${missingRequired[0].label}.`,
+          missingFields: missingRequired.map((f) => ({ id: f.id, label: f.label })),
+        },
+        { status: 400 },
+      );
+    }
+
+    // Validações básicas de tipo
+    for (const a of cleanAnswers) {
+      if (a.fieldType === 'email' && !isEmpty(a.value)) {
+        const s = String(a.value);
+        if (!/^\S+@\S+\.\S+$/.test(s)) {
+          return NextResponse.json({ error: `E-mail inválido em "${a.label}".` }, { status: 400 });
+        }
+      }
+    }
+
+    // Extrair name/email/phone direto do tipo de campo
+    const pickByType = (types: string[]) => {
+      for (const a of cleanAnswers) {
+        if (types.includes(a.fieldType) && !isEmpty(a.value)) return String(a.value);
       }
       return null;
     };
-    const name = findVal(['name', 'short_text']) || 'Lead sem nome';
-    const email = findVal(['email']);
-    const phone = findVal(['phone']);
+    const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
+    const email = pickByType(['email']);
+    const phone = pickByType(['phone']);
 
-    const lead = await prisma.lead.create({
-      data: {
-        tenantId: form.tenantId,
-        formId: form.id,
-        pipelineId: form.pipelineId,
-        stageId: form.initialStageId,
-        name,
-        email,
-        phone,
-        source: 'formulario',
-        status: 'open',
-        temperature: 'warm',
-        answers: {
-          create: answers.map((a) => ({
-            fieldId: a.fieldId,
-            questionLabel: a.label,
-            answer: a.value as any,
-          })),
+    // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
+    const lead = await prisma.$transaction(async (tx) => {
+      const created = await tx.lead.create({
+        data: {
+          tenantId: form.tenantId,
+          formId: form.id,
+          pipelineId: form.pipelineId,
+          stageId: form.initialStageId,
+          name,
+          email,
+          phone,
+          source: 'formulario',
+          status: 'open',
+          temperature: 'warm',
+          answers: {
+            create: cleanAnswers.map((a) => ({
+              fieldId: a.fieldId,
+              questionLabel: a.label,
+              answer: (a.value ?? null) as any,
+            })),
+          },
+          history: {
+            create: [{ fromStageId: null, toStageId: form.initialStageId }],
+          },
         },
-        history: {
-          create: [{ fromStageId: null, toStageId: form.initialStageId }],
-        },
-      },
+      });
+      return created;
     });
 
+    // Audit logs (fora da transaction para não bloquear retorno em caso de falha de log)
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'form', entityId: form.id, action: 'form.submitted',
-      metadata: { leadId: lead.id, source: 'public_form', slug: ctx.params.slug },
+      metadata: { leadId: lead.id, source: 'public_form', slug },
     });
     await logAudit({
       tenantId: form.tenantId, userId: null,
@@ -79,9 +151,13 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario' },
     });
 
-    return NextResponse.json({ ok: true, leadId: lead.id, successMessage: form.successMessage });
+    return NextResponse.json({
+      ok: true,
+      leadId: lead.id,
+      successMessage: form.successMessage,
+    });
   } catch (e: any) {
     console.error('public submit error', e);
-    return NextResponse.json({ error: 'Erro ao enviar' }, { status: 500 });
+    return NextResponse.json({ error: 'Erro interno ao enviar formulário. Tente novamente.' }, { status: 500 });
   }
 }

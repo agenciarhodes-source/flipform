@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface PublicField {
   id: string;
@@ -29,6 +29,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const submitGuard = useRef(false);
 
   const tenantInitials = (form.tenantName || '').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
@@ -60,13 +61,18 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
     if (!validate()) return;
     if (isLast) {
       if (previewMode) { setDone(true); return; }
+      if (submitGuard.current || submitting) return; // guard contra double-click
+      submitGuard.current = true;
       setSubmitting(true);
       try {
         await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: answers[f.id] ?? null })));
         setDone(true);
-      } catch {
-        setError('Erro ao enviar. Tente novamente.');
-      } finally { setSubmitting(false); }
+      } catch (e: any) {
+        setError(e?.message || 'Erro ao enviar. Tente novamente.');
+        submitGuard.current = false;
+      } finally {
+        setSubmitting(false);
+      }
     } else { setStep(step + 1); }
   };
 
@@ -135,8 +141,14 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
             <div className="flex gap-2">
               <Button variant="ghost" onClick={prev} disabled={step === 0}><ArrowLeft className="w-4 h-4 mr-1" />Voltar</Button>
             </div>
-            <Button onClick={next} disabled={submitting} style={{ backgroundColor: form.primaryColor }} className="text-white hover:opacity-90">
-              {isLast ? <>Enviar <Check className="w-4 h-4 ml-1" /></> : <>Próximo <ArrowRight className="w-4 h-4 ml-1" /></>}
+            <Button onClick={next} disabled={submitting} style={{ backgroundColor: form.primaryColor }} className="text-white hover:opacity-90 min-w-[110px]">
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Enviando...</>
+              ) : isLast ? (
+                <>Enviar <Check className="w-4 h-4 ml-1" /></>
+              ) : (
+                <>Próximo <ArrowRight className="w-4 h-4 ml-1" /></>
+              )}
             </Button>
           </div>
           <div className="text-xs text-muted-foreground mt-4">Pergunta {step + 1} de {fields.length}</div>
