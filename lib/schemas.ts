@@ -1,0 +1,75 @@
+import { z } from 'zod';
+
+export const registerSchema = z.object({
+  companyName: z.string().min(2, 'Nome da empresa muito curto'),
+  name: z.string().min(2, 'Informe seu nome'),
+  email: z.string().email('E-mail inválido'),
+  password: z.string().min(6, 'Senha deve ter ao menos 6 caracteres'),
+});
+
+export const loginSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+  password: z.string().min(1, 'Informe a senha'),
+});
+
+export const fieldTypeEnum = z.enum([
+  'short_text',
+  'long_text',
+  'name',
+  'email',
+  'phone',
+  'number',
+  'date',
+  'document',
+  'single_select',
+  'multi_select',
+  'checkbox',
+  'dropdown',
+  'rating',
+  'file',
+  'hidden',
+  'url',
+  'city_state',
+]);
+
+export const formFieldSchema = z.object({
+  id: z.string().optional(),
+  label: z.string().min(1),
+  placeholder: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  fieldType: fieldTypeEnum,
+  options: z.array(z.string()).optional().nullable(),
+  isRequired: z.boolean().default(false),
+  orderIndex: z.number().int(),
+});
+
+export const formCreateSchema = z.object({
+  name: z.string().min(1),
+  publicTitle: z.string().min(1),
+  publicDescription: z.string().optional().nullable(),
+  primaryColor: z.string().optional(),
+  successMessage: z.string().optional(),
+  pipelineId: z.string().optional(),
+  initialStageId: z.string().optional(),
+  isActive: z.boolean().optional(),
+  fields: z.array(formFieldSchema).default([]),
+});
+
+export const leadCreateSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  pipelineId: z.string(),
+  stageId: z.string(),
+  source: z.string().optional(),
+});
+
+export const publicSubmitSchema = z.object({
+  answers: z.array(z.object({
+    fieldId: z.string(),
+    label: z.string(),
+    value: z.any(),
+  })),
+});
+
+export type FieldType = z.infer<typeof fieldTypeEnum>;

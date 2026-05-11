@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  owner
+  admin
+  manager
+  agent
+  viewer
+}
+
+enum TenantStatus {
+  active
+  inactive
+}
+
+enum LeadStatus {
+  open
+  won
+  lost
+}
+
+enum LeadTemperature {
+  cold
+  warm
+  hot
+}
+
+enum TaskStatus {
+  pending
+  completed
+  overdue
+}
+
+model Tenant {
+  id            String       @id @default(uuid())
+  name          String
+  slug          String       @unique
+  logoUrl       String?      @map("logo_url")
+  primaryColor  String       @default("#2563EB") @map("primary_color")
+  status        TenantStatus @default(active)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  tenantUsers   TenantUser[]
+  forms         Form[]
+  pipelines     Pipeline[]
+  leads         Lead[]
+  notes         Note[]
+  tasks         Task[]
+  auditLogs     AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenantUsers      TenantUser[]
+  assignedLeads    Lead[]              @relation("AssignedLeads")
+  stageChanges     LeadStageHistory[]  @relation("StageChanger")
+  notes            Note[]
+  assignedTasks    Task[]              @relation("AssignedTasks")
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model TenantUser {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  role      Role     @default(agent)
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+model Pipeline {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stages PipelineStage[]
+  forms  Form[]
+  leads  Lead[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id         String   @id @default(uuid())
+  pipelineId String   @map("pipeline_id")
+  name       String
+  color      String   @default("#3B82F6")
+  orderIndex Int      @map("order_index")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  formsAsInitial Form[]
+  leads    Lead[]
+  fromHistory LeadStageHistory[] @relation("FromStage")
+  toHistory   LeadStageHistory[] @relation("ToStage")
+
+  @@map("pipeline_stages")
+}
+
+model Form {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  name              String
+  publicTitle       String   @map("public_title")
+  publicDescription String?  @map("public_description")
+  slug              String   @unique
+  primaryColor      String   @default("#2563EB") @map("primary_color")
+  logoUrl           String?  @map("logo_url")
+  successMessage    String   @default("Obrigado pelo envio!") @map("success_message")
+  pipelineId        String   @map("pipeline_id")
+  initialStageId    String   @map("initial_stage_id")
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline       @relation(fields: [pipelineId], references: [id])
+  initialStage PipelineStage  @relation(fields: [initialStageId], references: [id])
+  fields       FormField[]
+  leads        Lead[]
+
+  @@map("forms")
+}
+
+model FormField {
+  id              String   @id @default(uuid())
+  formId          String   @map("form_id")
+  label           String
+  placeholder     String?
+  description     String?
+  fieldType       String   @map("field_type")
+  options         Json?
+  isRequired      Boolean  @default(false) @map("is_required")
+  orderIndex      Int      @map("order_index")
+  validationRules Json?    @map("validation_rules")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  form    Form         @relation(fields: [formId], references: [id], onDelete: Cascade)
+  answers LeadAnswer[]
+
+  @@map("form_fields")
+}
+
+model Lead {
+  id          String           @id @default(uuid())
+  tenantId    String           @map("tenant_id")
+  formId      String?          @map("form_id")
+  pipelineId  String           @map("pipeline_id")
+  stageId     String           @map("stage_id")
+  assignedTo  String?          @map("assigned_to")
+  name        String
+  email       String?
+  phone       String?
+  source      String           @default("formulario")
+  status      LeadStatus       @default(open)
+  temperature LeadTemperature  @default(cold)
+  lostReason  String?          @map("lost_reason")
+  tags        String[]         @default([])
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  form        Form?              @relation(fields: [formId], references: [id], onDelete: SetNull)
+  pipeline    Pipeline           @relation(fields: [pipelineId], references: [id])
+  stage       PipelineStage      @relation(fields: [stageId], references: [id])
+  assignedUser User?             @relation("AssignedLeads", fields: [assignedTo], references: [id])
+  answers     LeadAnswer[]
+  history     LeadStageHistory[]
+  notes       Note[]
+  tasks       Task[]
+
+  @@index([tenantId])
+  @@index([stageId])
+  @@map("leads")
+}
+
+model LeadAnswer {
+  id            String   @id @default(uuid())
+  leadId        String   @map("lead_id")
+  fieldId       String?  @map("field_id")
+  questionLabel String   @map("question_label")
+  answer        Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  lead  Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  field FormField? @relation(fields: [fieldId], references: [id], onDelete: SetNull)
+
+  @@map("lead_answers")
+}
+
+model LeadStageHistory {
+  id          String   @id @default(uuid())
+  leadId      String   @map("lead_id")
+  fromStageId String?  @map("from_stage_id")
+  toStageId   String   @map("to_stage_id")
+  changedBy   String?  @map("changed_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  lead      Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fromStage PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
+  toStage   PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
+  changer   User?          @relation("StageChanger", fields: [changedBy], references: [id])
+
+  @@map("lead_stage_history")
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  leadId    String   @map("lead_id")
+  userId    String   @map("user_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("notes")
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  tenantId    String     @map("tenant_id")
+  leadId      String?    @map("lead_id")
+  assignedTo  String?    @map("assigned_to")
+  title       String
+  description String?
+  dueDate     DateTime?  @map("due_date")
+  status      TaskStatus @default(pending)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead     Lead?  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignee User?  @relation("AssignedTasks", fields: [assignedTo], references: [id])
+
+  @@map("tasks")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  userId     String?  @map("user_id")
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
