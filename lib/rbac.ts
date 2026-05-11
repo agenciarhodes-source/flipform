@@ -44,6 +44,14 @@ export const PERMISSIONS = {
   SETTINGS_VIEW:        ['owner', 'admin'] as RoleName[],
   SETTINGS_EDIT:        ['owner', 'admin'] as RoleName[],
   AUDIT_VIEW:           ['owner', 'admin'] as RoleName[],
+  TASKS_VIEW:           ['owner', 'admin', 'manager', 'agent', 'viewer'] as RoleName[],
+  TASKS_CREATE:         ['owner', 'admin', 'manager', 'agent'] as RoleName[],
+  TASKS_EDIT_ANY:       ['owner', 'admin', 'manager'] as RoleName[],
+  TASKS_EDIT_OWN:       ['owner', 'admin', 'manager', 'agent'] as RoleName[],
+  TASKS_DELETE_ANY:     ['owner', 'admin', 'manager'] as RoleName[],
+  TASKS_DELETE_OWN:     ['owner', 'admin', 'manager', 'agent'] as RoleName[],
+  TASKS_COMPLETE:       ['owner', 'admin', 'manager', 'agent'] as RoleName[],
+  TASKS_ASSIGN:         ['owner', 'admin', 'manager'] as RoleName[],
 } as const;
 
 export type PermissionKey = keyof typeof PERMISSIONS;
@@ -62,4 +70,43 @@ export function canMoveLead(role: string, lead: { assignedTo: string | null }, u
   if (!can(role, 'LEADS_MOVE')) return false;
   if (role === 'agent') return lead.assignedTo === userId;
   return true;
+}
+
+/**
+ * Regras de escopo para tarefas:
+ * - owner/admin/manager: podem editar/excluir/concluir qualquer tarefa.
+ * - agent: só pode editar/excluir/concluir tarefa que ele criou, que está atribuída a ele,
+ *   ou que está em um lead atribuído a ele.
+ * - viewer: apenas visualização.
+ */
+export interface TaskScopeContext {
+  task: { assignedTo: string | null; createdBy: string | null };
+  lead?: { assignedTo: string | null } | null;
+}
+
+export function canEditTask(role: string, ctx: TaskScopeContext, userId: string): boolean {
+  if (can(role, 'TASKS_EDIT_ANY')) return true;
+  if (!can(role, 'TASKS_EDIT_OWN')) return false;
+  const t = ctx.task;
+  if (t.assignedTo === userId) return true;
+  if (t.createdBy === userId) return true;
+  if (ctx.lead && ctx.lead.assignedTo === userId) return true;
+  return false;
+}
+
+export function canDeleteTask(role: string, ctx: TaskScopeContext, userId: string): boolean {
+  if (can(role, 'TASKS_DELETE_ANY')) return true;
+  if (!can(role, 'TASKS_DELETE_OWN')) return false;
+  // agent só pode excluir tarefa que ele criou
+  return ctx.task.createdBy === userId;
+}
+
+export function canCompleteTask(role: string, ctx: TaskScopeContext, userId: string): boolean {
+  if (!can(role, 'TASKS_COMPLETE')) return false;
+  if (can(role, 'TASKS_EDIT_ANY')) return true;
+  const t = ctx.task;
+  if (t.assignedTo === userId) return true;
+  if (t.createdBy === userId) return true;
+  if (ctx.lead && ctx.lead.assignedTo === userId) return true;
+  return false;
 }

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { StatCard } from '@/components/stat-card';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Users, UserPlus, Trophy, TrendingUp, Target, AlertCircle, ArrowRight } from 'lucide-react';
+import { Users, UserPlus, Trophy, TrendingUp, Target, AlertCircle, ArrowRight, ListChecks, AlertTriangle, CheckCircle2, User as UserIconLucide } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import Link from 'next/link';
 
@@ -17,14 +17,20 @@ interface Dashboard {
 
 export default function DashboardPage() {
   const [data, setData] = useState<Dashboard | null>(null);
+  const [taskStats, setTaskStats] = useState<{ pending: number; overdue: number; completedToday: number; mine: number } | null>(null);
   const [range, setRange] = useState<'today' | '7d' | '30d'>('30d');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/dashboard?range=${range}`)
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); });
+    Promise.all([
+      fetch(`/api/dashboard?range=${range}`).then((r) => r.json()),
+      fetch('/api/tasks/stats').then((r) => r.json()),
+    ]).then(([d, ts]) => {
+      setData(d);
+      setTaskStats(ts);
+      setLoading(false);
+    });
   }, [range]);
 
   return (
@@ -57,6 +63,19 @@ export default function DashboardPage() {
             Começar <ArrowRight className="w-4 h-4" />
           </Link>
         </Card>
+      </div>
+
+      {/* Tarefas */}
+      <div>
+        <h2 className="font-heading font-semibold text-lg mb-3 flex items-center gap-2">
+          <ListChecks className="w-5 h-5 text-muted-foreground" /> Tarefas
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard label="Tarefas pendentes" value={taskStats?.pending ?? '—'} icon={ListChecks} />
+          <StatCard label="Tarefas vencidas" value={taskStats?.overdue ?? '—'} icon={AlertTriangle} tone="danger" />
+          <StatCard label="Concluídas hoje" value={taskStats?.completedToday ?? '—'} icon={CheckCircle2} tone="success" />
+          <StatCard label="Minhas tarefas" value={taskStats?.mine ?? '—'} icon={UserIconLucide} tone="warning" />
+        </div>
       </div>
 
       {/* Gráficos */}

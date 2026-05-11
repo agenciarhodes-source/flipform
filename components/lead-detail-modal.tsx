@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2 } from 'lucide-react';
+import { TasksTab } from '@/components/tasks-tab';
 
 interface Stage { id: string; name: string; color: string; }
 
@@ -90,6 +91,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             <TabsTrigger value="answers">Respostas</TabsTrigger>
             <TabsTrigger value="history">Histórico</TabsTrigger>
             <TabsTrigger value="notes">Notas ({lead.notes.length})</TabsTrigger>
+            <TabsTrigger value="tasks">Tarefas ({lead.tasks?.filter((t: any) => t.status === 'pending').length || 0})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="info" className="pb-6 space-y-4">
@@ -155,6 +157,10 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div className="text-xs text-muted-foreground mt-2">{n.user.name} • {formatDateTime(n.createdAt)}</div>
               </div>
             ))}
+          </TabsContent>
+
+          <TabsContent value="tasks" className="pb-6">
+            <TasksTab leadId={leadId} onChange={() => { load(); onChange(); }} />
           </TabsContent>
         </Tabs>
       </DialogContent>

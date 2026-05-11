@@ -17,7 +17,13 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
         orderBy: { createdAt: 'asc' },
       },
       notes: { include: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
-      tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
+      tasks: {
+        include: {
+          assignee: { select: { id: true, name: true } },
+          creator: { select: { id: true, name: true } },
+        },
+        orderBy: [{ status: 'asc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
+      },
     },
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });

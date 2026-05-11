@@ -7,13 +7,14 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow } from 'lucide-react';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
 
 interface Stage { id: string; name: string; color: string; orderIndex: number; isArchived?: boolean; }
 interface Pipeline { id: string; name: string; isDefault: boolean; isArchived: boolean; stages: Stage[]; }
+interface TaskIndicator { pending: number; overdue: number; dueToday: number; total: number; }
 interface Lead {
   id: string; name: string; email: string | null; phone: string | null;
   stageId: string; source: string; temperature: 'cold' | 'warm' | 'hot'; tags: string[];
@@ -26,7 +27,41 @@ function TempIcon({ t }: { t: Lead['temperature'] }) {
   return <Snowflake className="w-3.5 h-3.5 text-sky-500" />;
 }
 
-function LeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
+function TaskBadge({ ind }: { ind: TaskIndicator | undefined }) {
+  if (!ind || ind.total === 0) return null;
+  if (ind.pending === 0) {
+    return (
+      <div title="Todas as tarefas concluídas" className="flex items-center gap-0.5 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+        <CheckCircle2 className="w-3 h-3" />
+        <span>{ind.total}</span>
+      </div>
+    );
+  }
+  if (ind.overdue > 0) {
+    return (
+      <div title={`${ind.overdue} tarefa(s) vencida(s)`} className="flex items-center gap-0.5 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5 font-medium">
+        <AlertTriangle className="w-3 h-3" />
+        <span>{ind.pending}</span>
+      </div>
+    );
+  }
+  if (ind.dueToday > 0) {
+    return (
+      <div title={`${ind.dueToday} tarefa(s) vencendo hoje`} className="flex items-center gap-0.5 text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+        <Clock className="w-3 h-3" />
+        <span>{ind.pending}</span>
+      </div>
+    );
+  }
+  return (
+    <div title={`${ind.pending} tarefa(s) pendente(s)`} className="flex items-center gap-0.5 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5">
+      <ListChecks className="w-3 h-3" />
+      <span>{ind.pending}</span>
+    </div>
+  );
+}
+
+function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndicator; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
   return (
     <div
@@ -34,7 +69,7 @@ function LeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
       {...attributes}
       {...listeners}
       onClick={(e) => { if (!isDragging) onClick(); }}
-      className={`bg-card border rounded-md p-3 mb-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition ${isDragging ? 'opacity-50' : ''}`}
+      className={`bg-card border rounded-md p-3 mb-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition ${isDragging ? 'opacity-50' : ''} ${taskInd && taskInd.overdue > 0 ? 'border-l-2 border-l-red-500' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="font-medium text-sm truncate flex-1">{lead.name}</div>
@@ -44,9 +79,12 @@ function LeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
         {lead.email && <div className="flex items-center gap-1.5 truncate"><Mail className="w-3 h-3 shrink-0" /><span className="truncate">{lead.email}</span></div>}
         {lead.phone && <div className="flex items-center gap-1.5"><Phone className="w-3 h-3" />{lead.phone}</div>}
       </div>
-      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/60">
-        <Badge variant="secondary" className="text-[10px] py-0 h-4 capitalize">{lead.source}</Badge>
-        <div className="flex items-center gap-1">
+      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/60 gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Badge variant="secondary" className="text-[10px] py-0 h-4 capitalize">{lead.source}</Badge>
+          <TaskBadge ind={taskInd} />
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           {lead.assignedUser && <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><UserIcon className="w-3 h-3" />{lead.assignedUser.name.split(' ')[0]}</div>}
         </div>
       </div>
@@ -55,7 +93,7 @@ function LeadCard({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   );
 }
 
-function Column({ stage, leads, onCardClick }: { stage: Stage; leads: Lead[]; onCardClick: (id: string) => void }) {
+function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
     <div className="w-72 shrink-0 flex flex-col bg-muted/40 rounded-md">
@@ -67,7 +105,7 @@ function Column({ stage, leads, onCardClick }: { stage: Stage; leads: Lead[]; on
         <Badge variant="secondary" className="text-xs h-5">{leads.length}</Badge>
       </div>
       <div ref={setNodeRef} className={`flex-1 p-2 overflow-y-auto scrollbar-thin min-h-[200px] transition ${isOver ? 'bg-brand-50/60' : ''}`}>
-        {leads.map((l) => <LeadCard key={l.id} lead={l} onClick={() => onCardClick(l.id)} />)}
+        {leads.map((l) => <LeadCard key={l.id} lead={l} taskInd={taskInds[l.id]} onClick={() => onCardClick(l.id)} />)}
         {leads.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">Sem leads</div>}
       </div>
     </div>
@@ -79,6 +117,7 @@ export default function KanbanPage() {
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [taskInds, setTaskInds] = useState<Record<string, TaskIndicator>>({});
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -179,6 +218,7 @@ export default function KanbanPage() {
                   key={s.id}
                   stage={s}
                   leads={leads.filter((l) => l.stageId === s.id)}
+                  taskInds={taskInds}
                   onCardClick={(id) => setSelectedLeadId(id)}
                 />
               ))}
