@@ -1,13 +1,14 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners } from '@dnd-kit/core';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
@@ -96,7 +97,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
 function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <div className="flex-[0_0_340px] w-[340px] min-w-[340px] shrink-0 flex flex-col bg-muted/40 rounded-md">
+    <div className="flex-none w-[340px] min-w-[340px] max-w-[340px] shrink-0 flex flex-col bg-muted/40 rounded-md">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
@@ -123,6 +124,7 @@ export default function KanbanPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const boardScrollRef = useRef<HTMLDivElement | null>(null);
 
   const loadPipelines = async () => {
     const data = await fetch('/api/pipelines').then((r) => r.json());
@@ -195,13 +197,21 @@ export default function KanbanPage() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground hidden lg:block">Arraste cards entre etapas para atualizar o status.</p>
+          <div className="hidden lg:flex items-center gap-1">
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: -360, behavior: 'smooth' })}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: 360, behavior: 'smooth' })}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar lead por nome, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
-      <div className="flex-1 p-4 lg:p-6">
+      <div className="w-full flex-1 h-[calc(100vh-220px)] overflow-hidden p-4 lg:p-6">
         {loading ? (
           <div className="text-muted-foreground">Carregando...</div>
         ) : stages.length === 0 ? (
@@ -212,8 +222,11 @@ export default function KanbanPage() {
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="kanban-x-scroll w-full overflow-x-auto overflow-y-hidden pb-3">
-              <div className="flex gap-4 min-w-max w-max" style={{ minWidth: `${stages.length * 340 + Math.max(0, stages.length - 1) * 16}px` }}>
+            {stages.length > 4 && (
+              <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
+            )}
+            <div ref={boardScrollRef} className="kanban-scrollbar w-full overflow-x-scroll overflow-y-hidden pb-4">
+              <div className="flex gap-4 w-max min-w-max" style={{ minWidth: `${stages.length * 340 + Math.max(0, stages.length - 1) * 16}px` }}>
                 {stages.map((s) => (
                 <Column
                   key={s.id}

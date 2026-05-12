@@ -95,3 +95,22 @@
     border-radius: 9999px;
   }
 }
+
+.kanban-scrollbar::-webkit-scrollbar {
+  height: 12px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.kanban-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
