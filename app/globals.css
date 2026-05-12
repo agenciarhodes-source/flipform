@@ -77,3 +77,21 @@
   .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
 }
+
+@layer utilities {
+  .kanban-x-scroll {
+    scrollbar-width: auto;
+    scrollbar-color: hsl(var(--border)) hsl(var(--muted));
+  }
+  .kanban-x-scroll::-webkit-scrollbar {
+    height: 12px;
+  }
+  .kanban-x-scroll::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 9999px;
+  }
+  .kanban-x-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+}

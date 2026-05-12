@@ -96,7 +96,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
 function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <div className="w-[340px] min-w-[340px] shrink-0 flex flex-col bg-muted/40 rounded-md">
+    <div className="flex-[0_0_340px] w-[340px] min-w-[340px] shrink-0 flex flex-col bg-muted/40 rounded-md">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
@@ -201,7 +201,7 @@ export default function KanbanPage() {
           <Input placeholder="Buscar lead por nome, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 lg:p-6 pb-6 scrollbar-thin">
+      <div className="flex-1 p-4 lg:p-6">
         {loading ? (
           <div className="text-muted-foreground">Carregando...</div>
         ) : stages.length === 0 ? (
@@ -212,8 +212,9 @@ export default function KanbanPage() {
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-            <div className="flex gap-4 h-full w-max min-w-full" style={{ minWidth: `${stages.length * 340 + Math.max(0, stages.length - 1) * 16}px` }}>
-              {stages.map((s) => (
+            <div className="kanban-x-scroll w-full overflow-x-auto overflow-y-hidden pb-3">
+              <div className="flex gap-4 min-w-max w-max" style={{ minWidth: `${stages.length * 340 + Math.max(0, stages.length - 1) * 16}px` }}>
+                {stages.map((s) => (
                 <Column
                   key={s.id}
                   stage={s}
@@ -221,7 +222,8 @@ export default function KanbanPage() {
                   taskInds={taskInds}
                   onCardClick={(id) => setSelectedLeadId(id)}
                 />
-              ))}
+                ))}
+              </div>
             </div>
             <DragOverlay>
               {activeLead && (
