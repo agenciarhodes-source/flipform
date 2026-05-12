@@ -1,3 +1,4 @@
+import type React from 'react';
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -57,15 +58,17 @@ export default function AdminOverviewPage() {
   );
 }
 
-export function Stat({ label, value, icon: Icon, tone }: any) {
-  const tones: any = { success: 'text-emerald-600 bg-emerald-50', danger: 'text-red-600 bg-red-50', warning: 'text-amber-600 bg-amber-50' };
+type StatProps = { label: string; value: number; icon: React.ComponentType<{ className?: string }>; tone?: "success" | "danger" | "warning" }
+
+function Stat({ label, value, icon: Icon, tone }: StatProps) {
+  const tones: Record<string, string> = { success: 'text-emerald-600 bg-emerald-50', danger: 'text-red-600 bg-red-50', warning: 'text-amber-600 bg-amber-50' };
   return (
     <Card className="p-4 flex items-start justify-between">
       <div>
         <div className="text-xs text-muted-foreground">{label}</div>
         <div className="font-heading text-2xl font-bold mt-1">{value}</div>
       </div>
-      <div className={`w-9 h-9 rounded-md flex items-center justify-center ${tones[tone] || 'text-slate-600 bg-slate-100'}`}>
+      <div className={`w-9 h-9 rounded-md flex items-center justify-center ${(tone ? tones[tone] : undefined) || 'text-slate-600 bg-slate-100'}`}>
         <Icon className="w-4 h-4" />
       </div>
     </Card>
