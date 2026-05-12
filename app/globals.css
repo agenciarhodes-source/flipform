@@ -77,3 +77,40 @@
   .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
 }
+
+@layer utilities {
+  .kanban-x-scroll {
+    scrollbar-width: auto;
+    scrollbar-color: hsl(var(--border)) hsl(var(--muted));
+  }
+  .kanban-x-scroll::-webkit-scrollbar {
+    height: 12px;
+  }
+  .kanban-x-scroll::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 9999px;
+  }
+  .kanban-x-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+}
+
+.kanban-scrollbar::-webkit-scrollbar {
+  height: 12px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.kanban-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.kanban-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
