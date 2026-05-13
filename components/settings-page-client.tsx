@@ -30,6 +30,10 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
   const [primaryColor, setPrimaryColor] = useState(initialTenant.primaryColor);
   const [logoUrl, setLogoUrl] = useState(initialTenant.logoUrl || '');
   const [saving, setSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const slugValid = SLUG_REGEX_FE.test(slug);
   const colorValid = /^#[0-9A-Fa-f]{6}$/.test(primaryColor);
@@ -59,6 +63,30 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
     } catch (e: any) {
       toast.error(e.message || 'Erro ao salvar');
     } finally { setSaving(false); }
+  };
+
+
+  const changePassword = async () => {
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword, confirmNewPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao alterar senha.');
+      toast.success(data.message || 'Senha alterada com sucesso.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      router.push('/login');
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e.message || 'Erro ao alterar senha.');
+    } finally {
+      setChangingPassword(false);
+    }
   };
 
   return (
@@ -160,6 +188,29 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           </div>
         </Card>
       </div>
+
+
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-brand-600" />
+          <h3 className="font-heading font-semibold">Alterar senha</h3>
+        </div>
+        <div>
+          <Label>Senha atual</Label>
+          <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+        </div>
+        <div>
+          <Label>Nova senha</Label>
+          <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} />
+        </div>
+        <div>
+          <Label>Confirmar nova senha</Label>
+          <Input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} minLength={8} />
+        </div>
+        <Button onClick={changePassword} disabled={changingPassword || !currentPassword || !newPassword || !confirmNewPassword}>
+          {changingPassword ? 'Alterando...' : 'Alterar senha'}
+        </Button>
+      </Card>
 
       {/* Estatísticas */}
       <Card className="p-5">

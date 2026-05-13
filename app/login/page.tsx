@@ -12,8 +12,8 @@ import { Zap } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('demo@leadflow.com');
-  const [password, setPassword] = useState('demo123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -88,10 +88,6 @@ export default function LoginPage() {
           </form>
           <div className="mt-6 text-sm text-center text-muted-foreground">
             Não tem conta? <Link href="/register" className="text-primary font-medium hover:underline">Cadastre sua empresa</Link>
-          </div>
-          <div className="mt-6 p-3 rounded-md bg-muted text-xs text-muted-foreground" suppressHydrationWarning>
-            <strong className="text-foreground">Demo:</strong>{' '}
-            <code className="font-mono">demo@leadflow.com</code> / <code className="font-mono">demo123</code>
           </div>
         </Card>
       </div>
