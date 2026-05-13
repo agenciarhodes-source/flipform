@@ -1,15 +1,27 @@
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from './prisma';
+import { signSessionToken, verifySessionToken, type JwtSessionPayload } from './jwt';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'flipform-dev-secret';
 const COOKIE_NAME = 'flipform_token';
-const LEGACY_COOKIE = 'leadflow_token';
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-export interface SessionPayload {
+
+function isSecureRequest(): boolean {
+  if (process.env.NODE_ENV === 'production') return true;
+  const forwardedProto = process.env.TRUST_PROXY_PROTO;
+  if (forwardedProto && forwardedProto.toLowerCase() === 'https') return true;
+  return false;
+}
+
+function getSameSite(): 'lax' | 'strict' | 'none' {
+  const raw = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
+  if (raw === 'strict' || raw === 'none') return raw;
+  return 'lax';
+}
+
+export interface SessionPayload extends JwtSessionPayload {
   userId: string;
   // tenantId é '' apenas para sessões de platform admin sem tenant
   tenantId: string;
@@ -29,23 +41,19 @@ export async function verifyPassword(plain: string, hash: string): Promise<boole
 }
 
 export function signToken(payload: SessionPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+  return signSessionToken(payload);
 }
 
 export function verifyToken(token: string): SessionPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as SessionPayload;
-  } catch {
-    return null;
-  }
+  return verifySessionToken(token);
 }
 
 export async function setSessionCookie(payload: SessionPayload) {
   const token = signToken(payload);
   cookies().set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
+    secure: isSecureRequest(),
+    sameSite: getSameSite(),
     path: '/',
     maxAge: MAX_AGE,
   });
@@ -53,12 +61,11 @@ export async function setSessionCookie(payload: SessionPayload) {
 
 export function clearSessionCookie() {
   cookies().delete(COOKIE_NAME);
-  cookies().delete(LEGACY_COOKIE);
 }
 
 function readCookieToken(): string | undefined {
   const c = cookies();
-  return c.get(COOKIE_NAME)?.value || c.get(LEGACY_COOKIE)?.value;
+  return c.get(COOKIE_NAME)?.value;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -68,7 +75,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
-  const token = req.cookies.get(COOKIE_NAME)?.value || req.cookies.get(LEGACY_COOKIE)?.value;
+  const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) return null;
   return verifyToken(token);
 }
