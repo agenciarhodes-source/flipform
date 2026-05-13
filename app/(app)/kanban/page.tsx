@@ -97,7 +97,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
 function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <div className="flex-[0_0_380px] w-[380px] min-w-[380px] max-w-[380px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
+    <div className="flex-none w-[360px] min-w-[360px] max-w-[360px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
@@ -125,9 +125,6 @@ export default function KanbanPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
-  const bottomScrollbarRef = useRef<HTMLDivElement | null>(null);
-  const syncScrollRef = useRef<'board' | 'bottom' | null>(null);
-  const [boardScrollWidth, setBoardScrollWidth] = useState(0);
 
   const loadPipelines = async () => {
     const data = await fetch('/api/pipelines').then((r) => r.json());
@@ -156,46 +153,17 @@ export default function KanbanPage() {
   useEffect(() => { const t = setTimeout(loadLeads, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
 
   useEffect(() => {
-    const syncWidths = () => {
-      const width = boardScrollRef.current?.scrollWidth ?? 0;
-      setBoardScrollWidth(width);
-    };
-
-    syncWidths();
-    window.addEventListener('resize', syncWidths);
-
-    return () => {
-      window.removeEventListener('resize', syncWidths);
-    };
-  }, [stages.length, pipelineId, leads.length]);
-
-  useEffect(() => {
-    const boardEl = boardScrollRef.current;
-    const bottomEl = bottomScrollbarRef.current;
-    if (!boardEl || !bottomEl) return;
-
-    const onBoardScroll = () => {
-      if (syncScrollRef.current === 'bottom') return;
-      syncScrollRef.current = 'board';
-      bottomEl.scrollLeft = boardEl.scrollLeft;
-      syncScrollRef.current = null;
-    };
-
-    const onBottomScroll = () => {
-      if (syncScrollRef.current === 'board') return;
-      syncScrollRef.current = 'bottom';
-      boardEl.scrollLeft = bottomEl.scrollLeft;
-      syncScrollRef.current = null;
-    };
-
-    boardEl.addEventListener('scroll', onBoardScroll, { passive: true });
-    bottomEl.addEventListener('scroll', onBottomScroll, { passive: true });
-
-    return () => {
-      boardEl.removeEventListener('scroll', onBoardScroll);
-      bottomEl.removeEventListener('scroll', onBottomScroll);
-    };
-  }, [stages.length, pipelineId]);
+    if (process.env.NODE_ENV !== 'development') return;
+    const board = boardScrollRef.current;
+    if (!board) return;
+    console.log('[kanban-scroll-debug]', {
+      scrollWidth: board.scrollWidth,
+      clientWidth: board.clientWidth,
+      scrollLeft: board.scrollLeft,
+      isScrollable: board.scrollWidth > board.clientWidth,
+      stages: stages.length,
+    });
+  }, [stages.length, leads.length, pipelineId]);
 
   const onDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
   const onDragEnd = async (e: DragEndEvent) => {
@@ -243,10 +211,10 @@ export default function KanbanPage() {
           </Select>
           <p className="text-xs text-muted-foreground hidden lg:block">Arraste cards entre etapas para atualizar o status.</p>
           <div className="hidden lg:flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: -360, behavior: 'smooth' })}>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: -380, behavior: 'smooth' })}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: 360, behavior: 'smooth' })}>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: 380, behavior: 'smooth' })}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -271,8 +239,8 @@ export default function KanbanPage() {
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full max-w-full overflow-x-auto overflow-y-hidden">
-              <div className="kanban-columns flex h-full gap-4 w-max min-w-max items-stretch" style={{ width: 'max-content', minWidth: 'max-content' }}>
+            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full max-w-full overflow-x-scroll overflow-y-hidden pb-4">
+              <div className="kanban-columns flex h-full gap-4 items-stretch" style={{ width: `${stages.length * 380}px`, minWidth: `${stages.length * 380}px` }}>
                 {stages.map((s) => (
                 <Column
                   key={s.id}
@@ -283,9 +251,6 @@ export default function KanbanPage() {
                 />
                 ))}
               </div>
-            </div>
-            <div ref={bottomScrollbarRef} className="kanban-fixed-horizontal-scroll sticky bottom-0 z-30 mt-2 h-5 overflow-x-scroll overflow-y-hidden border-t bg-slate-50">
-              <div style={{ width: `${boardScrollWidth}px`, height: '1px' }} />
             </div>
             </div>
             <DragOverlay>
