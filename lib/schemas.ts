@@ -91,4 +91,11 @@ export const publicSubmitSchema = z.object({
     .default([]),
 });
 
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Informe a senha atual.'),
+  newPassword: z.string().min(8, 'A nova senha deve ter no mínimo 8 caracteres.'),
+  confirmNewPassword: z.string().min(8, 'Confirme a nova senha.'),
+});
+
 export type FieldType = z.infer<typeof fieldTypeEnum>;
