@@ -127,7 +127,6 @@ export default function KanbanPage() {
   const [maxOffset, setMaxOffset] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
-  const boardInnerRef = useRef<HTMLDivElement | null>(null);
 
   const loadPipelines = async () => {
     const data = await fetch('/api/pipelines').then((r) => r.json());
@@ -156,28 +155,15 @@ export default function KanbanPage() {
   useEffect(() => { const t = setTimeout(loadLeads, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
 
   useEffect(() => {
-    const computeOffsets = () => {
-      const board = boardScrollRef.current;
-      const inner = boardInnerRef.current;
-      if (!board || !inner) return;
-      const visibleWidth = board.clientWidth;
-      const totalWidth = inner.scrollWidth;
-      const nextMaxOffset = Math.max(0, totalWidth - visibleWidth);
-      setMaxOffset(nextMaxOffset);
-      setHorizontalOffset((prev) => Math.max(0, Math.min(prev, nextMaxOffset)));
-
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[kanban-scroll-debug]', { visibleWidth, totalWidth, maxOffset: nextMaxOffset });
-      }
-    };
-    computeOffsets();
-    window.addEventListener('resize', computeOffsets);
-    return () => window.removeEventListener('resize', computeOffsets);
+    if (process.env.NODE_ENV !== 'development') return;
+    const board = boardScrollRef.current;
+    if (!board) return;
+    console.log('[kanban-scroll-debug]', {
+      scrollWidth: board.scrollWidth,
+      clientWidth: board.clientWidth,
+      isScrollable: board.scrollWidth > board.clientWidth,
+    });
   }, [stages.length, leads.length, pipelineId]);
-
-  const moveHorizontal = (delta: number) => {
-    setHorizontalOffset((prev) => Math.max(0, Math.min(prev + delta, maxOffset)));
-  };
 
   const onDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
   const onDragEnd = async (e: DragEndEvent) => {
@@ -225,10 +211,10 @@ export default function KanbanPage() {
           </Select>
           <p className="text-xs text-muted-foreground hidden lg:block">Arraste cards entre etapas para atualizar o status.</p>
           <div className="hidden lg:flex items-center gap-1">
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => moveHorizontal(-380)} disabled={horizontalOffset === 0}>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: -380, behavior: 'smooth' })}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => moveHorizontal(380)} disabled={horizontalOffset >= maxOffset}>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => boardScrollRef.current?.scrollBy({ left: 380, behavior: 'smooth' })}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -253,23 +239,12 @@ export default function KanbanPage() {
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div className="relative h-full">
-              {maxOffset > 0 && (
-                <>
-                  <Button type="button" variant="secondary" size="icon" className="absolute left-2 top-2 z-20 h-8 w-8" onClick={() => moveHorizontal(-380)} disabled={horizontalOffset === 0}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button type="button" variant="secondary" size="icon" className="absolute right-2 top-2 z-20 h-8 w-8" onClick={() => moveHorizontal(380)} disabled={horizontalOffset >= maxOffset}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </>
-              )}
-            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full max-w-full overflow-hidden pb-4" onWheel={(e) => {
+            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full min-h-0 overflow-x-auto overflow-y-hidden pb-4" onWheel={(e) => {
               if (!e.shiftKey) return;
               e.preventDefault();
-              moveHorizontal(e.deltaY > 0 ? 380 : -380);
+              boardScrollRef.current?.scrollBy({ left: e.deltaY > 0 ? 380 : -380, behavior: 'smooth' });
             }}>
-              <div ref={boardInnerRef} className="kanban-columns flex h-full gap-4 items-stretch transition-transform duration-200 ease-out" style={{ width: `${stages.length * 380}px`, minWidth: `${stages.length * 380}px`, transform: `translateX(-${horizontalOffset}px)` }}>
+              <div className="kanban-columns flex h-full gap-4 items-stretch pr-6" style={{ minWidth: `${stages.length * 380}px` }}>
                 {stages.map((s) => (
                 <Column
                   key={s.id}
@@ -280,7 +255,6 @@ export default function KanbanPage() {
                 />
                 ))}
               </div>
-            </div>
             </div>
             </div>
             <DragOverlay>
