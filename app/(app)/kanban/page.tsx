@@ -125,6 +125,9 @@ export default function KanbanPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomScrollRef = useRef<HTMLDivElement | null>(null);
+  const syncScrollRef = useRef<'board' | 'bottom' | null>(null);
+  const [boardScrollWidth, setBoardScrollWidth] = useState(0);
 
   const loadPipelines = async () => {
     const data = await fetch('/api/pipelines').then((r) => r.json());
@@ -151,6 +154,48 @@ export default function KanbanPage() {
     loadLeads();
   /* eslint-disable-next-line */ }, [pipelineId, pipelines]);
   useEffect(() => { const t = setTimeout(loadLeads, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
+
+  useEffect(() => {
+    const syncWidths = () => {
+      const width = boardScrollRef.current?.scrollWidth ?? 0;
+      setBoardScrollWidth(width);
+    };
+
+    syncWidths();
+    window.addEventListener('resize', syncWidths);
+
+    return () => {
+      window.removeEventListener('resize', syncWidths);
+    };
+  }, [stages.length, pipelineId, leads.length]);
+
+  useEffect(() => {
+    const boardEl = boardScrollRef.current;
+    const bottomEl = bottomScrollRef.current;
+    if (!boardEl || !bottomEl) return;
+
+    const onBoardScroll = () => {
+      if (syncScrollRef.current === 'bottom') return;
+      syncScrollRef.current = 'board';
+      bottomEl.scrollLeft = boardEl.scrollLeft;
+      syncScrollRef.current = null;
+    };
+
+    const onBottomScroll = () => {
+      if (syncScrollRef.current === 'board') return;
+      syncScrollRef.current = 'bottom';
+      boardEl.scrollLeft = bottomEl.scrollLeft;
+      syncScrollRef.current = null;
+    };
+
+    boardEl.addEventListener('scroll', onBoardScroll, { passive: true });
+    bottomEl.addEventListener('scroll', onBottomScroll, { passive: true });
+
+    return () => {
+      boardEl.removeEventListener('scroll', onBoardScroll);
+      bottomEl.removeEventListener('scroll', onBottomScroll);
+    };
+  }, [stages.length, pipelineId]);
 
   const onDragStart = (e: DragStartEvent) => setActiveId(e.active.id as string);
   const onDragEnd = async (e: DragEndEvent) => {
@@ -226,7 +271,7 @@ export default function KanbanPage() {
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full overflow-x-auto overflow-y-hidden pb-3">
+            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full overflow-x-auto overflow-y-hidden">
               <div className="kanban-columns flex h-full gap-4 w-max min-w-max items-stretch">
                 {stages.map((s) => (
                 <Column
@@ -238,6 +283,9 @@ export default function KanbanPage() {
                 />
                 ))}
               </div>
+            </div>
+            <div ref={bottomScrollRef} className="kanban-bottom-scroll sticky bottom-0 z-20 mt-2 h-5 overflow-x-auto overflow-y-hidden bg-background">
+              <div style={{ width: `${boardScrollWidth}px`, height: '1px' }} />
             </div>
             </div>
             <DragOverlay>

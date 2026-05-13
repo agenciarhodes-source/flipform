@@ -101,3 +101,26 @@
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 #e5e7eb;
 }
+
+.kanban-bottom-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.kanban-bottom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
