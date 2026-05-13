@@ -204,6 +204,9 @@ model Form {
   fields       FormField[]
   leads        Lead[]
 
+  @@index([tenantId, createdAt])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, isActive])
   @@map("forms")
 }
 
@@ -257,6 +260,11 @@ model Lead {
 
   @@index([tenantId])
   @@index([stageId])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, stageId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
   @@map("leads")
 }
 
@@ -287,6 +295,8 @@ model LeadStageHistory {
   toStage   PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
   changer   User?          @relation("StageChanger", fields: [changedBy], references: [id])
 
+  @@index([leadId, createdAt])
+  @@index([toStageId, createdAt])
   @@map("lead_stage_history")
 }
 
@@ -330,6 +340,9 @@ model Task {
   @@index([leadId])
   @@index([assignedTo])
   @@index([dueDate])
+  @@index([tenantId, assignedTo])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("tasks")
 }
 
@@ -412,6 +425,8 @@ model Subscription {
   payments Payment[]
 
   @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, nextDueDate])
   @@map("subscriptions")
 }
 
@@ -436,6 +451,9 @@ model Payment {
 
   @@index([tenantId])
   @@index([status])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, createdAt])
   @@map("payments")
 }
 
