@@ -39,3 +39,21 @@ export function verifySessionToken(token: string): JwtSessionPayload | null {
 export function getJoseSecretsForVerify(): Uint8Array[] {
   return getSecretsForVerify().map((s) => new TextEncoder().encode(s));
 }
+
+export interface OnboardingTokenPayload {
+  email: string;
+  purpose: 'onboarding';
+}
+
+export function signOnboardingToken(payload: OnboardingTokenPayload): string {
+  return jwt.sign(payload, JWT_SECRET_CURRENT!, { expiresIn: '15m' });
+}
+
+export function verifyOnboardingToken(token: string): OnboardingTokenPayload | null {
+  for (const secret of getSecretsForVerify()) {
+    try {
+      return jwt.verify(token, secret) as OnboardingTokenPayload;
+    } catch {}
+  }
+  return null;
+}

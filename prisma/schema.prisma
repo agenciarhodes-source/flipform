@@ -405,6 +405,23 @@ model AllowedUser {
   @@map("allowed_users")
 }
 
+model EmailVerificationCode {
+  id          String   @id @default(cuid())
+  email       String
+  codeHash    String   @map("code_hash")
+  purpose     String
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5) @map("max_attempts")
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("email_verification_codes")
+}
+
 // ============================================================================
 // Fase 8 — Billing / Plataforma (preparação para Asaas; sem integração real)
 // ============================================================================
