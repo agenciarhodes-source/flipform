@@ -125,7 +125,7 @@ export default function KanbanPage() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
-  const bottomScrollRef = useRef<HTMLDivElement | null>(null);
+  const bottomScrollbarRef = useRef<HTMLDivElement | null>(null);
   const syncScrollRef = useRef<'board' | 'bottom' | null>(null);
   const [boardScrollWidth, setBoardScrollWidth] = useState(0);
 
@@ -171,7 +171,7 @@ export default function KanbanPage() {
 
   useEffect(() => {
     const boardEl = boardScrollRef.current;
-    const bottomEl = bottomScrollRef.current;
+    const bottomEl = bottomScrollbarRef.current;
     if (!boardEl || !bottomEl) return;
 
     const onBoardScroll = () => {
@@ -284,7 +284,7 @@ export default function KanbanPage() {
                 ))}
               </div>
             </div>
-            <div ref={bottomScrollRef} className="kanban-bottom-scroll sticky bottom-0 z-20 mt-2 h-5 overflow-x-auto overflow-y-hidden bg-background">
+            <div ref={bottomScrollbarRef} className="kanban-fixed-horizontal-scroll sticky bottom-0 z-30 mt-2 h-5 overflow-x-scroll overflow-y-hidden border-t bg-slate-50">
               <div style={{ width: `${boardScrollWidth}px`, height: '1px' }} />
             </div>
             </div>
