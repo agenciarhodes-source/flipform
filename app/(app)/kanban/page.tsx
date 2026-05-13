@@ -97,7 +97,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
 function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <div className="flex-none w-[340px] min-w-[340px] max-w-[340px] shrink-0 flex flex-col bg-muted/40 rounded-md">
+    <div className="flex-none w-[340px] min-w-[340px] max-w-[340px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
@@ -105,7 +105,7 @@ function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: 
         </div>
         <Badge variant="secondary" className="text-xs h-5">{leads.length}</Badge>
       </div>
-      <div ref={setNodeRef} className={`p-2 min-h-[200px] transition ${isOver ? 'bg-brand-50/60' : ''}`}>
+      <div ref={setNodeRef} className={`flex-1 min-h-0 p-2 overflow-y-auto scrollbar-thin transition ${isOver ? 'bg-brand-50/60' : ''}`}>
         {leads.map((l) => <LeadCard key={l.id} lead={l} taskInd={taskInds[l.id]} onClick={() => onCardClick(l.id)} />)}
         {leads.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">Sem leads</div>}
       </div>
@@ -183,7 +183,7 @@ export default function KanbanPage() {
   const activeLead = leads.find((l) => l.id === activeId);
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] flex min-h-0 flex-col overflow-hidden">
       <div className="p-4 lg:p-6 border-b bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <Select value={pipelineId || ''} onValueChange={(v) => setPipelineId(v)}>
@@ -226,8 +226,8 @@ export default function KanbanPage() {
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div ref={boardScrollRef} className="kanban-scroll-area flex-1 min-h-0 w-full overflow-auto pb-4">
-              <div className="kanban-columns flex gap-4 w-max min-w-max items-start">
+            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full overflow-x-auto overflow-y-hidden pb-3">
+              <div className="kanban-columns flex h-full gap-4 w-max min-w-max items-stretch">
                 {stages.map((s) => (
                 <Column
                   key={s.id}
