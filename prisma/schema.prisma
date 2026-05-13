@@ -386,11 +386,11 @@ model Invite {
 }
 
 model AllowedUser {
-  id        String   @id @default(uuid())
+  id        String   @id @default(cuid())
   email     String
   tenantId  String   @map("tenant_id")
-  role      Role     @default(agent)
-  status    String   @default("active") // active | revoked
+  role      String
+  active    Boolean  @default(true)
   invitedBy String?  @map("invited_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -398,9 +398,10 @@ model AllowedUser {
   tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inviter User?  @relation("AllowedUserInviter", fields: [invitedBy], references: [id])
 
+  @@unique([email])
   @@index([email])
   @@index([tenantId])
-  @@unique([tenantId, email])
+  @@index([active])
   @@map("allowed_users")
 }
 

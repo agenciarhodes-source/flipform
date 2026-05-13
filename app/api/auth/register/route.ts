@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const { email } = parsed.data;
 
     const allowed = await prisma.allowedUser.findFirst({
-      where: { email, status: 'active' },
+      where: { email, active: true },
       include: { tenant: { select: { id: true, slug: true } } },
     });
     if (!allowed) {

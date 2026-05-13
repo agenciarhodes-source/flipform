@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     if (!user) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
 
     if (user.globalRole !== 'platform_admin') {
-      const allowed = await prisma.allowedUser.findFirst({ where: { email, status: 'active' } });
+      const allowed = await prisma.allowedUser.findFirst({ where: { email, active: true } });
       if (!allowed) {
         return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
       }
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     if (!tu) return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
 
     const allowedTenant = await prisma.allowedUser.findFirst({
-      where: { email, tenantId: tu.tenantId, status: 'active' },
+      where: { email, tenantId: tu.tenantId, active: true },
     });
     if (!allowedTenant) {
       return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
