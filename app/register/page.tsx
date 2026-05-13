@@ -12,7 +12,7 @@ import { Zap } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ companyName: '', name: '', email: '', password: '' });
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -22,13 +22,12 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ email, name: 'Solicitação de acesso', companyName: 'N/A', password: 'bloqueado' }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erro ao registrar');
-      toast.success('Empresa cadastrada!');
+      if (!res.ok) throw new Error(data.error || 'Este e-mail não possui acesso autorizado.');
+      toast.success('Acesso autorizado. Redirecionando...');
       router.push('/dashboard');
-      router.refresh();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -45,27 +44,15 @@ export default function RegisterPage() {
           </div>
           <span className="font-heading font-bold text-lg">FlipForm</span>
         </div>
-        <h2 className="font-heading text-2xl font-bold mb-2">Crie sua conta</h2>
-        <p className="text-muted-foreground text-sm mb-6">Comece a capturar leads em minutos.</p>
+        <h2 className="font-heading text-2xl font-bold mb-2">Solicitar acesso</h2>
+        <p className="text-muted-foreground text-sm mb-6">Apenas e-mails previamente autorizados podem acessar.</p>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="companyName">Nome da empresa</Label>
-            <Input id="companyName" required value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="name">Seu nome</Label>
-            <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div className="space-y-2">
             <Label htmlFor="email">E-mail</Label>
-            <Input id="email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Senha</Label>
-            <Input id="password" type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Criando...' : 'Criar conta'}
+            {loading ? 'Verificando...' : 'Solicitar acesso'}
           </Button>
         </form>
         <div className="mt-6 text-sm text-center text-muted-foreground">
