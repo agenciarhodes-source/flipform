@@ -97,7 +97,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
 function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
-    <div className="flex-none w-[340px] min-w-[340px] max-w-[340px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
+    <div className="flex-[0_0_380px] w-[380px] min-w-[380px] max-w-[380px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
       <div className="px-3 py-2.5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
@@ -271,8 +271,8 @@ export default function KanbanPage() {
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full overflow-x-auto overflow-y-hidden">
-              <div className="kanban-columns flex h-full gap-4 w-max min-w-max items-stretch">
+            <div ref={boardScrollRef} className="kanban-scroll-area h-full w-full max-w-full overflow-x-auto overflow-y-hidden">
+              <div className="kanban-columns flex h-full gap-4 w-max min-w-max items-stretch" style={{ width: 'max-content', minWidth: 'max-content' }}>
                 {stages.map((s) => (
                 <Column
                   key={s.id}
