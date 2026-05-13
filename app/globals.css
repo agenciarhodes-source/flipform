@@ -77,3 +77,50 @@
   .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
 }
+
+.kanban-scroll-area::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.kanban-scroll-area::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.kanban-scroll-area::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.kanban-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.kanban-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-track {
+  background: #e5e7eb;
+  border-radius: 9999px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+.kanban-bottom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.kanban-bottom-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #e5e7eb;
+}
