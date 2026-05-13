@@ -105,7 +105,7 @@ function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: 
         </div>
         <Badge variant="secondary" className="text-xs h-5">{leads.length}</Badge>
       </div>
-      <div ref={setNodeRef} className={`flex-1 p-2 overflow-y-auto scrollbar-thin min-h-[200px] transition ${isOver ? 'bg-brand-50/60' : ''}`}>
+      <div ref={setNodeRef} className={`p-2 min-h-[200px] transition ${isOver ? 'bg-brand-50/60' : ''}`}>
         {leads.map((l) => <LeadCard key={l.id} lead={l} taskInd={taskInds[l.id]} onClick={() => onCardClick(l.id)} />)}
         {leads.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">Sem leads</div>}
       </div>
@@ -183,7 +183,7 @@ export default function KanbanPage() {
   const activeLead = leads.find((l) => l.id === activeId);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       <div className="p-4 lg:p-6 border-b bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <Select value={pipelineId || ''} onValueChange={(v) => setPipelineId(v)}>
@@ -211,7 +211,7 @@ export default function KanbanPage() {
           <Input placeholder="Buscar lead por nome, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
-      <div className="w-full flex-1 h-[calc(100vh-220px)] overflow-hidden p-4 lg:p-6">
+      <div className="w-full flex-1 min-h-0 overflow-hidden p-4 lg:p-6">
         {loading ? (
           <div className="text-muted-foreground">Carregando...</div>
         ) : stages.length === 0 ? (
@@ -222,11 +222,12 @@ export default function KanbanPage() {
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+            <div className="flex h-full min-h-0 flex-col">
             {stages.length > 4 && (
               <p className="text-xs text-muted-foreground mb-2">Role horizontalmente para ver mais etapas →</p>
             )}
-            <div ref={boardScrollRef} className="kanban-scrollbar w-full overflow-x-scroll overflow-y-hidden pb-4">
-              <div className="flex gap-4 w-max min-w-max" style={{ minWidth: `${stages.length * 340 + Math.max(0, stages.length - 1) * 16}px` }}>
+            <div ref={boardScrollRef} className="kanban-scroll-area flex-1 min-h-0 w-full overflow-auto pb-4">
+              <div className="kanban-columns flex gap-4 w-max min-w-max items-start">
                 {stages.map((s) => (
                 <Column
                   key={s.id}
@@ -237,6 +238,7 @@ export default function KanbanPage() {
                 />
                 ))}
               </div>
+            </div>
             </div>
             <DragOverlay>
               {activeLead && (
