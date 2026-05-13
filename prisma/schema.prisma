@@ -95,6 +95,7 @@ model Tenant {
   tasks            Task[]
   auditLogs        AuditLog[]
   invites          Invite[]
+  allowedUsers     AllowedUser[]
   plan             Plan?                  @relation(fields: [planId], references: [id])
   subscriptions    Subscription[]
   payments         Payment[]
@@ -122,6 +123,7 @@ model User {
   auditLogs            AuditLog[]
   invitesIssued        Invite[]                @relation("InviteIssuer")
   tenantStatusChanges  TenantStatusHistory[]   @relation("StatusChanger")
+  allowedInvites       AllowedUser[]           @relation("AllowedUserInviter")
 
   @@map("users")
 }
@@ -383,6 +385,25 @@ model Invite {
   @@map("invites")
 }
 
+model AllowedUser {
+  id        String   @id @default(uuid())
+  email     String
+  tenantId  String   @map("tenant_id")
+  role      Role     @default(agent)
+  status    String   @default("active") // active | revoked
+  invitedBy String?  @map("invited_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User?  @relation("AllowedUserInviter", fields: [invitedBy], references: [id])
+
+  @@index([email])
+  @@index([tenantId])
+  @@unique([tenantId, email])
+  @@map("allowed_users")
+}
+
 // ============================================================================
 // Fase 8 — Billing / Plataforma (preparação para Asaas; sem integração real)
 // ============================================================================
@@ -472,4 +493,3 @@ model TenantStatusHistory {
   @@index([tenantId, createdAt])
   @@map("tenant_status_history")
 }
-

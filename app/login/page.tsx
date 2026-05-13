@@ -87,7 +87,7 @@ export default function LoginPage() {
             </Button>
           </form>
           <div className="mt-6 text-sm text-center text-muted-foreground">
-            Não tem conta? <Link href="/register" className="text-primary font-medium hover:underline">Cadastre sua empresa</Link>
+            Precisa de acesso? <Link href="/register" className="text-primary font-medium hover:underline">Solicitar acesso</Link>
           </div>
         </Card>
       </div>
