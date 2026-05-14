@@ -92,7 +92,7 @@ export function AppShell({ children, session, tenant }: { children: React.ReactN
       {open && <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setOpen(false)} />}
 
       {/* Main */}
-      <div className="flex-1 flex flex-col lg:pl-64">
+      <div className="flex-1 min-w-0 flex flex-col lg:pl-64">
         {/* Header */}
         <header className="h-16 bg-card border-b flex items-center justify-between px-4 lg:px-6 sticky top-0 z-20">
           <div className="flex items-center gap-3">
@@ -138,7 +138,7 @@ export function AppShell({ children, session, tenant }: { children: React.ReactN
             <span>Regularize para evitar suspensão{tenant?.nextDueDate ? ` (vencimento: ${new Date(tenant.nextDueDate).toLocaleDateString('pt-BR')})` : ''}.</span>
           </div>
         )}
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

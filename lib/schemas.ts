@@ -91,4 +91,26 @@ export const publicSubmitSchema = z.object({
     .default([]),
 });
 
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Informe a senha atual.'),
+  newPassword: z.string().min(8, 'A nova senha deve ter no mínimo 8 caracteres.'),
+  confirmNewPassword: z.string().min(8, 'Confirme a nova senha.'),
+});
+
+export const requestCodeSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+});
+
+export const verifyCodeSchema = z.object({
+  email: z.string().email('E-mail inválido'),
+  code: z.string().regex(/^\d{6}$/, 'Código inválido'),
+});
+
+export const completeOnboardingSchema = z.object({
+  onboardingToken: z.string().min(10),
+  password: z.string().min(8, 'Senha deve ter ao menos 8 caracteres'),
+  confirmPassword: z.string().min(8, 'Senha deve ter ao menos 8 caracteres'),
+});
+
 export type FieldType = z.infer<typeof fieldTypeEnum>;

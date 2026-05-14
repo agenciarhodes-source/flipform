@@ -95,6 +95,7 @@ model Tenant {
   tasks            Task[]
   auditLogs        AuditLog[]
   invites          Invite[]
+  allowedUsers     AllowedUser[]
   plan             Plan?                  @relation(fields: [planId], references: [id])
   subscriptions    Subscription[]
   payments         Payment[]
@@ -122,6 +123,7 @@ model User {
   auditLogs            AuditLog[]
   invitesIssued        Invite[]                @relation("InviteIssuer")
   tenantStatusChanges  TenantStatusHistory[]   @relation("StatusChanger")
+  allowedInvites       AllowedUser[]           @relation("AllowedUserInviter")
 
   @@map("users")
 }
@@ -204,6 +206,9 @@ model Form {
   fields       FormField[]
   leads        Lead[]
 
+  @@index([tenantId, createdAt])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, isActive])
   @@map("forms")
 }
 
@@ -257,6 +262,11 @@ model Lead {
 
   @@index([tenantId])
   @@index([stageId])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, stageId])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedTo])
   @@map("leads")
 }
 
@@ -287,6 +297,8 @@ model LeadStageHistory {
   toStage   PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
   changer   User?          @relation("StageChanger", fields: [changedBy], references: [id])
 
+  @@index([leadId, createdAt])
+  @@index([toStageId, createdAt])
   @@map("lead_stage_history")
 }
 
@@ -330,6 +342,9 @@ model Task {
   @@index([leadId])
   @@index([assignedTo])
   @@index([dueDate])
+  @@index([tenantId, assignedTo])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("tasks")
 }
 
@@ -368,6 +383,43 @@ model Invite {
   @@index([tenantId])
   @@index([email])
   @@map("invites")
+}
+
+model AllowedUser {
+  id        String   @id @default(cuid())
+  email     String
+  tenantId  String   @map("tenant_id")
+  role      String
+  active    Boolean  @default(true)
+  invitedBy String?  @map("invited_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User?  @relation("AllowedUserInviter", fields: [invitedBy], references: [id])
+
+  @@unique([email])
+  @@index([email])
+  @@index([tenantId])
+  @@index([active])
+  @@map("allowed_users")
+}
+
+model EmailVerificationCode {
+  id          String   @id @default(cuid())
+  email       String
+  codeHash    String   @map("code_hash")
+  purpose     String
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5) @map("max_attempts")
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("email_verification_codes")
 }
 
 // ============================================================================
@@ -412,6 +464,8 @@ model Subscription {
   payments Payment[]
 
   @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, nextDueDate])
   @@map("subscriptions")
 }
 
@@ -436,6 +490,9 @@ model Payment {
 
   @@index([tenantId])
   @@index([status])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, createdAt])
   @@map("payments")
 }
 
@@ -454,4 +511,3 @@ model TenantStatusHistory {
   @@index([tenantId, createdAt])
   @@map("tenant_status_history")
 }
-
