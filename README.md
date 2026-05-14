@@ -78,6 +78,10 @@ npm run smoke
   - `JWT_SECRET_CURRENT`
   - `DATABASE_URL`/`DIRECT_URL` de banco isolado de teste
   - `RESEND_API_KEY` opcional (em teste pode usar mock)
+- Observação: os testes E2E dependem de acesso ao registry npm para instalar Playwright (`@playwright/test` + browsers).
+- Em ambientes com política de rede restrita (ex.: erro `npm 403` para `registry.npmjs.org/playwright`), os E2E podem não executar.
+- No ambiente Codex, pode ocorrer bloqueio de rede/npm (`403`) para instalar Playwright; nesse caso, execute os E2E em CI/local com acesso liberado.
+- O build de produção do FlipForm **não depende** da execução do Playwright.
 
 ## Deploy Vercel
 1. Configurar envs de staging/production no painel.
