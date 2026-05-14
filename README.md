@@ -61,8 +61,23 @@ npm run prisma:validate
 npm run prisma:migrate:status
 npm run test
 npm run test:e2e
+npm run test:e2e:onboarding
 npm run smoke
 ```
+
+## E2E Onboarding (OTP)
+- Preparação local:
+  - `npm install`
+- Instalar Playwright e browsers antes de rodar os testes:
+  - `npm run playwright:install`
+- Rodar localmente com ambiente de teste e provider mockado de e-mail.
+- Executar suite de onboarding:
+  - `npm run test:e2e:onboarding`
+- Env recomendadas para E2E:
+  - `NODE_ENV=test`
+  - `JWT_SECRET_CURRENT`
+  - `DATABASE_URL`/`DIRECT_URL` de banco isolado de teste
+  - `RESEND_API_KEY` opcional (em teste pode usar mock)
 
 ## Deploy Vercel
 1. Configurar envs de staging/production no painel.
