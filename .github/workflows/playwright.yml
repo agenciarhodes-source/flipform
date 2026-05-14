@@ -15,7 +15,7 @@ jobs:
       JWT_SECRET_PREVIOUS: staging-local-previous
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DIRECT_URL: ${{ secrets.DIRECT_URL }}
-      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
 
     steps:
       - uses: actions/checkout@v5
