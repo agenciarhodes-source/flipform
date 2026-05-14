@@ -32,6 +32,8 @@ npm run dev
 - `JWT_SECRET_CURRENT` (obrigatória)
 - `JWT_SECRET_PREVIOUS` (opcional, janela de rotação)
 - `NEXT_PUBLIC_BASE_URL`
+- `RESEND_API_KEY` (obrigatória em staging/produção para envio real de OTP)
+- `EMAIL_FROM` (obrigatória em staging/produção; domínio remetente validado)
 - `COOKIE_SAMESITE` (opcional: `lax|strict|none`)
 - `TRUST_PROXY_PROTO` (opcional: `https` quando necessário em proxy)
 
@@ -70,6 +72,8 @@ npm run smoke
 
 ## Staging checklist
 - [ ] `JWT_SECRET_CURRENT` configurado
+- [ ] `RESEND_API_KEY` configurada
+- [ ] `EMAIL_FROM` configurado com domínio validado
 - [ ] `DATABASE_URL` e `DIRECT_URL` corretas
 - [ ] `NEXT_PUBLIC_BASE_URL` do staging
 - [ ] `npx prisma validate && npx prisma generate`

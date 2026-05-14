@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requestCodeSchema } from '@/lib/schemas';
 import { generateOtpCode, hashOtp } from '@/lib/otp';
 import { logAudit } from '@/lib/audit';
+import { sendOtpEmail } from '@/lib/email';
 
 const GENERIC = 'Se o e-mail estiver autorizado, enviaremos um código de acesso.';
 const OK_TENANT = new Set(['active', 'trial', 'past_due']);
@@ -31,8 +32,13 @@ export async function POST(req: Request) {
 
   await logAudit({ tenantId: allowed.tenantId, entityType: 'auth', entityId: email, action: 'auth.otp_requested', metadata: { email } });
 
-  const isSafeDebug = process.env.NODE_ENV !== 'production' && process.env.APP_ENV !== 'staging';
-  if (isSafeDebug) console.log('[otp][dev]', { email, code });
+  try {
+    await sendOtpEmail({ to: email, code });
+    await logAudit({ tenantId: allowed.tenantId, entityType: 'auth', entityId: email, action: 'auth.otp_email_sent' });
+  } catch {
+    await logAudit({ tenantId: allowed.tenantId, entityType: 'auth', entityId: email, action: 'auth.otp_email_failed' });
+    return NextResponse.json({ error: 'Não foi possível enviar o código agora. Tente novamente em instantes.' }, { status: 503 });
+  }
 
   return NextResponse.json({ message: GENERIC });
 }

@@ -6,6 +6,8 @@
 - `JWT_SECRET_CURRENT`
 - `JWT_SECRET_PREVIOUS` (opcional em rotação)
 - `NEXT_PUBLIC_BASE_URL`
+- `RESEND_API_KEY`
+- `EMAIL_FROM` (domínio remetente validado no Resend)
 - `COOKIE_SAMESITE` (`lax` recomendado)
 
 ## 2) Neon setup
@@ -48,6 +50,7 @@ npm run build
 
 ## 8) Smoke tests pós-deploy
 - Login de tenant owner.
+- Fluxo OTP onboarding: solicitar código, receber e-mail, validar código, criar senha.
 - Acesso dashboard/kanban/reports.
 - Submissão de formulário público.
 - Acesso `/admin` com platform admin.

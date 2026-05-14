@@ -24,7 +24,7 @@ export default function RegisterPage() {
     setLoading(true);
     const res = await fetch('/api/auth/request-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
     const data = await res.json();
-    toast.success(data.message || 'Enviamos um código de acesso para seu e-mail');
+    toast.success(data.message || 'Enviamos um código para o e-mail informado.');
     setStep('code');
     setLoading(false);
   };
@@ -53,7 +53,7 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md p-8 shadow-sm">
         <div className="flex items-center gap-2 mb-6"><div className="w-9 h-9 rounded-md bg-brand-600 flex items-center justify-center text-white"><Zap className="w-4 h-4" /></div><span className="font-heading font-bold text-lg">FlipForm</span></div>
         {step === 'email' && <><h2 className="font-heading text-2xl font-bold mb-2">Informe seu e-mail autorizado</h2><p className="text-muted-foreground text-sm mb-6">Enviaremos um código de acesso para validação.</p><div className="space-y-4"><div className="space-y-2"><Label htmlFor="email">E-mail</Label><Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div><Button className="w-full" onClick={requestCode} disabled={loading}>{loading ? 'Enviando...' : 'Enviar código'}</Button></div></>}
-        {step === 'code' && <><h2 className="font-heading text-2xl font-bold mb-2">Enviamos um código de acesso para seu e-mail</h2><div className="space-y-4"><div className="space-y-2"><Label htmlFor="code">Código (6 dígitos)</Label><Input id="code" value={code} onChange={(e) => setCode(e.target.value)} /></div><Button className="w-full" onClick={verifyCode} disabled={loading}>{loading ? 'Validando...' : 'Validar código'}</Button></div></>}
+        {step === 'code' && <><h2 className="font-heading text-2xl font-bold mb-2">Enviamos um código para o e-mail informado.</h2><div className="space-y-4"><div className="space-y-2"><Label htmlFor="code">Código (6 dígitos)</Label><Input id="code" value={code} onChange={(e) => setCode(e.target.value)} /></div><Button className="w-full" onClick={verifyCode} disabled={loading}>{loading ? 'Validando...' : 'Validar código'}</Button></div></>}
         {step === 'password' && <><h2 className="font-heading text-2xl font-bold mb-2">Crie sua senha de acesso</h2><div className="space-y-4"><div className="space-y-2"><Label htmlFor="password">Senha</Label><Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></div><div className="space-y-2"><Label htmlFor="confirmPassword">Confirmar senha</Label><Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div><Button className="w-full" onClick={complete} disabled={loading}>{loading ? 'Concluindo...' : 'Ativar acesso'}</Button></div></>}
         <div className="mt-6 text-sm text-center text-muted-foreground">Já tem conta? <Link href="/login" className="text-primary font-medium hover:underline">Entrar</Link></div>
       </Card>
