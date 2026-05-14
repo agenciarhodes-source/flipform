@@ -17,6 +17,14 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+
+    if (user.globalRole !== 'platform_admin') {
+      const allowed = await prisma.allowedUser.findFirst({ where: { email, active: true } });
+      if (!allowed) {
+        return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
+      }
+    }
+
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
 
@@ -42,6 +50,13 @@ export async function POST(req: Request) {
       orderBy: { createdAt: 'asc' },
     });
     if (!tu) return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
+
+    const allowedTenant = await prisma.allowedUser.findFirst({
+      where: { email, tenantId: tu.tenantId, active: true },
+    });
+    if (!allowedTenant) {
+      return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
+    }
 
     if (BLOCKED.has(String(tu.tenant.status))) {
       return NextResponse.json(
