@@ -1,5 +1,5 @@
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
-const ASAAS_BASE_URL = process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';
+const ASAAS_BASE_URL = process.env.ASAAS_BASE_URL || 'https://api-sandbox.asaas.com/v3';
 const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN;
 
 async function asaasFetch(path: string, init: RequestInit) {
@@ -22,7 +22,7 @@ export async function getPayment(id: string) { return asaasFetch(`/payments/${id
 export async function getSubscription(id: string) { return asaasFetch(`/subscriptions/${id}`, { method: 'GET' }); }
 export async function cancelSubscription(id: string) { return asaasFetch(`/subscriptions/${id}`, { method: 'DELETE' }); }
 
-export function mapPaymentStatus(status: string) {
+export function mapAsaasPaymentStatus(status: string) {
   const s = String(status || '').toUpperCase();
   if (s.includes('RECEIVED') || s.includes('CONFIRMED')) return 'received';
   if (s.includes('OVERDUE')) return 'overdue';
@@ -30,6 +30,8 @@ export function mapPaymentStatus(status: string) {
   if (s.includes('DELET')) return 'failed';
   return 'pending';
 }
+
+export const mapPaymentStatus = mapAsaasPaymentStatus;
 
 export function validateWebhookToken(req: Request) {
   const token = req.headers.get('asaas-access-token') || req.headers.get('x-asaas-token');
