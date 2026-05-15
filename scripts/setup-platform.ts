@@ -35,10 +35,10 @@ async function main() {
 
   // 2. Planos padrão
   const plans = [
-    { name: 'Free',     description: 'Plano gratuito para testar',           price: 0,      billingCycle: 'monthly', maxUsers: 2,    maxForms: 1,   maxLeads: 100  },
-    { name: 'Starter',  description: 'Para times pequenos',                  price: 49,     billingCycle: 'monthly', maxUsers: 5,    maxForms: 5,   maxLeads: 1000 },
-    { name: 'Pro',      description: 'Para times em crescimento',            price: 149,    billingCycle: 'monthly', maxUsers: 15,   maxForms: 20,  maxLeads: 10000 },
-    { name: 'Business', description: 'Empresas com alto volume de leads',    price: 399,    billingCycle: 'monthly', maxUsers: 50,   maxForms: 100, maxLeads: 100000 },
+    { name: 'Free', slug: 'free', description: 'Plano gratuito para testar', price: 0, billingCycle: 'monthly', maxUsers: 2, maxForms: 1, maxLeadsPerMonth: 100, maxPipelines: 1, canUseReports: false, canExportCsv: false, canUseCustomBranding: false, canUseMetaPixel: false, canUseWebhooks: false, canUseTasks: true },
+    { name: 'Starter', slug: 'starter', description: 'Para times pequenos', price: 49, billingCycle: 'monthly', maxUsers: 5, maxForms: 5, maxLeadsPerMonth: 1000, maxPipelines: 3, canUseReports: true, canExportCsv: false, canUseCustomBranding: false, canUseMetaPixel: false, canUseWebhooks: false, canUseTasks: true },
+    { name: 'Pro', slug: 'pro', description: 'Para times em crescimento', price: 149, billingCycle: 'monthly', maxUsers: 15, maxForms: 20, maxLeadsPerMonth: 10000, maxPipelines: 10, canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true },
+    { name: 'Business', slug: 'business', description: 'Empresas com alto volume de leads', price: 399, billingCycle: 'monthly', maxUsers: 50, maxForms: 100, maxLeadsPerMonth: 100000, maxPipelines: 50, canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true },
   ] as const;
 
   for (const p of plans) {

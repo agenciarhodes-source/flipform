@@ -34,7 +34,9 @@ enum BillingCycle {
 enum SubscriptionStatus {
   trialing
   active
+  courtesy
   past_due
+  suspended
   canceled
   unpaid
   paused
@@ -100,6 +102,7 @@ model Tenant {
   subscriptions    Subscription[]
   payments         Payment[]
   statusHistory    TenantStatusHistory[]
+  webhookEvents    WebhookEvent[]
 
   @@map("tenants")
 }
@@ -391,7 +394,10 @@ model AllowedUser {
   tenantId  String   @map("tenant_id")
   role      String
   active    Boolean  @default(true)
+  status    String   @default("active")
+  source    String   @default("admin")
   invitedBy String?  @map("invited_by")
+  acceptedAt DateTime? @map("accepted_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -434,7 +440,15 @@ model Plan {
   billingCycle BillingCycle @default(monthly) @map("billing_cycle")
   maxUsers     Int          @default(0) @map("max_users")
   maxForms     Int          @default(0) @map("max_forms")
-  maxLeads     Int          @default(0) @map("max_leads")
+  slug         String       @unique
+  maxLeadsPerMonth Int      @default(0) @map("max_leads_per_month")
+  maxPipelines Int          @default(0) @map("max_pipelines")
+  canUseReports Boolean     @default(false) @map("can_use_reports")
+  canExportCsv Boolean      @default(false) @map("can_export_csv")
+  canUseCustomBranding Boolean @default(false) @map("can_use_custom_branding")
+  canUseMetaPixel Boolean   @default(false) @map("can_use_meta_pixel")
+  canUseWebhooks Boolean    @default(false) @map("can_use_webhooks")
+  canUseTasks Boolean       @default(true) @map("can_use_tasks")
   isActive     Boolean      @default(true) @map("is_active")
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
@@ -453,11 +467,15 @@ model Subscription {
   currentPeriodStart     DateTime?          @map("current_period_start")
   currentPeriodEnd       DateTime?          @map("current_period_end")
   nextDueDate            DateTime?          @map("next_due_date")
+  provider               String             @default("asaas")
+  paymentRequired        Boolean            @default(true) @map("payment_required")
+  gracePeriodEndsAt      DateTime?          @map("grace_period_ends_at")
   paymentProvider        String?            @default("asaas") @map("payment_provider")
   providerCustomerId     String?            @map("provider_customer_id")
   providerSubscriptionId String?            @map("provider_subscription_id")
   createdAt              DateTime           @default(now()) @map("created_at")
   updatedAt              DateTime           @updatedAt @map("updated_at")
+  canceledAt             DateTime?          @map("canceled_at")
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   plan     Plan      @relation(fields: [planId], references: [id])
@@ -480,6 +498,8 @@ model Payment {
   dueDate           DateTime?     @map("due_date")
   paidAt            DateTime?     @map("paid_at")
   invoiceUrl        String?       @map("invoice_url")
+  bankSlipUrl       String?       @map("bank_slip_url")
+  pixQrCode         String?       @map("pix_qr_code")
   billingType       String?       @map("billing_type")
   rawPayload        Json?         @map("raw_payload")
   createdAt         DateTime      @default(now()) @map("created_at")
@@ -494,6 +514,24 @@ model Payment {
   @@index([tenantId, dueDate])
   @@index([tenantId, createdAt])
   @@map("payments")
+}
+
+model WebhookEvent {
+  id                     String   @id @default(cuid())
+  provider               String
+  eventId                String   @map("event_id")
+  eventType              String   @map("event_type")
+  providerPaymentId      String?  @map("provider_payment_id")
+  rawPayload             Json?    @map("raw_payload")
+  processedAt            DateTime? @map("processed_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  tenantId               String?  @map("tenant_id")
+
+  tenant                 Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, eventId])
+  @@index([providerPaymentId])
+  @@map("webhook_events")
 }
 
 model TenantStatusHistory {
