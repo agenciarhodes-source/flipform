@@ -1,12 +1,38 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { evaluateBillingAccess } from '@/lib/billing-access';
 
-export async function POST() {
+function isAuthorized(req: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return false;
+  const token = req.headers.get('x-cron-secret') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  return token === secret;
+}
+
+export async function POST(req: Request) {
+  if (!isAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
   const now = new Date();
-  const overdue = await prisma.subscription.findMany({ where: { status: 'past_due', gracePeriodEndsAt: { lt: now }, paymentRequired: true } });
-  for (const s of overdue) {
-    await prisma.subscription.update({ where: { id: s.id }, data: { status: 'suspended' } });
-    await prisma.tenant.update({ where: { id: s.tenantId }, data: { status: 'suspended' } });
+  const candidates = await prisma.subscription.findMany({
+    where: { status: 'past_due', paymentRequired: true },
+    select: { id: true, tenantId: true, status: true, gracePeriodEndsAt: true, tenant: { select: { status: true } } },
+  });
+
+  let suspended = 0;
+  for (const sub of candidates) {
+    const access = evaluateBillingAccess({
+      tenantStatus: sub.tenant.status,
+      subscriptionStatus: sub.status,
+      gracePeriodEndsAt: sub.gracePeriodEndsAt,
+      now,
+    });
+
+    if (!access.shouldSuspend) continue;
+
+    await prisma.subscription.updateMany({ where: { id: sub.id, status: 'past_due' }, data: { status: 'suspended' } });
+    await prisma.tenant.updateMany({ where: { id: sub.tenantId, status: { not: 'canceled' } }, data: { status: 'suspended' } });
+    suspended += 1;
   }
-  return NextResponse.json({ ok: true, suspended: overdue.length });
+
+  return NextResponse.json({ ok: true, candidates: candidates.length, suspended });
 }

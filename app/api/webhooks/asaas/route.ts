@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { mapPaymentStatus, validateWebhookToken } from '@/lib/asaas';
+import { evaluateBillingAccess } from '@/lib/billing-access';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request) {
@@ -41,9 +42,18 @@ export async function POST(req: Request) {
     }
 
     if (paymentStatus === 'received') {
-      await prisma.subscription.updateMany({ where: { id: tenant.subscriptionId || '' }, data: { status: 'active', gracePeriodEndsAt: null } });
-      await prisma.tenant.update({ where: { id: tenant.tenantId }, data: { status: 'active' } });
-      await prisma.allowedUser.updateMany({ where: { tenantId: tenant.tenantId }, data: { active: true, status: 'active', acceptedAt: new Date() } });
+      const current = await prisma.subscription.findUnique({ where: { id: tenant.subscriptionId || '' }, select: { status: true } });
+      const tenantRow = await prisma.tenant.findUnique({ where: { id: tenant.tenantId }, select: { status: true } });
+      const access = evaluateBillingAccess({ tenantStatus: tenantRow?.status, subscriptionStatus: current?.status });
+
+      if (current?.status !== 'canceled') {
+        await prisma.subscription.updateMany({ where: { id: tenant.subscriptionId || '', status: { not: 'canceled' } }, data: { status: 'active', gracePeriodEndsAt: null } });
+      }
+
+      if (tenantRow?.status !== 'canceled' && (!access.allowed || tenantRow?.status === 'past_due')) {
+        await prisma.tenant.updateMany({ where: { id: tenant.tenantId, status: { not: 'canceled' } }, data: { status: 'active' } });
+        await prisma.allowedUser.updateMany({ where: { tenantId: tenant.tenantId }, data: { active: true, status: 'active', acceptedAt: new Date() } });
+      }
     }
 
     await logAudit({ tenantId: tenant.tenantId, entityType: 'billing', entityId: providerPaymentId, action: `billing.webhook.${event.toLowerCase()}`, metadata: { event, paymentStatus } });
