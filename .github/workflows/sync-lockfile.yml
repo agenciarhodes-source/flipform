@@ -1,0 +1,31 @@
+name: Sync package-lock
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lockfile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Update package-lock
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Commit package-lock update
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b chore/sync-package-lock-playwright
+          git add package-lock.json package.json
+          git commit -m "chore: sync package-lock for playwright" || echo "No changes to commit"
+          git push origin chore/sync-package-lock-playwright --force
