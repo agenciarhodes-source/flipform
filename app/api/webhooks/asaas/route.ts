@@ -3,7 +3,6 @@ import { prisma } from '@/lib/prisma';
 import { mapPaymentStatus, validateWebhookToken } from '@/lib/asaas';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import { logAudit } from '@/lib/audit';
-import { evaluateBillingAccess } from '@/lib/billing-access';
 
 export async function POST(req: Request) {
   if (!validateWebhookToken(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
