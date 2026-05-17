@@ -32,8 +32,6 @@ export default function AdminBillingPage() {
   const [rows, setRows] = useState<DiagnosticRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [syncingTenantId, setSyncingTenantId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -47,27 +45,6 @@ export default function AdminBillingPage() {
       setError('Não foi possível carregar os dados de billing.');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function syncWithAsaas(row: DiagnosticRow) {
-    setSuccess(null);
-    setError(null);
-    setSyncingTenantId(row.tenantId);
-    try {
-      const res = await fetch(`/api/admin/tenants/${row.tenantId}/billing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_subscription' }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Não foi possível sincronizar no momento.');
-      setSuccess('Sincronização concluída com sucesso.');
-      await load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Não foi possível sincronizar no momento.');
-    } finally {
-      setSyncingTenantId(null);
     }
   }
 
@@ -94,10 +71,6 @@ export default function AdminBillingPage() {
         </Card>
       )}
 
-      {success && !error && (
-        <Card className="p-4 bg-emerald-50 border-emerald-200 text-sm text-emerald-800">{success}</Card>
-      )}
-
       {!error && rows.length === 0 && (
         <Card className="p-6 text-sm text-muted-foreground">Nenhuma assinatura encontrada para diagnóstico.</Card>
       )}
@@ -118,7 +91,6 @@ export default function AdminBillingPage() {
                 <th className="p-3">Último pagamento</th>
                 <th className="p-3">Último webhook</th>
                 <th className="p-3">Atualizado em</th>
-                <th className="p-3">Ação</th>
               </tr>
             </thead>
             <tbody>
@@ -135,11 +107,6 @@ export default function AdminBillingPage() {
                   <td className="p-3">{r.lastPaymentStatus || '—'}</td>
                   <td className="p-3">{r.lastWebhookEvent ? `${r.lastWebhookEvent}${r.lastWebhookAt ? ` (${new Date(r.lastWebhookAt).toLocaleString('pt-BR')})` : ''}` : '—'}</td>
                   <td className="p-3">{new Date(r.updatedAt).toLocaleString('pt-BR')}</td>
-                  <td className="p-3">
-                    <Button variant="outline" size="sm" disabled={syncingTenantId === r.tenantId} onClick={() => syncWithAsaas(r)}>
-                      {syncingTenantId === r.tenantId ? 'Sincronizando...' : 'Sincronizar com Asaas'}
-                    </Button>
-                  </td>
                 </tr>
               ))}
             </tbody>
