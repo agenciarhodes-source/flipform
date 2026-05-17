@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { mapPaymentStatus, validateWebhookToken } from '@/lib/asaas';
+import { evaluateBillingAccess } from '@/lib/billing-access';
 import { logAudit } from '@/lib/audit';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 
