@@ -13,13 +13,13 @@ export async function POST(req: Request) {
   if (!isAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const now = new Date();
-  const candidates = await prisma.subscription.findMany({
+  const subscriptions = await prisma.subscription.findMany({
     where: { status: 'past_due', paymentRequired: true },
-    select: { id: true, tenantId: true, status: true, gracePeriodEndsAt: true, tenant: { select: { status: true } } },
+    select: { id: true, tenantId: true, status: true, gracePeriodEndsAt: true, tenant: { select: { status: true, name: true } } },
   });
 
   let suspended = 0;
-  for (const sub of candidates) {
+  for (const sub of subscriptions) {
     const access = evaluateBillingAccess({
       tenantStatus: sub.tenant.status,
       subscriptionStatus: sub.status,
@@ -31,8 +31,9 @@ export async function POST(req: Request) {
 
     await prisma.subscription.updateMany({ where: { id: sub.id, status: 'past_due' }, data: { status: 'suspended' } });
     await prisma.tenant.updateMany({ where: { id: sub.tenantId, status: { not: 'canceled' } }, data: { status: 'suspended' } });
+    console.info('[billing-status-cron] suspended tenant', { tenantId: sub.tenantId, tenantName: sub.tenant.name, subscriptionId: sub.id });
     suspended += 1;
   }
 
-  return NextResponse.json({ ok: true, candidates: candidates.length, suspended });
+  return NextResponse.json({ ok: true, candidates: subscriptions.length, suspended });
 }

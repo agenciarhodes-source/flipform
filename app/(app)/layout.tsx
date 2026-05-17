@@ -13,7 +13,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     select: { id: true, name: true, slug: true, primaryColor: true, logoUrl: true, status: true, nextDueDate: true },
   });
 
-  const sub = tenant
+  const subscription = tenant
     ? await prisma.subscription.findFirst({
         where: { tenantId: tenant.id },
         select: { status: true, gracePeriodEndsAt: true },
@@ -23,11 +23,11 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
 
   const access = evaluateBillingAccess({
     tenantStatus: tenant?.status,
-    subscriptionStatus: sub?.status,
-    gracePeriodEndsAt: sub?.gracePeriodEndsAt,
+    subscriptionStatus: subscription?.status,
+    gracePeriodEndsAt: subscription?.gracePeriodEndsAt,
   });
 
-  if (!access.allowed) redirect('/billing/blocked');
+  if (!access.allowAccess) redirect('/billing/blocked');
 
   return (
     <AppShell
