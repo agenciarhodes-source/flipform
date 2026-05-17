@@ -30,7 +30,6 @@ export const GET = withPlatformAdmin(async () => {
 
   return NextResponse.json({
     rows: subs.map((s) => ({
-      subscriptionId: s.id,
       tenantName: s.tenant.name,
       tenantId: s.tenant.id,
       tenantStatus: s.tenant.status,

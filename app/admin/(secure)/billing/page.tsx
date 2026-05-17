@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, RefreshCcw } from 'lucide-react';
 
 type DiagnosticRow = {
-  subscriptionId: string;
   tenantName: string;
   tenantId: string;
   tenantStatus: string;
@@ -33,7 +32,6 @@ export default function AdminBillingPage() {
   const [rows, setRows] = useState<DiagnosticRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [syncingBySub, setSyncingBySub] = useState<Record<string, boolean>>({});
 
   async function load() {
     try {
@@ -47,27 +45,6 @@ export default function AdminBillingPage() {
       setError('Não foi possível carregar os dados de billing.');
     } finally {
       setLoading(false);
-    }
-  }
-
-
-  async function syncBillingStatus(row: DiagnosticRow) {
-    if (!row.asaasSubscriptionId) return;
-    setSyncingBySub((prev) => ({ ...prev, [row.subscriptionId]: true }));
-    try {
-      const res = await fetch(`/api/admin/tenants/${row.tenantId}/billing`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'sync_subscription' }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Falha ao sincronizar');
-      await load();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Não foi possível sincronizar o billing.';
-      setError(message);
-    } finally {
-      setSyncingBySub((prev) => ({ ...prev, [row.subscriptionId]: false }));
     }
   }
 
@@ -114,12 +91,11 @@ export default function AdminBillingPage() {
                 <th className="p-3">Último pagamento</th>
                 <th className="p-3">Último webhook</th>
                 <th className="p-3">Atualizado em</th>
-                <th className="p-3">Ação</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.subscriptionId} className="border-t align-top">
+                <tr key={`${r.tenantId}-${r.asaasSubscriptionId || 'none'}`} className="border-t align-top">
                   <td className="p-3 font-medium">{r.tenantName}</td>
                   <td className="p-3 font-mono text-xs">{r.tenantId}</td>
                   <td className="p-3"><Badge variant={STATUS_VARIANT[r.subscriptionStatus] || 'outline'}>{r.subscriptionStatus}</Badge></td>
@@ -131,13 +107,6 @@ export default function AdminBillingPage() {
                   <td className="p-3">{r.lastPaymentStatus || '—'}</td>
                   <td className="p-3">{r.lastWebhookEvent ? `${r.lastWebhookEvent}${r.lastWebhookAt ? ` (${new Date(r.lastWebhookAt).toLocaleString('pt-BR')})` : ''}` : '—'}</td>
                   <td className="p-3">{new Date(r.updatedAt).toLocaleString('pt-BR')}</td>
-                  <td className="p-3">
-                    {r.asaasSubscriptionId ? (
-                      <Button size="sm" variant="outline" onClick={() => syncBillingStatus(r)} disabled={Boolean(syncingBySub[r.subscriptionId])}>
-                        {syncingBySub[r.subscriptionId] ? 'Sincronizando...' : 'Sync billing status'}
-                      </Button>
-                    ) : '—'}
-                  </td>
                 </tr>
               ))}
             </tbody>
