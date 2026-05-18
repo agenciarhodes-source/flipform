@@ -27,27 +27,59 @@ export async function GET(req: Request) {
     if (active === 'true') where.active = true;
     if (active === 'false') where.active = false;
 
-    const [items, tenants] = await Promise.all([
+    const [allowedUsers, tenants] = await Promise.all([
       prisma.allowedUser.findMany({
         where,
         orderBy: { createdAt: 'desc' },
-        include: {
-          tenant: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              status: true,
-              plan: { select: { name: true } },
-              subscriptions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
-            },
-          },
-        },
       }),
-      prisma.tenant.findMany({ select: { id: true, name: true, slug: true }, orderBy: { name: 'asc' } }),
+      prisma.tenant.findMany({
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          status: true,
+          plan: { select: { name: true } },
+          subscriptions: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
     ]);
 
-    return NextResponse.json({ items, tenants });
+    const tenantById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+
+    const items = allowedUsers.map((item) => {
+      const tenant = tenantById.get(item.tenantId);
+
+      return {
+        ...item,
+        tenant: tenant
+          ? {
+              id: tenant.id,
+              name: tenant.name,
+              slug: tenant.slug,
+              status: tenant.status,
+              plan: tenant.plan,
+              subscriptions: tenant.subscriptions,
+            }
+          : {
+              id: item.tenantId,
+              name: 'Tenant não encontrado',
+              slug: 'tenant-ausente',
+              status: 'unknown',
+              plan: null,
+              subscriptions: [],
+            },
+      };
+    });
+
+    return NextResponse.json({
+      items,
+      tenants: tenants.map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+      })),
+    });
   } catch (error) {
     console.error('[admin.allowed-users.GET]', error);
     return NextResponse.json({ error: 'Falha ao carregar acessos autorizados' }, { status: 500 });
