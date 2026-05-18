@@ -18,11 +18,12 @@ export async function POST(req: Request) {
   const parsed = verifyCodeSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
   const email = parsed.data.email.trim().toLowerCase();
+  const requestedTenantId = parsed.data.tenantId?.trim();
 
   const rec = await prisma.emailVerificationCode.findFirst({ where: { email, purpose: 'onboarding' }, orderBy: { createdAt: 'desc' } });
   if (!rec || rec.usedAt) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
   if (rec.expiresAt.getTime() < Date.now()) {
-    await logAudit({ tenantId: 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_expired' });
+    await logAudit({ tenantId: requestedTenantId || 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_expired' });
     return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
   }
   if (rec.attempts >= rec.maxAttempts) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
@@ -30,14 +31,23 @@ export async function POST(req: Request) {
   const ok = hashOtp(email, parsed.data.code) === rec.codeHash;
   if (!ok) {
     await prisma.emailVerificationCode.update({ where: { id: rec.id }, data: { attempts: { increment: 1 } } });
-    await logAudit({ tenantId: 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_failed' });
+    await logAudit({ tenantId: requestedTenantId || 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_failed' });
     return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
   }
 
-  await prisma.emailVerificationCode.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
-  const onboardingToken = signOnboardingToken({ email, purpose: 'onboarding' });
+  const allowedUser = requestedTenantId
+    ? await prisma.allowedUser.findFirst({ where: { email, tenantId: requestedTenantId, active: true }, select: { tenantId: true } })
+    : await prisma.allowedUser.findFirst({ where: { email, active: true }, orderBy: { createdAt: 'desc' }, select: { tenantId: true } });
 
-  await logAudit({ tenantId: 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_verified' });
+  if (!allowedUser?.tenantId) {
+    await logAudit({ tenantId: requestedTenantId || 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_missing_tenant' });
+    return NextResponse.json({ error: 'Não foi possível localizar o tenant do onboarding.', code: 'ONBOARDING_TENANT_NOT_FOUND' }, { status: 400 });
+  }
+
+  await prisma.emailVerificationCode.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
+  const onboardingToken = signOnboardingToken({ email, tenantId: allowedUser.tenantId, purpose: 'onboarding' });
+
+  await logAudit({ tenantId: allowedUser.tenantId, entityType: 'auth', entityId: email, action: 'auth.otp_verified' });
 
   return NextResponse.json({ ok: true, onboardingToken });
 }
