@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { createCustomer, createSubscription } from '@/lib/asaas';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logPlatformAudit } from '@/lib/platform-audit';
+import { signOnboardingToken } from '@/lib/jwt';
 
 function slugify(input: string) {
   return input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -56,7 +57,9 @@ export async function POST(req: Request) {
     await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: subscription.id, action: 'checkout.subscription_created', metadata: { providerSubscriptionId: createdSub.id } });
 
     const checkoutUrl = createdSub?.invoiceUrl || createdSub?.bankSlipUrl || createdSub?.checkoutUrl || '/checkout/pending';
-    return NextResponse.json({ ok: true, checkoutUrl, tenantId: tenant.id, subscriptionId: subscription.id });
+    const onboardingToken = signOnboardingToken({ email, tenantId: tenant.id, purpose: 'onboarding' });
+    const onboardingUrl = `/onboarding/${onboardingToken}`;
+    return NextResponse.json({ ok: true, checkoutUrl, tenantId: tenant.id, subscriptionId: subscription.id, onboardingUrl });
   } catch {
     await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: email, action: 'checkout.failed', metadata: { planSlug } });
     return NextResponse.json({ error: 'Não foi possível iniciar o pagamento. Tente novamente.', code: 'CHECKOUT_PROVIDER_FAILED' }, { status: 502 });
