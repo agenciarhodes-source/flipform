@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword, setSessionCookie } from '@/lib/auth';
 import { loginSchema } from '@/lib/schemas';
@@ -7,6 +8,13 @@ import { logAudit } from '@/lib/audit';
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const bodyForRate = await req.clone().json().catch(() => ({} as any));
+  const emailForRate = String(bodyForRate?.email || '').toLowerCase();
+  const rlIp = rateLimit({ key: `login:ip:${ip}`, limit: 10, windowMs: 10 * 60 * 1000 });
+  if (!rlIp.allowed) return rateLimitResponse(rlIp);
+  if (emailForRate) { const rlEmail = rateLimit({ key: `login:email:${emailForRate}`, limit: 5, windowMs: 10 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
+
   try {
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);

@@ -8,7 +8,7 @@ import { prisma } from './prisma';
  */
 export async function logPlatformAudit(params: {
   tenantId?: string | null;
-  userId: string;
+  userId?: string | null;
   entityType: string;
   entityId: string;
   action: string;
@@ -25,7 +25,7 @@ export async function logPlatformAudit(params: {
 
   try {
     await prisma.auditLog.create({
-      data: { tenantId, userId, entityType, entityId, action, metadata: (metadata || {}) as any },
+      data: { tenantId, userId: userId || null, entityType, entityId, action, metadata: (metadata || {}) as any },
     });
   } catch (e) {
     console.error('logPlatformAudit error', e);

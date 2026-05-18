@@ -60,7 +60,13 @@ export async function setSessionCookie(payload: SessionPayload) {
 }
 
 export function clearSessionCookie() {
-  cookies().delete(COOKIE_NAME);
+  cookies().set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: isSecureRequest(),
+    sameSite: getSameSite(),
+    path: '/',
+    maxAge: 0,
+  });
 }
 
 function readCookieToken(): string | undefined {
