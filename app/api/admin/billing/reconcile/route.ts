@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { captureServerException } from '@/lib/observability';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { withPlatformAdmin } from '@/lib/auth';
 import { reconcileProviderSubscription, reconcileSubscription, reconcileTenantBilling } from '@/lib/billing-reconciliation';
 
 export const POST = withPlatformAdmin(async (req, session) => {
+  try {
   const rl = rateLimit({ key: `admin:billing-reconcile:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json().catch(() => ({} as any));
@@ -23,4 +25,8 @@ export const POST = withPlatformAdmin(async (req, session) => {
       : await reconcileProviderSubscription(providerSubscriptionId!);
 
   return NextResponse.json(result, { status: result.success ? 200 : 422 });
+  } catch (error) {
+    captureServerException(error, { route: '/api/admin/billing/reconcile', method: 'POST', userId: session.userId, role: session.role || session.globalRole || null });
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+  }
 });

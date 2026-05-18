@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { captureServerException } from '@/lib/observability';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { evaluateBillingAccess } from '@/lib/billing-access';
@@ -11,6 +12,7 @@ function isAuthorized(req: Request) {
 }
 
 export async function POST(req: Request) {
+  try {
   const ip = getClientIp(req);
   const rl = rateLimit({ key: `job:billing-status:ip:${ip}`, limit: 10, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
@@ -41,4 +43,8 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true, candidates: subscriptions.length, suspended });
+  } catch (error) {
+    captureServerException(error, { route: '/api/cron/billing-status', method: 'POST' });
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+  }
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { captureServerException } from '@/lib/observability';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { reconcileSubscription } from '@/lib/billing-reconciliation';
@@ -11,6 +12,7 @@ function isAuthorized(req: Request) {
 }
 
 export async function POST(req: Request) {
+  try {
   const ip = getClientIp(req);
   const rl = rateLimit({ key: `job:reconcile-billing:ip:${ip}`, limit: 10, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
@@ -33,4 +35,8 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true, candidates: suspects.length, changed, failed });
+  } catch (error) {
+    captureServerException(error, { route: '/api/internal/jobs/reconcile-billing', method: 'POST' });
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+  }
 }
