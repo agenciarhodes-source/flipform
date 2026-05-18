@@ -12,7 +12,7 @@ export type BillingAccessInput = {
 export type BillingAccessResult = {
   allowAccess: boolean;
   shouldSuspend: boolean;
-  reason: 'active' | 'courtesy' | 'past_due_grace' | 'past_due_expired' | 'suspended' | 'canceled' | 'blocked' | 'unknown';
+  reason: 'active' | 'trial' | 'courtesy' | 'past_due_grace' | 'past_due_expired' | 'suspended' | 'canceled' | 'blocked' | 'unknown';
 };
 
 export function evaluateBillingAccess(input: BillingAccessInput): BillingAccessResult {
@@ -31,6 +31,10 @@ export function evaluateBillingAccess(input: BillingAccessInput): BillingAccessR
     return expired
       ? { allowAccess: false, shouldSuspend: true, reason: 'past_due_expired' }
       : { allowAccess: true, shouldSuspend: false, reason: 'past_due_grace' };
+  }
+
+  if (tenantStatus === 'trial' || subscriptionStatus === 'trialing') {
+    return { allowAccess: true, shouldSuspend: false, reason: 'trial' };
   }
 
   if (tenantStatus === 'active' || subscriptionStatus === 'active') return { allowAccess: true, shouldSuspend: false, reason: 'active' };
