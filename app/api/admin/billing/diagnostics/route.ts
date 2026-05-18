@@ -20,7 +20,7 @@ export const GET = withPlatformAdmin(async () => {
       })
     : [];
 
-  const lastWebhookByTenant = new Map<string, { eventType: string; processedAt: Date }>();
+  const lastWebhookByTenant = new Map<string, { eventType: string; processedAt: Date | null }>();
   for (const evt of webhookEvents) {
     if (!evt.tenantId) continue;
     if (!lastWebhookByTenant.has(evt.tenantId)) {
