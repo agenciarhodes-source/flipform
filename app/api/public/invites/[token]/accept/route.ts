@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { hashPassword, setSessionCookie } from '@/lib/auth';
 import { inviteAcceptSchema } from '@/lib/schemas-users';
