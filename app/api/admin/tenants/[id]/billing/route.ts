@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { withPlatformAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { cancelSubscription, createCustomer, createSubscription, getPayment, getSubscription, mapAsaasPaymentStatus } from '@/lib/asaas';
@@ -15,6 +16,8 @@ function mapAsaasSubscriptionStatus(status: string, fallback: string) {
 }
 
 export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: string } }) => {
+  const rl = rateLimit({ key: `admin:tenant-billing:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json().catch(() => ({}));
   const action = String(body.action || '');
   const tenantId = ctx.params.id;

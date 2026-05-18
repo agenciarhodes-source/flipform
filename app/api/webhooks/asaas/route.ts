@@ -1,10 +1,15 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { mapPaymentStatus, validateWebhookToken } from '@/lib/asaas';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const rl = rateLimit({ key: `webhook:asaas:ip:${ip}`, limit: 120, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   if (!validateWebhookToken(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const payload = await req.json().catch(() => ({}));
   const event = String(payload.event || payload.type || 'UNKNOWN');

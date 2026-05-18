@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -10,6 +11,9 @@ async function requirePlatformAdmin() {
 }
 
 export async function GET(req: Request) {
+  const ip = getClientIp(req);
+  const rl = rateLimit({ key: `admin:allowed-users:get:ip:${ip}`, limit: 60, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
   const session = await requirePlatformAdmin();
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 403 });
 
@@ -50,6 +54,10 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const rl = rateLimit({ key: `admin:allowed-users:post:ip:${ip}`, limit: 60, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   const session = await requirePlatformAdmin();
   if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 403 });
 

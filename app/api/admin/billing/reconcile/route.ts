@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { withPlatformAdmin } from '@/lib/auth';
 import { reconcileProviderSubscription, reconcileSubscription, reconcileTenantBilling } from '@/lib/billing-reconciliation';
 
-export const POST = withPlatformAdmin(async (req) => {
+export const POST = withPlatformAdmin(async (req, session) => {
+  const rl = rateLimit({ key: `admin:billing-reconcile:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json().catch(() => ({} as any));
   const subscriptionId = body?.subscriptionId ? String(body.subscriptionId) : null;
   const tenantId = body?.tenantId ? String(body.tenantId) : null;

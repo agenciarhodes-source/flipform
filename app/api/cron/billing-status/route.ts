@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 
@@ -10,6 +11,10 @@ function isAuthorized(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const rl = rateLimit({ key: `job:billing-status:ip:${ip}`, limit: 10, windowMs: 60 * 1000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
+
   if (!isAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const now = new Date();
