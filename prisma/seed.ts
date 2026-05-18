@@ -30,12 +30,12 @@ async function main() {
     },
     {
       slug: 'growth', name: 'Growth', description: 'Plano recomendado para empresas em crescimento que precisam de CRM, funil, formulários e integrações.',
-      price: '297', billingCycle: 'monthly', maxUsers: 10, maxForms: 25, maxPipelines: 10, maxLeadsPerMonth: 25000,
+      price: '157', billingCycle: 'monthly', maxUsers: 7, maxForms: 15, maxPipelines: 5, maxLeadsPerMonth: 10000,
       canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
     },
     {
       slug: 'pro', name: 'Pro', description: 'Plano profissional para operações comerciais com volume, múltiplas equipes e integrações avançadas.',
-      price: '697', billingCycle: 'monthly', maxUsers: 30, maxForms: 100, maxPipelines: 50, maxLeadsPerMonth: 150000,
+      price: '397', billingCycle: 'monthly', maxUsers: 20, maxForms: 60, maxPipelines: 25, maxLeadsPerMonth: 75000,
       canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
     },
     {
