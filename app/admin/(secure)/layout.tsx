@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth';
-import { LayoutDashboard, Building2, CreditCard, ScrollText, LogOut, Shield } from 'lucide-react';
+import { LayoutDashboard, Building2, CreditCard, ScrollText, LogOut, Shield, Users } from 'lucide-react';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -27,6 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <AdminLink href="/admin" icon={LayoutDashboard} label="Visão geral" />
           <AdminLink href="/admin/tenants" icon={Building2} label="Clientes" />
           <AdminLink href="/admin/billing" icon={CreditCard} label="Billing & Planos" />
+          <AdminLink href="/admin/access" icon={Users} label="Acessos" />
           <AdminLink href="/admin/audit" icon={ScrollText} label="Audit logs" />
         </nav>
         <div className="p-3 border-t border-slate-800 text-xs text-slate-400">
