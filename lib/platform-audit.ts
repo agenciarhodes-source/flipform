@@ -5,10 +5,13 @@ import { prisma } from './prisma';
  * Diferente do logAudit padrão, este pode receber um tenantId opcional.
  * Quando tenantId é informado, registra no audit_logs do tenant relevante;
  * caso contrário, tenta achar qualquer tenant para o registro existir.
+ *
+ * userId é opcional para permitir eventos gerados por jobs/cron/sistema,
+ * já que audit_logs.user_id é nullable no schema Prisma.
  */
 export async function logPlatformAudit(params: {
   tenantId?: string | null;
-  userId: string;
+  userId?: string | null;
   entityType: string;
   entityId: string;
   action: string;
@@ -25,7 +28,7 @@ export async function logPlatformAudit(params: {
 
   try {
     await prisma.auditLog.create({
-      data: { tenantId, userId, entityType, entityId, action, metadata: (metadata || {}) as any },
+      data: { tenantId, userId: userId || null, entityType, entityId, action, metadata: (metadata || {}) as any },
     });
   } catch (e) {
     console.error('logPlatformAudit error', e);
