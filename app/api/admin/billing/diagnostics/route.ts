@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withPlatformAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getSubscription } from '@/lib/asaas';
 
 export const GET = withPlatformAdmin(async () => {
   const subs = await prisma.subscription.findMany({
@@ -31,8 +32,35 @@ export const GET = withPlatformAdmin(async () => {
     }
   }
 
-  return NextResponse.json({
-    rows: subs.map((s) => ({
+  const reconciliationLogs = tenantIds.length
+    ? await prisma.auditLog.findMany({
+        where: { tenantId: { in: tenantIds }, action: { startsWith: 'billing.reconciliation.' } },
+        orderBy: { createdAt: 'desc' },
+        select: { tenantId: true, createdAt: true },
+      })
+    : [];
+
+  const lastReconciledByTenant = new Map<string, Date>();
+  for (const log of reconciliationLogs) {
+    if (!lastReconciledByTenant.has(log.tenantId)) lastReconciledByTenant.set(log.tenantId, log.createdAt);
+  }
+
+  const rows = await Promise.all(subs.map(async (s) => {
+    let providerSubscriptionStatus: string | null = null;
+    if (s.providerSubscriptionId && s.status !== 'trialing') {
+      try {
+        const providerSubscription = await getSubscription(s.providerSubscriptionId);
+        providerSubscriptionStatus = providerSubscription?.status ? String(providerSubscription.status) : null;
+      } catch {
+        providerSubscriptionStatus = 'provider_error';
+      }
+    }
+
+    const providerNorm = String(providerSubscriptionStatus || '').toLowerCase();
+    const localNorm = String(s.status || '').toLowerCase();
+    const statusDivergence = Boolean(providerSubscriptionStatus && providerNorm !== localNorm && providerNorm !== 'provider_error');
+
+    return ({
       tenantName: s.tenant.name,
       tenantId: s.tenant.id,
       tenantStatus: s.tenant.status,
@@ -45,6 +73,11 @@ export const GET = withPlatformAdmin(async () => {
       lastWebhookEvent: lastWebhookByTenant.get(s.tenantId)?.eventType || null,
       lastWebhookAt: lastWebhookByTenant.get(s.tenantId)?.processedAt || null,
       updatedAt: s.updatedAt,
-    })),
-  });
+      providerSubscriptionStatus,
+      statusDivergence,
+      lastReconciledAt: lastReconciledByTenant.get(s.tenantId) || null,
+    });
+  }));
+
+  return NextResponse.json({ rows });
 });
