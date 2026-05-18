@@ -45,7 +45,9 @@ export async function POST(req: Request) {
   }
 
   await prisma.emailVerificationCode.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
-  const onboardingToken = signOnboardingToken({ email, tenantId: allowedUser.tenantId, purpose: 'onboarding' });
+  const allowed = await prisma.allowedUser.findFirst({ where: { email, active: true }, select: { tenantId: true } });
+  if (!allowed?.tenantId) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
+  const onboardingToken = signOnboardingToken({ email, tenantId: allowed.tenantId, purpose: 'onboarding' });
 
   await logAudit({ tenantId: allowedUser.tenantId, entityType: 'auth', entityId: email, action: 'auth.otp_verified' });
 

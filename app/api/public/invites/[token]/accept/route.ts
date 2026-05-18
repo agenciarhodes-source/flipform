@@ -7,6 +7,10 @@ import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request, ctx: { params: { token: string } }) {
   try {
+    const ip = getClientIp(req);
+    const rl = rateLimit({ key: `invite:accept:ip:${ip}`, limit: 20, windowMs: 60 * 60 * 1000 });
+    if (!rl.allowed) return rateLimitResponse(rl);
+
     const body = await req.json();
     const parsed = inviteAcceptSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
@@ -16,8 +20,15 @@ export async function POST(req: Request, ctx: { params: { token: string } }) {
       include: { tenant: true },
     });
     if (!invite) return NextResponse.json({ error: 'Convite inválido' }, { status: 404 });
+    if (invite.status === 'revoked') return NextResponse.json({ error: 'Convite revogado.', code: 'INVITE_REVOKED' }, { status: 410 });
     if (invite.status !== 'pending') return NextResponse.json({ error: 'Convite não está ativo' }, { status: 410 });
-    if (invite.expiresAt < new Date()) return NextResponse.json({ error: 'Convite expirado' }, { status: 410 });
+    if (invite.expiresAt < new Date()) {
+      await logAudit({ tenantId: invite.tenantId, entityType: 'invite', entityId: invite.id, action: 'invite.expired_attempt', metadata: { email: invite.email } });
+      return NextResponse.json({ error: 'Convite expirado.', code: 'INVITE_EXPIRED' }, { status: 410 });
+    }
+
+    const allowed = await prisma.allowedUser.findFirst({ where: { tenantId: invite.tenantId, email: invite.email, active: true } });
+    if (!allowed) return NextResponse.json({ error: 'Convite inválido' }, { status: 400 });
 
     const existing = await prisma.user.findUnique({ where: { email: invite.email } });
     let user = existing;
@@ -38,6 +49,7 @@ export async function POST(req: Request, ctx: { params: { token: string } }) {
       where: { id: invite.id },
       data: { status: 'accepted', acceptedAt: new Date() },
     });
+    await prisma.allowedUser.updateMany({ where: { tenantId: invite.tenantId, email: invite.email }, data: { status: 'active', active: true, acceptedAt: new Date() } });
 
     await logAudit({
       tenantId: invite.tenantId, userId: user.id,
