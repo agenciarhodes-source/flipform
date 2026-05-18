@@ -62,6 +62,10 @@ chainlit.md
 
 # Data and databases
 agenthub/agents/youtube/db
+/backups/
+/*.dump
+/*.sql
+/*.backup
 
 # Archive files and large assets
 **/*.zip
