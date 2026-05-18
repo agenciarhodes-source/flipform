@@ -42,6 +42,7 @@ export function getJoseSecretsForVerify(): Uint8Array[] {
 
 export interface OnboardingTokenPayload {
   email: string;
+  tenantId: string;
   purpose: 'onboarding';
 }
 
