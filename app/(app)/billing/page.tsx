@@ -1,5 +1,6 @@
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import ChangePlanClient from './change-plan-client';
 
 export default async function BillingPage() {
   const session = await getSession();
@@ -15,6 +16,7 @@ export default async function BillingPage() {
         <div>Status: {sub?.status || '—'}</div>
         <div>Próxima cobrança: {sub?.nextDueDate ? new Date(sub.nextDueDate).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
+      <ChangePlanClient currentPlan={sub?.plan?.slug || null} />
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2">Últimas cobranças</h2>
         <ul className="space-y-1 text-sm">{payments.map((p) => <li key={p.id}>{p.status} - R$ {Number(p.value).toFixed(2)} {p.invoiceUrl ? <a href={p.invoiceUrl} className="underline" target="_blank">pagar</a> : ''}</li>)}</ul>
