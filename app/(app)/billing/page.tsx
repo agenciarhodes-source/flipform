@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import ChangePlanClient from './change-plan-client';
+import { Badge } from '@/components/ui/badge';
 
 export default async function BillingPage() {
   const session = await getSession();
@@ -17,12 +18,9 @@ export default async function BillingPage() {
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-2xl font-semibold">Billing</h1>
-
-      <div className="rounded border p-4 space-y-2">
-        <div className="flex items-center gap-2">Status da assinatura: <Badge variant={variantForStatus(sub?.status || '')}>{sub?.status || '—'}</Badge></div>
-        <div className="flex items-center gap-2">Status de billing: <Badge variant={variantForStatus(tenant?.status || '')}>{tenant?.status || '—'}</Badge></div>
-        <div className="flex items-center gap-2">Conta cortesia: <Badge variant={courtesy ? 'secondary' : 'outline'}>{courtesy ? 'Sim' : 'Não'}</Badge></div>
-        <div>Plano atual: {sub?.plan?.name || '—'}</div>
+      <div className="rounded border p-4">
+        <div>Plano: {sub?.plan?.name || '—'}</div>
+        <div className="flex items-center gap-2">Status: <Badge variant="outline">{sub?.status || '—'}</Badge></div>
         <div>Próxima cobrança: {sub?.nextDueDate ? new Date(sub.nextDueDate).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
       <ChangePlanClient currentPlan={sub?.plan?.slug || null} />
