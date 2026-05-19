@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { requestCodeSchema } from '@/lib/schemas';
 import { generateOtpCode, hashOtp } from '@/lib/otp';
@@ -9,6 +10,13 @@ const GENERIC = 'Se o e-mail estiver autorizado, enviaremos um código de acesso
 const OK_TENANT = new Set(['active', 'trial', 'past_due']);
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const bodyForRate = await req.clone().json().catch(() => ({} as any));
+  const emailForRate = String(bodyForRate?.email || '').toLowerCase();
+  const rlIp = rateLimit({ key: `otp:ip:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
+  if (!rlIp.allowed) return rateLimitResponse(rlIp);
+  if (emailForRate) { const rlEmail = rateLimit({ key: `otp:email:${emailForRate}`, limit: 5, windowMs: 15 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
+
   const body = await req.json().catch(() => ({}));
   const parsed = requestCodeSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ message: GENERIC });
