@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getJoseSecretsForVerify } from '@/lib/jwt';
+import { isAdminHostname } from '@/lib/host-routing';
 
 const COOKIE = 'flipform_token';
 
@@ -21,6 +22,21 @@ async function verifyJWT(token: string): Promise<any | null> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const host = req.headers.get('host');
+
+  if (isAdminHostname(host)) {
+    const ignore =
+      pathname.startsWith('/admin') ||
+      pathname.startsWith('/api') ||
+      pathname.startsWith('/_next') ||
+      pathname === '/favicon.ico';
+
+    if (!ignore) {
+      const rewriteUrl = req.nextUrl.clone();
+      rewriteUrl.pathname = `/admin${pathname === '/' ? '' : pathname}`;
+      return NextResponse.rewrite(rewriteUrl);
+    }
+  }
 
   if (pathname === '/admin/login' || pathname.startsWith('/admin/login/')) {
     return NextResponse.next();
@@ -50,8 +66,6 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    '/dashboard/:path*', '/kanban/:path*', '/leads/:path*', '/forms/:path*',
-    '/pipelines/:path*', '/reports/:path*', '/settings/:path*', '/users/:path*',
-    '/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };
