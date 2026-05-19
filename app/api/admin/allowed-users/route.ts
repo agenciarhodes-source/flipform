@@ -39,7 +39,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ items, tenants: allTenants.map((t) => ({ id: t.id, name: t.name, slug: t.slug })) });
   } catch (error) {
-    console.error('[admin/allowed-users][GET]', error);
+    console.error('[admin.allowed-users.GET]', { stage: 'catch', message: error instanceof Error ? error.message : String(error), code: (error as any)?.code });
     return NextResponse.json({ error: 'Falha ao carregar acessos autorizados', details: 'Não foi possível consultar a lista no momento.' }, { status: 500 });
   }
 }
@@ -56,27 +56,33 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').trim().toLowerCase();
     const role = String(body.role || '').trim();
+    const allowedRoles = new Set(['owner','admin','manager','agent','viewer']);
     const tenantId = String(body.tenantId || '').trim();
     const status = String(body.status || 'active').trim() || 'active';
     const active = Boolean(body.active ?? true);
 
     if (!email) return NextResponse.json({ error: 'E-mail é obrigatório' }, { status: 400 });
     if (!tenantId) return NextResponse.json({ error: 'Tenant é obrigatório' }, { status: 400 });
-    if (!role) return NextResponse.json({ error: 'Role é obrigatória' }, { status: 400 });
+    if (!role || !allowedRoles.has(role)) return NextResponse.json({ error: 'Role inválida' }, { status: 400 });
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
     if (!tenant) return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 404 });
 
     const exists = await prisma.allowedUser.findUnique({ where: { email } });
-    if (exists && exists.tenantId === tenantId) return NextResponse.json({ error: 'E-mail já autorizado para este tenant' }, { status: 409 });
-    if (exists) return NextResponse.json({ error: 'E-mail já autorizado em outro tenant' }, { status: 409 });
+    if (exists && exists.tenantId !== tenantId) return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
+
+    if (exists && exists.tenantId === tenantId) {
+      const updated = await prisma.allowedUser.update({ where: { id: exists.id }, data: { role, status, active, invitedBy: session.userId } });
+      await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'allowlist', entityId: updated.id, action: 'allowlist.email.updated', metadata: { email, role, status, active } });
+      return NextResponse.json({ ok: true, item: updated });
+    }
 
     const created = await prisma.allowedUser.create({ data: { email, tenantId, role, status, active, invitedBy: session.userId } });
     await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'allowlist', entityId: created.id, action: 'allowlist.email.created', metadata: { email, role, status, active } });
 
     return NextResponse.json({ ok: true, item: created });
   } catch (error) {
-    console.error('[admin/allowed-users][POST]', error);
+    console.error('[admin.allowed-users.POST]', { stage: 'catch', message: error instanceof Error ? error.message : String(error), code: (error as any)?.code });
     return NextResponse.json({ error: 'Falha ao criar acesso autorizado' }, { status: 500 });
   }
 }

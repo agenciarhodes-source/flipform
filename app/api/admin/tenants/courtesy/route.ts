@@ -57,7 +57,8 @@ export async function POST(req: Request) {
     if ('error' in result) return NextResponse.json({ error: result.error, code: result.code }, { status: 409 });
     return NextResponse.json({ ok: true, tenant: result.tenant, allowedUser: result.allowedUser });
   } catch (error) {
-    console.error('[admin/tenants/courtesy][POST]', error);
-    return NextResponse.json({ error: 'Falha ao criar tenant de cortesia' }, { status: 500 });
+    console.error('[admin.tenants.courtesy.POST]', { stage: 'catch', message: error instanceof Error ? error.message : String(error), code: (error as any)?.code });
+    if ((error as any)?.code === 'P2002') return NextResponse.json({ error: 'Registro duplicado.', code: 'DUPLICATE_RECORD' }, { status: 409 });
+    return NextResponse.json({ error: 'Falha ao criar tenant de cortesia', code: 'COURTESY_CREATE_FAILED' }, { status: 500 });
   }
 }
