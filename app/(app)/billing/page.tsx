@@ -1,14 +1,6 @@
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { Badge } from '@/components/ui/badge';
-
-function variantForStatus(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  const s = String(status || '').toLowerCase();
-  if (s === 'active' || s === 'received' || s === 'confirmed') return 'default';
-  if (s === 'past_due' || s === 'pending' || s === 'courtesy') return 'secondary';
-  if (s === 'suspended' || s === 'overdue' || s === 'failed') return 'destructive';
-  return 'outline';
-}
+import ChangePlanClient from './change-plan-client';
 
 export default async function BillingPage() {
   const session = await getSession();
@@ -33,7 +25,7 @@ export default async function BillingPage() {
         <div>Plano atual: {sub?.plan?.name || '—'}</div>
         <div>Próxima cobrança: {sub?.nextDueDate ? new Date(sub.nextDueDate).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
-
+      <ChangePlanClient currentPlan={sub?.plan?.slug || null} />
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2">Últimas cobranças</h2>
         {payments.length === 0 ? (
