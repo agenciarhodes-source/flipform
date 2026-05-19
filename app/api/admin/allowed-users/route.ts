@@ -25,8 +25,8 @@ export async function GET(req: Request) {
 
   const where: any = {};
   if (q) where.email = { contains: q, mode: 'insensitive' };
-  if (tenantId) where.tenantId = tenantId;
-  if (status) where.status = status;
+  if (tenantId && tenantId !== 'all') where.tenantId = tenantId;
+  if (status && status !== 'all') where.status = status;
   if (active === 'true') where.active = true;
   if (active === 'false') where.active = false;
 
