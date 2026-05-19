@@ -83,6 +83,14 @@ async function main() {
     ],
   });
 
+  await prisma.allowedUser.createMany({
+    data: [
+      { email: owner.email, tenantId: tenant.id, role: 'owner', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
+      { email: manager.email, tenantId: tenant.id, role: 'manager', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
+      { email: agent.email, tenantId: tenant.id, role: 'agent', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
+    ],
+  });
+
   // Pipeline padrão
   const pipeline = await prisma.pipeline.create({
     data: { tenantId: tenant.id, name: 'Funil de Vendas', isDefault: true },
