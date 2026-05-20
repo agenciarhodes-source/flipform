@@ -1,18 +1,12 @@
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import ChangePlanClient from './change-plan-client';
+import CancelSubscriptionClient from './cancel-subscription-client';
 import { Badge } from '@/components/ui/badge';
 
-type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
-
-function variantForStatus(status: string | null | undefined): BadgeVariant {
-  const normalized = String(status || '').toLowerCase();
-
-  if (['active', 'paid', 'received', 'confirmed', 'courtesy'].includes(normalized)) return 'secondary';
-  if (['overdue', 'past_due', 'failed', 'canceled', 'cancelled', 'suspended', 'blocked'].includes(normalized)) return 'destructive';
-  if (['pending', 'trialing', 'processing'].includes(normalized)) return 'outline';
-
-  return 'outline';
+function variantForStatus(status: string | null | undefined): 'outline' | 'secondary' {
+  const s = String(status || '').toLowerCase();
+  return s === 'active' || s === 'trialing' ? 'secondary' : 'outline';
 }
 
 export default async function BillingPage() {
@@ -32,12 +26,12 @@ export default async function BillingPage() {
       <h1 className="text-2xl font-semibold">Billing</h1>
       <div className="rounded border p-4 space-y-2">
         <div>Plano: {sub?.plan?.name || '—'}</div>
-        <div className="flex items-center gap-2">Status da assinatura: <Badge variant={variantForStatus(sub?.status)}>{sub?.status || '—'}</Badge></div>
-        <div className="flex items-center gap-2">Status do tenant: <Badge variant={variantForStatus(tenant?.status)}>{tenant?.status || '—'}</Badge></div>
-        <div className="flex items-center gap-2">Conta cortesia: <Badge variant={courtesy ? 'secondary' : 'outline'}>{courtesy ? 'Sim' : 'Não'}</Badge></div>
+        <div className="flex items-center gap-2">Status: <Badge variant={variantForStatus(sub?.status)}>{sub?.status || '—'}</Badge></div>
         <div>Próxima cobrança: {sub?.nextDueDate ? new Date(sub.nextDueDate).toLocaleDateString('pt-BR') : '—'}</div>
       </div>
       <ChangePlanClient currentPlan={sub?.plan?.slug || null} />
+      <CancelSubscriptionClient />
+      <CancelSubscriptionClient />
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2">Últimas cobranças</h2>
         {payments.length === 0 ? (
