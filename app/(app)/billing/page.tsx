@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import ChangePlanClient from './change-plan-client';
 import CancelSubscriptionClient from './cancel-subscription-client';
+import LgpdClient from './lgpd-client';
 import { Badge } from '@/components/ui/badge';
 
 function variantForStatus(status: string | null | undefined): 'outline' | 'secondary' {
@@ -31,7 +32,9 @@ export default async function BillingPage() {
       </div>
       <ChangePlanClient currentPlan={sub?.plan?.slug || null} />
       <CancelSubscriptionClient />
+      <LgpdClient />
       <CancelSubscriptionClient />
+      <LgpdClient />
       <div className="rounded border p-4">
         <h2 className="font-medium mb-2">Últimas cobranças</h2>
         {payments.length === 0 ? (
