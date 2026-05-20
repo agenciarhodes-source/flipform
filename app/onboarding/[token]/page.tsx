@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function OnboardingPage({ params }: { params: { token: string } }) {
   const [name, setName] = useState('');
@@ -27,5 +28,8 @@ export default function OnboardingPage({ params }: { params: { token: string } }
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button disabled={loading} className="px-4 py-2 bg-black text-white">{loading ? 'Processando...' : 'Concluir onboarding'}</button>
     </form>
+    <div className="text-xs text-muted-foreground">
+      <Link href="/legal/terms" className="underline">Termos de Uso</Link> · <Link href="/legal/privacy" className="underline">Política de Privacidade</Link> · <Link href="/legal/support" className="underline">Suporte</Link>
+    </div>
   </div>;
 }

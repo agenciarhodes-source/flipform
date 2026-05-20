@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 
 export default function CheckoutPage({ params }: { params: { planSlug: string } }) {
   const [loading, setLoading] = useState(false);
@@ -25,6 +26,7 @@ export default function CheckoutPage({ params }: { params: { planSlug: string } 
     <input className="w-full border p-2" placeholder="CPF/CNPJ (opcional)" value={form.cpfCnpj} onChange={(e)=>setForm({...form,cpfCnpj:e.target.value})} />
     <input className="w-full border p-2" placeholder="Empresa" value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} />
     {error && <p className="text-red-600 text-sm">{error}</p>}
+<p className="text-xs text-muted-foreground">Ao continuar, você concorda com os <Link href="/legal/terms" className="underline">Termos de Uso</Link> e a <Link href="/legal/privacy" className="underline">Política de Privacidade</Link>.</p>
     <button className="px-4 py-2 bg-black text-white" disabled={loading}>{loading ? 'Iniciando...' : 'Iniciar pagamento'}</button>
   </form></div>;
 }
