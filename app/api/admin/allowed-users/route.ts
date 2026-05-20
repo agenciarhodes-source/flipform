@@ -4,10 +4,17 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
+const ALLOWED_ROLES = new Set(['owner', 'admin', 'manager', 'agent', 'viewer']);
+const ALLOWED_STATUSES = new Set(['pending', 'accepted', 'active', 'blocked', 'revoked', 'expired']);
+
 async function requirePlatformAdmin() {
   const session = await getSession();
   if (!session || session.globalRole !== 'platform_admin') return null;
   return session;
+}
+
+function badRequest(error: string, code: string) {
+  return NextResponse.json({ error, code, items: [], tenants: [] }, { status: 400 });
 }
 
 export async function GET(req: Request) {
@@ -15,8 +22,9 @@ export async function GET(req: Request) {
     const ip = getClientIp(req);
     const rl = rateLimit({ key: `admin:allowed-users:get:ip:${ip}`, limit: 60, windowMs: 60 * 1000 });
     if (!rl.allowed) return rateLimitResponse(rl);
+
     const session = await requirePlatformAdmin();
-    if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 403 });
+    if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED', items: [], tenants: [] }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
     const q = String(searchParams.get('q') || '').trim().toLowerCase();
@@ -31,16 +39,32 @@ export async function GET(req: Request) {
     if (active === 'true') where.active = true;
     if (active === 'false') where.active = false;
 
-    const allowedUsers = await prisma.allowedUser.findMany({ where, orderBy: { createdAt: 'desc' } });
-    const allTenants = await prisma.tenant.findMany({ select: { id: true, name: true, slug: true, status: true }, orderBy: { name: 'asc' } });
-    const tenantById = new Map(allTenants.map((t) => [t.id, t]));
+    const tenants = await prisma.tenant.findMany({
+      select: { id: true, name: true, slug: true, status: true },
+      orderBy: { name: 'asc' },
+    });
 
-    const items = allowedUsers.map((u) => ({ ...u, tenant: tenantById.get(u.tenantId) || null }));
+    const allowedUsers = await prisma.allowedUser.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
 
-    return NextResponse.json({ items, tenants: allTenants.map((t) => ({ id: t.id, name: t.name, slug: t.slug })) });
+    const tenantMap = new Map(tenants.map((tenant) => [tenant.id, tenant]));
+
+    const items = allowedUsers.map((user) => ({
+      ...user,
+      tenant: tenantMap.get(user.tenantId) || null,
+    }));
+
+    return NextResponse.json({ items, tenants });
   } catch (error) {
-    console.error('[admin.allowed-users.GET]', { stage: 'catch', message: error instanceof Error ? error.message : String(error), code: (error as any)?.code });
-    return NextResponse.json({ error: 'Falha ao carregar acessos autorizados', details: 'Não foi possível consultar a lista no momento.' }, { status: 500 });
+    console.error('[admin.allowed-users.GET]', {
+      step: 'load-list',
+      message: error instanceof Error ? error.message : String(error),
+      code: (error as any)?.code,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return NextResponse.json({ error: 'Falha ao carregar acessos autorizados.', code: 'ALLOWED_USERS_LIST_FAILED', items: [], tenants: [] }, { status: 500 });
   }
 }
 
@@ -51,38 +75,60 @@ export async function POST(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
 
     const session = await requirePlatformAdmin();
-    if (!session) return NextResponse.json({ error: 'Não autorizado' }, { status: 403 });
+    if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED' }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));
     const email = String(body.email || '').trim().toLowerCase();
-    const role = String(body.role || '').trim();
-    const allowedRoles = new Set(['owner','admin','manager','agent','viewer']);
     const tenantId = String(body.tenantId || '').trim();
-    const status = String(body.status || 'active').trim() || 'active';
-    const active = Boolean(body.active ?? true);
+    const role = String(body.role || '').trim().toLowerCase();
+    const status = String(body.status || 'active').trim().toLowerCase() || 'active';
+    const active = body.active === undefined ? true : Boolean(body.active);
 
-    if (!email) return NextResponse.json({ error: 'E-mail é obrigatório' }, { status: 400 });
-    if (!tenantId) return NextResponse.json({ error: 'Tenant é obrigatório' }, { status: 400 });
-    if (!role || !allowedRoles.has(role)) return NextResponse.json({ error: 'Role inválida' }, { status: 400 });
+    if (!email || !email.includes('@')) return badRequest('E-mail inválido.', 'INVALID_EMAIL');
+    if (!tenantId) return badRequest('Tenant é obrigatório.', 'TENANT_REQUIRED');
+    if (!ALLOWED_ROLES.has(role)) return badRequest('Role inválida.', 'INVALID_ROLE');
+    if (!ALLOWED_STATUSES.has(status)) return badRequest('Status inválido.', 'INVALID_STATUS');
 
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
-    if (!tenant) return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 404 });
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true, slug: true, status: true } });
+    if (!tenant) return NextResponse.json({ error: 'Tenant não encontrado.', code: 'TENANT_NOT_FOUND' }, { status: 404 });
 
-    const exists = await prisma.allowedUser.findUnique({ where: { email } });
-    if (exists && exists.tenantId !== tenantId) return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
+    const existing = await prisma.allowedUser.findUnique({ where: { email } });
 
-    if (exists && exists.tenantId === tenantId) {
-      const updated = await prisma.allowedUser.update({ where: { id: exists.id }, data: { role, status, active, invitedBy: session.userId } });
-      await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'allowlist', entityId: updated.id, action: 'allowlist.email.updated', metadata: { email, role, status, active } });
-      return NextResponse.json({ ok: true, item: updated });
+    if (existing && existing.tenantId !== tenantId) {
+      return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
     }
 
-    const created = await prisma.allowedUser.create({ data: { email, tenantId, role, status, active, invitedBy: session.userId } });
-    await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'allowlist', entityId: created.id, action: 'allowlist.email.created', metadata: { email, role, status, active } });
+    const item = existing
+      ? await prisma.allowedUser.update({
+          where: { id: existing.id },
+          data: { tenantId, role, status, active, invitedBy: session.userId },
+        })
+      : await prisma.allowedUser.create({
+          data: { email, tenantId, role, status, active, invitedBy: session.userId },
+        });
 
-    return NextResponse.json({ ok: true, item: created });
-  } catch (error) {
-    console.error('[admin.allowed-users.POST]', { stage: 'catch', message: error instanceof Error ? error.message : String(error), code: (error as any)?.code });
-    return NextResponse.json({ error: 'Falha ao criar acesso autorizado' }, { status: 500 });
+    await logPlatformAudit({
+      tenantId,
+      userId: session.userId,
+      entityType: 'allowlist',
+      entityId: item.id,
+      action: existing ? 'allowlist.email.updated' : 'allowlist.email.created',
+      metadata: { email, role, status, active },
+    });
+
+    return NextResponse.json({ ok: true, item });
+  } catch (error: any) {
+    console.error('[admin.allowed-users.POST]', {
+      step: 'upsert-allowed-user',
+      message: error instanceof Error ? error.message : String(error),
+      code: error?.code,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    if (error?.code === 'P2002') {
+      return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
+    }
+
+    return NextResponse.json({ error: 'Falha ao salvar acesso autorizado.', code: 'ALLOWED_USER_UPSERT_FAILED' }, { status: 500 });
   }
 }
