@@ -100,11 +100,13 @@ export const changePasswordSchema = z.object({
 
 export const requestCodeSchema = z.object({
   email: z.string().email('E-mail inválido'),
+  tenantId: z.string().optional(),
 });
 
 export const verifyCodeSchema = z.object({
   email: z.string().email('E-mail inválido'),
   code: z.string().regex(/^\d{6}$/, 'Código inválido'),
+  tenantId: z.string().optional(),
 });
 
 export const completeOnboardingSchema = z.object({
