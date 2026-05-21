@@ -1,9 +1,14 @@
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'https://flipform.com.br';
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.flipform.com.br';
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3000';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || 'http://localhost:3000';
 
 function trimSlash(url: string) {
   return url.replace(/\/+$/, '');
+}
+
+function normalizePath(path?: string) {
+  if (!path) return '';
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 export function getAppUrl() {
@@ -18,10 +23,22 @@ export function getAdminUrl() {
   return trimSlash(ADMIN_URL);
 }
 
+export function appUrl(path?: string) {
+  return `${getAppUrl()}${normalizePath(path)}`;
+}
+
+export function marketingUrl(path?: string) {
+  return `${getMarketingUrl()}${normalizePath(path)}`;
+}
+
+export function adminUrl(path?: string) {
+  return `${getAdminUrl()}${normalizePath(path)}`;
+}
+
 export function buildFirstAccessUrl(token: string) {
-  return `${getAppUrl()}/first-access?token=${encodeURIComponent(token)}`;
+  return `${appUrl('/first-access')}?token=${encodeURIComponent(token)}`;
 }
 
 export function getAppLoginUrl() {
-  return `${getAppUrl()}/login`;
+  return appUrl('/login');
 }

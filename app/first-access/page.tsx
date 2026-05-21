@@ -9,7 +9,7 @@ async function readJsonSafe(res: Response) {
   try { return JSON.parse(text); } catch { return {}; }
 }
 
-function FirstAccessContent() {
+function FirstAccessForm() {
   const params = useSearchParams();
   const token = params.get('token') || '';
   const [loading, setLoading] = useState(true);
@@ -48,7 +48,7 @@ function FirstAccessContent() {
 export default function FirstAccessPage() {
   return (
     <Suspense fallback={<div className="p-8 max-w-xl mx-auto">Carregando...</div>}>
-      <FirstAccessContent />
+      <FirstAccessForm />
     </Suspense>
   );
 }
