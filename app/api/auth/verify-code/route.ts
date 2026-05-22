@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { verifyCodeSchema } from '@/lib/schemas';
 import { hashOtp } from '@/lib/otp';
@@ -6,6 +7,13 @@ import { signOnboardingToken } from '@/lib/jwt';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request) {
+  const ip = getClientIp(req);
+  const bodyForRate = await req.clone().json().catch(() => ({} as any));
+  const emailForRate = String(bodyForRate?.email || '').toLowerCase();
+  const rlIp = rateLimit({ key: `otp:verify:ip:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
+  if (!rlIp.allowed) return rateLimitResponse(rlIp);
+  if (emailForRate) { const rlEmail = rateLimit({ key: `otp:verify:email:${emailForRate}`, limit: 5, windowMs: 15 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
+
   const body = await req.json().catch(() => ({}));
   const parsed = verifyCodeSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
@@ -27,7 +35,9 @@ export async function POST(req: Request) {
   }
 
   await prisma.emailVerificationCode.update({ where: { id: rec.id }, data: { usedAt: new Date() } });
-  const onboardingToken = signOnboardingToken({ email, purpose: 'onboarding' });
+  const allowed = await prisma.allowedUser.findFirst({ where: { email, active: true }, select: { tenantId: true } });
+  if (!allowed?.tenantId) return NextResponse.json({ error: 'Código inválido ou expirado' }, { status: 400 });
+  const onboardingToken = signOnboardingToken({ email, tenantId: allowed.tenantId, purpose: 'onboarding' });
 
   await logAudit({ tenantId: 'unknown', entityType: 'auth', entityId: email, action: 'auth.otp_verified' });
 
