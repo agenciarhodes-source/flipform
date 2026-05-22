@@ -58,3 +58,7 @@ Se possível sem serviços externos:
 ```bash
 SMOKE_BASE_URL='http://localhost:3000' npm run smoke:test
 ```
+
+
+## Referência de homologação
+O fluxo E2E em sandbox com simulador de webhook está documentado em `docs/operations/asaas-sandbox-e2e-validation.md`.

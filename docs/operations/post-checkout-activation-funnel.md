@@ -27,3 +27,7 @@ Todas devem manter comunicação clara: ativação depende da confirmação de p
 
 ## Pós-checkout
 Após pagamento confirmado via Asaas, o usuário recebe e-mail transacional com link seguro de primeiro acesso.
+
+
+## Sandbox E2E
+Consulte também: `docs/operations/asaas-sandbox-e2e-validation.md` para validação assistida com simulador de webhook.

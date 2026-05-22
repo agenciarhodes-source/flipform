@@ -1,0 +1,16 @@
+{
+  "event": "PAYMENT_OVERDUE",
+  "id": "evt_test_payment_overdue_001",
+  "payment": {
+    "id": "pay_test_overdue_001",
+    "customer": "cus_test_002",
+    "subscription": "sub_test_002",
+    "status": "OVERDUE",
+    "value": 397,
+    "billingType": "BOLETO",
+    "description": "FlipForm Pro",
+    "externalReference": "tenant_test_pro",
+    "dueDate": "2026-05-22",
+    "invoiceUrl": "https://sandbox.asaas.com/i/pay_test_overdue_001"
+  }
+}

@@ -71,3 +71,7 @@ No domínio de e-mail, manter/configurar:
 - MX (quando aplicável)
 
 Como o DNS está na Cloudflare, manter registros de e-mail lá e **não remover** registros da Hostinger sem plano de migração.
+
+
+## Sandbox E2E
+Para testes de ativação sem envio real, utilize `EMAIL_PROVIDER=none` e o runbook `docs/operations/asaas-sandbox-e2e-validation.md`.
