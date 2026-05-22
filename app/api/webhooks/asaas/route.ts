@@ -75,6 +75,7 @@ export async function POST(req: Request) {
             userId: null,
             template: 'plan_activated',
             params: {
+              name: currentTenant?.name || 'cliente',
               planName: currentSubscription?.plan?.name || 'Plano FlipForm',
               email: ownerAllowed.email,
               firstAccessUrl: firstAccess.url,
@@ -82,10 +83,12 @@ export async function POST(req: Request) {
             },
           });
 
-          await logAudit({ tenantId: tenant.tenantId, entityType: 'first_access', entityId: ownerAllowed.email, action: emailResult.ok ? 'first_access.email_queued' : 'first_access.email_skipped', metadata: { skipped: !emailResult.ok, reason: (emailResult as any).reason || null } });
+          await logAudit({ tenantId: tenant.tenantId, entityType: 'email', entityId: ownerAllowed.email, action: 'email.activation_send_attempted' });
+
+          await logAudit({ tenantId: tenant.tenantId, entityType: 'email', entityId: ownerAllowed.email, action: emailResult.ok ? 'email.activation_sent' : 'email.activation_skipped_provider_missing', metadata: { skipped: !emailResult.ok, reason: (emailResult as any).reason || null } });
         } catch (emailError) {
           console.error('[first-access.email]', { message: emailError instanceof Error ? emailError.message : String(emailError) });
-          await logAudit({ tenantId: tenant.tenantId, entityType: 'first_access', entityId: ownerAllowed.email, action: 'first_access.email_skipped', metadata: { reason: 'SEND_FAILED' } });
+          await logAudit({ tenantId: tenant.tenantId, entityType: 'email', entityId: ownerAllowed.email, action: 'email.activation_failed' });
         }
       }
     }
