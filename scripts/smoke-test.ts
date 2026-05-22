@@ -40,6 +40,7 @@ async function run() {
   await checkPage('/checkout/cancelled');
   await checkPage('/checkout/error');
   await checkPage('/first-access');
+  await checkPage('/pricing');
   await checkPage('/legal/terms');
   await checkPage('/legal/privacy');
   await checkPage('/legal/cancellation');
