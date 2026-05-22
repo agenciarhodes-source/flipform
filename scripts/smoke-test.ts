@@ -4,10 +4,18 @@ const baseUrl = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
 type CheckResult = { name: string; ok: boolean; status?: number; note: string };
 const results: CheckResult[] = [];
 
+async function assertNoDefaultPassword(path: string, text: string) {
+  if (/senha padrão/i.test(text)) {
+    results.push({ name: `${path}#content`, ok: false, note: 'CONTAINS_FORBIDDEN_TEXT' });
+  }
+}
+
 async function checkPage(path: string) {
   const res = await fetch(`${baseUrl}${path}`, { redirect: 'manual' });
+  const text = await res.text();
   const ok = (res.status >= 200 && res.status < 400) || (path === '/' && [200, 307, 308].includes(res.status));
   results.push({ name: path, ok, status: res.status, note: `PAGE ${res.status}` });
+  await assertNoDefaultPassword(path, text);
 }
 
 async function checkJsonApi(path: string, init?: RequestInit, allowedStatuses: number[] = [200, 400, 401, 403, 404, 409, 429]) {
@@ -27,6 +35,11 @@ async function run() {
   await checkPage('/checkout/starter');
   await checkPage('/checkout/growth');
   await checkPage('/checkout/pro');
+  await checkPage('/checkout/success');
+  await checkPage('/checkout/pending');
+  await checkPage('/checkout/cancelled');
+  await checkPage('/checkout/error');
+  await checkPage('/first-access');
   await checkPage('/legal/terms');
   await checkPage('/legal/privacy');
   await checkPage('/legal/cancellation');
