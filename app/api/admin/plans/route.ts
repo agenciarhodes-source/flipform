@@ -11,7 +11,8 @@ export const GET = withPlatformAdmin(async () => {
     plans: plans.map((p) => ({
       id: p.id, name: p.name, description: p.description,
       price: Number(p.price), billingCycle: p.billingCycle,
-      maxUsers: p.maxUsers, maxForms: p.maxForms, maxLeadsPerMonth: p.maxLeadsPerMonth,
+      maxUsers: p.maxUsers, maxForms: p.maxForms, maxPipelines: p.maxPipelines, maxLeadsPerMonth: p.maxLeadsPerMonth,
+      canUseReports: p.canUseReports, canExportCsv: p.canExportCsv, canUseCustomBranding: p.canUseCustomBranding, canUseMetaPixel: p.canUseMetaPixel, canUseWebhooks: p.canUseWebhooks, canUseTasks: p.canUseTasks,
       isActive: p.isActive,
       tenantsCount: p._count.tenants,
       subscriptionsCount: p._count.subscriptions,
