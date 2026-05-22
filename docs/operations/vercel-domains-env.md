@@ -9,12 +9,16 @@
 > Este repositório é apenas app/SaaS/admin. Não deve servir landing pública.
 
 ## Cloudflare DNS esperado (DNS only)
-- `A` `flipform.com.br` → `76.76.21.21`
+Registros principais validados na Vercel:
+
+- `CNAME` `flipform.com.br` → `68a48dcea7693d22.vercel-dns-017.com`
 - `CNAME` `www` → `68a48dcea7693d22.vercel-dns-017.com`
-- `CNAME` `app` → `cname.vercel-dns.com`
-- `CNAME` `admin` → `cname.vercel-dns.com`
+- `CNAME` `app` → `68a48dcea7693d22.vercel-dns-017.com`
+- `CNAME` `admin` → `68a48dcea7693d22.vercel-dns-017.com`
 
 Todos os registros acima devem ficar como **DNS only** (sem proxy laranja inicialmente).
+
+Observação: a Vercel ainda aceita o padrão antigo `A @ 76.76.21.21` e `cname.vercel-dns.com`, mas o painel recomendou o CNAME específico acima para remover o aviso de DNS.
 
 ## Vercel — projeto landing
 Projeto: `flipform-landing`
