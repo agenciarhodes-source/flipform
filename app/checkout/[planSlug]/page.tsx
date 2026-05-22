@@ -4,54 +4,40 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 
 type PlanKey = 'starter' | 'growth' | 'pro';
+type PaymentMethod = 'pix' | 'card' | 'boleto';
 
 type PlanDef = {
   name: string;
-  price: string;
+  priceNumber: number;
   users: string;
   forms: string;
   pipelines: string;
   leads: string;
-  badge?: string;
+  recommended?: boolean;
 };
 
 const PLANS: Record<PlanKey, PlanDef> = {
-  starter: {
-    name: 'Starter',
-    price: 'R$ 97/mês',
-    users: '3 usuários',
-    forms: '5 formulários',
-    pipelines: '2 pipelines',
-    leads: '2.500 leads/mês',
-  },
-  growth: {
-    name: 'Growth',
-    price: 'R$ 157/mês',
-    badge: 'Mais recomendado',
-    users: '7 usuários',
-    forms: '15 formulários',
-    pipelines: '5 pipelines',
-    leads: '10.000 leads/mês',
-  },
-  pro: {
-    name: 'Pro',
-    price: 'R$ 397/mês',
-    users: '20 usuários',
-    forms: '60 formulários',
-    pipelines: '25 pipelines',
-    leads: '75.000 leads/mês',
-  },
+  starter: { name: 'Starter', priceNumber: 97, users: '3 usuários', forms: '5 formulários', pipelines: '2 pipelines', leads: '2.500 leads/mês' },
+  growth: { name: 'Growth', priceNumber: 157, users: '7 usuários', forms: '15 formulários', pipelines: '5 pipelines', leads: '10.000 leads/mês', recommended: true },
+  pro: { name: 'Pro', priceNumber: 397, users: '20 usuários', forms: '60 formulários', pipelines: '25 pipelines', leads: '75.000 leads/mês' },
 };
 
-type CheckoutForm = {
-  email: string;
-  confirmEmail: string;
-  name: string;
-  cpfCnpj: string;
-  phone: string;
-  cep: string;
-  companyName: string;
-};
+function toBrl(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function digitsOnly(v: string) { return v.replace(/\D/g, ''); }
+function maskCpfCnpj(v: string) {
+  const d = digitsOnly(v).slice(0, 14);
+  if (d.length <= 11) return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  return d.replace(/(\d{2})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1/$2').replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+}
+function maskPhone(v: string) {
+  const d = digitsOnly(v).slice(0, 11);
+  if (d.length <= 10) return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d{1,4})$/, '$1-$2');
+  return d.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
+}
+function maskCep(v: string) { return digitsOnly(v).slice(0, 8).replace(/(\d{5})(\d{1,3})$/, '$1-$2'); }
 
 async function readJsonSafe(res: Response) {
   const text = await res.text();
@@ -59,175 +45,126 @@ async function readJsonSafe(res: Response) {
   try { return JSON.parse(text); } catch { return {}; }
 }
 
-function normalizeDigits(value: string) {
-  return value.replace(/\D/g, '');
-}
-
-function maskCpfCnpj(value: string) {
-  const digits = normalizeDigits(value).slice(0, 14);
-  if (digits.length <= 11) {
-    return digits
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-  }
-  return digits
-    .replace(/(\d{2})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1/$2')
-    .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
-}
-
-function maskPhone(value: string) {
-  const digits = normalizeDigits(value).slice(0, 11);
-  if (digits.length <= 10) return digits.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{4})(\d{1,4})$/, '$1-$2');
-  return digits.replace(/(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d{1,4})$/, '$1-$2');
-}
-
-function maskCep(value: string) {
-  const digits = normalizeDigits(value).slice(0, 8);
-  return digits.replace(/(\d{5})(\d{1,3})$/, '$1-$2');
-}
-
 export default function CheckoutPage({ params }: { params: { planSlug: string } }) {
-  const planSlug = params.planSlug?.toLowerCase();
-  const plan = (PLANS as Record<string, PlanDef | undefined>)[planSlug];
-
-  const [form, setForm] = useState<CheckoutForm>({
-    email: '',
-    confirmEmail: '',
-    name: '',
-    cpfCnpj: '',
-    phone: '',
-    cep: '',
-    companyName: '',
-  });
-  const [loading, setLoading] = useState(false);
+  const initialPlan = (params.planSlug || '').toLowerCase() as PlanKey;
+  const [planSlug, setPlanSlug] = useState<PlanKey>(PLANS[initialPlan] ? initialPlan : 'growth');
+  const plan = PLANS[planSlug];
+  const [payment, setPayment] = useState<PaymentMethod>('pix');
+  const [coupon, setCoupon] = useState('');
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [discount, setDiscount] = useState(0);
+  const [form, setForm] = useState({ name: '', email: '', emailConfirm: '', cpfCnpj: '', phone: '', companyName: '', cep: '' });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [redirecting, setRedirecting] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof CheckoutForm, string>>>({});
+  const [loading, setLoading] = useState(false);
 
-  const faq = useMemo(() => [
-    { q: 'O pagamento é seguro?', a: 'Sim. O pagamento é processado em ambiente seguro via Asaas.' },
-    { q: 'Quando recebo acesso?', a: 'Após a confirmação do pagamento, você receberá no e-mail cadastrado as instruções de acesso.' },
-    { q: 'Vou receber uma senha por e-mail?', a: 'Não. Por segurança, você receberá um link seguro para definir sua senha no primeiro acesso.' },
-    { q: 'Posso trocar de plano depois?', a: 'Sim, conforme disponibilidade do app e suporte.' },
-    { q: 'Posso cancelar?', a: 'Sim, conforme política comercial aplicável.' },
-    { q: 'Preciso instalar alguma coisa?', a: 'Não. A FlipForm funciona pelo navegador.' },
-  ], []);
+  const total = Math.max(plan.priceNumber - discount, 0);
 
-  if (!plan) {
-    return (
-      <div className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h1 className="text-2xl font-bold text-slate-900">Plano inválido</h1>
-          <p className="mt-2 text-slate-600">Não encontramos este plano de checkout.</p>
-          <a href="https://flipform.com.br#planos" className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 font-medium text-white">Ver planos disponíveis</a>
-        </div>
-      </div>
-    );
+  const installments = useMemo(() => [1, 2, 3].map((i) => `${i}x de ${toBrl(total / i)} (sem juros)`), [total]);
+
+  if (!PLANS[initialPlan]) {
+    return <div className="min-h-screen bg-slate-50 p-6"><div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-6"><h1 className="text-2xl font-bold text-slate-900">Plano inválido</h1><p className="mt-2 text-slate-600">Não encontramos este plano de checkout.</p><a href="https://flipform.com.br#planos" className="mt-4 inline-flex rounded-lg bg-blue-600 px-4 py-2 font-medium text-white">Ver planos disponíveis</a></div></div>;
   }
 
   function validate() {
-    const errors: Partial<Record<keyof CheckoutForm, string>> = {};
-    if (!form.email.trim()) errors.email = 'E-mail é obrigatório.';
-    if (!form.confirmEmail.trim()) errors.confirmEmail = 'Confirme seu e-mail.';
-    if (form.email.trim() && form.confirmEmail.trim() && form.email.trim().toLowerCase() !== form.confirmEmail.trim().toLowerCase()) {
-      errors.confirmEmail = 'Os e-mails não conferem.';
-    }
-    if (!form.name.trim()) errors.name = 'Nome completo é obrigatório.';
-    if (!form.companyName.trim()) errors.companyName = 'Empresa / negócio é obrigatório.';
-    return errors;
+    const e: Record<string, string> = {};
+    if (!form.name.trim()) e.name = 'Nome completo é obrigatório.';
+    if (!form.email.trim()) e.email = 'E-mail é obrigatório.';
+    if (!form.emailConfirm.trim()) e.emailConfirm = 'Confirme o e-mail.';
+    if (form.email.trim() && form.emailConfirm.trim() && form.email.trim().toLowerCase() !== form.emailConfirm.trim().toLowerCase()) e.emailConfirm = 'Os e-mails não conferem.';
+    if (!form.companyName.trim()) e.companyName = 'Empresa / negócio é obrigatório.';
+    return e;
   }
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit() {
     if (loading) return;
-    const errors = validate();
-    setFieldErrors(errors);
+    const e = validate();
+    setFieldErrors(e);
     setError(null);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(e).length) return;
 
     setLoading(true);
-    const payload = {
-      planSlug,
-      email: form.email.trim().toLowerCase(),
-      name: form.name.trim(),
-      phone: form.phone.trim(),
-      cpfCnpj: form.cpfCnpj.trim(),
-      companyName: form.companyName.trim(),
-    };
-
     const res = await fetch('/api/public/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ planSlug, name: form.name.trim(), email: form.email.trim().toLowerCase(), phone: form.phone.trim(), cpfCnpj: form.cpfCnpj.trim(), companyName: form.companyName.trim(), metadata: { paymentMethod: payment, cep: form.cep.trim(), coupon: coupon || null } }),
     });
     const data = await readJsonSafe(res);
-
-    if (!res.ok) {
-      setLoading(false);
-      return setError((data as any)?.error || 'Não foi possível iniciar o checkout. Revise os dados ou tente novamente.');
-    }
-
-    setRedirecting(true);
+    if (!res.ok) { setLoading(false); setError((data as any)?.error || 'Não foi possível iniciar o checkout. Revise os dados ou tente novamente.'); return; }
     window.location.href = (data as any)?.checkoutUrl || '/checkout/pending';
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3"><div className="h-9 w-9 rounded-lg bg-blue-600" /><div><p className="font-semibold">FlipForm</p><p className="text-xs text-slate-500">Checkout seguro</p></div></div>
-          <a href="https://app.flipform.com.br/login" className="text-sm font-medium text-blue-700 hover:underline">Já tenho conta</a>
+    <main className="min-h-screen bg-slate-50 text-slate-600">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white px-6 py-4">
+        <div className="mx-auto flex max-w-6xl items-center justify-between">
+          <a href="https://flipform.com.br" className="flex items-center gap-2 no-underline"><span className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white">≡</span><span className="font-bold text-slate-900">FlipForm</span></a>
+          <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">Checkout seguro</span>
         </div>
-        <p className="mx-auto max-w-6xl px-4 pb-4 text-xs text-slate-500 sm:px-6 lg:px-8">Pagamento processado com segurança. Acesso liberado após confirmação.</p>
       </header>
 
-      <section className="bg-gradient-to-b from-blue-50 to-slate-50 border-b border-slate-200">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-          <h1 className="text-3xl font-bold">Comece com o FlipForm {plan.name}</h1>
-          <p className="mt-2 max-w-3xl text-slate-600">Organize seus leads, formulários e funis comerciais em uma plataforma simples para acompanhar oportunidades até a venda.</p>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Pipeline visual</p><div className="mt-2 grid grid-cols-3 gap-2 text-xs"><span className="rounded bg-blue-100 p-2">Novos</span><span className="rounded bg-amber-100 p-2">Contato</span><span className="rounded bg-emerald-100 p-2">Fechados</span></div></div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs text-slate-500">Formulários inteligentes</p><div className="mt-2 space-y-2"><div className="h-2 rounded bg-slate-200" /><div className="h-2 w-2/3 rounded bg-slate-200" /><div className="h-2 w-1/2 rounded bg-slate-200" /></div></div>
-            <div className="rounded-xl border border-slate-200 bg-slate-900 p-4 text-white shadow-sm"><p className="text-xs text-blue-100">Selos de confiança</p><p className="mt-2 text-sm">Checkout seguro via Asaas</p><p className="text-sm">Link seguro de primeiro acesso</p></div>
-          </div>
-        </div>
-      </section>
+      <div className="mx-auto grid max-w-6xl gap-8 px-6 py-8 lg:grid-cols-[1fr_380px]">
+        <section>
+          <div className="mb-6 flex items-center gap-2 text-xs font-semibold"><span className="rounded-full bg-emerald-500 px-2 py-1 text-white">✓</span>Plano <span className="h-px flex-1 bg-slate-300" /> <span className="rounded-full bg-blue-600 px-2 py-1 text-white">2</span>Dados <span className="h-px flex-1 bg-slate-300" /> <span className="rounded-full border border-slate-300 px-2 py-1">3</span>Pagamento</div>
 
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-3 lg:px-8">
-        <form onSubmit={submit} className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-4" noValidate>
-          <h2 className="text-xl font-semibold">Dados para finalizar assinatura</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div><label className="mb-1 block text-sm font-medium">E-mail</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" type="email" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} aria-invalid={Boolean(fieldErrors.email)} required />{fieldErrors.email && <p className="text-xs text-red-600">{fieldErrors.email}</p>}</div>
-            <div><label className="mb-1 block text-sm font-medium">Confirmar e-mail</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" type="email" value={form.confirmEmail} onChange={(e)=>setForm({...form,confirmEmail:e.target.value})} aria-invalid={Boolean(fieldErrors.confirmEmail)} required />{fieldErrors.confirmEmail && <p className="text-xs text-red-600">{fieldErrors.confirmEmail}</p>}</div>
-            <div className="sm:col-span-2"><label className="mb-1 block text-sm font-medium">Nome completo</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} aria-invalid={Boolean(fieldErrors.name)} required />{fieldErrors.name && <p className="text-xs text-red-600">{fieldErrors.name}</p>}</div>
-            <div><label className="mb-1 block text-sm font-medium">CPF/CNPJ</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.cpfCnpj} onChange={(e)=>setForm({...form,cpfCnpj:maskCpfCnpj(e.target.value)})} /></div>
-            <div><label className="mb-1 block text-sm font-medium">Celular / WhatsApp</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.phone} onChange={(e)=>setForm({...form,phone:maskPhone(e.target.value)})} /></div>
-            <div><label className="mb-1 block text-sm font-medium">CEP</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.cep} onChange={(e)=>setForm({...form,cep:maskCep(e.target.value)})} /></div>
-            <div><label className="mb-1 block text-sm font-medium">Empresa / Nome do negócio</label><input className="w-full rounded-lg border border-slate-300 px-3 py-2" value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} aria-invalid={Boolean(fieldErrors.companyName)} required />{fieldErrors.companyName && <p className="text-xs text-red-600">{fieldErrors.companyName}</p>}</div>
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="mb-4 font-semibold text-slate-900">Escolha seu plano</h2>
+            <div className="space-y-3">
+              {(Object.keys(PLANS) as PlanKey[]).map((k) => (
+                <button key={k} type="button" onClick={() => { setPlanSlug(k); setDiscount(0); setCoupon(''); }} className={`relative flex w-full items-start gap-3 rounded-xl border-2 p-4 text-left ${k === planSlug ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                  {PLANS[k].recommended && <span className="absolute -top-2 right-3 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">Mais escolhido</span>}
+                  <span className={`mt-1 h-4 w-4 rounded-full border-2 ${k === planSlug ? 'border-blue-600 bg-blue-600' : 'border-slate-300'}`} />
+                  <div className="flex-1"><div className="flex items-center justify-between"><strong className="text-slate-900">{PLANS[k].name}</strong><strong className="text-slate-900">{toBrl(PLANS[k].priceNumber)}<span className="text-xs font-normal text-slate-500">/mês</span></strong></div><p className="text-xs text-slate-500">{PLANS[k].users} · {PLANS[k].forms} · {PLANS[k].pipelines} · {PLANS[k].leads}</p></div>
+                </button>
+              ))}
+            </div>
           </div>
-          {error && <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-          <p className="text-sm text-slate-600">Você receberá um link seguro para definir sua senha no primeiro acesso. Não enviamos senha padrão por e-mail. Seu plano será ativado após confirmação do pagamento.</p>
-          <p className="text-xs text-slate-500">Ao continuar, você concorda com os <Link href="/legal/terms" className="underline">Termos de Uso</Link> e a <Link href="/legal/privacy" className="underline">Política de Privacidade</Link>.</p>
-          <button disabled={loading || redirecting} className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white disabled:opacity-60">{loading ? 'Preparando seu checkout seguro...' : redirecting ? 'Redirecionando para pagamento...' : 'Continuar para pagamento seguro'}</button>
-        </form>
 
-        <aside className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between"><h3 className="text-lg font-semibold">Plano {plan.name}</h3>{plan.badge && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">{plan.badge}</span>}</div>
-            <p className="mt-1 text-2xl font-bold text-blue-700">{plan.price}</p>
-            <ul className="mt-3 space-y-1 text-sm text-slate-600"><li>{plan.users}</li><li>{plan.forms}</li><li>{plan.pipelines}</li><li>{plan.leads}</li><li>Pagamento mensal</li><li>Ativação após confirmação</li><li>Link seguro para definir senha</li><li>Suporte em atendimento@flipform.com.br</li></ul>
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="mb-4 font-semibold text-slate-900">Dados pessoais</h2>
+            <div className="grid gap-3">
+              <input className="rounded-lg border border-slate-300 px-3 py-2" placeholder="Seu nome completo" value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})} />{fieldErrors.name && <p className="text-xs text-red-600">{fieldErrors.name}</p>}
+              <div className="grid gap-3 sm:grid-cols-2"><div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="seu@email.com" value={form.email} onChange={(e)=>setForm({...form,email:e.target.value})} />{fieldErrors.email && <p className="text-xs text-red-600">{fieldErrors.email}</p>}</div><div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="confirme seu@email.com" value={form.emailConfirm} onChange={(e)=>setForm({...form,emailConfirm:e.target.value})} />{fieldErrors.emailConfirm && <p className="text-xs text-red-600">{fieldErrors.emailConfirm}</p>}</div></div>
+              <div className="grid gap-3 sm:grid-cols-2"><input className="rounded-lg border border-slate-300 px-3 py-2" placeholder="000.000.000-00" value={form.cpfCnpj} onChange={(e)=>setForm({...form,cpfCnpj:maskCpfCnpj(e.target.value)})} /><input className="rounded-lg border border-slate-300 px-3 py-2" placeholder="(00) 00000-0000" value={form.phone} onChange={(e)=>setForm({...form,phone:maskPhone(e.target.value)})} /></div>
+              <div className="grid gap-3 sm:grid-cols-2"><div><input className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Nome da empresa" value={form.companyName} onChange={(e)=>setForm({...form,companyName:e.target.value})} />{fieldErrors.companyName && <p className="text-xs text-red-600">{fieldErrors.companyName}</p>}</div><input className="rounded-lg border border-slate-300 px-3 py-2" placeholder="00000-000" value={form.cep} onChange={(e)=>setForm({...form,cep:maskCep(e.target.value)})} /></div>
+            </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold">Confiança</h3><ul className="mt-2 space-y-2 text-sm text-slate-600"><li><strong>Checkout seguro:</strong> Pagamento processado por Asaas com ambiente protegido.</li><li><strong>Ativação automática:</strong> Após a confirmação do pagamento, seu plano é ativado e você recebe as instruções de acesso.</li><li><strong>Primeiro acesso seguro:</strong> Você define sua senha por um link seguro. A FlipForm não envia senha padrão por e-mail.</li><li><strong>Suporte direto:</strong> Em caso de dúvida, fale com atendimento@flipform.com.br.</li></ul></div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><h3 className="font-semibold">Provas sociais</h3><blockquote className="mt-2 text-sm text-slate-600">“Antes os leads ficavam espalhados. Com um funil visual, o acompanhamento ficou mais simples.”<footer className="mt-1 text-xs text-slate-500">Equipe comercial</footer></blockquote><blockquote className="mt-3 text-sm text-slate-600">“O formulário deixou de ser só captação e passou a alimentar um processo de venda.”<footer className="mt-1 text-xs text-slate-500">Operação de marketing</footer></blockquote><blockquote className="mt-3 text-sm text-slate-600">“Agora cada oportunidade tem etapa, responsável e próximo passo.”<footer className="mt-1 text-xs text-slate-500">Gestão comercial</footer></blockquote></div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 className="mb-4 font-semibold text-slate-900">Forma de pagamento</h2>
+            <div className="space-y-2">
+              {(['pix', 'card', 'boleto'] as PaymentMethod[]).map((m) => <button type="button" key={m} onClick={()=>setPayment(m)} className={`flex w-full items-center gap-3 rounded-xl border-2 p-3 text-left ${payment===m?'border-blue-600 bg-blue-50':'border-slate-200'}`}><span className={`h-4 w-4 rounded-full border-2 ${payment===m?'border-blue-600 bg-blue-600':'border-slate-300'}`} /><span className="font-medium text-slate-900">{m==='pix'?'Pix':m==='card'?'Cartão de crédito':'Boleto bancário'}</span></button>)}
+            </div>
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">{payment==='pix' && 'Após confirmar, você receberá um QR Code Pix para pagamento instantâneo. O acesso é liberado após a confirmação.'}{payment==='card' && <div>Recorrência mensal automática no cartão. Parcelamento de referência: <ul className="mt-2 list-disc pl-5">{installments.map((i)=><li key={i}>{i}</li>)}</ul></div>}{payment==='boleto' && 'O boleto será gerado após a confirmação. O acesso será liberado após a compensação bancária.'}</div>
+          </div>
+        </section>
+
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
+            <h3 className="mb-3 font-semibold text-slate-900">Resumo da compra</h3>
+            <div className="border-b border-slate-200 py-3"><p className="font-semibold text-slate-900">FlipForm {plan.name}</p><p className="text-xs text-slate-500">Assinatura mensal</p></div>
+            <button type="button" onClick={()=>setCouponOpen(!couponOpen)} className="mt-3 text-sm font-semibold text-blue-600">Tem cupom de desconto?</button>
+            {couponOpen && <div className="mt-2 flex gap-2"><input className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" value={coupon} onChange={(e)=>setCoupon(e.target.value)} placeholder="Digite o cupom" /><button type="button" className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white" onClick={()=>setDiscount(coupon.trim()?Math.round(plan.priceNumber*0.1):0)}>Aplicar</button></div>}
+            {discount>0 && <p className="mt-2 rounded-md bg-emerald-100 px-3 py-2 text-sm text-emerald-700">Cupom aplicado! (10% off)</p>}
+            {discount>0 && <div className="mt-3 flex justify-between text-sm"><span>Desconto</span><span className="font-semibold text-emerald-700">- {toBrl(discount)}</span></div>}
+            <div className="mt-3 flex justify-between border-t-2 border-slate-900 pt-3 font-bold text-slate-900"><span>Total</span><span>{toBrl(total)}/mês</span></div>
+
+            <button type="button" onClick={handleSubmit} disabled={loading} className="mt-5 w-full rounded-xl bg-blue-600 px-4 py-3 font-bold text-white disabled:opacity-60">{loading ? 'Preparando seu checkout seguro...' : 'Finalizar assinatura'}</button>
+            {error && <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+            <div className="mt-4 space-y-2 text-xs">
+              <p>Seus dados protegidos com criptografia SSL</p>
+              <p>Acesso após confirmação do pagamento</p>
+              <p>Cancele quando quiser</p>
+              <p>Arquitetura multi-tenant — dados isolados por cliente</p>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs"><strong>Ambiente seguro</strong><p>Não enviamos senha padrão por e-mail. Você receberá link seguro de primeiro acesso.</p></div>
+            <p className="mt-4 text-center text-xs text-slate-500">Já tem conta? <a className="text-blue-600" href="https://app.flipform.com.br/login">Entrar</a></p>
+            <p className="mt-1 text-center text-xs text-slate-500"><Link href="/legal/terms" className="underline">Termos</Link> · <Link href="/legal/privacy" className="underline">Privacidade</Link></p>
+          </div>
         </aside>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 pb-10 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"><h3 className="text-lg font-semibold">FAQ rápida</h3><div className="mt-4 grid gap-4 md:grid-cols-2">{faq.map((item) => <div key={item.q} className="rounded-lg border border-slate-200 p-4"><p className="font-medium">{item.q}</p><p className="mt-1 text-sm text-slate-600">{item.a}</p></div>)}</div></div>
-      </section>
+      </div>
     </main>
   );
 }
