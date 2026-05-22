@@ -8,6 +8,7 @@ function getProvider(): Provider {
   const configured = String(process.env.EMAIL_PROVIDER || '').trim().toLowerCase();
   if (configured === 'resend') return 'resend';
   if (configured === 'smtp') return 'smtp';
+  if (configured === 'none') return 'none';
   if (process.env.RESEND_API_KEY) return 'resend';
   if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && (process.env.SMTP_PASSWORD || process.env.SMTP_PASS)) return 'smtp';
   return 'none';
@@ -47,6 +48,33 @@ async function sendWithResend(input: { to: string; subject: string; html: string
   }
 }
 
+async function sendWithSmtp(input: { to: string; subject: string; html: string; text: string }) {
+  let nodemailer: any;
+  try {
+    nodemailer = await import('nodemailer');
+  } catch {
+    throw new Error('SMTP provider selected but nodemailer is not installed. Add nodemailer to dependencies.');
+  }
+
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASSWORD || process.env.SMTP_PASS;
+  const secure = String(process.env.SMTP_SECURE || '').toLowerCase() === 'true';
+
+  if (!host || !user || !pass) throw new Error('Missing SMTP configuration');
+
+  const transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+  await transport.sendMail({
+    from: getFromAddress(),
+    to: input.to,
+    replyTo: getReplyTo(),
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+  });
+}
+
 export async function sendTransactionalEmail(input: SendTransactionalEmailInput & { tenantId?: string; userId?: string | null }): Promise<SendTransactionalEmailResult> {
   const rendered = renderEmailTemplate(input.template, input.params);
 
@@ -71,14 +99,14 @@ export async function sendTransactionalEmail(input: SendTransactionalEmailInput 
       action: 'email.transactional.skipped',
       metadata: { template: input.template, reason: 'EMAIL_PROVIDER_NOT_CONFIGURED' },
     });
-    return { ok: false, skipped: true, reason: 'EMAIL_PROVIDER_NOT_CONFIGURED' };
+    return { ok: false, skipped: true, reason: 'EMAIL_PROVIDER_NOT_CONFIGURED', provider };
   }
 
   try {
     if (provider === 'resend') {
       await sendWithResend({ to: input.to, subject: rendered.subject, html: rendered.html, text: rendered.text });
     } else {
-      throw new Error('SMTP provider selected but SMTP transport is not enabled in this build yet. Configure EMAIL_PROVIDER=resend or add SMTP transport implementation.');
+      await sendWithSmtp({ to: input.to, subject: rendered.subject, html: rendered.html, text: rendered.text });
     }
 
     await logAudit({
@@ -90,7 +118,7 @@ export async function sendTransactionalEmail(input: SendTransactionalEmailInput 
       metadata: { template: input.template, provider },
     });
 
-    return { ok: true };
+    return { ok: true, provider };
   } catch (e: any) {
     await logAudit({
       tenantId: input.tenantId || 'unknown',
@@ -101,6 +129,6 @@ export async function sendTransactionalEmail(input: SendTransactionalEmailInput 
       metadata: { template: input.template, provider, message: e?.message || 'unknown' },
     });
 
-    return { ok: false, reason: 'SEND_FAILED', error: e?.message || 'unknown' };
+    return { ok: false, reason: 'SEND_FAILED', error: e?.message || 'unknown', provider };
   }
 }

@@ -1,9 +1,8 @@
 'use client';
 
-import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-function CheckoutCancelledContent() {
+export default function CancelledPage() {
   const params = useSearchParams();
   const plan = (params.get('plan') || 'growth').toLowerCase();
   const safePlan = ['starter', 'growth', 'pro'].includes(plan) ? plan : 'growth';
@@ -19,24 +18,5 @@ function CheckoutCancelledContent() {
         </div>
       </div>
     </main>
-  );
-}
-
-function CheckoutCancelledFallback() {
-  return (
-    <main className="min-h-screen bg-slate-50 p-6 text-slate-700">
-      <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">Carregando checkout...</h1>
-        <p className="mt-3">Preparando as informações para continuar.</p>
-      </div>
-    </main>
-  );
-}
-
-export default function CancelledPage() {
-  return (
-    <Suspense fallback={<CheckoutCancelledFallback />}>
-      <CheckoutCancelledContent />
-    </Suspense>
   );
 }

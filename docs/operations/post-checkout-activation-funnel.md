@@ -23,3 +23,7 @@ Landing → Checkout no app → Pagamento via Asaas → Página pós-checkout (s
 - `/checkout/error`
 
 Todas devem manter comunicação clara: ativação depende da confirmação de pagamento.
+
+
+## Pós-checkout
+Após pagamento confirmado via Asaas, o usuário recebe e-mail transacional com link seguro de primeiro acesso.

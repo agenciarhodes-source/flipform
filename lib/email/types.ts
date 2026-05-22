@@ -22,6 +22,6 @@ export type SendTransactionalEmailInput = {
 };
 
 export type SendTransactionalEmailResult =
-  | { ok: true; skipped?: false }
-  | { ok: false; skipped: true; reason: 'EMAIL_PROVIDER_NOT_CONFIGURED' }
-  | { ok: false; skipped?: false; reason: 'SEND_FAILED'; error?: string };
+  | { ok: true; skipped?: false; provider: 'none' | 'smtp' | 'resend' }
+  | { ok: false; skipped: true; reason: 'EMAIL_PROVIDER_NOT_CONFIGURED'; provider: 'none' | 'smtp' | 'resend' }
+  | { ok: false; skipped?: false; reason: 'SEND_FAILED'; error?: string; provider: 'none' | 'smtp' | 'resend' };

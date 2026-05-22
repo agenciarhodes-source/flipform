@@ -94,3 +94,5 @@ Após confirmação de pagamento:
 - O checkout no app foi otimizado visualmente para conversão e confiança, mantendo o fluxo de pagamento via **Asaas**.
 - Após confirmação do pagamento, o processo segue com ativação e envio de link seguro de primeiro acesso.
 
+
+- Após pagamento confirmado via Asaas, envio transacional de ativação com link seguro de primeiro acesso (`/first-access?token=...`).
