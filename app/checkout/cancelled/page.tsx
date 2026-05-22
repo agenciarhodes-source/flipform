@@ -1,8 +1,9 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function CancelledPage() {
+function CancelledPageContent() {
   const params = useSearchParams();
   const plan = (params.get('plan') || 'growth').toLowerCase();
   const safePlan = ['starter', 'growth', 'pro'].includes(plan) ? plan : 'growth';
@@ -18,5 +19,13 @@ export default function CancelledPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function CancelledPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-slate-50 p-6 text-slate-700"><div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">Carregando...</div></main>}>
+      <CancelledPageContent />
+    </Suspense>
   );
 }
