@@ -25,6 +25,7 @@ export async function cancelSubscription(id: string) { return asaasFetch(`/subsc
 export function mapAsaasPaymentStatus(status: string) {
   const s = String(status || '').toUpperCase();
   if (s.includes('RECEIVED') || s.includes('CONFIRMED')) return 'received';
+  if (s.includes('CHARGEBACK')) return 'refunded';
   if (s.includes('OVERDUE')) return 'overdue';
   if (s.includes('REFUND')) return 'refunded';
   if (s.includes('DELET')) return 'failed';

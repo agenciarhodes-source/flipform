@@ -1,0 +1,17 @@
+{
+  "event": "PAYMENT_CONFIRMED",
+  "id": "evt_test_payment_confirmed_001",
+  "payment": {
+    "id": "pay_test_confirmed_001",
+    "customer": "cus_test_001",
+    "subscription": "sub_test_001",
+    "status": "CONFIRMED",
+    "value": 157,
+    "billingType": "CREDIT_CARD",
+    "description": "FlipForm Growth",
+    "externalReference": "tenant_test_growth",
+    "paidDate": "2026-05-22",
+    "dueDate": "2026-05-22",
+    "invoiceUrl": "https://sandbox.asaas.com/i/pay_test_confirmed_001"
+  }
+}
