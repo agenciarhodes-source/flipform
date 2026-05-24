@@ -408,7 +408,7 @@ model AllowedUser {
   tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inviter User?  @relation("AllowedUserInviter", fields: [invitedBy], references: [id])
 
-  @@unique([email])
+  @@unique([tenantId, email])
   @@index([email])
   @@index([tenantId])
   @@index([active])
