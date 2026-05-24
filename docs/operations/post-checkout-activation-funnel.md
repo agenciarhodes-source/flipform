@@ -31,3 +31,6 @@ Após pagamento confirmado via Asaas, o usuário recebe e-mail transacional com 
 
 ## Sandbox E2E
 Consulte também: `docs/operations/asaas-sandbox-e2e-validation.md` para validação assistida com simulador de webhook.
+
+## Referência
+- Ver também: `docs/operations/billing-lifecycle.md`.

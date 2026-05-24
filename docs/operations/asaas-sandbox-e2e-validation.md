@@ -53,3 +53,6 @@ Resultado esperado:
 
 ## Production environment lock
 A validação de envs para produção está descrita em `docs/operations/production-env-checklist.md`.
+
+## Referência
+- Ver também: `docs/operations/billing-lifecycle.md`.

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { mapPaymentStatus, validateWebhookToken } from '@/lib/asaas';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import { logAudit } from '@/lib/audit';
-import { createFirstAccessToken } from '@/lib/first-access';
+import { createFirstAccessToken, hasRecentActiveFirstAccessToken } from '@/lib/first-access';
 import { sendTransactionalEmail } from '@/lib/email/send';
 import { getAppLoginUrl } from '@/lib/public-urls';
 
@@ -51,6 +51,12 @@ export async function POST(req: Request) {
       await prisma.tenant.update({ where: { id: tenant.tenantId }, data: { status: 'past_due' } });
     }
 
+    if (paymentStatus === 'refunded' || paymentStatus === 'failed') {
+      await prisma.subscription.updateMany({ where: { id: tenant.subscriptionId || '', status: { not: 'canceled' } }, data: { status: 'suspended' } });
+      await prisma.tenant.updateMany({ where: { id: tenant.tenantId, status: { not: 'canceled' } }, data: { status: 'suspended' } });
+      await prisma.allowedUser.updateMany({ where: { tenantId: tenant.tenantId }, data: { active: false, status: 'inactive' } });
+    }
+
     if (paymentStatus === 'received') {
       const currentSubscription = await prisma.subscription.findUnique({ where: { id: tenant.subscriptionId || '' }, select: { status: true, plan: { select: { name: true } } } });
       const currentTenant = await prisma.tenant.findUnique({ where: { id: tenant.tenantId }, select: { status: true, name: true } });
@@ -68,20 +74,25 @@ export async function POST(req: Request) {
       const ownerAllowed = await prisma.allowedUser.findFirst({ where: { tenantId: tenant.tenantId, active: true }, orderBy: [{ role: 'asc' }, { createdAt: 'asc' }] });
       if (ownerAllowed?.email) {
         try {
-          const firstAccess = await createFirstAccessToken({ email: ownerAllowed.email, tenantId: tenant.tenantId, userId: null });
-          const emailResult = await sendTransactionalEmail({
-            to: ownerAllowed.email,
-            tenantId: tenant.tenantId,
-            userId: null,
-            template: 'plan_activated',
-            params: {
-              name: currentTenant?.name || 'cliente',
-              planName: currentSubscription?.plan?.name || 'Plano FlipForm',
-              email: ownerAllowed.email,
-              firstAccessUrl: firstAccess.url,
-              appLoginUrl: getAppLoginUrl(),
-            },
-          });
+          const hasActiveToken = await hasRecentActiveFirstAccessToken({ email: ownerAllowed.email, tenantId: tenant.tenantId });
+          const shouldSendActivationEmail = !hasActiveToken;
+          let emailResult: { ok: boolean; reason?: string | null } = { ok: false, reason: 'activation_email_already_sent_recently' };
+          if (shouldSendActivationEmail) {
+            const firstAccess = await createFirstAccessToken({ email: ownerAllowed.email, tenantId: tenant.tenantId, userId: null });
+            emailResult = await sendTransactionalEmail({
+              to: ownerAllowed.email,
+              tenantId: tenant.tenantId,
+              userId: null,
+              template: 'plan_activated',
+              params: {
+                name: currentTenant?.name || 'cliente',
+                planName: currentSubscription?.plan?.name || 'Plano FlipForm',
+                email: ownerAllowed.email,
+                firstAccessUrl: firstAccess.url,
+                appLoginUrl: getAppLoginUrl(),
+              },
+            });
+          }
 
           await logAudit({ tenantId: tenant.tenantId, entityType: 'email', entityId: ownerAllowed.email, action: 'email.activation_send_attempted' });
 

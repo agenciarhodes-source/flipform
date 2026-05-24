@@ -132,3 +132,6 @@ Não expor SMTP_PASSWORD.
 Não expor RESEND_API_KEY.  
 Não usar EMAIL_PROVIDER=none em produção, exceto em manutenção controlada.  
 Não usar sandbox Asaas em produção, exceto com flag explícita e temporária.
+
+## Referência
+- Ver também: `docs/operations/billing-lifecycle.md`.

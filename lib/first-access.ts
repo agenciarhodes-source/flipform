@@ -37,6 +37,22 @@ export async function createFirstAccessToken(params: { email: string; tenantId: 
   return { token, expiresAt, url: buildFirstAccessUrl(token) };
 }
 
+export async function hasRecentActiveFirstAccessToken(params: { email: string; tenantId: string }) {
+  const email = params.email.trim().toLowerCase();
+  const existing = await prisma.firstAccessToken.findFirst({
+    where: {
+      tenantId: params.tenantId,
+      email,
+      purpose: 'first_access',
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, createdAt: true, expiresAt: true },
+  });
+  return existing;
+}
+
 export async function resolveFirstAccessToken(token: string) {
   const tokenHash = hashToken(token);
   const rec = await prisma.firstAccessToken.findUnique({ where: { tokenHash } });

@@ -66,3 +66,6 @@ O fluxo E2E em sandbox com simulador de webhook está documentado em `docs/opera
 
 ## Production environment lock
 Além dos quality gates, usar `npm run env:check` conforme `docs/operations/production-env-checklist.md`.
+
+## Referência
+- Ver também: `docs/operations/billing-lifecycle.md`.
