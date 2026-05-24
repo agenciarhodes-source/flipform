@@ -21,6 +21,38 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 
+
+  const commercialPlans = [
+    {
+      slug: 'starter', name: 'Starter', description: 'Plano de entrada para pequenos negócios que precisam capturar, organizar e acompanhar leads.',
+      price: '97', billingCycle: 'monthly', maxUsers: 3, maxForms: 5, maxPipelines: 2, maxLeadsPerMonth: 2500,
+      canUseReports: false, canExportCsv: true, canUseCustomBranding: false, canUseMetaPixel: false, canUseWebhooks: false, canUseTasks: true, isActive: true,
+    },
+    {
+      slug: 'growth', name: 'Growth', description: 'Plano recomendado para empresas em crescimento que precisam de CRM, funil, formulários e integrações.',
+      price: '157', billingCycle: 'monthly', maxUsers: 7, maxForms: 15, maxPipelines: 5, maxLeadsPerMonth: 10000,
+      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
+    },
+    {
+      slug: 'pro', name: 'Pro', description: 'Plano profissional para operações comerciais com volume, múltiplas equipes e integrações avançadas.',
+      price: '397', billingCycle: 'monthly', maxUsers: 20, maxForms: 60, maxPipelines: 25, maxLeadsPerMonth: 75000,
+      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
+    },
+    {
+      slug: 'enterprise', name: 'Enterprise', description: 'Plano sob consulta para operações com necessidades customizadas, SLA dedicado e suporte avançado.',
+      price: '0', billingCycle: 'monthly', maxUsers: 0, maxForms: 0, maxPipelines: 0, maxLeadsPerMonth: 0,
+      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
+    },
+  ] as const;
+
+  for (const plan of commercialPlans) {
+    await prisma.plan.upsert({
+      where: { slug: plan.slug },
+      create: plan as any,
+      update: plan as any,
+    });
+  }
+
   // Tenant
   const tenant = await prisma.tenant.create({
     data: {
@@ -48,6 +80,14 @@ async function main() {
       { tenantId: tenant.id, userId: owner.id, role: Role.owner },
       { tenantId: tenant.id, userId: manager.id, role: Role.manager },
       { tenantId: tenant.id, userId: agent.id, role: Role.agent },
+    ],
+  });
+
+  await prisma.allowedUser.createMany({
+    data: [
+      { email: owner.email, tenantId: tenant.id, role: 'owner', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
+      { email: manager.email, tenantId: tenant.id, role: 'manager', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
+      { email: agent.email, tenantId: tenant.id, role: 'agent', active: true, status: 'active', source: 'seed', acceptedAt: new Date() },
     ],
   });
 
