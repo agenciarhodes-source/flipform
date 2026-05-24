@@ -49,3 +49,7 @@ Resultado esperado:
 - Sem duplicidade de ativação indevida.
 - Sem múltiplos e-mails.
 - Sem múltiplos tokens ativos desnecessários.
+
+
+## Production environment lock
+A validação de envs para produção está descrita em `docs/operations/production-env-checklist.md`.

@@ -20,7 +20,9 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "smoke:test": "tsx scripts/smoke-test.ts",
-    "asaas:webhook:simulate": "tsx scripts/simulate-asaas-webhook.ts"
+    "asaas:webhook:simulate": "tsx scripts/simulate-asaas-webhook.ts",
+    "env:check": "tsx scripts/validate-env.ts",
+    "env:check:production": "NODE_ENV=production VERCEL_ENV=production tsx scripts/validate-env.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

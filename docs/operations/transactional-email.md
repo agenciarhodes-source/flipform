@@ -75,3 +75,7 @@ Como o DNS está na Cloudflare, manter registros de e-mail lá e **não remover*
 
 ## Sandbox E2E
 Para testes de ativação sem envio real, utilize `EMAIL_PROVIDER=none` e o runbook `docs/operations/asaas-sandbox-e2e-validation.md`.
+
+
+## Production environment lock
+Antes do deploy final, execute `npm run env:check` e consulte `docs/operations/production-env-checklist.md`.

@@ -96,3 +96,7 @@ Após confirmação de pagamento:
 
 
 - Após pagamento confirmado via Asaas, envio transacional de ativação com link seguro de primeiro acesso (`/first-access?token=...`).
+
+
+## Production environment lock
+Consulte `docs/operations/production-env-checklist.md` para checklist final de produção e validação de envs.

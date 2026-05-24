@@ -50,3 +50,7 @@ npm run build
 ```
 
 As envs de produção devem estar configuradas no painel da Vercel antes do deploy.
+
+
+## Production environment lock
+Incluir `npm run env:check` no preflight de deploy. Ver: `docs/operations/production-env-checklist.md`.

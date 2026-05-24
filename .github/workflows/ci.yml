@@ -62,6 +62,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Validate environment schema
+        run: npm run env:check
+
       - name: Regression guards
         run: |
           grep -n "evaluateBillingAccess" app/api/webhooks/asaas/route.ts
