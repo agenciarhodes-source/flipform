@@ -71,8 +71,8 @@ export const POST = withPermission('USERS_INVITE', async (req, session) => {
       },
     });
     await prisma.allowedUser.upsert({
-      where: { email: normalizedEmail },
-      update: { tenantId: session.tenantId, role: parsed.data.role, status: 'pending', active: true, source: 'invite' },
+      where: { tenantId_email: { tenantId: session.tenantId, email: normalizedEmail } },
+      update: { role: parsed.data.role, status: 'pending', active: true, source: 'invite', invitedBy: session.userId },
       create: { email: normalizedEmail, tenantId: session.tenantId, role: parsed.data.role, status: 'pending', active: true, source: 'invite', invitedBy: session.userId },
     });
 
