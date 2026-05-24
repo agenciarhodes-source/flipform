@@ -89,6 +89,9 @@ export default function LoginPage() {
           <div className="mt-6 text-sm text-center text-muted-foreground">
             Precisa de acesso? <Link href="/register" className="text-primary font-medium hover:underline">Solicitar acesso</Link>
           </div>
+          <div className="mt-3 text-xs text-center text-muted-foreground">
+            <Link href="/legal/terms" className="underline">Termos</Link> · <Link href="/legal/privacy" className="underline">Privacidade</Link> · <Link href="/legal/support" className="underline">Suporte</Link>
+          </div>
         </Card>
       </div>
     </div>
