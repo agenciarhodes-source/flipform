@@ -135,3 +135,6 @@ Não usar sandbox Asaas em produção, exceto com flag explícita e temporária.
 
 ## Referência
 - Ver também: `docs/operations/billing-lifecycle.md`.
+
+## Referência
+- Ver também: `docs/operations/first-access-onboarding.md`.

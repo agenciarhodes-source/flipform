@@ -63,3 +63,6 @@ npm run asaas:webhook:simulate -- tests/fixtures/asaas/payment-refunded.json
 - Não expor `ASAAS_API_KEY`/`ASAAS_WEBHOOK_TOKEN`.
 - Não logar token de first-access.
 - Webhook duplicado não deve duplicar e-mail.
+
+## Referência
+- Ver também: `docs/operations/first-access-onboarding.md`.

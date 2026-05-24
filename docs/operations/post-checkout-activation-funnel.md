@@ -34,3 +34,6 @@ Consulte também: `docs/operations/asaas-sandbox-e2e-validation.md` para valida�
 
 ## Referência
 - Ver também: `docs/operations/billing-lifecycle.md`.
+
+## Referência
+- Ver também: `docs/operations/first-access-onboarding.md`.

@@ -40,6 +40,8 @@ async function run() {
   await checkPage('/checkout/cancelled');
   await checkPage('/checkout/error');
   await checkPage('/first-access');
+  await checkPage('/first-access?token=invalid-test-token');
+  await checkPage('/onboarding/invalid-test-token');
   await checkPage('/pricing');
   await checkPage('/legal/terms');
   await checkPage('/legal/privacy');
@@ -57,6 +59,9 @@ async function run() {
   await checkJsonApi('/api/admin/allowed-users', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/admin/billing/diagnostics', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/webhooks/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'PAYMENT_RECEIVED' }) }, [401, 403]);
+  await checkJsonApi('/api/auth/first-access/validate?token=invalid-test-token', { method: 'GET' }, [400]);
+  await checkJsonApi('/api/auth/first-access/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid-test-token', password: '12345678', confirmPassword: '12345678' }) }, [400]);
+  await checkJsonApi('/api/public/onboarding/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid-test-token', name: 'Smoke User', password: '12345678' }) }, [400]);
 
   for (const r of results) {
     console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.name} ${r.note}`);

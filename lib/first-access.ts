@@ -56,8 +56,9 @@ export async function hasRecentActiveFirstAccessToken(params: { email: string; t
 export async function resolveFirstAccessToken(token: string) {
   const tokenHash = hashToken(token);
   const rec = await prisma.firstAccessToken.findUnique({ where: { tokenHash } });
-  if (!rec || rec.purpose !== 'first_access' || rec.usedAt) return { ok: false as const, code: 'INVALID_OR_EXPIRED_FIRST_ACCESS_TOKEN' };
-  if (rec.expiresAt.getTime() < Date.now()) return { ok: false as const, code: 'INVALID_OR_EXPIRED_FIRST_ACCESS_TOKEN', expired: true };
+  if (!rec || rec.purpose !== 'first_access') return { ok: false as const, code: 'INVALID_FIRST_ACCESS_TOKEN' };
+  if (rec.usedAt) return { ok: false as const, code: 'USED_FIRST_ACCESS_TOKEN', used: true };
+  if (rec.expiresAt.getTime() < Date.now()) return { ok: false as const, code: 'EXPIRED_FIRST_ACCESS_TOKEN', expired: true };
   return { ok: true as const, rec };
 }
 
