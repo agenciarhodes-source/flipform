@@ -1,0 +1,17 @@
+{
+  "event": "PAYMENT_RECEIVED",
+  "id": "evt_test_payment_received_001",
+  "payment": {
+    "id": "pay_test_received_001",
+    "customer": "cus_test_001",
+    "subscription": "sub_test_001",
+    "status": "RECEIVED",
+    "value": 97,
+    "billingType": "PIX",
+    "description": "FlipForm Starter",
+    "externalReference": "tenant_test_starter",
+    "paidDate": "2026-05-22",
+    "dueDate": "2026-05-22",
+    "invoiceUrl": "https://sandbox.asaas.com/i/pay_test_received_001"
+  }
+}

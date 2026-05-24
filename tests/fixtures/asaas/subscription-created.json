@@ -1,0 +1,12 @@
+{
+  "event": "SUBSCRIPTION_CREATED",
+  "id": "evt_test_subscription_created_001",
+  "subscription": {
+    "id": "sub_test_001",
+    "customer": "cus_test_001",
+    "status": "ACTIVE",
+    "value": 157,
+    "billingType": "CREDIT_CARD",
+    "externalReference": "tenant_test_growth"
+  }
+}
