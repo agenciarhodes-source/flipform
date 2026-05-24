@@ -41,3 +41,9 @@ Avaliar antes de processar:
 
 ## Revisão jurídica
 Os textos legais e políticas devem ser revisados por assessoria jurídica antes do go-live público amplo.
+
+## Referência
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.

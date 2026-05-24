@@ -64,4 +64,11 @@ Operar a plataforma FlipForm sem intervenção manual no banco.
 3. Confirmar acesso e status de usuários autorizados.
 
 ## Referência
-- Ver também: .
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
+
+## Referência
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.

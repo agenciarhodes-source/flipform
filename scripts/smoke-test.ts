@@ -50,6 +50,8 @@ async function run() {
   await checkPage('/pricing');
   await checkPage('/privacy');
   await checkPage('/terms');
+  await checkJsonApi('/api/health', { method: 'GET' }, [200]);
+  await checkJsonApi('/api/health/readiness', { method: 'GET' }, [401, 403]);
   await checkPage('/legal/terms');
   await checkPage('/legal/privacy');
   await checkPage('/legal/cancellation');

@@ -140,7 +140,15 @@ Não usar sandbox Asaas em produção, exceto com flag explícita e temporária.
 - Ver também: `docs/operations/first-access-onboarding.md`.
 
 ## Referência
-- Ver também: .
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
 
 ## Referência
-- Ver também: .
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
+
+## Referência
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
+- Ver também: `docs/operations/observability-and-alerts.md`.
+- Ver também: `docs/operations/incident-response.md`.
