@@ -94,3 +94,10 @@ node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
 .env.*.local
 !.env.example
 !.env.production.example
+
+# Backup and database artifacts
+*.sql.gz
+*.bak
+*.db
+*.sqlite
+*.sqlite3
