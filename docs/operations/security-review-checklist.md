@@ -13,3 +13,4 @@
 - [ ] headers de segurança revisados
 - [ ] Sentry não recebe secrets
 - [ ] exportação LGPD não inclui hash/tokens
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).

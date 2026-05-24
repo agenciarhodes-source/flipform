@@ -104,6 +104,9 @@ model Tenant {
   statusHistory    TenantStatusHistory[]
   webhookEvents    WebhookEvent[]
   firstAccessTokens FirstAccessToken[]
+  integrationSettings TenantIntegrationSettings?
+  trackingEventMappings KanbanStageTrackingEvent[]
+  trackingEventLogs TrackingEventLog[]
 
   @@map("tenants")
 }
@@ -566,4 +569,67 @@ model TenantStatusHistory {
 
   @@index([tenantId, createdAt])
   @@map("tenant_status_history")
+}
+
+
+model TenantIntegrationSettings {
+  id               String   @id @default(cuid())
+  tenantId         String   @unique @map("tenant_id")
+  metaPixelEnabled Boolean  @default(false) @map("meta_pixel_enabled")
+  metaPixelId      String?  @map("meta_pixel_id")
+  gtmEnabled       Boolean  @default(false) @map("gtm_enabled")
+  gtmContainerId   String?  @map("gtm_container_id")
+  ga4Enabled       Boolean  @default(false) @map("ga4_enabled")
+  ga4MeasurementId String?  @map("ga4_measurement_id")
+  googleAdsEnabled Boolean  @default(false) @map("google_ads_enabled")
+  googleAdsId      String?  @map("google_ads_id")
+  googleAdsLabel   String?  @map("google_ads_label")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_integration_settings")
+}
+
+model KanbanStageTrackingEvent {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  pipelineId      String?  @map("pipeline_id")
+  stageId         String   @map("stage_id")
+  provider        String
+  eventName       String   @map("event_name")
+  customEventName String?  @map("custom_event_name")
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([stageId])
+  @@map("kanban_stage_tracking_events")
+}
+
+model TrackingEventLog {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  leadId        String?  @map("lead_id")
+  pipelineId    String?  @map("pipeline_id")
+  fromStageId   String?  @map("from_stage_id")
+  toStageId     String?  @map("to_stage_id")
+  provider      String
+  eventName     String   @map("event_name")
+  status        String
+  reason        String?
+  triggeredById String?  @map("triggered_by_id")
+  eventId       String?  @map("event_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([leadId])
+  @@index([createdAt])
+  @@map("tracking_event_logs")
 }

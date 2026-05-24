@@ -34,3 +34,4 @@
 - **Rotas:** `/api/health`, `/api/health/readiness`, `/api/internal/*`.
 - **Comandos:** `npm run data:safety-check`, `bash -n scripts/db-*.sh`.
 - **Aprovação:** procedimentos executáveis e documentação íntegra.
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).

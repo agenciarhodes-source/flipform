@@ -24,3 +24,4 @@ Orientar o teste controlado com 1 cliente piloto antes de escalar.
 - [ ] suporte recebeu feedback
 - [ ] billing ficou correto
 - [ ] admin consegue visualizar tenant
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).

@@ -63,3 +63,4 @@
 - **Mitigação atual:** CI/smoke + checklists
 - **Ação recomendada:** deploy canário e rollback testado
 - **Bloqueia go-live?:** não
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).

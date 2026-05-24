@@ -53,6 +53,13 @@ async function run() {
   await checkPage('/pricing');
   await checkPage('/privacy');
   await checkPage('/terms');
+
+  await checkPage('/settings/integrations');
+  await checkJsonApi('/api/integrations', { method: 'GET' }, [401, 403]);
+  await checkJsonApi('/api/integrations/kanban-events', { method: 'GET' }, [401, 403]);
+  await checkJsonApi('/api/integrations/test-event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider: 'meta', eventName: 'Lead' }) }, [401, 403]);
+  await checkJsonApi('/api/integrations/event-logs', { method: 'GET' }, [401, 403]);
+
   await checkJsonApi('/api/health', { method: 'GET' }, [200]);
   await checkJsonApi('/api/health/readiness', { method: 'GET' }, [401, 403]);
   await checkPage('/legal/terms');

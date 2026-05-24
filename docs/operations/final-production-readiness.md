@@ -53,3 +53,4 @@
 - [Audit Handoff](./audit-handoff.md)
 - [Route Inventory](./route-inventory.md)
 - [Environment Inventory](./environment-inventory.md)
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).

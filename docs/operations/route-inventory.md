@@ -31,3 +31,4 @@
 | `/api/internal/*` | api | secret | sim | alto | job logs | parcial |
 | `/api/health/readiness` | api | x-internal-secret | não | médio | readiness checks | sim (sem secret) |
 | `/api/admin/billing/reconcile` | api | platform admin | sim | alto | billing audit | sim (sem auth) |
+\n- Tenant Integrations/Pixels/GTM/GA4/Kanban tracking: implementado (ver tenant-integrations-tracking.md).
