@@ -56,3 +56,7 @@ A validação de envs para produção está descrita em `docs/operations/product
 
 ## Referência
 - Ver também: `docs/operations/billing-lifecycle.md`.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

@@ -164,3 +164,7 @@
 
 ## Comunicação
 Registrar impacto, escopo, ETA de mitigação e atualização ao cliente.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

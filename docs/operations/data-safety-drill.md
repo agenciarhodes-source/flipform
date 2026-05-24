@@ -40,3 +40,7 @@ Resultado:
 Erros:
 Ações corretivas:
 ```
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

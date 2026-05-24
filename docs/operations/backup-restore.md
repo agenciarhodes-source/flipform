@@ -81,3 +81,7 @@ SMOKE_BASE_URL=https://app.flipform.com.br npm run smoke:test
 - Backups devem ser criptografados em armazenamento externo.
 - Acesso deve ser restrito por perfil.
 - Retenção e descarte devem ser definidos pela operação.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

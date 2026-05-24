@@ -4,9 +4,12 @@ const baseUrl = process.env.SMOKE_BASE_URL || 'http://localhost:3000';
 type CheckResult = { name: string; ok: boolean; status?: number; note: string };
 const results: CheckResult[] = [];
 
-async function assertNoDefaultPassword(path: string, text: string) {
-  if (/senha padrão/i.test(text)) {
-    results.push({ name: `${path}#content`, ok: false, note: 'CONTAINS_FORBIDDEN_TEXT' });
+async function assertNoUnsafeLeak(path: string, text: string) {
+  if (/DATABASE_URL=postgres|ASAAS_API_KEY=\w|SMTP_PASSWORD=\w|RESEND_API_KEY=\w/i.test(text)) {
+    results.push({ name: `${path}#content`, ok: false, note: 'POTENTIAL_SECRET_LEAK' });
+  }
+  if (/TypeError:|ReferenceError:|SyntaxError:|at\s+.+:\d+:\d+/i.test(text)) {
+    results.push({ name: `${path}#content`, ok: false, note: 'POTENTIAL_STACK_TRACE' });
   }
 }
 
@@ -15,7 +18,7 @@ async function checkPage(path: string) {
   const text = await res.text();
   const ok = (res.status >= 200 && res.status < 400) || (path === '/' && [200, 307, 308].includes(res.status));
   results.push({ name: path, ok, status: res.status, note: `PAGE ${res.status}` });
-  await assertNoDefaultPassword(path, text);
+  await assertNoUnsafeLeak(path, text);
 }
 
 async function checkJsonApi(path: string, init?: RequestInit, allowedStatuses: number[] = [200, 400, 401, 403, 404, 409, 429]) {

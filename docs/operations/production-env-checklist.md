@@ -152,3 +152,7 @@ Não usar sandbox Asaas em produção, exceto com flag explícita e temporária.
 - Ver também: `docs/operations/incident-response.md`.
 - Ver também: `docs/operations/observability-and-alerts.md`.
 - Ver também: `docs/operations/incident-response.md`.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

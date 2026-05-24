@@ -69,3 +69,7 @@ Além dos quality gates, usar `npm run env:check` conforme `docs/operations/prod
 
 ## Referência
 - Ver também: `docs/operations/billing-lifecycle.md`.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

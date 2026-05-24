@@ -38,3 +38,7 @@ senhas, tokens, cookies, Authorization, DATABASE_URL, JWT secrets, ASAAS_API_KEY
 - Falha de cron
 - Falha de banco
 - Rate limit anormal
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

@@ -41,3 +41,7 @@ npm run smoke:test
 - Ver também: `docs/operations/incident-response.md`.
 - Ver também: `docs/operations/observability-and-alerts.md`.
 - Ver também: `docs/operations/incident-response.md`.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+

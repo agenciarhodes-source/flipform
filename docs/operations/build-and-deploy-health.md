@@ -54,3 +54,7 @@ As envs de produção devem estar configuradas no painel da Vercel antes do depl
 
 ## Production environment lock
 Incluir `npm run env:check` no preflight de deploy. Ver: `docs/operations/production-env-checklist.md`.
+## Relacionado
+- [Final Production Readiness](./final-production-readiness.md)
+- [Audit Handoff](./audit-handoff.md)
+
