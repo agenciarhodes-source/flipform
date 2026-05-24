@@ -62,3 +62,6 @@ Operar a plataforma FlipForm sem intervenção manual no banco.
 1. Verificar histórico de status e auditoria.
 2. Reativar tenant se apropriado.
 3. Confirmar acesso e status de usuários autorizados.
+
+## Referência
+- Ver também: .

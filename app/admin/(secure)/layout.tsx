@@ -28,6 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <AdminLink href="/admin/tenants" icon={Building2} label="Clientes" />
           <AdminLink href="/admin/billing" icon={CreditCard} label="Billing & Planos" />
           <AdminLink href="/admin/access" icon={Users} label="Acessos" />
+          <AdminLink href="/admin/lgpd" icon={ScrollText} label="LGPD" />
           <AdminLink href="/admin/audit" icon={ScrollText} label="Audit logs" />
         </nav>
         <div className="p-3 border-t border-slate-800 text-xs text-slate-400">

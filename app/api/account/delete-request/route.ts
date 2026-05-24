@@ -17,5 +17,6 @@ export const POST = withAuth(async (req: NextRequest, session) => {
   }
 
   await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'account', entityId: session.tenantId, action: 'account.deletion_requested', metadata: { reason: reason || null } });
+  await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'account', entityId: session.tenantId, action: 'account.delete_requested', metadata: { reason: reason || null } });
   return NextResponse.json({ ok: true, message: 'Solicitação de exclusão registrada. Nossa equipe revisará a solicitação.' });
 });

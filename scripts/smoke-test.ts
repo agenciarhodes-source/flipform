@@ -32,6 +32,7 @@ async function checkJsonApi(path: string, init?: RequestInit, allowedStatuses: n
 async function run() {
   await checkPage('/');
   await checkPage('/login');
+  await checkPage('/account');
   await checkPage('/checkout/starter');
   await checkPage('/checkout/growth');
   await checkPage('/checkout/pro');
@@ -45,7 +46,10 @@ async function run() {
   await checkPage('/admin');
   await checkPage('/admin/access');
   await checkPage('/admin/billing');
+  await checkPage('/admin/lgpd');
   await checkPage('/pricing');
+  await checkPage('/privacy');
+  await checkPage('/terms');
   await checkPage('/legal/terms');
   await checkPage('/legal/privacy');
   await checkPage('/legal/cancellation');
@@ -63,6 +67,7 @@ async function run() {
   await checkJsonApi('/api/admin/billing/diagnostics', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/admin/billing/reconcile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenantId: 'smoke-tenant-id' }) }, [401, 403]);
   await checkJsonApi('/api/admin/tenants/courtesy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Tenant', slug: 'smoke-tenant', ownerEmail: 'smoke@example.com', ownerName: 'Smoke Owner', planSlug: 'growth' }) }, [401, 403]);
+  await checkJsonApi('/api/admin/lgpd', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/webhooks/asaas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'PAYMENT_RECEIVED' }) }, [401, 403]);
   await checkJsonApi('/api/auth/first-access/validate?token=invalid-test-token', { method: 'GET' }, [400]);
   await checkJsonApi('/api/auth/first-access/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: 'invalid-test-token', password: '12345678', confirmPassword: '12345678' }) }, [400]);
