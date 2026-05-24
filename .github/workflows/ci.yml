@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Install, Typecheck and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET_CURRENT: staging-local-secret
+      NEXT_PUBLIC_MARKETING_URL: https://flipform.com.br
+      NEXT_PUBLIC_APP_URL: https://app.flipform.com.br
+      NEXT_PUBLIC_ADMIN_URL: https://admin.flipform.com.br
+      APP_HOSTNAME: app.flipform.com.br
+      ADMIN_HOSTNAME: admin.flipform.com.br
+      EMAIL_PROVIDER: none
+      EMAIL_FROM: atendimento@flipform.com.br
+      EMAIL_REPLY_TO: atendimento@flipform.com.br
+      ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
+      ASAAS_API_KEY: test-placeholder
+      ASAAS_WEBHOOK_TOKEN: test-placeholder
+      DATABASE_URL: file:./ci.db
+      CRON_SECRET: test-placeholder
+      INTERNAL_JOB_SECRET: test-placeholder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify dependency pins
+        run: |
+          node -e "const p=require('./package.json'); if (p.dependencies['@radix-ui/react-switch']==='^1.3.5') { throw new Error('Invalid @radix-ui/react-switch version ^1.3.5'); }"
+          node -e "const p=require('./package.json'); if (!p.dependencies.nodemailer) { throw new Error('Missing nodemailer dependency'); }"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Prisma validate
+        run: npx prisma validate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate environment schema
+        run: npm run env:check
+
+      - name: Regression guards
+        run: |
+          grep -n "evaluateBillingAccess" app/api/webhooks/asaas/route.ts
+          grep -n "userId?: string | null" lib/platform-audit.ts
+          grep -n "Suspense" app/first-access/page.tsx
+          grep -n "Suspense" app/checkout/cancelled/page.tsx
+          grep -n "Suspense" app/checkout/error/page.tsx
+          grep -R "senha padrão" -n app lib docs || true
+
+      - name: Build
+        run: npm run build
+
+  smoke:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET_CURRENT: staging-local-secret
+      NEXT_PUBLIC_MARKETING_URL: https://flipform.com.br
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_ADMIN_URL: http://localhost:3000/admin
+      APP_HOSTNAME: localhost
+      ADMIN_HOSTNAME: admin.flipform.com.br
+      EMAIL_PROVIDER: none
+      EMAIL_FROM: atendimento@flipform.com.br
+      EMAIL_REPLY_TO: atendimento@flipform.com.br
+      ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
+      ASAAS_API_KEY: test-placeholder
+      ASAAS_WEBHOOK_TOKEN: test-placeholder
+      DATABASE_URL: file:./ci.db
+      CRON_SECRET: test-placeholder
+      INTERNAL_JOB_SECRET: test-placeholder
+      SMOKE_BASE_URL: http://localhost:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Build
+        run: npm run build
+
+      - name: Start server
+        run: |
+          npm run start &
+          sleep 10
+
+      - name: Run smoke test
+        run: npm run smoke:test
