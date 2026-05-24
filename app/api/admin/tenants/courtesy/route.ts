@@ -1,7 +1,9 @@
-import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { getSession, hashPassword } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
+import { adminError, adminOk } from '@/lib/api/admin-response';
+import { normalizeEmail } from '@/lib/email-normalization';
 
 async function requirePlatformAdmin() {
   const session = await getSession();
@@ -19,25 +21,29 @@ function normalizeSlug(value: string) {
     .replace(/^-|-$/g, '');
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export async function POST(req: Request) {
   try {
     const session = await requirePlatformAdmin();
-    if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED' }, { status: 403 });
+    if (!session) return adminError('Não autorizado', 403);
 
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || '').trim();
     const slug = normalizeSlug(String(body.slug || ''));
-    const ownerEmail = String(body.ownerEmail || '').trim().toLowerCase();
+    const ownerEmail = normalizeEmail(String(body.ownerEmail || ''));
     const ownerName = String(body.ownerName || '').trim();
     const requestedPlanSlug = String(body.planSlug || 'growth').trim().toLowerCase() || 'growth';
 
-    if (!name) return NextResponse.json({ error: 'Nome do tenant é obrigatório.', code: 'TENANT_NAME_REQUIRED' }, { status: 400 });
-    if (!slug) return NextResponse.json({ error: 'Slug inválido.', code: 'INVALID_SLUG' }, { status: 400 });
-    if (!ownerEmail || !ownerEmail.includes('@')) return NextResponse.json({ error: 'E-mail do owner é inválido.', code: 'INVALID_OWNER_EMAIL' }, { status: 400 });
+    if (!name) return adminError('Nome do tenant é obrigatório.', 400, { code: 'TENANT_NAME_REQUIRED' });
+    if (!slug) return adminError('Slug inválido.', 400, { code: 'INVALID_SLUG' });
+    if (!ownerEmail || !isValidEmail(ownerEmail)) return adminError('E-mail inválido.', 400, { code: 'INVALID_OWNER_EMAIL' });
 
     const existsTenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
     if (existsTenant) {
-      return NextResponse.json({ error: 'Já existe um tenant com este slug.', code: 'TENANT_SLUG_ALREADY_EXISTS' }, { status: 409 });
+      return adminError('Slug já está em uso.', 409, { code: 'TENANT_SLUG_ALREADY_EXISTS' });
     }
 
     const plan =
@@ -45,8 +51,11 @@ export async function POST(req: Request) {
       (await prisma.plan.findFirst({ where: { slug: 'growth', isActive: true }, select: { id: true, slug: true } }));
 
     if (!plan) {
-      return NextResponse.json({ error: 'Nenhum plano ativo encontrado para criar cortesia.', code: 'NO_ACTIVE_PLAN' }, { status: 404 });
+      return adminError('Nenhum plano ativo encontrado para criar cortesia.', 404, { code: 'NO_ACTIVE_PLAN' });
     }
+
+    // Senha aleatória inutilizável: o usuário real deve definir a senha pelo fluxo seguro de primeiro acesso.
+    const unusablePasswordHash = await hashPassword(`courtesy-${randomUUID()}`);
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -71,44 +80,54 @@ export async function POST(req: Request) {
         },
       });
 
-      const existingAllowed = await tx.allowedUser.findUnique({ where: { email: ownerEmail } });
+      const user = await tx.user.upsert({
+        where: { email: ownerEmail },
+        update: ownerName ? { name: ownerName } : {},
+        create: {
+          email: ownerEmail,
+          name: ownerName || ownerEmail.split('@')[0] || 'Owner',
+          passwordHash: unusablePasswordHash,
+        },
+        select: { id: true, email: true, name: true },
+      });
 
-      if (existingAllowed && existingAllowed.tenantId !== tenant.id) {
-        throw Object.assign(new Error('EMAIL_ALREADY_LINKED_TO_OTHER_TENANT'), { code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' });
-      }
+      await tx.tenantUser.upsert({
+        where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
+        update: { role: 'owner', status: 'active' },
+        create: { tenantId: tenant.id, userId: user.id, role: 'owner', status: 'active' },
+      });
 
-      const allowedUser = existingAllowed
-        ? await tx.allowedUser.update({
-            where: { id: existingAllowed.id },
-            data: { tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
-            select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
-          })
-        : await tx.allowedUser.create({
-            data: { email: ownerEmail, tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
-            select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
-          });
+      const allowedUser = await tx.allowedUser.upsert({
+        where: { tenantId_email: { tenantId: tenant.id, email: ownerEmail } },
+        update: { role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
+        create: { email: ownerEmail, tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
+        select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
+      });
 
-      return { tenant, allowedUser };
+      return { tenant, user, allowedUser };
     });
 
-    await logPlatformAudit({ tenantId: result.tenant.id, userId: session.userId, entityType: 'courtesy', entityId: result.tenant.id, action: 'courtesy.tenant.created', metadata: { planSlug: plan.slug, provider: 'courtesy' } });
+    await logPlatformAudit({
+      tenantId: result.tenant.id,
+      userId: session.userId,
+      entityType: 'courtesy',
+      entityId: result.tenant.id,
+      action: 'courtesy.tenant.created',
+      metadata: { planSlug: plan.slug, provider: 'courtesy', ownerEmail: result.user.email },
+    });
 
-    return NextResponse.json({ ok: true, tenant: result.tenant, allowedUser: result.allowedUser });
+    return adminOk({ tenant: result.tenant, user: result.user, allowedUser: result.allowedUser });
   } catch (error: any) {
     console.error('[admin.tenants.courtesy.POST]', {
       step: 'create-courtesy-tenant',
       message: error instanceof Error ? error.message : String(error),
       code: error?.code,
-      stack: error instanceof Error ? error.stack : undefined,
     });
 
-    if (error?.code === 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT') {
-      return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
-    }
     if (error?.code === 'P2002') {
-      return NextResponse.json({ error: 'Já existe um tenant com este slug.', code: 'TENANT_SLUG_ALREADY_EXISTS' }, { status: 409 });
+      return adminError('Registro duplicado. Verifique slug, e-mail ou vínculo do tenant.', 409, { code: 'DUPLICATE_RECORD' });
     }
 
-    return NextResponse.json({ error: 'Falha ao criar tenant de cortesia.', code: 'COURTESY_CREATE_FAILED' }, { status: 500 });
+    return adminError('Falha ao criar tenant de cortesia.', 500, { code: 'COURTESY_CREATE_FAILED' });
   }
 }
