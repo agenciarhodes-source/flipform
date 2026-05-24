@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
+import { adminError, adminOk } from '@/lib/api/admin-response';
+import { normalizeEmail } from '@/lib/email-normalization';
 
 async function requirePlatformAdmin() {
   const session = await getSession();
@@ -22,22 +23,22 @@ function normalizeSlug(value: string) {
 export async function POST(req: Request) {
   try {
     const session = await requirePlatformAdmin();
-    if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED' }, { status: 403 });
+    if (!session) return adminError('Não autorizado', 403);
 
     const body = await req.json().catch(() => ({}));
     const name = String(body.name || '').trim();
     const slug = normalizeSlug(String(body.slug || ''));
-    const ownerEmail = String(body.ownerEmail || '').trim().toLowerCase();
+    const ownerEmail = normalizeEmail(String(body.ownerEmail || ''));
     const ownerName = String(body.ownerName || '').trim();
     const requestedPlanSlug = String(body.planSlug || 'growth').trim().toLowerCase() || 'growth';
 
     if (!name) return NextResponse.json({ error: 'Nome do tenant é obrigatório.', code: 'TENANT_NAME_REQUIRED' }, { status: 400 });
     if (!slug) return NextResponse.json({ error: 'Slug inválido.', code: 'INVALID_SLUG' }, { status: 400 });
-    if (!ownerEmail || !ownerEmail.includes('@')) return NextResponse.json({ error: 'E-mail do owner é inválido.', code: 'INVALID_OWNER_EMAIL' }, { status: 400 });
+    if (!ownerEmail || !ownerEmail.includes('@')) return adminError('E-mail inválido.', 400);
 
     const existsTenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
     if (existsTenant) {
-      return NextResponse.json({ error: 'Já existe um tenant com este slug.', code: 'TENANT_SLUG_ALREADY_EXISTS' }, { status: 409 });
+      return adminError('Slug já está em uso.', 409);
     }
 
     const plan =
@@ -93,7 +94,7 @@ export async function POST(req: Request) {
 
     await logPlatformAudit({ tenantId: result.tenant.id, userId: session.userId, entityType: 'courtesy', entityId: result.tenant.id, action: 'courtesy.tenant.created', metadata: { planSlug: plan.slug, provider: 'courtesy' } });
 
-    return NextResponse.json({ ok: true, tenant: result.tenant, allowedUser: result.allowedUser });
+    return adminOk({ tenant: result.tenant, allowedUser: result.allowedUser });
   } catch (error: any) {
     console.error('[admin.tenants.courtesy.POST]', {
       step: 'create-courtesy-tenant',
@@ -103,12 +104,12 @@ export async function POST(req: Request) {
     });
 
     if (error?.code === 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT') {
-      return NextResponse.json({ error: 'Este e-mail já está vinculado a outro tenant.', code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' }, { status: 409 });
+      return adminError('Este e-mail já está vinculado a outro tenant.', 409);
     }
     if (error?.code === 'P2002') {
-      return NextResponse.json({ error: 'Já existe um tenant com este slug.', code: 'TENANT_SLUG_ALREADY_EXISTS' }, { status: 409 });
+      return adminError('Slug já está em uso.', 409);
     }
 
-    return NextResponse.json({ error: 'Falha ao criar tenant de cortesia.', code: 'COURTESY_CREATE_FAILED' }, { status: 500 });
+    return adminError('Falha ao criar tenant de cortesia.', 500);
   }
 }
