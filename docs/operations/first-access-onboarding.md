@@ -31,3 +31,6 @@ Quando cliente reportar problemas:
 ```bash
 npm run smoke:test
 ```
+
+## Referência
+- Ver também: .
