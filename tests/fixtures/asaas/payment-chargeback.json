@@ -1,0 +1,14 @@
+{
+  "id": "evt_test_chargeback_001",
+  "event": "PAYMENT_CHARGEBACK_REQUESTED",
+  "payment": {
+    "id": "pay_test_chargeback_001",
+    "customer": "cus_test_001",
+    "subscription": "sub_test_001",
+    "status": "CHARGEBACK_REQUESTED",
+    "value": 157,
+    "billingType": "CREDIT_CARD",
+    "description": "FlipForm Growth",
+    "externalReference": "tenant_test_growth"
+  }
+}

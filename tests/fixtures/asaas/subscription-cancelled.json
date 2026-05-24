@@ -1,0 +1,9 @@
+{
+  "id": "evt_test_subscription_cancelled_001",
+  "event": "SUBSCRIPTION_DELETED",
+  "subscription": {
+    "id": "sub_test_001",
+    "status": "INACTIVE",
+    "externalReference": "tenant_test_growth"
+  }
+}
