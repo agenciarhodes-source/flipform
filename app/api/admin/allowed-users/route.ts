@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { getSession, hashPassword } from '@/lib/auth';
+import { ensureAdminSchemaReady } from '@/lib/admin/ensure-admin-schema';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { normalizeEmail } from '@/lib/email-normalization';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -26,6 +27,7 @@ export async function GET(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403);
+    await ensureAdminSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const q = normalizeEmail(String(searchParams.get('q') || ''));
@@ -55,7 +57,7 @@ export async function GET(req: Request) {
     });
 
     return adminOk({ items, tenants });
-  } catch { return adminError('Falha ao carregar acessos autorizados.', 500); }
+  } catch (error) { console.error('[admin/allowed-users][GET]', error); return adminError('Falha ao carregar acessos autorizados.', 500); }
 }
 
 export async function POST(req: Request) {
@@ -64,6 +66,7 @@ export async function POST(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403);
+    await ensureAdminSchemaReady();
 
     const body = await req.json().catch(() => ({}));
     const email = normalizeEmail(String(body.email || ''));
@@ -117,5 +120,5 @@ export async function POST(req: Request) {
     const item = await prisma.allowedUser.upsert({ where: { tenantId_email: { tenantId, email } }, update: { role, status, active, invitedBy: session.userId }, create: { tenantId, email, role, status, active, invitedBy: session.userId } });
     await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'allowlist', entityId: item.id, action: 'allowlist.email.upserted', metadata: { email, role, status, active } });
     return adminOk({ item });
-  } catch { return adminError('Falha ao salvar acesso autorizado.', 500); }
+  } catch (error) { console.error('[admin/allowed-users][POST]', error); return adminError('Falha ao salvar acesso autorizado.', 500); }
 }
