@@ -19,6 +19,12 @@ async function findPlan(planSlug?: string) {
     || await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } });
 }
 
+async function getSafeInviterId(userId?: string | null) {
+  if (!userId) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } }).catch(() => null);
+  return user?.id ?? null;
+}
+
 export async function GET(req: Request) {
   try {
     const rl = rateLimit({ key: `admin:allowed-users:get:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
@@ -74,6 +80,7 @@ export async function POST(req: Request) {
     if (!ALLOWED_ROLES.has(role)) return adminError('Role inválida.', 400, { code: 'INVALID_ROLE' });
     if (!ALLOWED_STATUSES.has(status)) return adminError('Status inválido.', 400, { code: 'INVALID_STATUS' });
 
+    const inviterId = await getSafeInviterId(session.userId);
     const direct = mode === 'direct' || !tenantId;
 
     if (direct) {
@@ -90,17 +97,17 @@ export async function POST(req: Request) {
         const hash = await hashPassword(password);
         const user = await tx.user.upsert({ where: { email }, create: { email, name: email.split('@')[0], passwordHash: hash }, update: { passwordHash: hash } });
         await tx.tenantUser.upsert({ where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } }, create: { tenantId: tenant.id, userId: user.id, role: role as any, status: 'active' }, update: { role: role as any, status: 'active' } });
-        const item = await tx.allowedUser.upsert({ where: { tenantId_email: { tenantId: tenant.id, email } }, create: { tenantId: tenant.id, email, role, status: 'active', active: true, source: 'manual-direct-access', acceptedAt: new Date(), invitedBy: session.userId }, update: { role, status: 'active', active: true, source: 'manual-direct-access', acceptedAt: new Date(), invitedBy: session.userId } });
+        const item = await tx.allowedUser.upsert({ where: { tenantId_email: { tenantId: tenant.id, email } }, create: { tenantId: tenant.id, email, role, status: 'active', active: true, source: 'manual-direct-access', acceptedAt: new Date(), invitedBy: inviterId }, update: { role, status: 'active', active: true, source: 'manual-direct-access', acceptedAt: new Date(), invitedBy: inviterId } });
         return { tenant, user, item };
       });
 
-      await logPlatformAudit({ tenantId: created.tenant.id, userId: session.userId, entityType: 'allowlist', entityId: created.item.id, action: 'allowlist.direct_access_created', metadata: { email, role, planSlug: plan.slug } });
+      await logPlatformAudit({ tenantId: created.tenant.id, userId: inviterId, entityType: 'allowlist', entityId: created.item.id, action: 'allowlist.direct_access_created', metadata: { email, role, planSlug: plan.slug } });
       return adminOk({ item: created.item, tenant: created.tenant, user: { id: created.user.id, email: created.user.email, name: created.user.name } });
     }
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId! } });
     if (!tenant) return adminError('Tenant não encontrado.', 404, { code: 'TENANT_NOT_FOUND' });
-    const item = await prisma.allowedUser.upsert({ where: { tenantId_email: { tenantId: tenant.id, email } }, create: { tenantId: tenant.id, email, role, status, active, invitedBy: session.userId }, update: { role, status, active, invitedBy: session.userId } });
+    const item = await prisma.allowedUser.upsert({ where: { tenantId_email: { tenantId: tenant.id, email } }, create: { tenantId: tenant.id, email, role, status, active, invitedBy: inviterId }, update: { role, status, active, invitedBy: inviterId } });
     if (password && password.length >= 8) {
       const hash = await hashPassword(password);
       const user = await prisma.user.upsert({ where: { email }, create: { email, name: email.split('@')[0], passwordHash: hash }, update: { passwordHash: hash } });
