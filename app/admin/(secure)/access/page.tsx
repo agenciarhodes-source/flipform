@@ -5,14 +5,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { safeJson } from '@/lib/http/safe-json';
 
 type TenantOption = { id: string; name: string; slug: string };
 type Row = { id: string; email: string; role: string; status: string; active: boolean; acceptedAt: string | null; createdAt: string; updatedAt: string; tenant: { id: string; name: string; slug: string; status?: string; plan?: { name: string } | null; subscriptions?: Array<{ status: string }>; } | null; };
 
 async function readJsonSafe(res: Response) {
-  const text = await res.text();
-  if (!text) return {};
-  try { return JSON.parse(text); } catch { return {}; }
+  return (await safeJson<any>(res)) ?? {};
 }
 
 export default function AdminAccessPage() {
