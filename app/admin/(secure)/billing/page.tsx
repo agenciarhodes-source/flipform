@@ -4,7 +4,6 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, RefreshCcw } from 'lucide-react';
-import { safeJson } from '@/lib/http/safe-json';
 
 type PlanRow = { id: string; name: string; slug: string; description: string | null; price: number; billingCycle: string; maxUsers: number; maxForms: number; maxPipelines: number; maxLeadsPerMonth: number; canUseReports: boolean; canExportCsv: boolean; canUseCustomBranding: boolean; canUseMetaPixel: boolean; canUseWebhooks: boolean; canUseTasks: boolean; isActive: boolean; tenantsCount: number; subscriptionsCount: number; };
 
@@ -17,11 +16,12 @@ export default function AdminBillingPage() {
     try {
       setLoading(true); setError(null);
       const res = await fetch('/api/admin/plans', { cache: 'no-store' });
-      const data = await safeJson<any>(res);
-      if (!data) throw new Error('Resposta vazia do servidor');
-      if (!res.ok) throw new Error((data as any)?.error || 'Falha ao carregar planos');
-      const payload = (data as any).data ?? data;
-      setPlans(payload.plans || []);
+      const text = await res.text();
+      const raw = text && text.trim() ? JSON.parse(text) : null;
+      if (!raw) throw new Error('Resposta vazia do servidor em /api/admin/plans');
+      if (!res.ok || raw.ok === false) throw new Error(raw.error || 'Falha ao carregar planos');
+      const payload = raw.data || raw;
+      setPlans(Array.isArray(payload.plans) ? payload.plans : []);
     } catch (e: any) {
       setError(e?.message || 'Falha ao carregar planos');
     } finally { setLoading(false); }
