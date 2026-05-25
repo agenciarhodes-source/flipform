@@ -18,6 +18,10 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export async function POST(req: Request) {
   try {
     const session = await requirePlatformAdmin();
@@ -41,6 +45,9 @@ export async function POST(req: Request) {
       (await prisma.plan.findFirst({ where: { slug: requestedPlanSlug, isActive: true }, select: { id: true, slug: true } })) ||
       (await prisma.plan.findFirst({ where: { slug: 'growth', isActive: true }, select: { id: true, slug: true } }));
     if (!plan) return adminError('Nenhum plano ativo encontrado para criar cortesia.', 404, { code: 'NO_ACTIVE_PLAN' });
+
+    // Senha aleatória inutilizável: o usuário real deve definir a senha pelo fluxo seguro de primeiro acesso.
+    const unusablePasswordHash = await hashPassword(`courtesy-${randomUUID()}`);
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
