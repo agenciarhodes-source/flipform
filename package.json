@@ -26,7 +26,8 @@
     "db:backup": "bash scripts/db-backup.sh",
     "db:restore": "bash scripts/db-restore.sh",
     "data:safety-check": "tsx scripts/check-data-safety.ts",
-    "demo:ensure-access": "tsx scripts/ensure-demo-access.ts"
+    "demo:ensure-access": "tsx scripts/ensure-demo-access.ts",
+    "access:ensure-manual-users": "tsx scripts/ensure-manual-access-users.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

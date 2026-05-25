@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { getSession, hashPassword } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -37,13 +36,13 @@ export async function POST(req: Request) {
     const ownerName = String(body.ownerName || '').trim();
     const requestedPlanSlug = String(body.planSlug || 'growth').trim().toLowerCase() || 'growth';
 
-    if (!name) return adminError('Nome do tenant é obrigatório.', 400, { code: 'TENANT_NAME_REQUIRED' });
-    if (!slug) return adminError('Slug inválido.', 400, { code: 'INVALID_SLUG' });
-    if (!ownerEmail || !isValidEmail(ownerEmail)) return adminError('E-mail inválido.', 400, { code: 'INVALID_OWNER_EMAIL' });
+    if (!name) return NextResponse.json({ error: 'Nome do tenant é obrigatório.', code: 'TENANT_NAME_REQUIRED' }, { status: 400 });
+    if (!slug) return NextResponse.json({ error: 'Slug inválido.', code: 'INVALID_SLUG' }, { status: 400 });
+    if (!ownerEmail || !ownerEmail.includes('@')) return adminError('E-mail inválido.', 400);
 
     const existsTenant = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
     if (existsTenant) {
-      return adminError('Slug já está em uso.', 409, { code: 'TENANT_SLUG_ALREADY_EXISTS' });
+      return adminError('Slug já está em uso.', 409);
     }
 
     const plan =
@@ -116,7 +115,7 @@ export async function POST(req: Request) {
       metadata: { planSlug: plan.slug, provider: 'courtesy', ownerEmail: result.user.email },
     });
 
-    return adminOk({ tenant: result.tenant, user: result.user, allowedUser: result.allowedUser });
+    return adminOk({ tenant: result.tenant, allowedUser: result.allowedUser });
   } catch (error: any) {
     console.error('[admin.tenants.courtesy.POST]', {
       step: 'create-courtesy-tenant',
@@ -124,10 +123,13 @@ export async function POST(req: Request) {
       code: error?.code,
     });
 
+    if (error?.code === 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT') {
+      return adminError('Este e-mail já está vinculado a outro tenant.', 409);
+    }
     if (error?.code === 'P2002') {
-      return adminError('Registro duplicado. Verifique slug, e-mail ou vínculo do tenant.', 409, { code: 'DUPLICATE_RECORD' });
+      return adminError('Slug já está em uso.', 409);
     }
 
-    return adminError('Falha ao criar tenant de cortesia.', 500, { code: 'COURTESY_CREATE_FAILED' });
+    return adminError('Falha ao criar tenant de cortesia.', 500);
   }
 }
