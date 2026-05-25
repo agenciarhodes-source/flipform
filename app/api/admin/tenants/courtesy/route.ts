@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { getSession } from '@/lib/auth';
+import { getSession, hashPassword } from '@/lib/auth';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { normalizeEmail } from '@/lib/email-normalization';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -12,10 +12,6 @@ async function requirePlatformAdmin() {
 
 function normalizeSlug(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 function isValidEmail(value: string) {
