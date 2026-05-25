@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { getSession, hashPassword } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { normalizeEmail } from '@/lib/email-normalization';
@@ -18,6 +18,10 @@ function normalizeSlug(value: string) {
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+function isValidEmail(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 export async function POST(req: Request) {
@@ -46,8 +50,11 @@ export async function POST(req: Request) {
       (await prisma.plan.findFirst({ where: { slug: 'growth', isActive: true }, select: { id: true, slug: true } }));
 
     if (!plan) {
-      return NextResponse.json({ error: 'Nenhum plano ativo encontrado para criar cortesia.', code: 'NO_ACTIVE_PLAN' }, { status: 404 });
+      return adminError('Nenhum plano ativo encontrado para criar cortesia.', 404, { code: 'NO_ACTIVE_PLAN' });
     }
+
+    // Senha aleatória inutilizável: o usuário real deve definir a senha pelo fluxo seguro de primeiro acesso.
+    const unusablePasswordHash = await hashPassword(`courtesy-${randomUUID()}`);
 
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
@@ -72,27 +79,41 @@ export async function POST(req: Request) {
         },
       });
 
-      const existingAllowed = await tx.allowedUser.findUnique({ where: { email: ownerEmail } });
+      const user = await tx.user.upsert({
+        where: { email: ownerEmail },
+        update: ownerName ? { name: ownerName } : {},
+        create: {
+          email: ownerEmail,
+          name: ownerName || ownerEmail.split('@')[0] || 'Owner',
+          passwordHash: unusablePasswordHash,
+        },
+        select: { id: true, email: true, name: true },
+      });
 
-      if (existingAllowed && existingAllowed.tenantId !== tenant.id) {
-        throw Object.assign(new Error('EMAIL_ALREADY_LINKED_TO_OTHER_TENANT'), { code: 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT' });
-      }
+      await tx.tenantUser.upsert({
+        where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
+        update: { role: 'owner', status: 'active' },
+        create: { tenantId: tenant.id, userId: user.id, role: 'owner', status: 'active' },
+      });
 
-      const allowedUser = existingAllowed
-        ? await tx.allowedUser.update({
-            where: { id: existingAllowed.id },
-            data: { tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
-            select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
-          })
-        : await tx.allowedUser.create({
-            data: { email: ownerEmail, tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
-            select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
-          });
+      const allowedUser = await tx.allowedUser.upsert({
+        where: { tenantId_email: { tenantId: tenant.id, email: ownerEmail } },
+        update: { role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
+        create: { email: ownerEmail, tenantId: tenant.id, role: 'owner', status: 'active', active: true, acceptedAt: new Date(), invitedBy: session.userId },
+        select: { id: true, email: true, role: true, status: true, active: true, tenantId: true },
+      });
 
-      return { tenant, allowedUser };
+      return { tenant, user, allowedUser };
     });
 
-    await logPlatformAudit({ tenantId: result.tenant.id, userId: session.userId, entityType: 'courtesy', entityId: result.tenant.id, action: 'courtesy.tenant.created', metadata: { planSlug: plan.slug, provider: 'courtesy' } });
+    await logPlatformAudit({
+      tenantId: result.tenant.id,
+      userId: session.userId,
+      entityType: 'courtesy',
+      entityId: result.tenant.id,
+      action: 'courtesy.tenant.created',
+      metadata: { planSlug: plan.slug, provider: 'courtesy', ownerEmail: result.user.email },
+    });
 
     return adminOk({ tenant: result.tenant, allowedUser: result.allowedUser });
   } catch (error: any) {
@@ -100,7 +121,6 @@ export async function POST(req: Request) {
       step: 'create-courtesy-tenant',
       message: error instanceof Error ? error.message : String(error),
       code: error?.code,
-      stack: error instanceof Error ? error.stack : undefined,
     });
 
     if (error?.code === 'EMAIL_ALREADY_LINKED_TO_OTHER_TENANT') {
