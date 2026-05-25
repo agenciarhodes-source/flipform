@@ -1,14 +1,9 @@
-import { randomUUID } from 'crypto';
 import { getSession, hashPassword } from '@/lib/auth';
 import { ensureAdminSchemaReady } from '@/lib/admin/ensure-admin-schema';
 import { adminError, adminOk } from '@/lib/api/admin-response';
-import { normalizeEmail } from '@/lib/email-normalization';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { prisma } from '@/lib/prisma';
-import { getSession, hashPassword } from '@/lib/auth';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
-import { adminError, adminOk } from '@/lib/api/admin-response';
-import { logPlatformAudit } from '@/lib/platform-audit';
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'manager', 'agent', 'viewer']);
 const ALLOWED_STATUSES = new Set(['pending', 'accepted', 'active', 'blocked', 'revoked', 'expired']);
@@ -30,6 +25,7 @@ export async function GET(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
+    await ensureAdminSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const q = String(searchParams.get('q') || '').trim();
@@ -62,6 +58,7 @@ export async function POST(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
+    await ensureAdminSchemaReady();
 
     const body = await req.json().catch(() => ({}));
     const mode = String(body.mode || '').toLowerCase();
