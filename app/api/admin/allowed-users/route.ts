@@ -1,4 +1,9 @@
-import { NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { getSession, hashPassword } from '@/lib/auth';
+import { ensureAdminSchemaReady } from '@/lib/admin/ensure-admin-schema';
+import { adminError, adminOk } from '@/lib/api/admin-response';
+import { normalizeEmail } from '@/lib/email-normalization';
+import { logPlatformAudit } from '@/lib/platform-audit';
 import { prisma } from '@/lib/prisma';
 import { getSession, hashPassword } from '@/lib/auth';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
