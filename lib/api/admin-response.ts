@@ -1,10 +1,9 @@
-import { NextResponse } from 'next/server';
+import { apiError, apiSuccess } from '@/lib/api/response';
 
-export function adminOk(data: unknown, init?: ResponseInit) {
-  const root = data && typeof data === 'object' && !Array.isArray(data) ? data : {};
-  return NextResponse.json({ ok: true, ...root, data }, init);
+export function adminOk<T>(data: T, init?: ResponseInit) {
+  return apiSuccess(data, init);
 }
 
 export function adminError(message: string, status = 400, details?: unknown) {
-  return NextResponse.json({ ok: false, error: message, ...(details === undefined ? {} : { details }) }, { status });
+  return apiError(message, status, details);
 }
