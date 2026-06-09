@@ -2,7 +2,7 @@ import { hashPassword } from '@/lib/auth';
 import { createInternalTenant } from '@/lib/admin/create-internal-tenant';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, Role } from '@prisma/client';
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'manager', 'agent', 'viewer']);
 const ALLOWED_STATUSES = new Set(['pending', 'accepted', 'active', 'blocked', 'revoked', 'expired']);
@@ -41,7 +41,9 @@ export async function createManualAccess(input: ManualAccessInput) {
     const tenant = input.tenantId
       ? await tx.tenant.findUnique({ where: { id: input.tenantId } })
       : null;
-    const resolvedTenant = tenant ?? await createInternalTenant(tx, { email, planId: plan.id, adminUserId: input.adminUserId });
+    const resolvedTenant = tenant
+      ? await tx.tenant.update({ where: { id: tenant.id }, data: { status: 'active', planId: tenant.planId ?? plan.id } })
+      : await createInternalTenant(tx, { email, planId: plan.id, adminUserId: input.adminUserId });
 
     const existingSub = await tx.subscription.findFirst({ where: { tenantId: resolvedTenant.id }, select: { id: true } });
     if (!existingSub) {
@@ -49,7 +51,7 @@ export async function createManualAccess(input: ManualAccessInput) {
     }
 
     const user = await tx.user.upsert({ where: { email }, create: { email, name: email.split('@')[0] || email, passwordHash: hash }, update: { passwordHash: hash } });
-    await tx.tenantUser.upsert({ where: { tenantId_userId: { tenantId: resolvedTenant.id, userId: user.id } }, create: { tenantId: resolvedTenant.id, userId: user.id, role: input.role as 'owner', status: 'active' }, update: { role: input.role as 'owner', status: 'active' } });
+    await tx.tenantUser.upsert({ where: { tenantId_userId: { tenantId: resolvedTenant.id, userId: user.id } }, create: { tenantId: resolvedTenant.id, userId: user.id, role: input.role as Role, status: 'active' }, update: { role: input.role as Role, status: 'active' } });
     const allowedUser = await tx.allowedUser.upsert({
       where: { tenantId_email: { tenantId: resolvedTenant.id, email } },
       create: { tenantId: resolvedTenant.id, email, role: input.role, status: 'active', active: true, source: 'manual_admin_access', acceptedAt: new Date(), invitedBy: input.adminUserId },

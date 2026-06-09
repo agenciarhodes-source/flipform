@@ -24,6 +24,10 @@ function tenantBlockedResponse(status: unknown) {
   );
 }
 
+function logLogin(event: string, metadata: Record<string, unknown>) {
+  console.info('[auth/login][POST]', { event, ...metadata });
+}
+
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   const bodyForRate = await req.clone().json().catch(() => ({} as any));
@@ -54,7 +58,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
     }
 
-    // Platform admin: pode logar sem tenant e sem AllowedUser.
+    // Platform admin: mantém o comportamento atual, sem exigir tenant/AllowedUser.
     if (user.globalRole === 'platform_admin') {
       await setSessionCookie({
         userId: user.id,
@@ -70,70 +74,52 @@ export async function POST(req: Request) {
     }
 
     const memberships = await prisma.tenantUser.findMany({
-      where: { userId: user.id, status: 'active' },
-      include: { tenant: true },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        userId: user.id,
+        status: 'active',
+      },
+      include: {
+        tenant: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
-    const membershipTenantIds = memberships.map((membership) => membership.tenantId);
 
-    const allowedUsers = membershipTenantIds.length > 0
-      ? await prisma.allowedUser.findMany({
-        where: {
-          email: normalizedEmail,
-          active: true,
-          status: { in: LOGIN_ALLOWED_STATUSES },
-          tenantId: { in: membershipTenantIds },
-        },
-      })
-      : [];
-
-    const allowedByTenant = new Map(allowedUsers.map((allowed) => [allowed.tenantId, allowed]));
-    const membershipsWithAllowed = memberships.filter((membership) => allowedByTenant.has(membership.tenantId));
-
-    if (membershipsWithAllowed.length === 0) {
-      const hasAnyActiveAllowedUser = await prisma.allowedUser.findFirst({
-        where: {
-          email: normalizedEmail,
-          active: true,
-          status: { in: LOGIN_ALLOWED_STATUSES },
-        },
-        select: { id: true },
-      });
-
-      if (!hasAnyActiveAllowedUser) {
-        logLogin('forbidden_no_allowed_user', { ip, email: normalizedEmail, userId: user.id, memberships: memberships.length });
-        return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
-      }
-
-      logLogin('forbidden_no_matching_tenant_user', { ip, email: normalizedEmail, userId: user.id, memberships: memberships.length });
-      return NextResponse.json({ error: 'Este e-mail não possui uma empresa ativa associada.' }, { status: 403 });
+    if (memberships.length === 0) {
+      logLogin('forbidden_no_active_membership', { ip, email: normalizedEmail, userId: user.id });
+      return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
     }
 
-    const preferredMembership = membershipsWithAllowed.find((membership) => {
-      const allowed = allowedByTenant.get(membership.tenantId);
-      return allowed && PREFERRED_ALLOWED_STATUSES.has(allowed.status) && !BLOCKED.has(String(membership.tenant.status));
+    const allowedUsers = await prisma.allowedUser.findMany({
+      where: {
+        email: normalizedEmail,
+        active: true,
+        tenantId: {
+          in: memberships.map((membership) => membership.tenantId),
+        },
+      },
     });
-    const fallbackMembership = membershipsWithAllowed.find((membership) => !BLOCKED.has(String(membership.tenant.status)));
-    const selectedMembership = preferredMembership ?? fallbackMembership;
+
+    const allowedByTenant = new Map(allowedUsers.map((allowed) => [allowed.tenantId, allowed]));
+
+    const selectedMembership = memberships.find((membership) => {
+      const allowed = allowedByTenant.get(membership.tenantId);
+      return allowed && !BLOCKED.has(String(membership.tenant.status));
+    });
 
     if (!selectedMembership) {
-      const blockedMembership = membershipsWithAllowed[0];
-      logLogin('forbidden_tenant_blocked', {
+      logLogin('forbidden_no_active_allowed_tenant', {
         ip,
         email: normalizedEmail,
         userId: user.id,
-        tenantId: blockedMembership.tenantId,
-        tenantStatus: blockedMembership.tenant.status,
+        memberships: memberships.length,
+        allowedUsers: allowedUsers.length,
       });
-      return tenantBlockedResponse(blockedMembership.tenant.status);
+      return NextResponse.json({ error: 'Este e-mail não possui uma empresa ativa associada.' }, { status: 403 });
     }
 
     const selectedAllowedUser = allowedByTenant.get(selectedMembership.tenantId);
-    if (!selectedAllowedUser) {
-      // Defesa adicional: a seleção acima só deve ocorrer quando há AllowedUser correspondente.
-      logLogin('forbidden_missing_allowed_after_selection', { ip, email: normalizedEmail, userId: user.id, tenantId: selectedMembership.tenantId });
-      return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
-    }
 
     await setSessionCookie({
       userId: user.id,
@@ -145,29 +131,34 @@ export async function POST(req: Request) {
       globalRole: null,
     });
 
-    // Atualiza lastLoginAt do tenant selecionado.
     await prisma.tenant.update({ where: { id: selectedMembership.tenantId }, data: { lastLoginAt: new Date() } });
 
     try {
       await logAudit({
         tenantId: selectedMembership.tenantId, userId: user.id,
         entityType: 'session', entityId: user.id, action: 'auth.login',
-        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: selectedAllowedUser.id },
+        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: selectedAllowedUser?.id },
       });
     } catch (auditError) {
-      console.error('[auth/login][POST]', {
-        event: 'audit_failed',
-        email: normalizedEmail,
-        userId: user.id,
-        tenantId: selectedMembership.tenantId,
-        error: auditError,
+      const err = auditError as { message?: string; code?: string; meta?: unknown; stack?: string };
+      console.error('[auth/login][POST][audit]', {
+        message: err?.message,
+        code: err?.code,
+        meta: err?.meta,
+        stack: err?.stack,
       });
     }
 
     logLogin('success', { ip, email: normalizedEmail, userId: user.id, tenantId: selectedMembership.tenantId, role: selectedMembership.role });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error('[auth/login][POST]', { event: 'error', error: e });
+    return NextResponse.json({ ok: true, platformAdmin: false });
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: string; meta?: unknown; stack?: string };
+    console.error('[auth/login][POST]', {
+      message: err?.message,
+      code: err?.code,
+      meta: err?.meta,
+      stack: err?.stack,
+    });
     return NextResponse.json({ error: 'Erro no login' }, { status: 500 });
   }
 }
