@@ -9,6 +9,10 @@ type AllowedUsersFilters = { q?: string; tenantId?: string; status?: string; act
 
 async function requirePlatformAdmin() { const s = await getSession(); return s?.globalRole === 'platform_admin' ? s : null; }
 
+function logAdminAllowedUsers(event: string, metadata: Record<string, unknown>) {
+  console.info('[admin/allowed-users][POST]', { event, ...metadata });
+}
+
 export async function GET(req: Request) {
   try {
     const rl = rateLimit({ key: `admin:allowed-users:get:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
@@ -67,19 +71,37 @@ export async function POST(req: Request) {
     };
 
     if (payload.mode === 'direct' || !payload.tenantId) {
-      const created = await createManualAccess({ ...payload, adminUserId: session.userId });
+      const manualPayload = { ...payload, status: 'active', active: true, adminUserId: session.userId };
+      logAdminAllowedUsers('manual_access_requested', {
+        adminUserId: session.userId,
+        email: manualPayload.email,
+        tenantId: manualPayload.tenantId,
+        planSlug: manualPayload.planSlug,
+        role: manualPayload.role,
+      });
+      const created = await createManualAccess(manualPayload);
+      logAdminAllowedUsers('manual_access_created', {
+        adminUserId: session.userId,
+        email: created.user.email,
+        tenantId: created.tenant.id,
+        userId: created.user.id,
+        allowedUserId: created.allowedUser.id,
+      });
       return adminOk({ item: created.allowedUser, tenant: created.tenant, user: { id: created.user.id, email: created.user.email, name: created.user.name } });
     }
+
+    logAdminAllowedUsers('allowed_user_upsert_requested', { adminUserId: session.userId, email: payload.email, tenantId: payload.tenantId, role: payload.role, status: payload.status, active: payload.active });
 
     const item = await prisma.allowedUser.upsert({
       where: { tenantId_email: { tenantId: payload.tenantId, email: payload.email } },
       create: { tenantId: payload.tenantId, email: payload.email, role: payload.role, status: payload.status, active: payload.active, invitedBy: session.userId },
       update: { role: payload.role, status: payload.status, active: payload.active, invitedBy: session.userId },
     });
+    logAdminAllowedUsers('allowed_user_upserted', { adminUserId: session.userId, email: item.email, tenantId: item.tenantId, allowedUserId: item.id });
     return adminOk({ item });
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string; meta?: unknown; stack?: string };
-    console.error('[ADMIN_ACCESS_CREATE]', { error: err, message: err?.message, stack: err?.stack });
+    console.error('[admin/allowed-users][POST]', { error: err, message: err?.message, stack: err?.stack });
     return adminError('Falha ao salvar acesso autorizado.', 500, { code: err?.message || 'ALLOWED_USER_UPSERT_FAILED', prismaCode: err?.code });
   }
 }
