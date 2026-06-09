@@ -6,23 +6,6 @@ import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
-const LOGIN_ALLOWED_STATUSES = ['active', 'accepted', 'pending'];
-const PREFERRED_ALLOWED_STATUSES = new Set(['active', 'accepted']);
-
-function logLogin(event: string, metadata: Record<string, unknown>) {
-  console.info('[auth/login][POST]', { event, ...metadata });
-}
-
-function tenantBlockedResponse(status: unknown) {
-  return NextResponse.json(
-    {
-      error: 'Acesso bloqueado para esta empresa. Entre em contato com o administrador.',
-      code: 'tenant_blocked',
-      status,
-    },
-    { status: 403 },
-  );
-}
 
 function logLogin(event: string, metadata: Record<string, unknown>) {
   console.info('[auth/login][POST]', { event, ...metadata });
@@ -58,7 +41,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
     }
 
-    // Platform admin: mantém o comportamento atual, sem exigir tenant/AllowedUser.
     if (user.globalRole === 'platform_admin') {
       await setSessionCookie({
         userId: user.id,
@@ -74,16 +56,9 @@ export async function POST(req: Request) {
     }
 
     const memberships = await prisma.tenantUser.findMany({
-      where: {
-        userId: user.id,
-        status: 'active',
-      },
-      include: {
-        tenant: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: { userId: user.id, status: 'active' },
+      include: { tenant: true },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (memberships.length === 0) {
@@ -95,14 +70,11 @@ export async function POST(req: Request) {
       where: {
         email: normalizedEmail,
         active: true,
-        tenantId: {
-          in: memberships.map((membership) => membership.tenantId),
-        },
+        tenantId: { in: memberships.map((membership) => membership.tenantId) },
       },
     });
 
     const allowedByTenant = new Map(allowedUsers.map((allowed) => [allowed.tenantId, allowed]));
-
     const selectedMembership = memberships.find((membership) => {
       const allowed = allowedByTenant.get(membership.tenantId);
       return allowed && !BLOCKED.has(String(membership.tenant.status));
