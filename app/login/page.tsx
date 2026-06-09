@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -85,6 +86,11 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
+          <div className="mt-3 text-xs text-center text-muted-foreground">
+            <Link href="/legal/terms" className="underline">Termos</Link>{' · '}
+            <Link href="/legal/privacy" className="underline">Privacidade</Link>{' · '}
+            <Link href="/legal/support" className="underline">Suporte</Link>
+          </div>
         </Card>
       </div>
     </div>
