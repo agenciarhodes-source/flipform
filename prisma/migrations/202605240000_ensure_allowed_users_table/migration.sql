@@ -7,7 +7,7 @@
 -- delete or modify existing allowlist rows.
 
 CREATE TABLE IF NOT EXISTS allowed_users (
-  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),
   email TEXT NOT NULL,
   tenant_id TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'owner',
