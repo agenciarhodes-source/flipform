@@ -12,6 +12,21 @@ async function readJsonSafe(res: Response) {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+function getAdminAccessErrorMessage(raw: any, fallback: string) {
+  const code = raw?.details?.code || raw?.details?.prismaCode || raw?.code;
+  const messages: Record<string, string> = {
+    INVALID_EMAIL: 'E-mail inválido.',
+    INVALID_PASSWORD: 'Senha deve ter ao menos 8 caracteres.',
+    NO_ACTIVE_PLAN: 'Nenhum plano ativo encontrado.',
+    DB_SCHEMA_NOT_READY: 'Banco de dados não está alinhado com o schema. Rode o diagnóstico/migration.',
+    ADMIN_SCHEMA_NOT_READY: 'Banco de dados não está alinhado com o schema. Rode o diagnóstico/migration.',
+    P2002: 'Este e-mail já possui acesso neste tenant.',
+    P2003: 'Falha de vínculo no banco. Rode o diagnóstico/migration.',
+  };
+  const detailMessage = raw?.details?.message && raw.details.message !== code ? ` (${raw.details.message})` : '';
+  return `${messages[code] || raw?.error || fallback}${detailMessage}`;
+}
+
 export default function AdminAccessPage() {
   const [items, setItems] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
@@ -38,7 +53,7 @@ export default function AdminAccessPage() {
       const res = await fetch(`/api/admin/allowed-users${query ? `?${query}` : ''}`, { cache: 'no-store' });
       const raw = await readJsonSafe(res);
       if (!raw) throw new Error('Resposta vazia do servidor. Verifique os logs da API.');
-      if (!res.ok || raw.ok === false) throw new Error(raw.error || 'Falha ao carregar acessos autorizados.');
+      if (!res.ok || raw.ok === false) throw new Error(getAdminAccessErrorMessage(raw, 'Falha ao carregar acessos autorizados.'));
       const payload = raw.data || raw;
       setItems(Array.isArray(payload.items) ? payload.items : []);
       setTenants(Array.isArray(payload.tenants) ? payload.tenants : []);
@@ -64,7 +79,7 @@ export default function AdminAccessPage() {
       const res = await fetch('/api/admin/allowed-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const raw = await readJsonSafe(res);
       if (!raw) throw new Error('Resposta vazia do servidor. Verifique os logs da API.');
-      if (!res.ok || raw.ok === false) throw new Error(raw.error || raw.message || 'Falha ao criar acesso.');
+      if (!res.ok || raw.ok === false) throw new Error(getAdminAccessErrorMessage(raw, 'Falha ao criar acesso.'));
       setSuccess('Acesso criado com sucesso.');
       setEmail(''); setPassword(''); setNewTenant('auto'); setRole('owner'); setNewStatus('active'); setNewActive(true);
       await load();
@@ -95,7 +110,8 @@ export default function AdminAccessPage() {
 
     <Card className="p-4 space-y-2">
       <Input placeholder="Buscar por e-mail" value={q} onChange={(e)=>setQ(e.target.value)} />
-      {loading ? <div className="text-sm text-muted-foreground">Carregando...</div> : <div className="text-sm">{items.length} acesso(s)</div>}
+      {loading ? <div className="text-sm text-muted-foreground">Carregando...</div> : error ? <div className="text-sm text-rose-700">Não foi possível carregar a lista. Corrija o erro acima e tente novamente.</div> : <div className="text-sm">{items.length} acesso(s)</div>}
+      {!loading && !error && items.length > 0 && <div className="divide-y rounded-md border">{items.map((item) => <div key={item.id} className="flex flex-col gap-1 p-3 text-sm md:flex-row md:items-center md:justify-between"><div><div className="font-medium">{item.email}</div><div className="text-xs text-muted-foreground">{item.tenant?.name || item.tenantId} · {item.role} · {item.status}</div></div><div className={item.active ? 'text-emerald-700' : 'text-rose-700'}>{item.active ? 'Ativo' : 'Inativo'}</div></div>)}</div>}
     </Card>
   </div>;
 }

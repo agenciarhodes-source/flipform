@@ -70,6 +70,7 @@ export async function POST(req: Request) {
       where: {
         email: normalizedEmail,
         active: true,
+        status: 'active',
         tenantId: { in: memberships.map((membership) => membership.tenantId) },
       },
     });

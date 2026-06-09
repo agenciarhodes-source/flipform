@@ -28,7 +28,9 @@
     "data:safety-check": "tsx scripts/check-data-safety.ts",
     "admin:diagnose": "tsx scripts/diagnose-admin-access-billing.ts",
     "admin:repair": "tsx scripts/repair-admin-access-billing.ts",
-    "env:install-check": "bash scripts/check-install-environment.sh"
+    "env:install-check": "bash scripts/check-install-environment.sh",
+    "admin:diagnose-access": "tsx scripts/diagnose-admin-access.ts",
+    "admin:create-test-access": "tsx scripts/create-manual-test-access.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

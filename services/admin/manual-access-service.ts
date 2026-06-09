@@ -2,10 +2,24 @@ import { hashPassword } from '@/lib/auth';
 import { createInternalTenant } from '@/lib/admin/create-internal-tenant';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { prisma } from '@/lib/prisma';
-import type { Prisma, Role } from '@prisma/client';
+import type { Prisma, Role, SubscriptionStatus } from '@prisma/client';
 
 const ALLOWED_ROLES = new Set(['owner', 'admin', 'manager', 'agent', 'viewer']);
 const ALLOWED_STATUSES = new Set(['pending', 'accepted', 'active', 'blocked', 'revoked', 'expired']);
+
+export class ManualAccessError extends Error {
+  code: string;
+  status: number;
+  details?: unknown;
+
+  constructor(code: string, message = code, status = 400, details?: unknown) {
+    super(message);
+    this.name = 'ManualAccessError';
+    this.code = code;
+    this.status = status;
+    this.details = details;
+  }
+}
 
 function logManualAccess(event: string, metadata: Record<string, unknown>) {
   console.info('[admin/allowed-users][POST]', { event, ...metadata });
@@ -19,49 +33,116 @@ export type ManualAccessInput = {
   status: string;
   active: boolean;
   tenantId?: string | null;
-  adminUserId: string | null;
+  adminUserId?: string | null;
 };
+
+async function getSafeInviterId(adminUserId?: string | null) {
+  if (!adminUserId) return null;
+  const admin = await prisma.user.findUnique({ where: { id: adminUserId }, select: { id: true } });
+  return admin?.id ?? null;
+}
+
+async function resolveActivePlan(planSlug?: string | null) {
+  const requestedSlug = String(planSlug || '').trim().toLowerCase();
+  return (requestedSlug ? await prisma.plan.findFirst({ where: { slug: requestedSlug, isActive: true } }) : null)
+    ?? await prisma.plan.findFirst({ where: { slug: 'growth', isActive: true } })
+    ?? await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } });
+}
 
 export async function createManualAccess(input: ManualAccessInput) {
   const email = input.email.trim().toLowerCase();
-  if (!/.+@.+\..+/.test(email)) throw new Error('INVALID_EMAIL');
-  if (input.password.length < 8) throw new Error('INVALID_PASSWORD');
-  if (!ALLOWED_ROLES.has(input.role)) throw new Error('INVALID_ROLE');
-  if (!ALLOWED_STATUSES.has(input.status)) throw new Error('INVALID_STATUS');
+  const role = input.role.trim().toLowerCase();
+  const status = input.status.trim().toLowerCase();
 
-  logManualAccess('manual_access_service_started', { email, planSlug: input.planSlug, role: input.role, tenantId: input.tenantId ?? null });
+  if (!/.+@.+\..+/.test(email)) throw new ManualAccessError('INVALID_EMAIL');
+  if (!input.password || input.password.length < 8) throw new ManualAccessError('INVALID_PASSWORD');
+  if (!ALLOWED_ROLES.has(role)) throw new ManualAccessError('INVALID_ROLE');
+  if (!ALLOWED_STATUSES.has(status)) throw new ManualAccessError('INVALID_STATUS');
 
-  const plan = await prisma.plan.findFirst({ where: { slug: input.planSlug, isActive: true } })
-    ?? await prisma.plan.findFirst({ where: { slug: 'growth', isActive: true } })
-    ?? await prisma.plan.findFirst({ where: { isActive: true }, orderBy: { price: 'asc' } });
-  if (!plan) throw new Error('NO_ACTIVE_PLAN');
+  logManualAccess('manual_access_service_started', { email, planSlug: input.planSlug, role, tenantId: input.tenantId ?? null });
 
+  const plan = await resolveActivePlan(input.planSlug);
+  if (!plan) throw new ManualAccessError('NO_ACTIVE_PLAN', 'NO_ACTIVE_PLAN', 409);
+
+  const safeInviterId = await getSafeInviterId(input.adminUserId);
   const hash = await hashPassword(input.password);
+  const acceptedAt = new Date();
+
   const output = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const tenant = input.tenantId
       ? await tx.tenant.findUnique({ where: { id: input.tenantId } })
       : null;
-    const resolvedTenant = tenant
-      ? await tx.tenant.update({ where: { id: tenant.id }, data: { status: 'active', planId: tenant.planId ?? plan.id } })
-      : await createInternalTenant(tx, { email, planId: plan.id, adminUserId: input.adminUserId });
 
-    const existingSub = await tx.subscription.findFirst({ where: { tenantId: resolvedTenant.id }, select: { id: true } });
-    if (!existingSub) {
-      await tx.subscription.create({ data: { tenantId: resolvedTenant.id, planId: plan.id, status: 'courtesy', provider: 'manual', paymentRequired: false, paymentProvider: null } });
+    if (input.tenantId && !tenant) {
+      throw new ManualAccessError('TENANT_NOT_FOUND', 'TENANT_NOT_FOUND', 404, { tenantId: input.tenantId });
     }
 
-    const user = await tx.user.upsert({ where: { email }, create: { email, name: email.split('@')[0] || email, passwordHash: hash }, update: { passwordHash: hash } });
-    await tx.tenantUser.upsert({ where: { tenantId_userId: { tenantId: resolvedTenant.id, userId: user.id } }, create: { tenantId: resolvedTenant.id, userId: user.id, role: input.role as Role, status: 'active' }, update: { role: input.role as Role, status: 'active' } });
+    const resolvedTenant = tenant
+      ? await tx.tenant.update({
+        where: { id: tenant.id },
+        data: { status: 'active', planId: tenant.planId ?? plan.id },
+      })
+      : await createInternalTenant(tx, { email, planId: plan.id, adminUserId: safeInviterId });
+
+    let subscription = await tx.subscription.findFirst({ where: { tenantId: resolvedTenant.id }, orderBy: { createdAt: 'desc' } });
+    if (!subscription) {
+      subscription = await tx.subscription.create({
+        data: {
+          tenantId: resolvedTenant.id,
+          planId: plan.id,
+          status: 'courtesy' as SubscriptionStatus,
+          provider: 'manual',
+          paymentRequired: false,
+          paymentProvider: null,
+        },
+      });
+    }
+
+    const existingUser = await tx.user.findUnique({ where: { email } });
+    const user = existingUser
+      ? await tx.user.update({ where: { id: existingUser.id }, data: { passwordHash: hash } })
+      : await tx.user.create({ data: { email, name: email.split('@')[0] || email, passwordHash: hash } });
+
+    const tenantUser = await tx.tenantUser.upsert({
+      where: { tenantId_userId: { tenantId: resolvedTenant.id, userId: user.id } },
+      create: { tenantId: resolvedTenant.id, userId: user.id, role: role as Role, status: 'active' },
+      update: { role: role as Role, status: 'active' },
+    });
+
     const allowedUser = await tx.allowedUser.upsert({
       where: { tenantId_email: { tenantId: resolvedTenant.id, email } },
-      create: { tenantId: resolvedTenant.id, email, role: input.role, status: 'active', active: true, source: 'manual_admin_access', acceptedAt: new Date(), invitedBy: input.adminUserId },
-      update: { role: input.role, status: 'active', active: true, source: 'manual_admin_access', acceptedAt: new Date(), invitedBy: input.adminUserId },
+      create: {
+        tenantId: resolvedTenant.id,
+        email,
+        role,
+        status: 'active',
+        active: true,
+        source: 'manual_admin_access',
+        acceptedAt,
+        invitedBy: safeInviterId,
+      },
+      update: {
+        role,
+        status: 'active',
+        active: true,
+        source: 'manual_admin_access',
+        acceptedAt,
+        invitedBy: safeInviterId,
+      },
     });
-    return { tenant: resolvedTenant, user, allowedUser };
+
+    return { tenant: resolvedTenant, user, tenantUser, allowedUser, subscription };
   });
 
   try {
-    await logPlatformAudit({ tenantId: output.tenant.id, userId: input.adminUserId, entityType: 'allowlist', entityId: output.allowedUser.id, action: 'allowlist.manual_access_created', metadata: { email, planSlug: plan.slug, role: input.role, source: 'manual_admin_access' } });
+    await logPlatformAudit({
+      tenantId: output.tenant.id,
+      userId: safeInviterId,
+      entityType: 'allowlist',
+      entityId: output.allowedUser.id,
+      action: 'allowlist.manual_access_created',
+      metadata: { email, planSlug: plan.slug, role, source: 'manual_admin_access' },
+    });
   } catch (auditError) {
     console.error('[admin/allowed-users][POST]', {
       event: 'manual_access_audit_failed',
