@@ -1,4 +1,5 @@
 import { getSession } from '@/lib/auth';
+import { ensureAdminSchemaReady } from '@/lib/admin/ensure-admin-schema';
 import { assertAdminSchemaReady } from '@/lib/admin/assert-admin-schema-ready';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { prisma } from '@/lib/prisma';
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
+    await ensureAdminSchemaReady();
     await assertAdminSchemaReady();
 
     const { searchParams } = new URL(req.url);
@@ -130,6 +132,7 @@ export async function POST(req: Request) {
   try {
     const rl = rateLimit({ key: `admin:allowed-users:post:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
     if (!rl.allowed) return rateLimitResponse(rl);
+    await ensureAdminSchemaReady();
     await assertAdminSchemaReady();
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
