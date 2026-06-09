@@ -7,10 +7,14 @@ import { logAudit } from '@/lib/audit';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
+function logLogin(event: string, metadata: Record<string, unknown>) {
+  console.info('[auth/login][POST]', { event, ...metadata });
+}
+
 export async function POST(req: Request) {
   const ip = getClientIp(req);
   const bodyForRate = await req.clone().json().catch(() => ({} as any));
-  const emailForRate = String(bodyForRate?.email || '').toLowerCase();
+  const emailForRate = String(bodyForRate?.email || '').trim().toLowerCase();
   const rlIp = rateLimit({ key: `login:ip:${ip}`, limit: 10, windowMs: 10 * 60 * 1000 });
   if (!rlIp.allowed) return rateLimitResponse(rlIp);
   if (emailForRate) { const rlEmail = rateLimit({ key: `login:email:${emailForRate}`, limit: 5, windowMs: 10 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
@@ -19,24 +23,25 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
+      logLogin('validation_failed', { ip, issues: parsed.error.errors.map((issue) => issue.message) });
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
     }
     const { email, password } = parsed.data;
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
-
-    if (user.globalRole !== 'platform_admin') {
-      const allowed = await prisma.allowedUser.findFirst({ where: { email, active: true } });
-      if (!allowed) {
-        return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
-      }
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) {
+      logLogin('invalid_credentials', { ip, email: normalizedEmail, reason: 'user_not_found' });
+      return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
     }
 
     const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+    if (!ok) {
+      logLogin('invalid_credentials', { ip, email: normalizedEmail, userId: user.id, reason: 'password_mismatch' });
+      return NextResponse.json({ error: 'Credenciais inválidas' }, { status: 401 });
+    }
 
-    // Platform admin: pode logar sem tenant
+    // Platform admin: mantém o comportamento atual, sem exigir tenant/AllowedUser.
     if (user.globalRole === 'platform_admin') {
       await setSessionCookie({
         userId: user.id,
@@ -47,58 +52,96 @@ export async function POST(req: Request) {
         tenantSlug: '',
         globalRole: 'platform_admin',
       });
-      // Não há tenant para logar audit nessa fase — registra em audit do primeiro tenant se existir,
-      // ou apenas console (poderíamos ter audit global; por ora omitimos).
+      logLogin('platform_admin_success', { ip, email: normalizedEmail, userId: user.id });
       return NextResponse.json({ ok: true, platformAdmin: true });
     }
 
-    const tu = await prisma.tenantUser.findFirst({
-      where: { userId: user.id, status: 'active' },
-      include: { tenant: true },
-      orderBy: { createdAt: 'asc' },
+    const memberships = await prisma.tenantUser.findMany({
+      where: {
+        userId: user.id,
+        status: 'active',
+      },
+      include: {
+        tenant: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
-    if (!tu) return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
 
-    const allowedTenant = await prisma.allowedUser.findFirst({
-      where: { email, tenantId: tu.tenantId, active: true },
-    });
-    if (!allowedTenant) {
-      return NextResponse.json({ error: 'Este e-mail não possui acesso autorizado.' }, { status: 403 });
+    if (memberships.length === 0) {
+      logLogin('forbidden_no_active_membership', { ip, email: normalizedEmail, userId: user.id });
+      return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
     }
 
-    if (BLOCKED.has(String(tu.tenant.status))) {
-      return NextResponse.json(
-        {
-          error: 'Acesso bloqueado para esta empresa. Entre em contato com o administrador.',
-          code: 'tenant_blocked',
-          status: tu.tenant.status,
+    const allowedUsers = await prisma.allowedUser.findMany({
+      where: {
+        email: normalizedEmail,
+        active: true,
+        tenantId: {
+          in: memberships.map((membership) => membership.tenantId),
         },
-        { status: 403 },
-      );
+      },
+    });
+
+    const allowedByTenant = new Map(allowedUsers.map((allowed) => [allowed.tenantId, allowed]));
+
+    const selectedMembership = memberships.find((membership) => {
+      const allowed = allowedByTenant.get(membership.tenantId);
+      return allowed && !BLOCKED.has(String(membership.tenant.status));
+    });
+
+    if (!selectedMembership) {
+      logLogin('forbidden_no_active_allowed_tenant', {
+        ip,
+        email: normalizedEmail,
+        userId: user.id,
+        memberships: memberships.length,
+        allowedUsers: allowedUsers.length,
+      });
+      return NextResponse.json({ error: 'Este e-mail não possui uma empresa ativa associada.' }, { status: 403 });
     }
+
+    const selectedAllowedUser = allowedByTenant.get(selectedMembership.tenantId);
 
     await setSessionCookie({
       userId: user.id,
-      tenantId: tu.tenantId,
-      role: tu.role,
+      tenantId: selectedMembership.tenantId,
+      role: selectedMembership.role,
       email: user.email,
       name: user.name,
-      tenantSlug: tu.tenant.slug,
-      globalRole: user.globalRole || null,
+      tenantSlug: selectedMembership.tenant.slug,
+      globalRole: null,
     });
 
-    // Atualiza lastLoginAt do tenant
-    await prisma.tenant.update({ where: { id: tu.tenantId }, data: { lastLoginAt: new Date() } });
+    await prisma.tenant.update({ where: { id: selectedMembership.tenantId }, data: { lastLoginAt: new Date() } });
 
-    await logAudit({
-      tenantId: tu.tenantId, userId: user.id,
-      entityType: 'session', entityId: user.id, action: 'auth.login',
-      metadata: { email: user.email, role: tu.role },
+    try {
+      await logAudit({
+        tenantId: selectedMembership.tenantId, userId: user.id,
+        entityType: 'session', entityId: user.id, action: 'auth.login',
+        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: selectedAllowedUser?.id },
+      });
+    } catch (auditError) {
+      const err = auditError as { message?: string; code?: string; meta?: unknown; stack?: string };
+      console.error('[auth/login][POST][audit]', {
+        message: err?.message,
+        code: err?.code,
+        meta: err?.meta,
+        stack: err?.stack,
+      });
+    }
+
+    logLogin('success', { ip, email: normalizedEmail, userId: user.id, tenantId: selectedMembership.tenantId, role: selectedMembership.role });
+    return NextResponse.json({ ok: true, platformAdmin: false });
+  } catch (error: unknown) {
+    const err = error as { message?: string; code?: string; meta?: unknown; stack?: string };
+    console.error('[auth/login][POST]', {
+      message: err?.message,
+      code: err?.code,
+      meta: err?.meta,
+      stack: err?.stack,
     });
-
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error('login error', e);
     return NextResponse.json({ error: 'Erro no login' }, { status: 500 });
   }
 }
