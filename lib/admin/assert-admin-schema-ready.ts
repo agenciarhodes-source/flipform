@@ -9,16 +9,19 @@ export type AdminSchemaCheck = {
   ok: boolean;
   detail?: string;
   suggestion?: string;
-  essential?: boolean;
+  runtimeEssential?: boolean;
+  diagnosticEssential?: boolean;
 };
+
+export type ReadinessProfile = 'runtime' | 'diagnostic';
 
 export class AdminSchemaNotReadyError extends Error {
   code = 'DB_SCHEMA_NOT_READY';
   status = 503;
   details: { code: 'DB_SCHEMA_NOT_READY'; missing: string[]; checks: AdminSchemaCheck[] };
 
-  constructor(checks: AdminSchemaCheck[]) {
-    const failed = checks.filter((check) => check.essential !== false && !check.ok);
+  constructor(checks: AdminSchemaCheck[], profile: ReadinessProfile = 'runtime') {
+    const failed = checks.filter((check) => isEssential(check, profile) && !check.ok);
     super('DB_SCHEMA_NOT_READY');
     this.name = 'AdminSchemaNotReadyError';
     this.details = {
@@ -29,19 +32,24 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const ESSENTIAL_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions'];
-const OPTIONAL_TABLES = ['audit_logs', 'payments'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments'];
+const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
-  tenants: ['id', 'name', 'slug', 'status', 'plan_id', 'internal_notes', 'created_at', 'updated_at'],
+  tenants: ['id', 'name', 'slug', 'status', 'plan_id', 'internal_notes', 'last_login_at', 'created_at', 'updated_at'],
   users: ['id', 'name', 'email', 'password_hash', 'global_role', 'created_at', 'updated_at'],
   tenant_users: ['id', 'tenant_id', 'user_id', 'role', 'status', 'created_at'],
   allowed_users: ['id', 'email', 'tenant_id', 'role', 'active', 'status', 'source', 'invited_by', 'accepted_at', 'created_at', 'updated_at'],
   subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'provider', 'payment_required', 'payment_provider', 'created_at', 'updated_at'],
+  plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
 };
 
 function add(checks: AdminSchemaCheck[], check: AdminSchemaCheck) {
-  checks.push({ essential: true, ...check });
+  checks.push({ runtimeEssential: true, diagnosticEssential: true, ...check });
+}
+
+function isEssential(check: AdminSchemaCheck, profile: ReadinessProfile) {
+  return profile === 'runtime' ? check.runtimeEssential !== false : check.diagnosticEssential !== false;
 }
 
 async function tableNames() {
@@ -92,12 +100,13 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const checks: AdminSchemaCheck[] = [];
   const tables = await tableNames();
 
-  for (const table of ESSENTIAL_TABLES) {
-    add(checks, { label: `table.${table}`, ok: tables.has(table), suggestion: 'Apply pending Prisma migrations.' });
-  }
-
-  for (const table of OPTIONAL_TABLES) {
-    add(checks, { label: `table.${table}`, ok: tables.has(table), essential: false, suggestion: 'Optional for manual admin access.' });
+  for (const table of REQUIRED_TABLES) {
+    add(checks, {
+      label: `table.${table}`,
+      ok: tables.has(table),
+      suggestion: `Aplique as migrations: npx prisma migrate deploy`,
+      runtimeEssential: RUNTIME_REQUIRED_TABLES.has(table),
+    });
   }
 
   const columnMaps = new Map<string, Map<string, ColumnInfo>>();
@@ -105,7 +114,12 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     const tableColumns = tables.has(table) ? await columnsFor(table) : new Map<string, ColumnInfo>();
     columnMaps.set(table, tableColumns);
     for (const column of requiredColumns) {
-      add(checks, { label: `column.${table}.${column}`, ok: tableColumns.has(column), suggestion: `Column ${table}.${column} is required for manual admin access.` });
+      add(checks, {
+        label: `column.${table}.${column}`,
+        ok: tableColumns.has(column),
+        suggestion: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ...;`,
+        runtimeEssential: table in REQUIRED_COLUMNS,
+      });
     }
   }
 
@@ -127,78 +141,86 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     label: 'column.allowed_users.invited_by_nullable',
     ok: invitedBy?.is_nullable === 'YES',
     detail: invitedBy ? `nullable=${invitedBy.is_nullable}` : 'not found',
-    suggestion: 'The invited_by column must allow null values.',
+    suggestion: 'ALTER TABLE allowed_users ALTER COLUMN invited_by DROP NOT NULL;',
   });
 
-  add(checks, { label: 'index.users.email_unique', ok: hasUsersEmailUnique, suggestion: 'The users.email unique index is required.' });
-  add(checks, { label: 'index.tenants.slug_unique', ok: hasTenantsSlugUnique, suggestion: 'The tenants.slug unique index is required.' });
-  add(checks, { label: 'index.tenant_users.tenant_id_user_id_unique', ok: hasTenantUsersUnique, suggestion: 'The tenant_users tenant/user unique index is required.' });
+  add(checks, { label: 'index.users.email_unique', ok: hasUsersEmailUnique, suggestion: 'Aplique a migration que cria unique em users.email.' });
+  add(checks, { label: 'index.tenants.slug_unique', ok: hasTenantsSlugUnique, suggestion: 'Aplique a migration que cria unique em tenants.slug.' });
+  add(checks, { label: 'index.tenant_users.tenant_id_user_id_unique', ok: hasTenantUsersUnique, suggestion: 'Aplique a migration que cria unique em tenant_users(tenant_id, user_id).' });
   add(checks, {
     label: 'index.allowed_users.no_global_email_unique',
     ok: !hasAllowedGlobalEmailUnique,
     detail: hasAllowedGlobalEmailUnique ? indexes.filter((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email')).map((idx) => idx.indexname).join(', ') : undefined,
-    suggestion: 'Remove the legacy global email unique index from allowed_users.',
+    suggestion: 'ALTER TABLE allowed_users DROP CONSTRAINT IF EXISTS allowed_users_email_key; DROP INDEX IF EXISTS allowed_users_email_key; DROP INDEX IF EXISTS "AllowedUser_email_key";',
   });
   add(checks, {
     label: 'index.allowed_users.tenant_id_email_unique',
     ok: hasAllowedCompositeUnique,
-    suggestion: 'The allowed_users tenant/email unique index is required.',
+    suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS allowed_users_tenant_id_email_key ON allowed_users(tenant_id, email);',
   });
 
   const enums = await enumValues();
   add(checks, {
     label: 'enum.SubscriptionStatus.courtesy',
     ok: enumAcceptsValue(columnMaps.get('subscriptions')?.get('status'), enums, 'SubscriptionStatus', 'subscription_status', 'courtesy'),
-    suggestion: 'The subscriptions.status column must accept courtesy.',
+    suggestion: 'ALTER TYPE "SubscriptionStatus" ADD VALUE IF NOT EXISTS courtesy; ou use coluna text compatível.',
   });
   add(checks, {
     label: 'enum.TenantStatus.active',
     ok: enumAcceptsValue(columnMaps.get('tenants')?.get('status'), enums, 'TenantStatus', 'tenant_status', 'active'),
-    suggestion: 'The tenants.status column must accept active.',
+    suggestion: 'ALTER TYPE "TenantStatus" ADD VALUE IF NOT EXISTS active; ou use coluna text compatível.',
   });
   add(checks, {
     label: 'enum.Role.owner',
     ok: enumAcceptsValue(columnMaps.get('tenant_users')?.get('role'), enums, 'Role', 'role', 'owner'),
-    suggestion: 'The tenant_users.role column must accept owner.',
+    suggestion: 'ALTER TYPE "Role" ADD VALUE IF NOT EXISTS owner; ou use coluna text compatível.',
   });
 
   if (tables.has('plans') && columnMaps.get('plans')?.has('slug') && columnMaps.get('plans')?.has('is_active')) {
-    const activePlans = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      select count(*)::bigint as count
-      from plans
-      where is_active = true
-    `;
-    add(checks, {
-      label: 'plan.any.active',
-      ok: Number(activePlans?.[0]?.count ?? 0) > 0,
-      detail: `active=${String(activePlans?.[0]?.count ?? 0)}`,
-      suggestion: 'At least one active plan is required.',
-    });
-
     const plans = await prisma.$queryRaw<Array<{ slug: string; is_active: boolean }>>`
       select slug, is_active
       from plans
       where slug in ('starter', 'growth', 'pro')
     `;
+    const activePlanCount = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      select count(*)::bigint as count
+      from plans
+      where is_active = true
+    `;
+    add(checks, {
+      label: 'plan.any_active',
+      ok: Number(activePlanCount[0]?.count ?? 0) > 0,
+      detail: `active=${String(activePlanCount[0]?.count ?? 0)}`,
+      suggestion: 'Ative ou crie ao menos um plano antes de criar acesso manual.',
+      diagnosticEssential: true,
+      runtimeEssential: true,
+    });
     for (const slug of ['starter', 'growth', 'pro']) {
       const plan = plans.find((item) => item.slug === slug);
       add(checks, {
         label: `plan.${slug}.active`,
         ok: Boolean(plan?.is_active),
-        essential: false,
         detail: plan ? `active=${plan.is_active}` : 'not found',
-        suggestion: `Optional default plan '${slug}' is missing or inactive.`,
+        suggestion: `INSERT INTO plans (...) SELECT ... WHERE NOT EXISTS (SELECT 1 FROM plans WHERE slug = '${slug}');`,
+        runtimeEssential: false,
       });
     }
   } else {
-    add(checks, { label: 'plan.any.active', ok: false, detail: 'plans.slug/is_active unavailable', suggestion: 'The plans table must have slug and is_active.' });
+    add(checks, { label: 'plan.any_active', ok: false, detail: 'plans.slug/is_active unavailable', suggestion: 'Aplique a migration de reparo dos planos.' });
+    for (const slug of ['starter', 'growth', 'pro']) {
+      add(checks, { label: `plan.${slug}.active`, ok: false, detail: 'plans.slug/is_active unavailable', suggestion: 'Aplique a migration de reparo dos planos.', runtimeEssential: false });
+    }
   }
 
   return checks;
 }
 
-export async function assertAdminSchemaReady() {
+export function getFailedAdminSchemaChecks(checks: AdminSchemaCheck[], profile: ReadinessProfile = 'runtime') {
+  return checks.filter((check) => isEssential(check, profile) && !check.ok);
+}
+
+export async function assertAdminSchemaReady(profile: ReadinessProfile = 'runtime') {
   const checks = await runAdminSchemaReadinessChecks();
-  const failed = checks.filter((check) => check.essential !== false && !check.ok);
-  if (failed.length) throw new AdminSchemaNotReadyError(checks);
+  const failed = getFailedAdminSchemaChecks(checks, profile);
+  if (failed.length) throw new AdminSchemaNotReadyError(checks, profile);
 }

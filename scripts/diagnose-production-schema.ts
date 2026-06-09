@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { runAdminSchemaReadinessChecks } from '@/lib/admin/assert-admin-schema-ready';
+import { getFailedAdminSchemaChecks, runAdminSchemaReadinessChecks } from '@/lib/admin/assert-admin-schema-ready';
 
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL não configurado.');
@@ -14,7 +14,7 @@ async function main() {
   }
   console.log('=======================================================');
 
-  const failed = checks.filter((check) => check.essential !== false && !check.ok);
+  const failed = getFailedAdminSchemaChecks(checks, 'diagnostic');
   if (failed.length) {
     console.log(`Resultado: FAIL (${failed.length} item(ns) essencial(is) desalinhado(s))`);
     process.exitCode = 1;
