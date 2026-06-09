@@ -24,7 +24,10 @@ function getAdminAccessErrorMessage(raw: any, fallback: string) {
     P2003: 'Falha de vínculo no banco. Rode o diagnóstico/migration.',
   };
   const detailMessage = raw?.details?.message && raw.details.message !== code ? ` (${raw.details.message})` : '';
-  return `${messages[code] || raw?.error || fallback}${detailMessage}`;
+  const missing = Array.isArray(raw?.details?.missing) && raw.details.missing.length
+    ? ` Itens pendentes: ${raw.details.missing.slice(0, 6).join(', ')}${raw.details.missing.length > 6 ? '...' : ''}.`
+    : '';
+  return `${messages[code] || raw?.error || fallback}${detailMessage}${missing}`;
 }
 
 export default function AdminAccessPage() {
