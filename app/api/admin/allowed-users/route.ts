@@ -1,5 +1,5 @@
 import { getSession } from '@/lib/auth';
-import { ensureAdminSchemaReady } from '@/lib/admin/ensure-admin-schema';
+import { assertAdminSchemaReady } from '@/lib/admin/assert-admin-schema-ready';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
@@ -16,6 +16,8 @@ const ERROR_STATUS: Record<string, number> = {
   ADMIN_SCHEMA_NOT_READY: 503,
   P2002: 409,
   P2003: 409,
+  P2021: 500,
+  P2022: 500,
 };
 
 type AllowedUsersFilters = { q?: string; tenantId?: string; status?: string; active?: string };
@@ -48,7 +50,7 @@ export async function GET(req: Request) {
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
-    await ensureAdminSchemaReady();
+    await assertAdminSchemaReady();
 
     const { searchParams } = new URL(req.url);
     const filters: AllowedUsersFilters = {
@@ -96,6 +98,10 @@ export async function GET(req: Request) {
       details: details.details,
       stack: details.stack,
     });
+    if (details.code === 'DB_SCHEMA_NOT_READY') {
+      const schemaDetails = (details.details && typeof details.details === 'object') ? details.details : { code: 'DB_SCHEMA_NOT_READY' };
+      return adminError('Banco de dados não está alinhado com o schema.', details.status, schemaDetails);
+    }
     return adminError('Falha ao carregar acessos autorizados.', details.status, {
       code: details.code,
       prismaCode: details.prismaCode,
@@ -124,7 +130,7 @@ export async function POST(req: Request) {
   try {
     const rl = rateLimit({ key: `admin:allowed-users:post:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
     if (!rl.allowed) return rateLimitResponse(rl);
-    await ensureAdminSchemaReady();
+    await assertAdminSchemaReady();
 
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     payload = {
