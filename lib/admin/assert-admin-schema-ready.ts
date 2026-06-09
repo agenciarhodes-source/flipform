@@ -104,7 +104,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     add(checks, {
       label: `table.${table}`,
       ok: tables.has(table),
-      suggestion: `Aplique as migrations: npx prisma migrate deploy`,
+      suggestion: table === 'allowed_users' ? 'Aplique a migration 202605240000_ensure_allowed_users_table com npx prisma migrate deploy.' : `Aplique as migrations: npx prisma migrate deploy`,
       runtimeEssential: RUNTIME_REQUIRED_TABLES.has(table),
     });
   }
