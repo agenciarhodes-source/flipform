@@ -30,6 +30,7 @@ async function main() {
   console.log(`tenantId=${output.tenant.id}`);
   console.log(`userId=${output.user.id}`);
   console.log(`allowedUserId=${output.allowedUser.id}`);
+  console.log(`subscriptionId=${output.subscription.id}`);
   console.log('success=true');
 }
 
