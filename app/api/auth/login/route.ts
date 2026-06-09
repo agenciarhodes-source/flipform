@@ -6,6 +6,23 @@ import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
+const LOGIN_ALLOWED_STATUSES = ['active', 'accepted', 'pending'];
+const PREFERRED_ALLOWED_STATUSES = new Set(['active', 'accepted']);
+
+function logLogin(event: string, metadata: Record<string, unknown>) {
+  console.info('[auth/login][POST]', { event, ...metadata });
+}
+
+function tenantBlockedResponse(status: unknown) {
+  return NextResponse.json(
+    {
+      error: 'Acesso bloqueado para esta empresa. Entre em contato com o administrador.',
+      code: 'tenant_blocked',
+      status,
+    },
+    { status: 403 },
+  );
+}
 
 function logLogin(event: string, metadata: Record<string, unknown>) {
   console.info('[auth/login][POST]', { event, ...metadata });
