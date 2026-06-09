@@ -31,7 +31,8 @@
     "env:install-check": "bash scripts/check-install-environment.sh",
     "admin:diagnose-access": "tsx scripts/diagnose-admin-access.ts",
     "admin:create-test-access": "tsx scripts/create-manual-test-access.ts",
-    "admin:diagnose-schema": "tsx scripts/diagnose-production-schema.ts"
+    "admin:diagnose-schema": "tsx scripts/diagnose-production-schema.ts",
+    "admin:repair-schema": "tsx scripts/repair-production-schema.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -171,7 +171,9 @@ async function ensureAllowedUsersTableForLegacyDatabases() {
 }
 
 export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[]> {
-  await ensureAllowedUsersTableForLegacyDatabases();
+  if (process.env.ADMIN_SCHEMA_RUNTIME_REPAIR === 'true') {
+    await ensureAllowedUsersTableForLegacyDatabases();
+  }
 
   const checks: AdminSchemaCheck[] = [];
   const tables = await tableNames();
