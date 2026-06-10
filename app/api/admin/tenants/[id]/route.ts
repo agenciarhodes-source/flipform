@@ -21,6 +21,6 @@ export const GET = withPlatformAdmin(async (_req, _session, ctx: { params: { id:
     ...tenant,
     leadsCount: tenant._count.leads,
     plan: tenant.plan ? { ...tenant.plan, price: Number(tenant.plan.price) } : null,
-    payments: tenant.payments.map((p) => ({ ...p, value: Number(p.value) })),
+    payments: (tenant.payments as Array<{ value: unknown; [key: string]: unknown }>).map((p) => ({ ...p, value: Number(p.value) })),
   } });
 });

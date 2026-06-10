@@ -33,9 +33,11 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
   const statusMap: Record<string, string> = { open: 'Aberto', won: 'Ganho', lost: 'Perdido' };
   const tempMap: Record<string, string> = { cold: 'Frio', warm: 'Morno', hot: 'Quente' };
 
-  const rows = leads.map((l) => {
-    const pending = l.tasks.filter((t) => t.status === 'pending').length;
-    const overdue = l.tasks.filter((t) => t.status === 'pending' && t.dueDate && t.dueDate < now).length;
+  type LeadExportRow = typeof leads[number];
+  const rows = (leads as LeadExportRow[]).map((l) => {
+    type TaskRow = { status: string; dueDate: Date | null };
+    const pending = (l.tasks as TaskRow[]).filter((t) => t.status === 'pending').length;
+    const overdue = (l.tasks as TaskRow[]).filter((t) => t.status === 'pending' && t.dueDate && t.dueDate < now).length;
     return {
       id: l.id,
       nome: l.name,

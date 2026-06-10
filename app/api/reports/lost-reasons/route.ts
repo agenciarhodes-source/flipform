@@ -17,7 +17,7 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     _count: { _all: true },
   });
   const data = grouped
-    .map((g) => ({ reason: g.lostReason || 'Não informado', count: g._count._all }))
-    .sort((a, b) => b.count - a.count);
+    .map((g: {lostReason: string | null; _count: {_all: number}}) => ({ reason: g.lostReason || 'Não informado', count: g._count._all }))
+    .sort((a: {count: number}, b: {count: number}) => b.count - a.count);
   return NextResponse.json({ data });
 });

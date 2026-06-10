@@ -50,7 +50,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
       if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       await tx.form.update({
         where: { id: ctx.params.id },
         data: {

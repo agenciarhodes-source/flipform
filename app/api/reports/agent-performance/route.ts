@@ -17,18 +17,23 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     prisma.lead.groupBy({ by: ['assignedTo'], where: { ...ctx.leadsWhere, status: 'lost' }, _count: { _all: true } }),
   ]);
 
-  const userIds = byAgent.map((g) => g.assignedTo).filter(Boolean) as string[];
+  type GroupRow = { assignedTo: string | null; _count: { _all: number }; [key: string]: unknown };
+  type UserRow = { id: string; name: string; email: string };
+  const typedByAgent = byAgent as GroupRow[];
+  const typedWon = wonByAgent as GroupRow[];
+  const typedLost = lostByAgent as GroupRow[];
+  const userIds = typedByAgent.map((g) => g.assignedTo).filter(Boolean) as string[];
   const users = userIds.length
     ? await prisma.user.findMany({
         where: { id: { in: userIds }, tenantUsers: { some: { tenantId: ctx.tenantId } } },
         select: { id: true, name: true, email: true },
       })
     : [];
-  const wonMap = new Map(wonByAgent.map((g) => [g.assignedTo, g._count._all]));
-  const lostMap = new Map(lostByAgent.map((g) => [g.assignedTo, g._count._all]));
+  const wonMap = new Map(typedWon.map((g) => [g.assignedTo, g._count._all]));
+  const lostMap = new Map(typedLost.map((g) => [g.assignedTo, g._count._all]));
 
-  const data = byAgent.map((g) => {
-    const u = g.assignedTo ? users.find((x) => x.id === g.assignedTo) : null;
+  const data = typedByAgent.map((g) => {
+    const u = g.assignedTo ? (users as UserRow[]).find((x) => x.id === g.assignedTo) : null;
     const total = g._count._all;
     const won = wonMap.get(g.assignedTo) || 0;
     const lost = lostMap.get(g.assignedTo) || 0;
@@ -41,6 +46,6 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
       lost,
       conversionRate: total > 0 ? Math.round((won / total) * 100) : 0,
     };
-  }).sort((a, b) => b.total - a.total);
+  }).sort((a, b) => (b.total as number) - (a.total as number));
   return NextResponse.json({ data });
 });

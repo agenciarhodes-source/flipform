@@ -21,14 +21,14 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     orderBy: { orderIndex: 'asc' },
     select: { id: true, name: true, color: true, orderIndex: true, pipelineId: true, isArchived: true },
   });
-  const data = stages.map((s) => ({
+  const data = (stages as Array<{id: string; name: string; color: string; orderIndex: number; [key: string]: unknown}>).map((s) => ({
     stageId: s.id,
     name: s.name,
     color: s.color,
     orderIndex: s.orderIndex,
     pipelineId: s.pipelineId,
     isArchived: s.isArchived,
-    count: grouped.find((g) => g.stageId === s.id)?._count?._all || 0,
+    count: (grouped as Array<{stageId: string; _count: {_all: number}}>).find((g) => g.stageId === s.id)?._count?._all || 0,
   }));
   return NextResponse.json({ data });
 });

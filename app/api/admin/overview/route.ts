@@ -20,6 +20,7 @@ export const GET = withPlatformAdmin(async () => {
     where: { status: { in: ['active', 'past_due'] } },
     include: { plan: { select: { price: true, billingCycle: true } } },
   });
+
   let mrr = 0;
   for (const t of tenantsWithPlan) {
     if (!t.plan) continue;
@@ -29,9 +30,12 @@ export const GET = withPlatformAdmin(async () => {
 
   // Últimos tenants criados
   const recentTenants = await prisma.tenant.findMany({
-    orderBy: { createdAt: 'desc' }, take: 5,
+    orderBy: { createdAt: 'desc' },
+    take: 5,
     include: { plan: { select: { name: true } } },
   });
+
+  type RecentTenant = typeof recentTenants[number];
 
   return NextResponse.json({
     tenants: { total: totalTenants, active: activeTenants, suspended, blocked, pastDue, trial },
@@ -39,9 +43,13 @@ export const GET = withPlatformAdmin(async () => {
     leads: totalLeads,
     forms: totalForms,
     mrr: Math.round(mrr * 100) / 100,
-    recentTenants: recentTenants.map((t) => ({
-      id: t.id, name: t.name, slug: t.slug, status: t.status,
-      planName: t.plan?.name || null, createdAt: t.createdAt,
+    recentTenants: (recentTenants as RecentTenant[]).map((t) => ({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      status: t.status,
+      planName: t.plan?.name || null,
+      createdAt: t.createdAt,
     })),
   });
 });

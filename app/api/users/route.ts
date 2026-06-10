@@ -12,7 +12,7 @@ export const GET = withPermission('USERS_VIEW', async (_req, session) => {
     orderBy: { createdAt: 'asc' },
   });
   return NextResponse.json({
-    users: tenantUsers.map((tu) => ({
+    users: tenantUsers.map((tu: {id: string; userId: string; role: string; status: string; createdAt: Date; user: {id: string; name: string; email: string; avatarUrl?: string | null; createdAt: Date}}) => ({
       tenantUserId: tu.id,
       userId: tu.userId,
       name: tu.user.name,

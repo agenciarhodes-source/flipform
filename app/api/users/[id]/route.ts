@@ -37,7 +37,7 @@ export const PUT = withPermission('USERS_EDIT', async (req, session, ctx: { para
     if (parsed.data.status) updates.status = parsed.data.status;
     if (parsed.data.name) userUpdates.name = parsed.data.name;
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       if (Object.keys(updates).length) await tx.tenantUser.update({ where: { id: target.id }, data: updates });
       if (Object.keys(userUpdates).length) await tx.user.update({ where: { id: target.userId }, data: userUpdates });
     });

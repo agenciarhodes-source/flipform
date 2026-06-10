@@ -34,7 +34,7 @@ export const GET = withPermission('REPORTS_VIEW', async (_req, session) => {
   return NextResponse.json({
     pipelines,
     forms,
-    users: users.map((tu) => ({ id: tu.user.id, name: tu.user.name, email: tu.user.email, role: tu.role })),
-    sources: sources.map((s) => ({ value: s.source, count: s._count._all })),
+    users: (users as Array<{ role: string; user: { id: string; name: string; email: string } }>).map((tu) => ({ id: tu.user.id, name: tu.user.name, email: tu.user.email, role: tu.role })),
+    sources: (sources as Array<{ source: string; _count: { _all: number } }>).map((s) => ({ value: s.source, count: s._count._all })),
   });
 });

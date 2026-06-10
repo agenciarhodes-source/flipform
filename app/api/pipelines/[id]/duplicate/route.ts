@@ -17,7 +17,7 @@ export const POST = withPermission('PIPELINES_CREATE', async (_req, session, ctx
       isDefault: false,
       isArchived: false,
       stages: {
-        create: source.stages.map((s) => ({
+        create: (source.stages as Array<{ name: string; color: string; orderIndex: number; isArchived: boolean }>).map((s) => ({
           name: s.name, color: s.color, orderIndex: s.orderIndex, isArchived: s.isArchived,
         })),
       },

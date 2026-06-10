@@ -17,7 +17,7 @@ export const GET = withAuth(async (req, session) => {
       where: { tenantId: session.tenantId, pipelineId },
       select: { id: true },
     });
-    leadIds = leads.map((l) => l.id);
+    leadIds = (leads as Array<{ id: string }>).map((l) => l.id);
   } else {
     return NextResponse.json({ indicators: {} });
   }

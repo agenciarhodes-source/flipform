@@ -55,7 +55,7 @@ export async function reconcileSubscription(subscriptionId: string): Promise<Rec
 
     const changed = nextSubscriptionStatus !== subscription.status || nextTenantStatus !== subscription.tenant.status;
     if (changed) {
-      await prisma.$transaction(async (tx) => {
+      await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
         if (nextSubscriptionStatus !== subscription.status) {
           await tx.subscription.update({ where: { id: subscription.id }, data: { status: nextSubscriptionStatus as any, gracePeriodEndsAt: nextSubscriptionStatus === 'active' ? null : subscription.gracePeriodEndsAt } });
         }

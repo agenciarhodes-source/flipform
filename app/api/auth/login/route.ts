@@ -66,17 +66,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
     }
 
+    type MembershipRow = { tenantId: string; role: string; tenant: { slug: string; status: unknown }; [key: string]: unknown };
+    type AllowedRow = { tenantId: string; id: string; [key: string]: unknown };
+    const typedMemberships = memberships as MembershipRow[];
+
     const allowedUsers = await prisma.allowedUser.findMany({
       where: {
         email: normalizedEmail,
         active: true,
         status: 'active',
-        tenantId: { in: memberships.map((membership) => membership.tenantId) },
+        tenantId: { in: typedMemberships.map((m) => m.tenantId) },
       },
     });
 
-    const allowedByTenant = new Map(allowedUsers.map((allowed) => [allowed.tenantId, allowed]));
-    const selectedMembership = memberships.find((membership) => {
+    const allowedByTenant = new Map<string, AllowedRow>((allowedUsers as AllowedRow[]).map((allowed) => [allowed.tenantId, allowed]));
+    const selectedMembership = typedMemberships.find((membership) => {
       const allowed = allowedByTenant.get(membership.tenantId);
       return allowed && !BLOCKED.has(String(membership.tenant.status));
     });
@@ -110,7 +114,7 @@ export async function POST(req: Request) {
       await logAudit({
         tenantId: selectedMembership.tenantId, userId: user.id,
         entityType: 'session', entityId: user.id, action: 'auth.login',
-        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: selectedAllowedUser?.id },
+        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: (selectedAllowedUser as AllowedRow | undefined)?.id },
       });
     } catch (auditError) {
       const err = auditError as { message?: string; code?: string; meta?: unknown; stack?: string };

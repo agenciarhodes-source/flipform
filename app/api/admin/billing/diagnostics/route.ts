@@ -12,7 +12,8 @@ export const GET = withPlatformAdmin(async () => {
     },
   });
 
-  const tenantIds = Array.from(new Set(subs.map((s) => s.tenantId)));
+  type SubRow = typeof subs[number];
+  const tenantIds = Array.from(new Set((subs as SubRow[]).map((s) => s.tenantId)));
   const webhookEvents = tenantIds.length
     ? await prisma.webhookEvent.findMany({
         where: { tenantId: { in: tenantIds }, provider: 'asaas' },
@@ -45,7 +46,7 @@ export const GET = withPlatformAdmin(async () => {
     if (!lastReconciledByTenant.has(log.tenantId)) lastReconciledByTenant.set(log.tenantId, log.createdAt);
   }
 
-  const rows = await Promise.all(subs.map(async (s) => {
+  const rows = await Promise.all((subs as SubRow[]).map(async (s) => {
     let providerSubscriptionStatus: string | null = null;
     if (s.providerSubscriptionId && s.status !== 'trialing') {
       try {
