@@ -74,16 +74,21 @@ export async function GET(req: Request) {
       prisma.subscription.findMany({ select: { id: true, tenantId: true, planId: true, status: true, provider: true, paymentRequired: true, paymentProvider: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }),
     ]);
 
-    const tenantsById = new Map(tenants.map((tenant) => [tenant.id, tenant]));
-    const plansById = new Map(plans.map((plan) => [plan.id, plan]));
-    const subscriptionByTenant = new Map(subscriptions.map((subscription) => [subscription.tenantId, subscription]));
-    const items = allowedUsers.map((item) => {
-      const tenant = tenantsById.get(item.tenantId) || null;
-      const plan = tenant?.planId ? plansById.get(tenant.planId) || null : null;
+    type TenantRow = { id: string; name: string; slug: string; status: string; planId: string | null };
+    type PlanRow = { id: string; name: string; slug: string; [key: string]: unknown };
+    type SubscriptionRow = { id: string; tenantId: string; planId: string; status: string; provider: string; paymentRequired: boolean; paymentProvider: string | null; createdAt: Date; updatedAt: Date };
+    type AllowedUserRow = { id: string; email: string; tenantId: string; role: string; active: boolean; status: string; source: string; [key: string]: unknown };
+
+    const tenantsById = new Map<string, TenantRow>((tenants as TenantRow[]).map((tenant) => [tenant.id, tenant]));
+    const plansById = new Map<string, PlanRow>((plans as PlanRow[]).map((plan) => [plan.id, plan]));
+    const subscriptionByTenant = new Map<string, SubscriptionRow>((subscriptions as SubscriptionRow[]).map((subscription) => [subscription.tenantId, subscription]));
+    const items = (allowedUsers as AllowedUserRow[]).map((item) => {
+      const tenant = tenantsById.get(item.tenantId) ?? null;
+      const plan = tenant?.planId ? plansById.get(tenant.planId) ?? null : null;
       return {
         ...item,
         tenant: tenant ? { ...tenant, plan: plan ? { name: plan.name, slug: plan.slug } : null } : null,
-        subscription: subscriptionByTenant.get(item.tenantId) || null,
+        subscription: subscriptionByTenant.get(item.tenantId) ?? null,
       };
     });
 

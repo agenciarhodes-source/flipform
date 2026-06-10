@@ -2,6 +2,27 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
 import { adminOk, adminError } from '@/lib/api/admin-response';
 
+type PlanWithCount = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: unknown;
+  billingCycle: string;
+  maxUsers: number;
+  maxForms: number;
+  maxPipelines: number;
+  maxLeadsPerMonth: number;
+  canUseReports: boolean;
+  canExportCsv: boolean;
+  canUseCustomBranding: boolean;
+  canUseMetaPixel: boolean;
+  canUseWebhooks: boolean;
+  canUseTasks: boolean;
+  isActive: boolean;
+  _count: { tenants: number; subscriptions: number };
+};
+
 export const GET = withPlatformAdmin(async () => {
   try {
     const plans = await prisma.plan.findMany({
@@ -10,7 +31,7 @@ export const GET = withPlatformAdmin(async () => {
     });
 
     return adminOk({
-      plans: plans.map((p) => ({
+      plans: (plans as PlanWithCount[]).map((p) => ({
         id: p.id,
         name: p.name,
         slug: p.slug,
@@ -32,8 +53,16 @@ export const GET = withPlatformAdmin(async () => {
         subscriptionsCount: p._count.subscriptions,
       })),
     });
-  } catch (error: any) {
-    console.error('[admin/plans][GET]', { message: error?.message, code: error?.code, meta: error?.meta, stack: error?.stack });
-    return adminError('Falha ao carregar planos.', 500, { code: 'ADMIN_PLANS_LOAD_FAILED', prismaCode: error?.code });
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('[admin/plans][GET]', {
+      message: err.message,
+      stack: err.stack,
+      code: (error as { code?: string })?.code,
+    });
+    return adminError('Falha ao carregar planos.', 500, {
+      code: 'ADMIN_PLANS_LOAD_FAILED',
+      prismaCode: (error as { code?: string })?.code,
+    });
   }
 });
