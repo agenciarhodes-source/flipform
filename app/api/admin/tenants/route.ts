@@ -7,7 +7,12 @@ export const GET = withPlatformAdmin(async (req) => {
   const status = searchParams.get('status');
   const q = searchParams.get('q');
 
-  const where: any = {};
+  type TenantWhere = {
+    status?: string;
+    OR?: Array<{ name?: { contains: string; mode: 'insensitive' }; slug?: { contains: string; mode: 'insensitive' } }>;
+  };
+
+  const where: TenantWhere = {};
   if (status && status !== 'all') where.status = status;
   if (q) where.OR = [
     { name: { contains: q, mode: 'insensitive' } },
@@ -23,8 +28,10 @@ export const GET = withPlatformAdmin(async (req) => {
     },
   });
 
+  type TenantRow = typeof tenants[number];
+
   return NextResponse.json({
-    tenants: tenants.map((t) => ({
+    tenants: (tenants as TenantRow[]).map((t) => ({
       id: t.id,
       name: t.name,
       slug: t.slug,
