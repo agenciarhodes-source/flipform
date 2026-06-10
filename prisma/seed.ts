@@ -1,4 +1,8 @@
-import { PrismaClient, Role, LeadTemperature, LeadStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+
+type Role = 'owner' | 'admin' | 'manager' | 'agent' | 'viewer';
+type LeadTemperature = 'cold' | 'warm' | 'hot';
+type LeadStatus = 'open' | 'won' | 'lost';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -77,9 +81,9 @@ async function main() {
 
   await prisma.tenantUser.createMany({
     data: [
-      { tenantId: tenant.id, userId: owner.id, role: Role.owner },
-      { tenantId: tenant.id, userId: manager.id, role: Role.manager },
-      { tenantId: tenant.id, userId: agent.id, role: Role.agent },
+      { tenantId: tenant.id, userId: owner.id, role: 'owner' },
+      { tenantId: tenant.id, userId: manager.id, role: 'manager' },
+      { tenantId: tenant.id, userId: agent.id, role: 'agent' },
     ],
   });
 
