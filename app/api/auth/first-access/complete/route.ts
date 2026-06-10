@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   const { rec } = resolved;
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const hashed = await hashPassword(password);
       let user = await tx.user.findUnique({ where: { email: rec.email } });
       if (!user) {

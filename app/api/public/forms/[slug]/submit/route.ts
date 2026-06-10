@@ -19,7 +19,7 @@ import { logAudit } from '@/lib/audit';
 export async function POST(req: Request, ctx: { params: { slug: string } }) {
   const slug = ctx.params.slug;
   try {
-    let body: any;
+    let body: unknown;
     try {
       body = await req.json();
     } catch {
@@ -57,13 +57,14 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (etapa inicial arquivada).' }, { status: 410 });
     }
 
-    const fieldsById = new Map(form.fields.map((f) => [f.id, f]));
+    type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; [key: string]: unknown };
+    const fieldsById = new Map<string, FieldRow>((form.fields as FieldRow[]).map((f) => [f.id, f]));
 
     // Filtra apenas answers com fieldId válido para este form
     const cleanAnswers = parsed.data.answers
       .filter((a) => fieldsById.has(a.fieldId))
       .map((a) => {
-        const f = fieldsById.get(a.fieldId)!;
+        const f = fieldsById.get(a.fieldId) as FieldRow;
         return {
           fieldId: f.id,
           label: f.label, // sempre derivamos do servidor
@@ -73,13 +74,13 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       });
 
     // Validar campos obrigatórios
-    const isEmpty = (v: any) =>
+    const isEmpty = (v: unknown) =>
       v === undefined ||
       v === null ||
       v === '' ||
       (Array.isArray(v) && v.length === 0);
 
-    const missingRequired = form.fields
+    const missingRequired = (form.fields as FieldRow[])
       .filter((f) => f.isRequired)
       .filter((f) => {
         const a = cleanAnswers.find((x) => x.fieldId === f.id);
@@ -90,7 +91,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json(
         {
           error: `Campo obrigatório não preenchido: ${missingRequired[0].label}.`,
-          missingFields: missingRequired.map((f) => ({ id: f.id, label: f.label })),
+          missingFields: (missingRequired as FieldRow[]).map((f) => ({ id: f.id, label: f.label })),
         },
         { status: 400 },
       );
@@ -118,7 +119,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const phone = pickByType(['phone']);
 
     // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
-    const lead = await prisma.$transaction(async (tx) => {
+    const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       const created = await tx.lead.create({
         data: {
           tenantId: form.tenantId,

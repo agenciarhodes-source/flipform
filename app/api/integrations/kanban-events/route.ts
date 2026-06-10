@@ -18,7 +18,7 @@ export const PUT = withAuth(async (req, session) => {
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: 'Payload inválido' }, { status: 400 });
 
-  await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
     await tx.kanbanStageTrackingEvent.deleteMany({ where: { tenantId: session.tenantId } });
     if (parsed.data.length) {
       await tx.kanbanStageTrackingEvent.createMany({ data: parsed.data.map((e) => ({ tenantId: session.tenantId, stageId: e.stageId, pipelineId: e.pipelineId || null, provider: e.provider, eventName: e.eventName, customEventName: e.customEventName || null, enabled: e.enabled })) });

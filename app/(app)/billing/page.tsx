@@ -41,7 +41,7 @@ export default async function BillingPage() {
           <p className="text-sm text-muted-foreground">Nenhuma cobrança encontrada.</p>
         ) : (
           <ul className="space-y-1 text-sm">
-            {payments.map((p) => (
+            {(payments as Array<{id: string; status: string; value: unknown; invoiceUrl?: string | null}>).map((p) => (
               <li key={p.id}>
                 <Badge variant={variantForStatus(p.status)}>{p.status}</Badge> - R$ {Number(p.value).toFixed(2)}{' '}
                 {p.invoiceUrl ? <a href={p.invoiceUrl} className="underline" target="_blank" rel="noreferrer">ver fatura</a> : ''}

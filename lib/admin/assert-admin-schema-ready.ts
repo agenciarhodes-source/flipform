@@ -58,17 +58,17 @@ async function tableNames() {
     from information_schema.tables
     where table_schema = 'public'
   `;
-  return new Set(rows.map((row) => row.table_name));
+  return new Set((rows as Array<{ table_name: string }>).map((row) => row.table_name));
 }
 
 async function columnsFor(tableName: string) {
-  const rows = await prisma.$queryRawUnsafe<ColumnInfo[]>(
+  const rows = (await prisma.$queryRawUnsafe(
     `select column_name, data_type, udt_name, is_nullable
      from information_schema.columns
      where table_schema = 'public' and table_name = $1`,
     tableName,
-  );
-  return new Map(rows.map((row) => [row.column_name, row]));
+  )) as ColumnInfo[];
+  return new Map((rows as ColumnInfo[]).map((row) => [row.column_name, row]));
 }
 
 async function enumValues() {
@@ -111,8 +111,9 @@ async function allowedUsersLooksReady() {
     from pg_indexes
     where schemaname = 'public' and tablename = 'allowed_users'
   `;
-  const hasCompositeUnique = indexes.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
-  const hasGlobalEmailUnique = indexes.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
+  const typedIdxLocal = indexes as IndexInfo[];
+  const hasCompositeUnique = typedIdxLocal.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
+  const hasGlobalEmailUnique = typedIdxLocal.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
   return hasCompositeUnique && !hasGlobalEmailUnique && columns.get('invited_by')?.is_nullable === 'YES';
 }
 
@@ -208,13 +209,15 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
       and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users')
   `;
 
-  const hasUsersEmailUnique = indexes.some((idx) => idx.tablename === 'users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email'));
-  const hasTenantsSlugUnique = indexes.some((idx) => idx.tablename === 'tenants' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'slug'));
-  const hasTenantUsersUnique = indexes.some((idx) => idx.tablename === 'tenant_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'user_id'));
-  const hasAllowedCompositeUnique = indexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
-  const hasAllowedGlobalEmailUnique = indexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
+  type IdxRow = IndexInfo;
+  const typedIndexes = indexes as IdxRow[];
+  const hasUsersEmailUnique = typedIndexes.some((idx) => idx.tablename === 'users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email'));
+  const hasTenantsSlugUnique = typedIndexes.some((idx) => idx.tablename === 'tenants' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'slug'));
+  const hasTenantUsersUnique = typedIndexes.some((idx) => idx.tablename === 'tenant_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'user_id'));
+  const hasAllowedCompositeUnique = typedIndexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
+  const hasAllowedGlobalEmailUnique = typedIndexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
 
-  const invitedBy = columnMaps.get('allowed_users')?.get('invited_by');
+  const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
   add(checks, {
     label: 'column.allowed_users.invited_by_nullable',
     ok: invitedBy?.is_nullable === 'YES',
@@ -228,7 +231,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, {
     label: 'index.allowed_users.no_global_email_unique',
     ok: !hasAllowedGlobalEmailUnique,
-    detail: hasAllowedGlobalEmailUnique ? indexes.filter((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email')).map((idx) => idx.indexname).join(', ') : undefined,
+    detail: hasAllowedGlobalEmailUnique ? typedIndexes.filter((idx: IndexInfo) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email')).map((idx: IndexInfo) => idx.indexname).join(', ') : undefined,
     suggestion: 'ALTER TABLE allowed_users DROP CONSTRAINT IF EXISTS allowed_users_email_key; DROP INDEX IF EXISTS allowed_users_email_key; DROP INDEX IF EXISTS "AllowedUser_email_key";',
   });
   add(checks, {
@@ -274,7 +277,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
       runtimeEssential: true,
     });
     for (const slug of ['starter', 'growth', 'pro']) {
-      const plan = plans.find((item) => item.slug === slug);
+      const plan = (plans as Array<{ slug: string; is_active: boolean }>).find((item) => item.slug === slug);
       add(checks, {
         label: `plan.${slug}.active`,
         ok: Boolean(plan?.is_active),

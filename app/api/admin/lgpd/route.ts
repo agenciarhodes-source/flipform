@@ -59,7 +59,8 @@ export const GET = withPlatformAdmin(async (req, session) => {
     });
   }
 
-  const requests = requestLogs.map((log) => {
+  type LogRow = { id: string; action: string; createdAt: Date; metadata: unknown; tenant: { id: string; name: string; slug: string } | null; user: { id: string; email: string; name: string } | null };
+  const requests = (requestLogs as LogRow[]).map((log) => {
     const type = log.action === 'account.export.requested' ? 'export' : 'delete';
     const statusInfo = statusByRequest.get(log.id);
     return {

@@ -16,7 +16,8 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     where: ctx.leadsWhere,
     _count: { _all: true },
   });
-  const data = grouped
+  type SourceRow = { source: string; _count: { _all: number } };
+  const data = (grouped as SourceRow[])
     .map((g) => ({ source: g.source, count: g._count._all }))
     .sort((a, b) => b.count - a.count);
   return NextResponse.json({ data });

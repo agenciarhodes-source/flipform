@@ -31,14 +31,21 @@ export const GET = withAuth(async (req, session) => {
     select: { id: true, name: true },
   });
 
-  const stagesData = stages.map((s) => ({
+  type StageRow = { id: string; name: string; color: string; orderIndex: number; [key: string]: unknown };
+  type GroupByStageRow = { stageId: string; _count: number; [key: string]: unknown };
+  type GroupBySourceRow = { source: string; _count: number; [key: string]: unknown };
+  type GroupByAssigneeRow = { assignedTo: string | null; _count: number; [key: string]: unknown };
+  type LeadDayRow = { createdAt: Date };
+  type UserRow = { id: string; name: string };
+
+  const stagesData = (stages as StageRow[]).map((s) => ({
     name: s.name,
     color: s.color,
-    count: leadsByStage.find((g) => g.stageId === s.id)?._count || 0,
+    count: (leadsByStage as GroupByStageRow[]).find((g) => g.stageId === s.id)?._count || 0,
   }));
 
-  const assigneeData = leadsByAssignee.map((g) => ({
-    name: users.find((u) => u.id === g.assignedTo)?.name || '—',
+  const assigneeData = (leadsByAssignee as GroupByAssigneeRow[]).map((g) => ({
+    name: (users as UserRow[]).find((u) => u.id === g.assignedTo)?.name || '—',
     count: g._count,
   }));
 
@@ -49,7 +56,7 @@ export const GET = withAuth(async (req, session) => {
     const key = d.toISOString().slice(0, 10);
     byDayMap[key] = 0;
   }
-  leadsByDay.forEach((l) => {
+  (leadsByDay as LeadDayRow[]).forEach((l) => {
     const key = l.createdAt.toISOString().slice(0, 10);
     if (byDayMap[key] !== undefined) byDayMap[key]++;
   });
@@ -64,7 +71,7 @@ export const GET = withAuth(async (req, session) => {
     indicators: {
       total, novos, ganhos, perdidos, emAtendimento, qualificados, conversionRate,
     },
-    leadsBySource: leadsBySource.map((g) => ({ source: g.source, count: g._count })),
+    leadsBySource: (leadsBySource as GroupBySourceRow[]).map((g) => ({ source: g.source, count: g._count })),
     leadsByStage: stagesData,
     leadsByAssignee: assigneeData,
     leadsByDay: byDay,

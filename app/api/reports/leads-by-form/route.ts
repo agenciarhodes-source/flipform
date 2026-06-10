@@ -16,7 +16,10 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     where: ctx.leadsWhere,
     _count: { _all: true },
   });
-  const formIds = grouped.map((g) => g.formId).filter(Boolean) as string[];
+  type GroupRow = { formId: string | null; _count: { _all: number } };
+  type FormRow = { id: string; name: string; slug: string };
+  const typedGrouped = grouped as GroupRow[];
+  const formIds = typedGrouped.map((g) => g.formId).filter(Boolean) as string[];
   const forms = formIds.length
     ? await prisma.form.findMany({
         where: { id: { in: formIds }, tenantId: ctx.tenantId },
@@ -30,10 +33,10 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     where: { ...ctx.leadsWhere, status: 'won' },
     _count: { _all: true },
   });
-  const wonMap = new Map(wonByForm.map((g) => [g.formId, g._count._all]));
+  const wonMap = new Map((wonByForm as GroupRow[]).map((g) => [g.formId, g._count._all]));
 
-  const data = grouped.map((g) => {
-    const f = g.formId ? forms.find((x) => x.id === g.formId) : null;
+  const data = typedGrouped.map((g) => {
+    const f = g.formId ? (forms as FormRow[]).find((x) => x.id === g.formId) : null;
     const total = g._count._all;
     const won = wonMap.get(g.formId) || 0;
     return {
@@ -44,6 +47,6 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
       won,
       conversionRate: total > 0 ? Math.round((won / total) * 100) : 0,
     };
-  }).sort((a, b) => b.total - a.total);
+  }).sort((a, b) => (b.total as number) - (a.total as number));
   return NextResponse.json({ data });
 });
