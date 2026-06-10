@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+import { TenantStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
@@ -7,13 +9,12 @@ export const GET = withPlatformAdmin(async (req) => {
   const status = searchParams.get('status');
   const q = searchParams.get('q');
 
-  type TenantWhere = {
-    status?: string;
-    OR?: Array<{ name?: { contains: string; mode: 'insensitive' }; slug?: { contains: string; mode: 'insensitive' } }>;
-  };
+  const tenantStatuses = Object.values(TenantStatus) as string[];
 
-  const where: TenantWhere = {};
-  if (status && status !== 'all') where.status = status;
+  const where: Prisma.TenantWhereInput = {};
+  if (status && status !== 'all' && tenantStatuses.includes(status)) {
+    where.status = status as TenantStatus;
+  }
   if (q) where.OR = [
     { name: { contains: q, mode: 'insensitive' } },
     { slug: { contains: q, mode: 'insensitive' } },
