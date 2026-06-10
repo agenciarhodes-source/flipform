@@ -1,0 +1,39 @@
+name: Repair Production Schema
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair-schema:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      JWT_SECRET_CURRENT: ${{ secrets.JWT_SECRET_CURRENT }}
+      JWT_SECRET_PREVIOUS: ${{ secrets.JWT_SECRET_PREVIOUS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Diagnose schema before repair
+        run: npm run admin:diagnose-schema
+
+      - name: Repair schema
+        run: npm run admin:repair-schema
+
+      - name: Diagnose schema after repair
+        run: npm run admin:diagnose-schema
