@@ -28,6 +28,7 @@ import {
   Menu,
   UserCog,
   Workflow,
+  CreditCard,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -42,6 +43,7 @@ const NAV: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/forms", label: "Formulários", icon: FileText },
+  { href: "/billing", label: "Financeiro", icon: CreditCard },
   {
     href: "/pipelines",
     label: "Pipelines",
