@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
     const rl = rateLimit({
-      key: `job:billing-status:ip:${ip}`,
+      key: `job:billing-suspension:ip:${ip}`,
       limit: 10,
       windowMs: 60 * 1000,
     });
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     captureServerException(error, {
-      route: "/api/cron/billing-status",
+      route: "/api/cron/billing-suspension",
       method: "POST",
     });
     return NextResponse.json({ error: "internal_error" }, { status: 500 });

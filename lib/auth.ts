@@ -1,24 +1,28 @@
-import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from './prisma';
-import { signSessionToken, verifySessionToken, type JwtSessionPayload } from './jwt';
+import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "./prisma";
+import {
+  signSessionToken,
+  verifySessionToken,
+  type JwtSessionPayload,
+} from "./jwt";
+import { evaluateBillingAccess } from "./billing-access";
 
-const COOKIE_NAME = 'flipform_token';
+const COOKIE_NAME = "flipform_token";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-
 function isSecureRequest(): boolean {
-  if (process.env.NODE_ENV === 'production') return true;
+  if (process.env.NODE_ENV === "production") return true;
   const forwardedProto = process.env.TRUST_PROXY_PROTO;
-  if (forwardedProto && forwardedProto.toLowerCase() === 'https') return true;
+  if (forwardedProto && forwardedProto.toLowerCase() === "https") return true;
   return false;
 }
 
-function getSameSite(): 'lax' | 'strict' | 'none' {
-  const raw = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase();
-  if (raw === 'strict' || raw === 'none') return raw;
-  return 'lax';
+function getSameSite(): "lax" | "strict" | "none" {
+  const raw = (process.env.COOKIE_SAMESITE || "lax").toLowerCase();
+  if (raw === "strict" || raw === "none") return raw;
+  return "lax";
 }
 
 export interface SessionPayload extends JwtSessionPayload {
@@ -36,7 +40,10 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);
 }
 
-export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  plain: string,
+  hash: string,
+): Promise<boolean> {
   return bcrypt.compare(plain, hash);
 }
 
@@ -54,17 +61,17 @@ export async function setSessionCookie(payload: SessionPayload) {
     httpOnly: true,
     secure: isSecureRequest(),
     sameSite: getSameSite(),
-    path: '/',
+    path: "/",
     maxAge: MAX_AGE,
   });
 }
 
 export function clearSessionCookie() {
-  cookies().set(COOKIE_NAME, '', {
+  cookies().set(COOKIE_NAME, "", {
     httpOnly: true,
     secure: isSecureRequest(),
     sameSite: getSameSite(),
-    path: '/',
+    path: "/",
     maxAge: 0,
   });
 }
@@ -89,7 +96,7 @@ export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
 export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) {
-    throw new Response('Unauthorized', { status: 401 });
+    throw new Response("Unauthorized", { status: 401 });
   }
   return session;
 }
@@ -97,7 +104,12 @@ export async function requireSession(): Promise<SessionPayload> {
 /**
  * Tenant statuses que BLOQUEIAM acesso à aplicação.
  */
-const BLOCKED_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
+const BLOCKED_STATUSES = new Set([
+  "suspended",
+  "blocked",
+  "canceled",
+  "inactive",
+]);
 
 /**
  * Wraps an API handler. Verifies session and injects it.
@@ -107,25 +119,49 @@ const BLOCKED_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive'
  * Platform admins sem tenantId não são afetados.
  */
 export function withAuth<T = any>(
-  handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse> | NextResponse
+  handler: (
+    req: NextRequest,
+    session: SessionPayload,
+    ctx: T,
+  ) => Promise<NextResponse> | NextResponse,
 ) {
   return async (req: NextRequest, ctx: T) => {
     const session = getSessionFromRequest(req);
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    // Tenant gating (apenas se a sessão tem tenantId)
-    if (session.tenantId) {
+    // Tenant gating (apenas se a sessão tem tenantId). Super Admin nunca é bloqueado.
+    if (session.tenantId && session.globalRole !== "platform_admin") {
       const tenant = await prisma.tenant.findUnique({
         where: { id: session.tenantId },
         select: { status: true },
       });
       if (!tenant) {
-        return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 401 });
-      }
-      if (BLOCKED_STATUSES.has(String(tenant.status))) {
         return NextResponse.json(
-          { error: 'Acesso bloqueado. Entre em contato com o administrador.', code: 'tenant_blocked', status: tenant.status },
+          { error: "Tenant não encontrado" },
+          { status: 401 },
+        );
+      }
+
+      const subscription = await prisma.subscription.findFirst({
+        where: { tenantId: session.tenantId },
+        select: { status: true, gracePeriodEndsAt: true },
+        orderBy: { createdAt: "desc" },
+      });
+      const access = evaluateBillingAccess({
+        tenantStatus: tenant.status,
+        subscriptionStatus: subscription?.status,
+        gracePeriodEndsAt: subscription?.gracePeriodEndsAt,
+      });
+
+      if (!access.allowAccess) {
+        return NextResponse.json(
+          {
+            error: "Acesso bloqueado. Entre em contato com o administrador.",
+            code: "tenant_blocked",
+            status: tenant.status,
+            reason: access.reason,
+          },
           { status: 403 },
         );
       }
@@ -139,21 +175,32 @@ export function withAuth<T = any>(
  * Requer usuário com globalRole === 'platform_admin'.
  */
 export function withPlatformAdmin<T = any>(
-  handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse> | NextResponse
+  handler: (
+    req: NextRequest,
+    session: SessionPayload,
+    ctx: T,
+  ) => Promise<NextResponse> | NextResponse,
 ) {
   return async (req: NextRequest, ctx: T) => {
     const session = getSessionFromRequest(req);
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (session.globalRole !== 'platform_admin') {
-      return NextResponse.json({ error: 'Acesso restrito ao Super Admin da plataforma.' }, { status: 403 });
+    if (!session)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session.globalRole !== "platform_admin") {
+      return NextResponse.json(
+        { error: "Acesso restrito ao Super Admin da plataforma." },
+        { status: 403 },
+      );
     }
     return handler(req, session, ctx);
   };
 }
 
-export async function loadUserSession(userId: string, tenantId: string): Promise<SessionPayload | null> {
+export async function loadUserSession(
+  userId: string,
+  tenantId: string,
+): Promise<SessionPayload | null> {
   const tu = await prisma.tenantUser.findFirst({
-    where: { userId, tenantId, status: 'active' },
+    where: { userId, tenantId, status: "active" },
     include: { user: true, tenant: true },
   });
   if (!tu) return null;

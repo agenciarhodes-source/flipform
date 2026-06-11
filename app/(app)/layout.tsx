@@ -1,45 +1,56 @@
-import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { AppShell } from '@/components/app-shell';
-import { evaluateBillingAccess } from '@/lib/billing-access';
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { AppShell } from "@/components/app-shell";
+import { requireActiveTenant } from "@/lib/billing-access";
 
-export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
+export default async function AppGroupLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const session = await getSession();
-  if (!session) redirect('/login');
+  if (!session) redirect("/login");
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: session.tenantId },
-    select: { id: true, name: true, slug: true, primaryColor: true, logoUrl: true, status: true, nextDueDate: true },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      primaryColor: true,
+      logoUrl: true,
+      status: true,
+      nextDueDate: true,
+    },
   });
 
-  const subscription = tenant
-    ? await prisma.subscription.findFirst({
-        where: { tenantId: tenant.id },
-        select: { status: true, gracePeriodEndsAt: true },
-        orderBy: { createdAt: 'desc' },
-      })
-    : null;
-
-  const access = evaluateBillingAccess({
-    tenantStatus: tenant?.status,
-    subscriptionStatus: subscription?.status,
-    gracePeriodEndsAt: subscription?.gracePeriodEndsAt,
-  });
-
-  if (!access.allowAccess) redirect('/billing/blocked');
+  const billingAccess = await requireActiveTenant(session);
 
   return (
     <AppShell
       session={session}
-      tenant={tenant ? {
-        name: tenant.name,
-        slug: tenant.slug,
-        primaryColor: tenant.primaryColor,
-        logoUrl: tenant.logoUrl,
-        status: tenant.status,
-        nextDueDate: tenant.nextDueDate ? tenant.nextDueDate.toISOString() : null,
-      } : null}
+      tenant={
+        tenant
+          ? {
+              name: tenant.name,
+              slug: tenant.slug,
+              primaryColor: tenant.primaryColor,
+              logoUrl: tenant.logoUrl,
+              status: tenant.status,
+              nextDueDate: tenant.nextDueDate
+                ? tenant.nextDueDate.toISOString()
+                : null,
+              gracePeriodEndsAt: billingAccess.subscription?.gracePeriodEndsAt
+                ? billingAccess.subscription.gracePeriodEndsAt.toISOString()
+                : null,
+              paymentUrl:
+                billingAccess.payment?.invoiceUrl ||
+                billingAccess.payment?.bankSlipUrl ||
+                null,
+            }
+          : null
+      }
     >
       {children}
     </AppShell>
