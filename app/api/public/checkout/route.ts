@@ -4,7 +4,29 @@ import { AsaasConfigError, assertAsaasConfig, createCustomer, createSubscription
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
-const ALLOWED_ORIGINS = new Set(['https://flipform.com.br', 'https://www.flipform.com.br']);
+const OFFICIAL_FLIPFORM_HOSTS = new Set(['flipform.com.br', 'www.flipform.com.br', 'app.flipform.com.br']);
+
+function officialOriginFromUrl(value?: string | null) {
+  if (!value) return null;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || !OFFICIAL_FLIPFORM_HOSTS.has(url.host)) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+const ALLOWED_ORIGINS = new Set(
+  [
+    'https://flipform.com.br',
+    'https://www.flipform.com.br',
+    'https://app.flipform.com.br',
+    officialOriginFromUrl(process.env.PUBLIC_SITE_URL),
+    officialOriginFromUrl(process.env.NEXT_PUBLIC_BASE_URL),
+  ].filter((origin): origin is string => Boolean(origin)),
+);
 const PUBLIC_PLAN_SLUGS = new Set(['starter', 'growth', 'pro']);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
