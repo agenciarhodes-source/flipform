@@ -1,8 +1,9 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
-import { requireActiveTenant } from "@/lib/billing-access";
+import { requireBillingAccess } from "@/lib/billing-access";
 
 export default async function AppGroupLayout({
   children,
@@ -11,6 +12,9 @@ export default async function AppGroupLayout({
 }) {
   const session = await getSession();
   if (!session) redirect("/login");
+
+  const pathname = headers().get("x-pathname") || "";
+  const isBillingRoute = pathname === "/billing" || pathname.startsWith("/billing/");
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: session.tenantId },
@@ -25,7 +29,10 @@ export default async function AppGroupLayout({
     },
   });
 
-  const billingAccess = await requireActiveTenant(session);
+  const billingAccess = await requireBillingAccess(session);
+  if (!billingAccess.allowAccess && !isBillingRoute) {
+    redirect("/billing/blocked");
+  }
 
   return (
     <AppShell

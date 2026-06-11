@@ -5,7 +5,7 @@ import { isAdminHostname } from '@/lib/host-routing';
 
 const COOKIE = 'flipform_token';
 
-const PROTECTED = ['/dashboard', '/kanban', '/leads', '/forms', '/pipelines', '/reports', '/settings', '/users'];
+const PROTECTED = ['/dashboard', '/kanban', '/leads', '/forms', '/pipelines', '/reports', '/settings', '/users', '/billing'];
 const ADMIN = ['/admin'];
 
 async function verifyJWT(token: string): Promise<any | null> {
@@ -23,6 +23,8 @@ async function verifyJWT(token: string): Promise<any | null> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get('host');
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set('x-pathname', pathname);
 
   if (isAdminHostname(host)) {
     const ignore =
@@ -34,12 +36,12 @@ export async function middleware(req: NextRequest) {
     if (!ignore) {
       const rewriteUrl = req.nextUrl.clone();
       rewriteUrl.pathname = `/admin${pathname === '/' ? '' : pathname}`;
-      return NextResponse.rewrite(rewriteUrl);
+      return NextResponse.rewrite(rewriteUrl, { request: { headers: requestHeaders } });
     }
   }
 
   if (pathname === '/admin/login' || pathname.startsWith('/admin/login/')) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const token = req.cookies.get(COOKIE)?.value;
@@ -47,7 +49,7 @@ export async function middleware(req: NextRequest) {
   const isProtectedTenant = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + '/'));
   const isAdmin = ADMIN.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-  if (!isProtectedTenant && !isAdmin) return NextResponse.next();
+  if (!isProtectedTenant && !isAdmin) return NextResponse.next({ request: { headers: requestHeaders } });
 
   if (!token) {
     const url = isAdmin ? '/admin/login' : '/login';
@@ -61,7 +63,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
