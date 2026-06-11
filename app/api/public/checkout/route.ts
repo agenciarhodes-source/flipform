@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { createCustomer, createSubscription } from '@/lib/asaas';
+import { AsaasConfigError, assertAsaasConfig, createCustomer, createSubscription } from '@/lib/asaas';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
@@ -164,6 +164,18 @@ export async function POST(req: Request) {
     return json({ ok: false, error: 'CPF/CNPJ inválido.' }, { status: 400 }, origin);
   }
 
+  try {
+    assertAsaasConfig({ requirePublicUrls: true });
+  } catch (error) {
+    const code = error instanceof AsaasConfigError ? error.code : 'ASAAS_CONFIG_INVALID';
+    console.error('[public-checkout]', { event: 'checkout_config_invalid', code });
+    return json(
+      { ok: false, error: 'Checkout temporariamente indisponível. Entre em contato com o suporte.' },
+      { status: 503 },
+      origin,
+    );
+  }
+
   const plan = await prisma.plan.findFirst({
     where: { slug: planSlug, isActive: true },
     select: { id: true, slug: true, name: true, price: true, billingCycle: true },
@@ -306,7 +318,8 @@ export async function POST(req: Request) {
       event: 'checkout_failed',
       planSlug: plan.slug,
       tenantId: tenant.id,
-      error: error instanceof Error ? error.message : String(error),
+      code: error instanceof AsaasConfigError ? error.code : 'CHECKOUT_PROVIDER_ERROR',
+      message: error instanceof AsaasConfigError ? error.message : 'Falha controlada ao iniciar cobrança Asaas.',
     });
     await logPlatformAudit({
       tenantId: tenant.id,
