@@ -34,24 +34,84 @@ export async function POST(req: Request) {
     );
     const payment = payload.payment || {};
     const providerPaymentId = payment.id ? String(payment.id) : null;
+    const providerSubscriptionId = payment.subscription
+      ? String(payment.subscription)
+      : null;
+    const externalReference = payment.externalReference
+      ? String(payment.externalReference)
+      : null;
 
     const exists = await prisma.webhookEvent.findUnique({
       where: { provider_eventId: { provider: "asaas", eventId } },
     });
     if (exists) return NextResponse.json({ ok: true, duplicate: true });
 
-    const tenant = providerPaymentId
-      ? await prisma.payment.findFirst({
-          where: { providerPaymentId },
-          select: {
-            tenantId: true,
-            subscriptionId: true,
-            dueDate: true,
-            invoiceUrl: true,
-            bankSlipUrl: true,
-          },
-        })
-      : null;
+    const tenant =
+      (providerPaymentId
+        ? await prisma.payment.findFirst({
+            where: { providerPaymentId },
+            select: {
+              tenantId: true,
+              subscriptionId: true,
+              dueDate: true,
+              invoiceUrl: true,
+              bankSlipUrl: true,
+            },
+          })
+        : null) ||
+      (providerSubscriptionId
+        ? await prisma.subscription.findFirst({
+            where: { providerSubscriptionId },
+            select: {
+              tenantId: true,
+              id: true,
+              nextDueDate: true,
+              payments: {
+                where: { status: { in: ["pending", "overdue"] } },
+                select: { dueDate: true, invoiceUrl: true, bankSlipUrl: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+          }).then((subscription) =>
+            subscription
+              ? {
+                  tenantId: subscription.tenantId,
+                  subscriptionId: subscription.id,
+                  dueDate: subscription.payments[0]?.dueDate || subscription.nextDueDate,
+                  invoiceUrl: subscription.payments[0]?.invoiceUrl || null,
+                  bankSlipUrl: subscription.payments[0]?.bankSlipUrl || null,
+                }
+              : null,
+          )
+        : null) ||
+      (externalReference
+        ? await prisma.subscription.findFirst({
+            where: { tenantId: externalReference },
+            select: {
+              tenantId: true,
+              id: true,
+              nextDueDate: true,
+              payments: {
+                where: { status: { in: ["pending", "overdue"] } },
+                select: { dueDate: true, invoiceUrl: true, bankSlipUrl: true },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
+            },
+            orderBy: { createdAt: "desc" },
+          }).then((subscription) =>
+            subscription
+              ? {
+                  tenantId: subscription.tenantId,
+                  subscriptionId: subscription.id,
+                  dueDate: subscription.payments[0]?.dueDate || subscription.nextDueDate,
+                  invoiceUrl: subscription.payments[0]?.invoiceUrl || null,
+                  bankSlipUrl: subscription.payments[0]?.bankSlipUrl || null,
+                }
+              : null,
+          )
+        : null);
 
     await prisma.webhookEvent.create({
       data: {
@@ -68,8 +128,17 @@ export async function POST(req: Request) {
     if (tenant?.tenantId && providerPaymentId) {
       const paymentStatus = mapPaymentStatus(payment.status || event);
       await prisma.payment.updateMany({
-        where: { providerPaymentId },
+        where: {
+          OR: [
+            { providerPaymentId },
+            {
+              subscriptionId: tenant.subscriptionId || undefined,
+              providerPaymentId: null,
+            },
+          ],
+        },
         data: {
+          providerPaymentId,
           status: paymentStatus as any,
           paidAt: payment.paidDate ? new Date(payment.paidDate) : undefined,
           dueDate: payment.dueDate ? new Date(payment.dueDate) : undefined,
@@ -214,8 +283,26 @@ export async function POST(req: Request) {
         await logAudit({
           tenantId: tenant.tenantId,
           entityType: "billing",
+          entityId: providerPaymentId,
+          action: "billing.checkout_payment_confirmed",
+          metadata: {
+            event,
+            previousTenantStatus: currentTenant?.status || null,
+            previousSubscriptionStatus: currentSubscription?.status || null,
+          },
+        });
+        await logAudit({
+          tenantId: tenant.tenantId,
+          entityType: "billing",
           entityId: tenant.subscriptionId || providerPaymentId,
           action: "billing.subscription_reactivated",
+          metadata: { event, providerPaymentId },
+        });
+        await logAudit({
+          tenantId: tenant.tenantId,
+          entityType: "billing",
+          entityId: tenant.subscriptionId || providerPaymentId,
+          action: "billing.checkout_access_released",
           metadata: { event, providerPaymentId },
         });
 

@@ -3,65 +3,319 @@ import { prisma } from '@/lib/prisma';
 import { createCustomer, createSubscription } from '@/lib/asaas';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logPlatformAudit } from '@/lib/platform-audit';
-import { signOnboardingToken } from '@/lib/jwt';
+
+const ALLOWED_ORIGINS = new Set(['https://flipform.com.br', 'https://www.flipform.com.br']);
+const PUBLIC_PLAN_SLUGS = new Set(['starter', 'growth', 'pro']);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function slugify(input: string) {
-  return input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  return input
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function digitsOnly(input: string) {
+  return input.replace(/\D/g, '');
+}
+
+function appBaseUrl() {
+  return (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://app.flipform.com.br').replace(/\/+$/, '');
+}
+
+function publicSiteUrl() {
+  return (process.env.PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_MARKETING_URL || 'https://flipform.com.br').replace(/\/+$/, '');
+}
+
+function json(payload: Record<string, unknown>, init?: ResponseInit, origin?: string | null) {
+  const res = NextResponse.json(payload, init);
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Vary', 'Origin');
+  }
+  return res;
+}
+
+function addCors(res: NextResponse, origin?: string | null) {
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Vary', 'Origin');
+  }
+  return res;
+}
+
+function forbiddenOrigin(origin: string | null) {
+  return Boolean(origin && !ALLOWED_ORIGINS.has(origin));
+}
+
+async function buildTenantSlug(companyName: string) {
+  const base = slugify(companyName) || 'cliente-flipform';
+  for (let i = 0; i < 5; i += 1) {
+    const suffix = `${Date.now().toString(36)}${i ? `-${i}` : ''}`;
+    const slug = `${base}-${suffix}`.slice(0, 80).replace(/-$/, '');
+    const exists = await prisma.tenant.findUnique({ where: { slug }, select: { id: true } });
+    if (!exists) return slug;
+  }
+  return `cliente-flipform-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+async function resolveCheckoutTenant(email: string, companyName: string) {
+  const existingUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existingUser) {
+    return { error: 'Este e-mail já possui acesso ao FlipForm. Entre em contato com o suporte para alterar o plano.' } as const;
+  }
+
+  const allowedUsers = await prisma.allowedUser.findMany({
+    where: { email },
+    select: { id: true, tenantId: true, active: true, status: true, source: true },
+    orderBy: { createdAt: 'asc' },
+    take: 2,
+  });
+
+  if (allowedUsers.length > 1) {
+    return { error: 'Este e-mail já está vinculado a mais de um workspace. Entre em contato com o suporte.' } as const;
+  }
+
+  const existingAllowed = allowedUsers[0];
+  if (existingAllowed) {
+    const isSafePendingCheckout =
+      existingAllowed.source === 'checkout_public' &&
+      !existingAllowed.active &&
+      existingAllowed.status !== 'active';
+
+    if (!isSafePendingCheckout) {
+      return { error: 'Este e-mail já possui acesso ao FlipForm. Entre em contato com o suporte para alterar o plano.' } as const;
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: existingAllowed.tenantId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!tenant || tenant.status === 'canceled' || tenant.status === 'blocked') {
+      return { error: 'Não foi possível iniciar o checkout para este e-mail. Entre em contato com o suporte.' } as const;
+    }
+    return { tenant } as const;
+  }
+
+  const slug = await buildTenantSlug(companyName);
+  const tenant = await prisma.tenant.create({
+    data: {
+      name: companyName,
+      slug,
+      status: 'past_due',
+      allowedUsers: {
+        create: {
+          email,
+          role: 'owner',
+          active: false,
+          status: 'pending',
+          source: 'checkout_public',
+        },
+      },
+    },
+    select: { id: true, name: true, status: true },
+  });
+
+  return { tenant } as const;
+}
+
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get('origin');
+  if (forbiddenOrigin(origin)) return new NextResponse(null, { status: 403 });
+
+  const res = new NextResponse(null, { status: 204 });
+  if (origin && ALLOWED_ORIGINS.has(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+    res.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.headers.set('Access-Control-Max-Age', '86400');
+    res.headers.set('Vary', 'Origin');
+  }
+  return res;
 }
 
 export async function POST(req: Request) {
+  const origin = req.headers.get('origin');
+  if (forbiddenOrigin(origin)) {
+    return json({ ok: false, error: 'Origem não autorizada.' }, { status: 403 }, origin);
+  }
+
   const ip = getClientIp(req);
   const rl = rateLimit({ key: `public-checkout:ip:${ip}`, limit: 20, windowMs: 10 * 60 * 1000 });
-  if (!rl.allowed) return rateLimitResponse(rl);
+  if (!rl.allowed) return addCors(rateLimitResponse(rl), origin);
 
   const body = await req.json().catch(() => ({} as any));
   const planSlug = String(body?.planSlug || '').trim().toLowerCase();
   const name = String(body?.name || '').trim();
   const email = String(body?.email || '').trim().toLowerCase();
-  const phone = String(body?.phone || '').trim();
-  const cpfCnpj = String(body?.cpfCnpj || '').trim();
+  const phone = digitsOnly(String(body?.phone || '').trim());
+  const cpfCnpj = digitsOnly(String(body?.cpfCnpj || body?.document || '').trim());
   const companyName = String(body?.companyName || '').trim() || name;
 
-  if (!planSlug || !name || !email) return NextResponse.json({ error: 'Dados inválidos.', code: 'INVALID_INPUT' }, { status: 400 });
-
-  const plan = await prisma.plan.findFirst({ where: { slug: planSlug, isActive: true }, select: { id: true, slug: true, name: true, price: true } });
-  if (!plan) return NextResponse.json({ error: 'Plano inválido ou indisponível.', code: 'INVALID_PLAN' }, { status: 400 });
-  if (plan.slug === 'enterprise') return NextResponse.json({ error: 'Plano Enterprise é sob consulta.', code: 'ENTERPRISE_CONTACT_REQUIRED' }, { status: 400 });
-  if (!['starter', 'growth', 'pro'].includes(plan.slug)) return NextResponse.json({ error: 'Plano inválido ou indisponível.', code: 'INVALID_PLAN' }, { status: 400 });
-
-  let tenant = await prisma.tenant.findFirst({ where: { allowedUsers: { some: { email } } }, select: { id: true, name: true } });
-  if (!tenant) {
-    const slugBase = slugify(companyName || name) || `tenant-${Date.now()}`;
-    tenant = await prisma.tenant.create({ data: { name: companyName, slug: `${slugBase}-${Date.now().toString().slice(-6)}`, status: 'past_due' }, select: { id: true, name: true } });
-    await prisma.allowedUser.create({ data: { email, tenantId: tenant.id, role: 'owner', active: false, status: 'pending', source: 'checkout_public' } });
+  if (!PUBLIC_PLAN_SLUGS.has(planSlug)) {
+    return json({ ok: false, error: 'Plano inválido ou indisponível.' }, { status: 400 }, origin);
+  }
+  if (!name || !companyName || !email || !EMAIL_RE.test(email)) {
+    return json({ ok: false, error: 'Informe nome, empresa e um e-mail válido.' }, { status: 400 }, origin);
+  }
+  if (cpfCnpj && ![11, 14].includes(cpfCnpj.length)) {
+    return json({ ok: false, error: 'CPF/CNPJ inválido.' }, { status: 400 }, origin);
   }
 
-  await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: email, action: 'checkout.started', metadata: { planSlug } });
+  const plan = await prisma.plan.findFirst({
+    where: { slug: planSlug, isActive: true },
+    select: { id: true, slug: true, name: true, price: true, billingCycle: true },
+  });
+  if (!plan || !PUBLIC_PLAN_SLUGS.has(plan.slug)) {
+    return json({ ok: false, error: 'Plano inválido ou indisponível.' }, { status: 400 }, origin);
+  }
+
+  const resolved = await resolveCheckoutTenant(email, companyName);
+  if ('error' in resolved) {
+    return json({ ok: false, error: resolved.error }, { status: 409 }, origin);
+  }
+  const tenant = resolved.tenant;
+
+  await logPlatformAudit({
+    tenantId: tenant.id,
+    userId: null,
+    entityType: 'checkout',
+    entityId: email,
+    action: 'billing.checkout_started',
+    metadata: { planSlug: plan.slug },
+  });
 
   try {
+    const reusablePayment = await prisma.payment.findFirst({
+      where: {
+        tenantId: tenant.id,
+        status: 'pending',
+        subscription: { planId: plan.id, status: { in: ['past_due', 'trialing'] } },
+        OR: [{ invoiceUrl: { not: null } }, { bankSlipUrl: { not: null } }],
+      },
+      select: { invoiceUrl: true, bankSlipUrl: true, subscriptionId: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const reusableCheckoutUrl = reusablePayment?.invoiceUrl || reusablePayment?.bankSlipUrl;
+    if (reusableCheckoutUrl) {
+      await logPlatformAudit({
+        tenantId: tenant.id,
+        userId: null,
+        entityType: 'checkout',
+        entityId: reusablePayment.subscriptionId || tenant.id,
+        action: 'billing.checkout_access_pending',
+        metadata: { planSlug: plan.slug, reusedPendingPayment: true },
+      });
+      return json({ ok: true, checkoutUrl: reusableCheckoutUrl, status: 'pending_payment' }, undefined, origin);
+    }
+
     const latest = await prisma.subscription.findFirst({ where: { tenantId: tenant.id }, orderBy: { createdAt: 'desc' } });
     let providerCustomerId = latest?.providerCustomerId || null;
 
     if (!providerCustomerId) {
-      const customer = await createCustomer({ name, email, phone: phone || undefined, cpfCnpj: cpfCnpj || undefined, externalReference: tenant.id });
+      const customer = await createCustomer({
+        name: companyName || name,
+        email,
+        phone: phone || undefined,
+        cpfCnpj: cpfCnpj || undefined,
+        externalReference: tenant.id,
+      });
       providerCustomerId = customer.id;
-      await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: tenant.id, action: 'checkout.customer_created', metadata: { providerCustomerId } });
+      await logPlatformAudit({
+        tenantId: tenant.id,
+        userId: null,
+        entityType: 'checkout',
+        entityId: tenant.id,
+        action: 'billing.checkout_customer_created',
+        metadata: { providerCustomerId },
+      });
     }
 
-    const createdSub = await createSubscription({ customer: providerCustomerId, billingType: 'UNDEFINED', value: Number(plan.price), cycle: 'MONTHLY', nextDueDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10), externalReference: tenant.id });
+    const nextDueDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const successUrl = `${appBaseUrl()}/login?checkout=success`;
+    const pendingUrl = `${appBaseUrl()}/login?checkout=pending`;
+    const cancelUrl = publicSiteUrl();
+    const createdSub = await createSubscription({
+      customer: providerCustomerId,
+      billingType: 'UNDEFINED',
+      value: Number(plan.price),
+      cycle: plan.billingCycle === 'yearly' ? 'YEARLY' : 'MONTHLY',
+      nextDueDate,
+      externalReference: tenant.id,
+      description: `FlipForm ${plan.name}`,
+    });
 
-    const subscription = await prisma.subscription.create({ data: { tenantId: tenant.id, planId: plan.id, provider: 'asaas', paymentProvider: 'asaas', providerCustomerId, providerSubscriptionId: createdSub.id, status: 'past_due', paymentRequired: true, nextDueDate: createdSub.nextDueDate ? new Date(createdSub.nextDueDate) : null } });
+    const subscription = await prisma.subscription.create({
+      data: {
+        tenantId: tenant.id,
+        planId: plan.id,
+        provider: 'asaas',
+        paymentProvider: 'asaas',
+        providerCustomerId,
+        providerSubscriptionId: createdSub.id,
+        status: 'past_due',
+        paymentRequired: true,
+        nextDueDate: createdSub.nextDueDate ? new Date(createdSub.nextDueDate) : new Date(nextDueDate),
+      },
+    });
 
-    await prisma.payment.create({ data: { tenantId: tenant.id, subscriptionId: subscription.id, provider: 'asaas', providerPaymentId: createdSub?.payment?.id || null, status: 'pending', value: plan.price, dueDate: createdSub.nextDueDate ? new Date(createdSub.nextDueDate) : null, invoiceUrl: createdSub?.invoiceUrl || createdSub?.payment?.invoiceUrl || null, bankSlipUrl: createdSub?.bankSlipUrl || createdSub?.payment?.bankSlipUrl || null, billingType: createdSub?.billingType || null, rawPayload: createdSub } });
+    await prisma.payment.create({
+      data: {
+        tenantId: tenant.id,
+        subscriptionId: subscription.id,
+        provider: 'asaas',
+        providerPaymentId: createdSub?.payment?.id || null,
+        status: 'pending',
+        value: plan.price,
+        dueDate: createdSub.nextDueDate ? new Date(createdSub.nextDueDate) : new Date(nextDueDate),
+        invoiceUrl: createdSub?.invoiceUrl || createdSub?.payment?.invoiceUrl || null,
+        bankSlipUrl: createdSub?.bankSlipUrl || createdSub?.payment?.bankSlipUrl || null,
+        billingType: createdSub?.billingType || null,
+        rawPayload: { ...createdSub, checkoutUrls: { successUrl, pendingUrl, cancelUrl } },
+      },
+    });
 
-    await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: subscription.id, action: 'checkout.subscription_created', metadata: { providerSubscriptionId: createdSub.id } });
+    await logPlatformAudit({
+      tenantId: tenant.id,
+      userId: null,
+      entityType: 'checkout',
+      entityId: subscription.id,
+      action: 'billing.checkout_subscription_created',
+      metadata: { providerSubscriptionId: createdSub.id, planSlug: plan.slug },
+    });
+    await logPlatformAudit({
+      tenantId: tenant.id,
+      userId: null,
+      entityType: 'checkout',
+      entityId: subscription.id,
+      action: 'billing.checkout_access_pending',
+      metadata: { planSlug: plan.slug },
+    });
 
-    const checkoutUrl = createdSub?.invoiceUrl || createdSub?.bankSlipUrl || createdSub?.checkoutUrl || '/checkout/pending';
-    const onboardingToken = signOnboardingToken({ email, tenantId: tenant.id, purpose: 'onboarding' });
-    const onboardingUrl = `/onboarding/${onboardingToken}`;
-    return NextResponse.json({ ok: true, checkoutUrl, tenantId: tenant.id, subscriptionId: subscription.id, onboardingUrl });
-  } catch {
-    await logPlatformAudit({ tenantId: tenant.id, userId: null, entityType: 'checkout', entityId: email, action: 'checkout.failed', metadata: { planSlug } });
-    return NextResponse.json({ error: 'Não foi possível iniciar o pagamento. Tente novamente.', code: 'CHECKOUT_PROVIDER_FAILED' }, { status: 502 });
+    const checkoutUrl = createdSub?.invoiceUrl || createdSub?.bankSlipUrl || createdSub?.payment?.invoiceUrl || createdSub?.checkoutUrl;
+    if (!checkoutUrl) {
+      throw new Error('Asaas checkout URL missing');
+    }
+
+    return json({ ok: true, checkoutUrl, status: 'pending_payment' }, undefined, origin);
+  } catch (error) {
+    console.error('[public-checkout]', {
+      event: 'checkout_failed',
+      planSlug: plan.slug,
+      tenantId: tenant.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await logPlatformAudit({
+      tenantId: tenant.id,
+      userId: null,
+      entityType: 'checkout',
+      entityId: email,
+      action: 'billing.checkout_failed',
+      metadata: { planSlug: plan.slug },
+    });
+    return json({ ok: false, error: 'Não foi possível iniciar o pagamento. Tente novamente.' }, { status: 502 }, origin);
   }
 }
