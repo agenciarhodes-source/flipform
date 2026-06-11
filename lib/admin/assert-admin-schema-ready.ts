@@ -36,12 +36,13 @@ const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'p
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
-  tenants: ['id', 'name', 'slug', 'status', 'plan_id', 'internal_notes', 'last_login_at', 'created_at', 'updated_at'],
+  tenants: ['id', 'name', 'slug', 'status', 'plan_id', 'next_due_date', 'internal_notes', 'last_login_at', 'created_at', 'updated_at'],
   users: ['id', 'name', 'email', 'password_hash', 'global_role', 'created_at', 'updated_at'],
   tenant_users: ['id', 'tenant_id', 'user_id', 'role', 'status', 'created_at'],
   allowed_users: ['id', 'email', 'tenant_id', 'role', 'active', 'status', 'source', 'invited_by', 'accepted_at', 'created_at', 'updated_at'],
-  subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'provider', 'payment_required', 'payment_provider', 'created_at', 'updated_at'],
+  subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'next_due_date', 'provider', 'payment_required', 'grace_period_ends_at', 'payment_provider', 'provider_customer_id', 'provider_subscription_id', 'created_at', 'updated_at', 'canceled_at'],
   plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
+  payments: ['id', 'tenant_id', 'subscription_id', 'provider', 'provider_payment_id', 'status', 'value', 'due_date', 'paid_at', 'invoice_url', 'bank_slip_url', 'pix_qr_code', 'billing_type', 'raw_payload', 'created_at', 'updated_at'],
 };
 
 function add(checks: AdminSchemaCheck[], check: AdminSchemaCheck) {
@@ -197,7 +198,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
         label: `column.${table}.${column}`,
         ok: tableColumns.has(column),
         suggestion: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ...;`,
-        runtimeEssential: table in REQUIRED_COLUMNS,
+        runtimeEssential: RUNTIME_REQUIRED_TABLES.has(table),
       });
     }
   }
@@ -206,7 +207,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments')
   `;
 
   type IdxRow = IndexInfo;
@@ -216,6 +217,15 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasTenantUsersUnique = typedIndexes.some((idx) => idx.tablename === 'tenant_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'user_id'));
   const hasAllowedCompositeUnique = typedIndexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
   const hasAllowedGlobalEmailUnique = typedIndexes.some((idx) => idx.tablename === 'allowed_users' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasPlansSlugUnique = typedIndexes.some((idx) => idx.tablename === 'plans' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'slug'));
+  const hasSubscriptionsTenant = typedIndexes.some((idx) => idx.tablename === 'subscriptions' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasSubscriptionsTenantStatus = typedIndexes.some((idx) => idx.tablename === 'subscriptions' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'status'));
+  const hasSubscriptionsTenantNextDueDate = typedIndexes.some((idx) => idx.tablename === 'subscriptions' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'next_due_date'));
+  const hasPaymentsTenant = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasPaymentsStatus = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'status'));
+  const hasPaymentsTenantStatus = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'status'));
+  const hasPaymentsTenantDueDate = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'due_date'));
+  const hasPaymentsTenantCreatedAt = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'created_at'));
 
   const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
   add(checks, {
@@ -228,6 +238,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.users.email_unique', ok: hasUsersEmailUnique, suggestion: 'Aplique a migration que cria unique em users.email.' });
   add(checks, { label: 'index.tenants.slug_unique', ok: hasTenantsSlugUnique, suggestion: 'Aplique a migration que cria unique em tenants.slug.' });
   add(checks, { label: 'index.tenant_users.tenant_id_user_id_unique', ok: hasTenantUsersUnique, suggestion: 'Aplique a migration que cria unique em tenant_users(tenant_id, user_id).' });
+  add(checks, { label: 'index.plans.slug_unique', ok: hasPlansSlugUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS plans_slug_key ON plans(slug);' });
   add(checks, {
     label: 'index.allowed_users.no_global_email_unique',
     ok: !hasAllowedGlobalEmailUnique,
@@ -239,6 +250,15 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     ok: hasAllowedCompositeUnique,
     suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS allowed_users_tenant_id_email_key ON allowed_users(tenant_id, email);',
   });
+
+  add(checks, { label: 'index.subscriptions.tenant_id', ok: hasSubscriptionsTenant, suggestion: 'CREATE INDEX IF NOT EXISTS subscriptions_tenant_id_idx ON subscriptions(tenant_id);' });
+  add(checks, { label: 'index.subscriptions.tenant_id_status', ok: hasSubscriptionsTenantStatus, suggestion: 'CREATE INDEX IF NOT EXISTS subscriptions_tenant_id_status_idx ON subscriptions(tenant_id, status);' });
+  add(checks, { label: 'index.subscriptions.tenant_id_next_due_date', ok: hasSubscriptionsTenantNextDueDate, suggestion: 'CREATE INDEX IF NOT EXISTS subscriptions_tenant_id_next_due_date_idx ON subscriptions(tenant_id, next_due_date);' });
+  add(checks, { label: 'index.payments.tenant_id', ok: hasPaymentsTenant, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_idx ON payments(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.payments.status', ok: hasPaymentsStatus, suggestion: 'CREATE INDEX IF NOT EXISTS payments_status_idx ON payments(status);', runtimeEssential: false });
+  add(checks, { label: 'index.payments.tenant_id_status', ok: hasPaymentsTenantStatus, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_status_idx ON payments(tenant_id, status);', runtimeEssential: false });
+  add(checks, { label: 'index.payments.tenant_id_due_date', ok: hasPaymentsTenantDueDate, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_due_date_idx ON payments(tenant_id, due_date);', runtimeEssential: false });
+  add(checks, { label: 'index.payments.tenant_id_created_at', ok: hasPaymentsTenantCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_created_at_idx ON payments(tenant_id, created_at);', runtimeEssential: false });
 
   const enums = await enumValues();
   add(checks, {
