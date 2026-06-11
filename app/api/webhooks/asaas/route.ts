@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { captureServerException } from "@/lib/observability";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
-import { mapPaymentStatus, validateWebhookToken } from "@/lib/asaas";
+import { AsaasConfigError, assertAsaasConfig, mapPaymentStatus, validateWebhookToken } from "@/lib/asaas";
 import {
   calculateGracePeriodEndsAt,
   evaluateBillingAccess,
@@ -25,8 +25,18 @@ export async function POST(req: Request) {
     });
     if (!rl.allowed) return rateLimitResponse(rl);
 
-    if (!validateWebhookToken(req))
+    try {
+      assertAsaasConfig({ requireWebhookToken: true });
+    } catch (error) {
+      const code = error instanceof AsaasConfigError ? error.code : "ASAAS_CONFIG_INVALID";
+      console.error("[asaas-webhook]", { event: "webhook_config_invalid", code });
+      return NextResponse.json({ error: "webhook_not_configured" }, { status: 503 });
+    }
+
+    if (!validateWebhookToken(req)) {
+      console.warn("[asaas-webhook]", { event: "invalid_webhook_token" });
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
     const payload = await req.json().catch(() => ({}));
     const event = String(payload.event || payload.type || "UNKNOWN");
     const eventId = String(

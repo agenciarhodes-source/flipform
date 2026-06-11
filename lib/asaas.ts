@@ -1,14 +1,165 @@
-const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
-const ASAAS_BASE_URL = process.env.ASAAS_BASE_URL || 'https://api-sandbox.asaas.com/v3';
-const ASAAS_WEBHOOK_TOKEN = process.env.ASAAS_WEBHOOK_TOKEN;
+const DEFAULT_ASAAS_BASE_URL = 'https://api-sandbox.asaas.com/v3';
+const ASAAS_SANDBOX_HOSTS = new Set(['sandbox.asaas.com', 'api-sandbox.asaas.com']);
+const ASAAS_PRODUCTION_HOSTS = new Set(['api.asaas.com', 'www.asaas.com']);
+
+export type AsaasEnvironment = 'sandbox' | 'production' | 'unknown';
+
+type AsaasConfig = {
+  apiKey: string | null;
+  baseUrl: string;
+  webhookToken: string | null;
+  nextPublicBaseUrl: string | null;
+  publicSiteUrl: string | null;
+  environment: AsaasEnvironment;
+  explicitEnvironment: string | null;
+  warnings: string[];
+};
+
+export class AsaasConfigError extends Error {
+  code: string;
+  status: number;
+
+  constructor(message: string, code = 'ASAAS_CONFIG_INVALID', status = 503) {
+    super(message);
+    this.name = 'AsaasConfigError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+function clean(value?: string | null) {
+  const trimmed = String(value || '').trim();
+  return trimmed.length ? trimmed : null;
+}
+
+function normalizeBaseUrl(value?: string | null) {
+  const raw = clean(value) || DEFAULT_ASAAS_BASE_URL;
+  return raw.replace(/\/+$/, '');
+}
+
+function hostFromUrl(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function detectEnvironmentFromBaseUrl(baseUrl: string): AsaasEnvironment {
+  const host = hostFromUrl(baseUrl);
+  if (!host) return 'unknown';
+  if (ASAAS_SANDBOX_HOSTS.has(host) || host.includes('sandbox.asaas.com')) return 'sandbox';
+  if (ASAAS_PRODUCTION_HOSTS.has(host)) return 'production';
+  return 'unknown';
+}
+
+function normalizeExplicitEnvironment(value?: string | null): AsaasEnvironment | null {
+  const normalized = clean(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (['prod', 'production'].includes(normalized)) return 'production';
+  if (['sandbox', 'test', 'testing'].includes(normalized)) return 'sandbox';
+  return 'unknown';
+}
+
+function isProductionRuntime() {
+  const appUrl = clean(process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL);
+  return (
+    process.env.VERCEL_ENV === 'production' ||
+    appUrl === 'https://app.flipform.com.br' ||
+    appUrl === 'https://www.app.flipform.com.br'
+  );
+}
+
+export function getAsaasConfig(): AsaasConfig {
+  const baseUrl = normalizeBaseUrl(process.env.ASAAS_BASE_URL);
+  const explicit = normalizeExplicitEnvironment(process.env.ASAAS_ENV);
+  const detected = detectEnvironmentFromBaseUrl(baseUrl);
+  const warnings: string[] = [];
+
+  if (detected === 'unknown') warnings.push('ASAAS_BASE_URL não corresponde aos hosts conhecidos do Asaas.');
+  if (explicit === 'unknown') warnings.push('ASAAS_ENV inválido; use sandbox ou production.');
+  if (explicit && explicit !== 'unknown' && detected !== 'unknown' && explicit !== detected) {
+    warnings.push('ASAAS_ENV não corresponde ao ambiente detectado pela ASAAS_BASE_URL.');
+  }
+  if (isProductionRuntime() && detected === 'sandbox' && process.env.ALLOW_SANDBOX_ASAAS_IN_PRODUCTION !== 'true') {
+    warnings.push('Runtime de produção está apontando para o Asaas Sandbox.');
+  }
+  if (!isProductionRuntime() && explicit === 'sandbox' && detected === 'production') {
+    warnings.push('ASAAS_ENV=sandbox está apontando para URL de produção do Asaas.');
+  }
+
+  return {
+    apiKey: clean(process.env.ASAAS_API_KEY),
+    baseUrl,
+    webhookToken: clean(process.env.ASAAS_WEBHOOK_TOKEN),
+    nextPublicBaseUrl: clean(process.env.NEXT_PUBLIC_BASE_URL),
+    publicSiteUrl: clean(process.env.PUBLIC_SITE_URL),
+    environment: explicit && explicit !== 'unknown' ? explicit : detected,
+    explicitEnvironment: clean(process.env.ASAAS_ENV),
+    warnings,
+  };
+}
+
+export function getAsaasHealthStatus() {
+  const config = getAsaasConfig();
+  const missing = [
+    ['ASAAS_API_KEY', !config.apiKey],
+    ['ASAAS_BASE_URL', !clean(process.env.ASAAS_BASE_URL)],
+    ['ASAAS_WEBHOOK_TOKEN', !config.webhookToken],
+    ['NEXT_PUBLIC_BASE_URL', !config.nextPublicBaseUrl],
+    ['PUBLIC_SITE_URL', !config.publicSiteUrl],
+  ]
+    .filter(([, isMissing]) => isMissing)
+    .map(([name]) => name as string);
+
+  return {
+    apiKeyConfigured: Boolean(config.apiKey),
+    environment: config.environment,
+    baseUrl: config.baseUrl,
+    webhookTokenConfigured: Boolean(config.webhookToken),
+    nextPublicBaseUrlConfigured: Boolean(config.nextPublicBaseUrl),
+    publicSiteUrlConfigured: Boolean(config.publicSiteUrl),
+    warnings: config.warnings,
+    missing,
+    status: missing.length === 0 && config.warnings.length === 0 ? 'ready' : 'not_ready',
+  };
+}
+
+export function assertAsaasConfig(options: { requireWebhookToken?: boolean; requirePublicUrls?: boolean } = {}): AsaasConfig & { apiKey: string } {
+  const config = getAsaasConfig();
+  if (!config.apiKey) {
+    throw new AsaasConfigError('ASAAS_API_KEY não configurada.', 'ASAAS_API_KEY_MISSING');
+  }
+  if (!clean(process.env.ASAAS_BASE_URL)) {
+    throw new AsaasConfigError('ASAAS_BASE_URL não configurada.', 'ASAAS_BASE_URL_MISSING');
+  }
+  if (!hostFromUrl(config.baseUrl)) {
+    throw new AsaasConfigError('ASAAS_BASE_URL inválida.', 'ASAAS_BASE_URL_INVALID');
+  }
+  if (options.requireWebhookToken && !config.webhookToken) {
+    throw new AsaasConfigError('ASAAS_WEBHOOK_TOKEN não configurado.', 'ASAAS_WEBHOOK_TOKEN_MISSING');
+  }
+  if (options.requirePublicUrls) {
+    if (!config.nextPublicBaseUrl) {
+      throw new AsaasConfigError('NEXT_PUBLIC_BASE_URL não configurada.', 'NEXT_PUBLIC_BASE_URL_MISSING');
+    }
+    if (!config.publicSiteUrl) {
+      throw new AsaasConfigError('PUBLIC_SITE_URL não configurada.', 'PUBLIC_SITE_URL_MISSING');
+    }
+  }
+  if (config.warnings.length > 0) {
+    throw new AsaasConfigError(config.warnings[0], 'ASAAS_ENVIRONMENT_MISMATCH');
+  }
+  return { ...config, apiKey: config.apiKey };
+}
 
 async function asaasFetch(path: string, init: RequestInit) {
-  if (!ASAAS_API_KEY) throw new Error('ASAAS_API_KEY not configured');
-  const res = await fetch(`${ASAAS_BASE_URL}${path}`, {
+  const config = assertAsaasConfig();
+  const res = await fetch(`${config.baseUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      access_token: ASAAS_API_KEY,
+      access_token: config.apiKey,
       ...(init.headers || {}),
     },
   });
@@ -28,13 +179,14 @@ export function mapAsaasPaymentStatus(status: string) {
   if (s.includes('CHARGEBACK')) return 'refunded';
   if (s.includes('OVERDUE')) return 'overdue';
   if (s.includes('REFUND')) return 'refunded';
-  if (s.includes('DELET')) return 'failed';
+  if (s.includes('DELET') || s.includes('CANCEL')) return 'failed';
   return 'pending';
 }
 
 export const mapPaymentStatus = mapAsaasPaymentStatus;
 
 export function validateWebhookToken(req: Request) {
-  const token = req.headers.get('asaas-access-token') || req.headers.get('x-asaas-token');
-  return Boolean(ASAAS_WEBHOOK_TOKEN && token && token === ASAAS_WEBHOOK_TOKEN);
+  const configuredToken = clean(process.env.ASAAS_WEBHOOK_TOKEN);
+  const token = clean(req.headers.get('asaas-access-token') || req.headers.get('x-asaas-token'));
+  return Boolean(configuredToken && token && token === configuredToken);
 }
