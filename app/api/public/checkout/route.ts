@@ -122,12 +122,15 @@ function publicCheckoutUnavailablePayload(errorCode: string) {
 
 const PUBLIC_CHECKOUT_PAYMENT_ERROR =
   "Não foi possível iniciar o pagamento. Tente novamente.";
+const CREDIT_CARD_CHECKOUT_PAYMENT_ERROR =
+  "Não foi possível iniciar pagamento por cartão. Tente Pix ou Boleto, ou entre em contato com o suporte.";
 const INVALID_DOCUMENT_PAYMENT_ERROR =
   "CPF/CNPJ inválido para iniciar o pagamento.";
 
 type PublicCheckoutErrorCode =
   | "ASAAS_CUSTOMER_CREATE_FAILED"
   | "ASAAS_SUBSCRIPTION_CREATE_FAILED"
+  | "ASAAS_CREDIT_CARD_CHECKOUT_FAILED"
   | "ASAAS_PAYMENT_LINK_MISSING"
   | "ASAAS_PROVIDER_ERROR";
 
@@ -161,6 +164,26 @@ function selectedBillingType(value: unknown) {
   if (method === "boleto" || method === "bank_slip" || method === "bank-slip")
     return "BOLETO";
   return "UNDEFINED";
+}
+
+function normalizedBillingType(value: unknown) {
+  const billingType = String(value || "")
+    .trim()
+    .toUpperCase();
+  return billingType || null;
+}
+
+function isReusablePaymentForBillingType(
+  paymentBillingType: unknown,
+  selectedBillingType: string,
+) {
+  const selected = normalizedBillingType(selectedBillingType);
+  if (!selected) return false;
+
+  const existing = normalizedBillingType(paymentBillingType);
+  if (!existing) return selected === "UNDEFINED";
+
+  return existing === selected;
 }
 
 function asaasErrorText(error: AsaasProviderError) {
@@ -469,13 +492,46 @@ export async function POST(req: Request) {
         },
         OR: [{ invoiceUrl: { not: null } }, { bankSlipUrl: { not: null } }],
       },
-      select: { invoiceUrl: true, bankSlipUrl: true, subscriptionId: true },
+      select: {
+        invoiceUrl: true,
+        bankSlipUrl: true,
+        subscriptionId: true,
+        billingType: true,
+      },
       orderBy: { createdAt: "desc" },
     });
 
     const reusableCheckoutUrl =
       reusablePayment?.invoiceUrl || reusablePayment?.bankSlipUrl;
-    if (reusableCheckoutUrl) {
+    const canReusePayment =
+      Boolean(reusableCheckoutUrl) &&
+      isReusablePaymentForBillingType(
+        reusablePayment?.billingType,
+        billingType,
+      );
+
+    if (reusableCheckoutUrl && !canReusePayment) {
+      console.info("[public-checkout]", {
+        event: "billing.checkout_reusable_payment_skipped",
+        planSlug: plan.slug,
+        selectedBillingType: billingType,
+        existingBillingType: reusablePayment?.billingType || null,
+      });
+      await logPlatformAudit({
+        tenantId: tenant.id,
+        userId: null,
+        entityType: "checkout",
+        entityId: reusablePayment?.subscriptionId || tenant.id,
+        action: "billing.checkout_reusable_payment_skipped",
+        metadata: {
+          planSlug: plan.slug,
+          selectedBillingType: billingType,
+          existingBillingType: reusablePayment?.billingType || null,
+        },
+      });
+    }
+
+    if (reusableCheckoutUrl && canReusePayment) {
       await logPlatformAudit({
         tenantId: tenant.id,
         userId: null,
@@ -553,12 +609,16 @@ export async function POST(req: Request) {
       });
     } catch (error) {
       throw new PublicCheckoutError(
-        "ASAAS_SUBSCRIPTION_CREATE_FAILED",
+        billingType === "CREDIT_CARD"
+          ? "ASAAS_CREDIT_CARD_CHECKOUT_FAILED"
+          : "ASAAS_SUBSCRIPTION_CREATE_FAILED",
         "Falha ao criar assinatura Asaas.",
         {
           userMessage: isInvalidCpfCnpjError(error)
             ? INVALID_DOCUMENT_PAYMENT_ERROR
-            : PUBLIC_CHECKOUT_PAYMENT_ERROR,
+            : billingType === "CREDIT_CARD"
+              ? CREDIT_CARD_CHECKOUT_PAYMENT_ERROR
+              : PUBLIC_CHECKOUT_PAYMENT_ERROR,
           cause: error,
         },
       );
