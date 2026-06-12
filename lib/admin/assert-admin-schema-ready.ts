@@ -210,7 +210,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs')
   `;
 
   type IdxRow = IndexInfo;
@@ -229,6 +229,15 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasPaymentsTenantStatus = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'status'));
   const hasPaymentsTenantDueDate = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'due_date'));
   const hasPaymentsTenantCreatedAt = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'created_at'));
+  const hasTenantIntegrationTenantUnique = typedIndexes.some((idx) => idx.tablename === 'tenant_integration_settings' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasTenantIntegrationTenant = typedIndexes.some((idx) => idx.indexname === 'tenant_integration_settings_tenant_id_idx' && idx.tablename === 'tenant_integration_settings' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasKanbanTrackingTenant = typedIndexes.some((idx) => idx.indexname === 'kanban_stage_tracking_events_tenant_id_idx' && idx.tablename === 'kanban_stage_tracking_events' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasKanbanTrackingStage = typedIndexes.some((idx) => idx.indexname === 'kanban_stage_tracking_events_stage_id_idx' && idx.tablename === 'kanban_stage_tracking_events' && indexHasColumn(idx.indexdef, 'stage_id'));
+  const hasKanbanTrackingTenantStageProvider = typedIndexes.some((idx) => idx.indexname === 'kanban_stage_tracking_events_tenant_stage_provider_idx' && idx.tablename === 'kanban_stage_tracking_events' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'stage_id') && indexHasColumn(idx.indexdef, 'provider'));
+  const hasTrackingLogsTenant = typedIndexes.some((idx) => idx.indexname === 'tracking_event_logs_tenant_id_idx' && idx.tablename === 'tracking_event_logs' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasTrackingLogsLead = typedIndexes.some((idx) => idx.indexname === 'tracking_event_logs_lead_id_idx' && idx.tablename === 'tracking_event_logs' && indexHasColumn(idx.indexdef, 'lead_id'));
+  const hasTrackingLogsCreatedAt = typedIndexes.some((idx) => idx.indexname === 'tracking_event_logs_created_at_idx' && idx.tablename === 'tracking_event_logs' && indexHasColumn(idx.indexdef, 'created_at'));
+  const hasTrackingLogsTenantProviderCreatedAt = typedIndexes.some((idx) => idx.indexname === 'tracking_event_logs_tenant_provider_created_at_idx' && idx.tablename === 'tracking_event_logs' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'provider') && indexHasColumn(idx.indexdef, 'created_at'));
 
   const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
   add(checks, {
@@ -262,6 +271,17 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.payments.tenant_id_status', ok: hasPaymentsTenantStatus, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_status_idx ON payments(tenant_id, status);', runtimeEssential: false });
   add(checks, { label: 'index.payments.tenant_id_due_date', ok: hasPaymentsTenantDueDate, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_due_date_idx ON payments(tenant_id, due_date);', runtimeEssential: false });
   add(checks, { label: 'index.payments.tenant_id_created_at', ok: hasPaymentsTenantCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_created_at_idx ON payments(tenant_id, created_at);', runtimeEssential: false });
+
+
+  add(checks, { label: 'index.tenant_integration_settings.tenant_id_unique', ok: hasTenantIntegrationTenantUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_key ON tenant_integration_settings(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.tenant_integration_settings.tenant_id', ok: hasTenantIntegrationTenant, suggestion: 'CREATE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_idx ON tenant_integration_settings(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.kanban_stage_tracking_events.tenant_id', ok: hasKanbanTrackingTenant, suggestion: 'CREATE INDEX IF NOT EXISTS kanban_stage_tracking_events_tenant_id_idx ON kanban_stage_tracking_events(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.kanban_stage_tracking_events.stage_id', ok: hasKanbanTrackingStage, suggestion: 'CREATE INDEX IF NOT EXISTS kanban_stage_tracking_events_stage_id_idx ON kanban_stage_tracking_events(stage_id);', runtimeEssential: false });
+  add(checks, { label: 'index.kanban_stage_tracking_events.tenant_stage_provider', ok: hasKanbanTrackingTenantStageProvider, suggestion: 'CREATE INDEX IF NOT EXISTS kanban_stage_tracking_events_tenant_stage_provider_idx ON kanban_stage_tracking_events(tenant_id, stage_id, provider);', runtimeEssential: false });
+  add(checks, { label: 'index.tracking_event_logs.tenant_id', ok: hasTrackingLogsTenant, suggestion: 'CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_id_idx ON tracking_event_logs(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.tracking_event_logs.lead_id', ok: hasTrackingLogsLead, suggestion: 'CREATE INDEX IF NOT EXISTS tracking_event_logs_lead_id_idx ON tracking_event_logs(lead_id);', runtimeEssential: false });
+  add(checks, { label: 'index.tracking_event_logs.created_at', ok: hasTrackingLogsCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS tracking_event_logs_created_at_idx ON tracking_event_logs(created_at);', runtimeEssential: false });
+  add(checks, { label: 'index.tracking_event_logs.tenant_provider_created_at', ok: hasTrackingLogsTenantProviderCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_provider_created_at_idx ON tracking_event_logs(tenant_id, provider, created_at);', runtimeEssential: false });
 
   const enums = await enumValues();
   add(checks, {
