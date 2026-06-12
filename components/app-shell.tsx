@@ -29,6 +29,7 @@ import {
   UserCog,
   Workflow,
   CreditCard,
+  PlugZap,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -61,6 +62,12 @@ const NAV: NavItem[] = [
     label: "Usuários",
     icon: UserCog,
     show: (r) => can(r, "USERS_VIEW"),
+  },
+  {
+    href: "/integrations",
+    label: "Integrações",
+    icon: PlugZap,
+    show: (r) => can(r, "INTEGRATIONS_VIEW"),
   },
   {
     href: "/settings",
