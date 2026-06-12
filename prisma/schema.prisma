@@ -76,37 +76,37 @@ enum TaskPriority {
 }
 
 model Tenant {
-  id              String       @id @default(uuid())
-  name            String
-  slug            String       @unique
-  logoUrl         String?      @map("logo_url")
-  primaryColor    String       @default("#2563EB") @map("primary_color")
-  status          TenantStatus @default(active)
-  planId          String?      @map("plan_id")
-  nextDueDate     DateTime?    @map("next_due_date")
-  internalNotes   String?      @map("internal_notes")
-  lastLoginAt     DateTime?    @map("last_login_at")
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
+  id            String       @id @default(uuid())
+  name          String
+  slug          String       @unique
+  logoUrl       String?      @map("logo_url")
+  primaryColor  String       @default("#2563EB") @map("primary_color")
+  status        TenantStatus @default(active)
+  planId        String?      @map("plan_id")
+  nextDueDate   DateTime?    @map("next_due_date")
+  internalNotes String?      @map("internal_notes")
+  lastLoginAt   DateTime?    @map("last_login_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
 
-  tenantUsers      TenantUser[]
-  forms            Form[]
-  pipelines        Pipeline[]
-  leads            Lead[]
-  notes            Note[]
-  tasks            Task[]
-  auditLogs        AuditLog[]
-  invites          Invite[]
-  allowedUsers     AllowedUser[]
-  plan             Plan?                  @relation(fields: [planId], references: [id])
-  subscriptions    Subscription[]
-  payments         Payment[]
-  statusHistory    TenantStatusHistory[]
-  webhookEvents    WebhookEvent[]
-  firstAccessTokens FirstAccessToken[]
-  integrationSettings TenantIntegrationSettings?
+  tenantUsers           TenantUser[]
+  forms                 Form[]
+  pipelines             Pipeline[]
+  leads                 Lead[]
+  notes                 Note[]
+  tasks                 Task[]
+  auditLogs             AuditLog[]
+  invites               Invite[]
+  allowedUsers          AllowedUser[]
+  plan                  Plan?                      @relation(fields: [planId], references: [id])
+  subscriptions         Subscription[]
+  payments              Payment[]
+  statusHistory         TenantStatusHistory[]
+  webhookEvents         WebhookEvent[]
+  firstAccessTokens     FirstAccessToken[]
+  integrationSettings   TenantIntegrationSettings?
   trackingEventMappings KanbanStageTrackingEvent[]
-  trackingEventLogs TrackingEventLog[]
+  trackingEventLogs     TrackingEventLog[]
 
   @@map("tenants")
 }
@@ -121,16 +121,16 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tenantUsers          TenantUser[]
-  assignedLeads        Lead[]                  @relation("AssignedLeads")
-  stageChanges         LeadStageHistory[]      @relation("StageChanger")
-  notes                Note[]
-  assignedTasks        Task[]                  @relation("AssignedTasks")
-  createdTasks         Task[]                  @relation("CreatedTasks")
-  auditLogs            AuditLog[]
-  invitesIssued        Invite[]                @relation("InviteIssuer")
-  tenantStatusChanges  TenantStatusHistory[]   @relation("StatusChanger")
-  allowedInvites       AllowedUser[]           @relation("AllowedUserInviter")
+  tenantUsers         TenantUser[]
+  assignedLeads       Lead[]                @relation("AssignedLeads")
+  stageChanges        LeadStageHistory[]    @relation("StageChanger")
+  notes               Note[]
+  assignedTasks       Task[]                @relation("AssignedTasks")
+  createdTasks        Task[]                @relation("CreatedTasks")
+  auditLogs           AuditLog[]
+  invitesIssued       Invite[]              @relation("InviteIssuer")
+  tenantStatusChanges TenantStatusHistory[] @relation("StatusChanger")
+  allowedInvites      AllowedUser[]         @relation("AllowedUserInviter")
 
   @@map("users")
 }
@@ -159,7 +159,7 @@ model Pipeline {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   stages PipelineStage[]
   forms  Form[]
   leads  Lead[]
@@ -207,9 +207,9 @@ model Form {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  pipeline     Pipeline       @relation(fields: [pipelineId], references: [id])
-  initialStage PipelineStage  @relation(fields: [initialStageId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id])
+  initialStage PipelineStage @relation(fields: [initialStageId], references: [id])
   fields       FormField[]
   leads        Lead[]
 
@@ -240,32 +240,32 @@ model FormField {
 }
 
 model Lead {
-  id          String           @id @default(uuid())
-  tenantId    String           @map("tenant_id")
-  formId      String?          @map("form_id")
-  pipelineId  String           @map("pipeline_id")
-  stageId     String           @map("stage_id")
-  assignedTo  String?          @map("assigned_to")
+  id          String          @id @default(uuid())
+  tenantId    String          @map("tenant_id")
+  formId      String?         @map("form_id")
+  pipelineId  String          @map("pipeline_id")
+  stageId     String          @map("stage_id")
+  assignedTo  String?         @map("assigned_to")
   name        String
   email       String?
   phone       String?
-  source      String           @default("formulario")
-  status      LeadStatus       @default(open)
-  temperature LeadTemperature  @default(cold)
-  lostReason  String?          @map("lost_reason")
-  tags        String[]         @default([])
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  source      String          @default("formulario")
+  status      LeadStatus      @default(open)
+  temperature LeadTemperature @default(cold)
+  lostReason  String?         @map("lost_reason")
+  tags        String[]        @default([])
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  form        Form?              @relation(fields: [formId], references: [id], onDelete: SetNull)
-  pipeline    Pipeline           @relation(fields: [pipelineId], references: [id])
-  stage       PipelineStage      @relation(fields: [stageId], references: [id])
-  assignedUser User?             @relation("AssignedLeads", fields: [assignedTo], references: [id])
-  answers     LeadAnswer[]
-  history     LeadStageHistory[]
-  notes       Note[]
-  tasks       Task[]
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  form         Form?              @relation(fields: [formId], references: [id], onDelete: SetNull)
+  pipeline     Pipeline           @relation(fields: [pipelineId], references: [id])
+  stage        PipelineStage      @relation(fields: [stageId], references: [id])
+  assignedUser User?              @relation("AssignedLeads", fields: [assignedTo], references: [id])
+  answers      LeadAnswer[]
+  history      LeadStageHistory[]
+  notes        Note[]
+  tasks        Task[]
 
   @@index([tenantId])
   @@index([stageId])
@@ -373,19 +373,19 @@ model AuditLog {
 }
 
 model Invite {
-  id         String   @id @default(uuid())
-  tenantId   String   @map("tenant_id")
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
   email      String
-  role       Role     @default(agent)
-  token      String   @unique
-  invitedBy  String?  @map("invited_by")
-  status     String   @default("pending") // pending | accepted | revoked | expired
-  expiresAt  DateTime @map("expires_at")
+  role       Role      @default(agent)
+  token      String    @unique
+  invitedBy  String?   @map("invited_by")
+  status     String    @default("pending") // pending | accepted | revoked | expired
+  expiresAt  DateTime  @map("expires_at")
   acceptedAt DateTime? @map("accepted_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  inviter  User?  @relation("InviteIssuer", fields: [invitedBy], references: [id])
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User?  @relation("InviteIssuer", fields: [invitedBy], references: [id])
 
   @@index([tenantId])
   @@index([email])
@@ -393,17 +393,17 @@ model Invite {
 }
 
 model AllowedUser {
-  id        String   @id @default(cuid())
-  email     String
-  tenantId  String   @map("tenant_id")
-  role      String
-  active    Boolean  @default(true)
-  status    String   @default("active")
-  source    String   @default("admin")
-  invitedBy String?  @map("invited_by")
+  id         String    @id @default(cuid())
+  email      String
+  tenantId   String    @map("tenant_id")
+  role       String
+  active     Boolean   @default(true)
+  status     String    @default("active")
+  source     String    @default("admin")
+  invitedBy  String?   @map("invited_by")
   acceptedAt DateTime? @map("accepted_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inviter User?  @relation("AllowedUserInviter", fields: [invitedBy], references: [id])
@@ -416,16 +416,16 @@ model AllowedUser {
 }
 
 model EmailVerificationCode {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   email       String
-  codeHash    String   @map("code_hash")
+  codeHash    String    @map("code_hash")
   purpose     String
-  attempts    Int      @default(0)
-  maxAttempts Int      @default(5) @map("max_attempts")
-  expiresAt   DateTime @map("expires_at")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5) @map("max_attempts")
+  expiresAt   DateTime  @map("expires_at")
   usedAt      DateTime? @map("used_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@index([email, purpose])
   @@index([expiresAt])
@@ -437,25 +437,25 @@ model EmailVerificationCode {
 // ============================================================================
 
 model Plan {
-  id           String       @id @default(uuid())
-  name         String
-  description  String?
-  price        Decimal      @db.Decimal(10, 2)
-  billingCycle BillingCycle @default(monthly) @map("billing_cycle")
-  maxUsers     Int          @default(0) @map("max_users")
-  maxForms     Int          @default(0) @map("max_forms")
-  slug         String       @unique
-  maxLeadsPerMonth Int      @default(0) @map("max_leads_per_month")
-  maxPipelines Int          @default(0) @map("max_pipelines")
-  canUseReports Boolean     @default(false) @map("can_use_reports")
-  canExportCsv Boolean      @default(false) @map("can_export_csv")
-  canUseCustomBranding Boolean @default(false) @map("can_use_custom_branding")
-  canUseMetaPixel Boolean   @default(false) @map("can_use_meta_pixel")
-  canUseWebhooks Boolean    @default(false) @map("can_use_webhooks")
-  canUseTasks Boolean       @default(true) @map("can_use_tasks")
-  isActive     Boolean      @default(true) @map("is_active")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+  id                   String       @id @default(uuid())
+  name                 String
+  description          String?
+  price                Decimal      @db.Decimal(10, 2)
+  billingCycle         BillingCycle @default(monthly) @map("billing_cycle")
+  maxUsers             Int          @default(0) @map("max_users")
+  maxForms             Int          @default(0) @map("max_forms")
+  slug                 String       @unique
+  maxLeadsPerMonth     Int          @default(0) @map("max_leads_per_month")
+  maxPipelines         Int          @default(0) @map("max_pipelines")
+  canUseReports        Boolean      @default(false) @map("can_use_reports")
+  canExportCsv         Boolean      @default(false) @map("can_export_csv")
+  canUseCustomBranding Boolean      @default(false) @map("can_use_custom_branding")
+  canUseMetaPixel      Boolean      @default(false) @map("can_use_meta_pixel")
+  canUseWebhooks       Boolean      @default(false) @map("can_use_webhooks")
+  canUseTasks          Boolean      @default(true) @map("can_use_tasks")
+  isActive             Boolean      @default(true) @map("is_active")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
 
   tenants       Tenant[]
   subscriptions Subscription[]
@@ -520,16 +520,15 @@ model Payment {
   @@map("payments")
 }
 
-
 model FirstAccessToken {
-  id        String   @id @default(cuid())
-  tokenHash String   @unique @map("token_hash")
+  id        String    @id @default(cuid())
+  tokenHash String    @unique @map("token_hash")
   email     String
-  tenantId  String   @map("tenant_id")
+  tenantId  String    @map("tenant_id")
   purpose   String
-  expiresAt DateTime @map("expires_at")
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -537,18 +536,19 @@ model FirstAccessToken {
   @@index([tenantId, expiresAt])
   @@map("first_access_tokens")
 }
-model WebhookEvent {
-  id                     String   @id @default(cuid())
-  provider               String
-  eventId                String   @map("event_id")
-  eventType              String   @map("event_type")
-  providerPaymentId      String?  @map("provider_payment_id")
-  rawPayload             Json?    @map("raw_payload")
-  processedAt            DateTime? @map("processed_at")
-  createdAt              DateTime @default(now()) @map("created_at")
-  tenantId               String?  @map("tenant_id")
 
-  tenant                 Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+model WebhookEvent {
+  id                String    @id @default(cuid())
+  provider          String
+  eventId           String    @map("event_id")
+  eventType         String    @map("event_type")
+  providerPaymentId String?   @map("provider_payment_id")
+  rawPayload        Json?     @map("raw_payload")
+  processedAt       DateTime? @map("processed_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  tenantId          String?   @map("tenant_id")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
   @@unique([provider, eventId])
   @@index([providerPaymentId])
@@ -571,21 +571,23 @@ model TenantStatusHistory {
   @@map("tenant_status_history")
 }
 
-
 model TenantIntegrationSettings {
-  id               String   @id @default(cuid())
-  tenantId         String   @unique @map("tenant_id")
-  metaPixelEnabled Boolean  @default(false) @map("meta_pixel_enabled")
-  metaPixelId      String?  @map("meta_pixel_id")
-  gtmEnabled       Boolean  @default(false) @map("gtm_enabled")
-  gtmContainerId   String?  @map("gtm_container_id")
-  ga4Enabled       Boolean  @default(false) @map("ga4_enabled")
-  ga4MeasurementId String?  @map("ga4_measurement_id")
-  googleAdsEnabled Boolean  @default(false) @map("google_ads_enabled")
-  googleAdsId      String?  @map("google_ads_id")
-  googleAdsLabel   String?  @map("google_ads_label")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id                       String   @id @default(cuid())
+  tenantId                 String   @unique @map("tenant_id")
+  metaPixelEnabled         Boolean  @default(false) @map("meta_pixel_enabled")
+  metaPixelId              String?  @map("meta_pixel_id")
+  metaAccessTokenEncrypted String?  @map("meta_access_token_encrypted")
+  metaTestEventCode        String?  @map("meta_test_event_code")
+  gtmEnabled               Boolean  @default(false) @map("gtm_enabled")
+  gtmContainerId           String?  @map("gtm_container_id")
+  ga4Enabled               Boolean  @default(false) @map("ga4_enabled")
+  ga4MeasurementId         String?  @map("ga4_measurement_id")
+  ga4ApiSecretEncrypted    String?  @map("ga4_api_secret_encrypted")
+  googleAdsEnabled         Boolean  @default(false) @map("google_ads_enabled")
+  googleAdsId              String?  @map("google_ads_id")
+  googleAdsLabel           String?  @map("google_ads_label")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -600,6 +602,10 @@ model KanbanStageTrackingEvent {
   provider        String
   eventName       String   @map("event_name")
   customEventName String?  @map("custom_event_name")
+  conversionLabel String?  @map("conversion_label")
+  conversionValue Decimal? @map("conversion_value") @db.Decimal(10, 2)
+  currency        String   @default("BRL")
+  metadata        Json?
   enabled         Boolean  @default(true)
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -608,6 +614,7 @@ model KanbanStageTrackingEvent {
 
   @@index([tenantId])
   @@index([stageId])
+  @@index([tenantId, stageId, provider])
   @@map("kanban_stage_tracking_events")
 }
 
@@ -631,5 +638,6 @@ model TrackingEventLog {
   @@index([tenantId])
   @@index([leadId])
   @@index([createdAt])
+  @@index([tenantId, provider, createdAt])
   @@map("tracking_event_logs")
 }

@@ -3,6 +3,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
+import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 
 /**
  * Public form submit endpoint.
@@ -158,6 +159,21 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       entityType: 'lead', entityId: lead.id, action: 'lead.created',
       metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario' },
     });
+
+    try {
+      await dispatchFormSubmissionTracking({
+        tenantId: form.tenantId,
+        leadId: lead.id,
+        pipelineId: form.pipelineId,
+        fromStageId: null,
+        toStageId: form.initialStageId,
+        triggeredById: null,
+        source: 'public_form',
+        lead: { email: lead.email, phone: lead.phone, name: lead.name },
+      });
+    } catch (trackingError) {
+      console.error('public submit tracking error', trackingError);
+    }
 
     return NextResponse.json({
       ok: true,

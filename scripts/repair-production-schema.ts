@@ -203,6 +203,16 @@ const steps: Step[] = [
   { label: 'payments.tenant_status.index', sql: `CREATE INDEX IF NOT EXISTS payments_tenant_id_status_idx ON payments(tenant_id, status)` },
   { label: 'payments.tenant_due_date.index', sql: `CREATE INDEX IF NOT EXISTS payments_tenant_id_due_date_idx ON payments(tenant_id, due_date)` },
   { label: 'payments.tenant_created_at.index', sql: `CREATE INDEX IF NOT EXISTS payments_tenant_id_created_at_idx ON payments(tenant_id, created_at)` },
+
+  { label: 'tenant_integration_settings.meta_access_token_encrypted', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS meta_access_token_encrypted TEXT` },
+  { label: 'tenant_integration_settings.meta_test_event_code', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS meta_test_event_code TEXT` },
+  { label: 'tenant_integration_settings.ga4_api_secret_encrypted', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS ga4_api_secret_encrypted TEXT` },
+  { label: 'kanban_stage_tracking_events.conversion_label', sql: `ALTER TABLE kanban_stage_tracking_events ADD COLUMN IF NOT EXISTS conversion_label TEXT` },
+  { label: 'kanban_stage_tracking_events.conversion_value', sql: `ALTER TABLE kanban_stage_tracking_events ADD COLUMN IF NOT EXISTS conversion_value NUMERIC(10, 2)` },
+  { label: 'kanban_stage_tracking_events.currency', sql: `ALTER TABLE kanban_stage_tracking_events ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BRL'` },
+  { label: 'kanban_stage_tracking_events.metadata', sql: `ALTER TABLE kanban_stage_tracking_events ADD COLUMN IF NOT EXISTS metadata JSONB` },
+  { label: 'kanban_stage_tracking_events.tenant_stage_provider.index', sql: `CREATE INDEX IF NOT EXISTS kanban_stage_tracking_events_tenant_stage_provider_idx ON kanban_stage_tracking_events(tenant_id, stage_id, provider)` },
+  { label: 'tracking_event_logs.tenant_provider_created_at.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_provider_created_at_idx ON tracking_event_logs(tenant_id, provider, created_at)` },
 ];
 
 const defaultPlans: Step[] = [
