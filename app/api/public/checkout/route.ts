@@ -28,6 +28,17 @@ const ALLOWED_ORIGINS = new Set(
   ].filter((origin): origin is string => Boolean(origin)),
 );
 const PUBLIC_PLAN_SLUGS = new Set(['starter', 'growth', 'pro']);
+const PUBLIC_CHECKOUT_UNAVAILABLE_MESSAGE = 'Checkout temporariamente indisponível. Entre em contato com o suporte.';
+const SAFE_ASAAS_CONFIG_ERROR_CODES = new Set([
+  'ASAAS_API_KEY_MISSING',
+  'ASAAS_BASE_URL_MISSING',
+  'ASAAS_BASE_URL_INVALID',
+  'ASAAS_WEBHOOK_TOKEN_MISSING',
+  'NEXT_PUBLIC_BASE_URL_MISSING',
+  'PUBLIC_SITE_URL_MISSING',
+  'ASAAS_ENVIRONMENT_MISMATCH',
+  'ASAAS_CONFIG_INVALID',
+]);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function slugify(input: string) {
@@ -70,6 +81,15 @@ function addCors(res: NextResponse, origin?: string | null) {
 
 function forbiddenOrigin(origin: string | null) {
   return Boolean(origin && !ALLOWED_ORIGINS.has(origin));
+}
+
+function publicAsaasConfigErrorCode(error: unknown) {
+  if (!(error instanceof AsaasConfigError)) return 'ASAAS_CONFIG_INVALID';
+  return SAFE_ASAAS_CONFIG_ERROR_CODES.has(error.code) ? error.code : 'ASAAS_CONFIG_INVALID';
+}
+
+function publicCheckoutUnavailablePayload(errorCode: string) {
+  return { ok: false, error: PUBLIC_CHECKOUT_UNAVAILABLE_MESSAGE, errorCode };
 }
 
 async function buildTenantSlug(companyName: string) {
@@ -189,13 +209,9 @@ export async function POST(req: Request) {
   try {
     assertAsaasConfig({ requirePublicUrls: true });
   } catch (error) {
-    const code = error instanceof AsaasConfigError ? error.code : 'ASAAS_CONFIG_INVALID';
+    const code = publicAsaasConfigErrorCode(error);
     console.error('[public-checkout]', { event: 'checkout_config_invalid', code });
-    return json(
-      { ok: false, error: 'Checkout temporariamente indisponível. Entre em contato com o suporte.' },
-      { status: 503 },
-      origin,
-    );
+    return json(publicCheckoutUnavailablePayload(code), { status: 503 }, origin);
   }
 
   const plan = await prisma.plan.findFirst({
@@ -336,12 +352,14 @@ export async function POST(req: Request) {
 
     return json({ ok: true, checkoutUrl, status: 'pending_payment' }, undefined, origin);
   } catch (error) {
+    const isAsaasConfigError = error instanceof AsaasConfigError;
+    const code = isAsaasConfigError ? publicAsaasConfigErrorCode(error) : 'CHECKOUT_PROVIDER_ERROR';
     console.error('[public-checkout]', {
-      event: 'checkout_failed',
+      event: isAsaasConfigError ? 'checkout_config_invalid' : 'checkout_failed',
       planSlug: plan.slug,
       tenantId: tenant.id,
-      code: error instanceof AsaasConfigError ? error.code : 'CHECKOUT_PROVIDER_ERROR',
-      message: error instanceof AsaasConfigError ? error.message : 'Falha controlada ao iniciar cobrança Asaas.',
+      code,
+      message: isAsaasConfigError ? error.message : 'Falha controlada ao iniciar cobrança Asaas.',
     });
     await logPlatformAudit({
       tenantId: tenant.id,
@@ -351,6 +369,9 @@ export async function POST(req: Request) {
       action: 'billing.checkout_failed',
       metadata: { planSlug: plan.slug },
     });
+    if (isAsaasConfigError) {
+      return json(publicCheckoutUnavailablePayload(code), { status: 503 }, origin);
+    }
     return json({ ok: false, error: 'Não foi possível iniciar o pagamento. Tente novamente.' }, { status: 502 }, origin);
   }
 }
