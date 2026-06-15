@@ -23,9 +23,36 @@ CREATE TABLE IF NOT EXISTS whatsapp_event_triggers (
   updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
 );
 
-ALTER TABLE whatsapp_event_triggers
-  ADD CONSTRAINT whatsapp_event_triggers_tenant_id_fkey
-  FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS id TEXT DEFAULT md5(random()::text || clock_timestamp()::text);
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS order_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS trigger_phrase TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS match_type TEXT NOT NULL DEFAULT 'exact';
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'meta';
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS event_name TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS custom_event_name TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS conversion_value NUMERIC(10, 2);
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BRL';
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS pipeline_id TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS stage_id TEXT;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS once_per_lead BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS require_exact_match BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS last_triggered_at TIMESTAMP WITHOUT TIME ZONE;
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now();
+ALTER TABLE whatsapp_event_triggers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'whatsapp_event_triggers_tenant_id_fkey'
+  ) THEN
+    ALTER TABLE whatsapp_event_triggers
+      ADD CONSTRAINT whatsapp_event_triggers_tenant_id_fkey
+      FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_event_triggers_tenant_phrase_match_key
   ON whatsapp_event_triggers(tenant_id, trigger_phrase, match_type);
