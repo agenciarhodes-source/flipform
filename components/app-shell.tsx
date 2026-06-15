@@ -30,6 +30,7 @@ import {
   Workflow,
   CreditCard,
   PlugZap,
+  MessageCircle,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -67,6 +68,12 @@ const NAV: NavItem[] = [
     href: "/integrations",
     label: "Integrações",
     icon: PlugZap,
+    show: (r) => can(r, "INTEGRATIONS_VIEW"),
+  },
+  {
+    href: "/whatsapp-funnel",
+    label: "Funil WhatsApp",
+    icon: MessageCircle,
     show: (r) => can(r, "INTEGRATIONS_VIEW"),
   },
   {

@@ -7,7 +7,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
     where: { tenantId: session.tenantId },
     orderBy: { createdAt: 'desc' },
     take: 50,
-    select: { id: true, leadId: true, pipelineId: true, fromStageId: true, toStageId: true, provider: true, eventName: true, status: true, reason: true, triggeredById: true, eventId: true, createdAt: true },
+    select: { id: true, leadId: true, pipelineId: true, fromStageId: true, toStageId: true, provider: true, eventName: true, status: true, reason: true, triggeredById: true, eventId: true, source: true, triggerRuleId: true, conversationId: true, createdAt: true },
   });
   return NextResponse.json({ logs });
 });
