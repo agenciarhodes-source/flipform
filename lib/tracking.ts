@@ -22,6 +22,7 @@ export const integrationsSchema = z.object({
   googleAdsEnabled: z.boolean().default(false),
   googleAdsId: z.string().trim().regex(/^AW-[0-9]+$/, 'Google Ads Conversion ID inválido. Exemplo: AW-123456789.').optional().or(z.literal('')),
   googleAdsLabel: optionalString(120),
+  whatsappFunnelEnabled: z.boolean().default(false),
 });
 
 export const kanbanEventSchema = z.object({
@@ -69,6 +70,7 @@ export function buildIntegrationSettingsData(input: z.infer<typeof integrationsS
     googleAdsEnabled: input.googleAdsEnabled,
     googleAdsId: input.googleAdsId || null,
     googleAdsLabel: input.googleAdsLabel || null,
+    whatsappFunnelEnabled: input.whatsappFunnelEnabled,
   };
 
   if (input.metaAccessToken !== undefined && !looksMaskedSecret(input.metaAccessToken)) {
@@ -93,6 +95,7 @@ export async function getTrackingConfig(tenantId: string) {
 export async function logTrackingEvent(data: {
   tenantId: string; leadId?: string | null; pipelineId?: string | null; fromStageId?: string | null; toStageId?: string | null;
   provider: string; eventName: string; status: string; reason?: string | null; triggeredById?: string | null; eventId?: string | null;
+  conversationId?: string | null; messageId?: string | null; triggerRuleId?: string | null; messageDirection?: string | null; source?: string | null;
 }) {
   return prisma.trackingEventLog.create({ data });
 }
