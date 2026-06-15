@@ -9,12 +9,27 @@ const providers = [
   { value: 'ga4', label: 'GA4' },
 ];
 const eventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'];
+const matchTypes = [
+  { value: 'exact', label: 'Exatamente igual' },
+  { value: 'contains', label: 'Contém' },
+  { value: 'starts_with', label: 'Começa com' },
+];
+const whatsappSuggestions = [
+  { name: 'Novo lead', triggerPhrase: '✅ Novo lead', eventName: 'Lead' },
+  { name: 'Lead qualificado', triggerPhrase: '✅ Lead qualificado', eventName: 'QualifiedLead' },
+  { name: 'Orçamento enviado', triggerPhrase: '✅ Orçamento enviado', eventName: 'InitiateCheckout' },
+  { name: 'Pedido realizado', triggerPhrase: '✅ Pedido realizado', eventName: 'Purchase' },
+  { name: 'Pagamento confirmado', triggerPhrase: '✅ Pagamento confirmado', eventName: 'Purchase' },
+];
 
 export function IntegrationsClient() {
   const [settings, setSettings] = useState<any>({ metaPixelEnabled: false, gtmEnabled: false, ga4Enabled: false, googleAdsEnabled: false });
   const [events, setEvents] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [whatsappTriggers, setWhatsappTriggers] = useState<any[]>([]);
+  const [whatsappForm, setWhatsappForm] = useState<any>({ name: '', orderIndex: 0, triggerPhrase: '', matchType: 'exact', eventName: 'Lead', currency: 'BRL', oncePerLead: true, enabled: true });
+  const [whatsappTestText, setWhatsappTestText] = useState('✅ Lead qualificado');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -28,10 +43,12 @@ export function IntegrationsClient() {
         fetch('/api/integrations/events').then(r=>r.json()),
         fetch('/api/integrations/event-logs').then(r=>r.json()),
       ]);
+      const wf = await fetch('/api/integrations/whatsapp-funnel').then(r=>r.json());
       if (s.settings) setSettings({ ...s.settings, metaAccessToken: '', ga4ApiSecret: '' });
       setEvents(e.events || []);
       setPipelines(e.pipelines || []);
       setLogs(l.logs || []);
+      setWhatsappTriggers(wf.triggers || []);
       const firstPipeline = e.pipelines?.[0];
       const firstStage = firstPipeline?.stages?.[0];
       setForm((prev: any) => ({ ...prev, pipelineId: prev.pipelineId || firstPipeline?.id || '', stageId: prev.stageId || firstStage?.id || '' }));
@@ -101,6 +118,38 @@ export function IntegrationsClient() {
     await load();
   }
 
+  async function addWhatsappTrigger() {
+    try {
+      const editingId = whatsappForm.id;
+      const res = await fetch(editingId ? `/api/integrations/whatsapp-funnel/${editingId}` : '/api/integrations/whatsapp-funnel', { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...whatsappForm, orderIndex: Number(whatsappForm.orderIndex || whatsappTriggers.length + 1) }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar frase-gatilho.');
+      toast.success(editingId ? 'Frase-gatilho atualizada.' : 'Frase-gatilho criada.');
+      setWhatsappForm({ name: '', orderIndex: whatsappTriggers.length + 2, triggerPhrase: '', matchType: 'exact', eventName: 'Lead', currency: 'BRL', oncePerLead: true, enabled: true });
+      await load();
+    } catch (error: any) { toast.error(error.message || 'Erro ao criar frase-gatilho.'); }
+  }
+
+  async function toggleWhatsappTrigger(trigger: any) {
+    const res = await fetch(`/api/integrations/whatsapp-funnel/${trigger.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...trigger, enabled: !trigger.enabled }) });
+    if (!res.ok) toast.error('Não foi possível atualizar a frase-gatilho.');
+    await load();
+  }
+
+  async function deleteWhatsappTrigger(id: string) {
+    if (!confirm('Excluir esta frase-gatilho do Funil WhatsApp?')) return;
+    const res = await fetch(`/api/integrations/whatsapp-funnel/${id}`, { method: 'DELETE' });
+    if (!res.ok) toast.error('Não foi possível excluir a frase-gatilho.'); else toast.success('Frase-gatilho excluída.');
+    await load();
+  }
+
+  async function testWhatsappTrigger() {
+    const res = await fetch('/api/integrations/whatsapp-funnel/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: whatsappTestText, dryRun: true }) });
+    const data = await res.json();
+    if (!res.ok) return toast.error(data.error || 'Falha ao testar gatilho.');
+    if (data.matched) toast.success(`Gatilho encontrado: ${data.matched.name} → ${data.matched.eventName}`); else toast.info('Nenhuma frase ativa corresponde ao texto testado.');
+  }
+
   return <div className="p-6 space-y-6 max-w-7xl">
     <div>
       <h1 className="text-3xl font-bold">Integrações</h1>
@@ -149,6 +198,39 @@ export function IntegrationsClient() {
       </div>
       <button className="px-4 py-2 rounded bg-black text-white" onClick={addEvent}>Adicionar evento</button>
       <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Pipeline</th><th className="p-2 text-left">Etapa</th><th className="p-2 text-left">Provedor</th><th className="p-2 text-left">Evento</th><th className="p-2 text-left">Label/Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{events.map(ev=>{ const p=pipelines.find(x=>x.id===ev.pipelineId); const st=p?.stages?.find((s:any)=>s.id===ev.stageId); return <tr key={ev.id} className="border-t"><td className="p-2">{p?.name || ev.pipelineId}</td><td className="p-2">{st?.name || ev.stageId}</td><td className="p-2">{providers.find(p=>p.value===ev.provider)?.label || ev.provider}</td><td className="p-2">{ev.customEventName || ev.eventName}</td><td className="p-2">{ev.conversionLabel || '-'} {ev.conversionValue ? `· R$ ${ev.conversionValue}` : ''}</td><td className="p-2">{ev.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>toggleEvent(ev)}>{ev.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteEvent(ev.id)}>Excluir</button></td></tr>})}{events.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={7}>Nenhum evento configurado.</td></tr>}</tbody></table></div>
+    </div>
+
+
+    <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
+      <div className="space-y-2">
+        <h2 className="font-semibold text-lg">Funil WhatsApp</h2>
+        <p className="text-sm text-muted-foreground">Monte um funil de frases-gatilho para o WhatsApp. Cada frase enviada pelo vendedor pode disparar um evento diferente na Meta, ajudando suas campanhas a entenderem quais conversas viraram leads, oportunidades, pedidos ou compras.</p>
+        <p className="text-sm text-muted-foreground">Use frases padronizadas com sua equipe comercial. Exemplo: quando o vendedor enviar ‘✅ Pedido realizado’, o FlipForm dispara o evento Purchase para o Pixel configurado.</p>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Essa função só dispara eventos quando a mensagem for enviada pelo vendedor e corresponder a uma frase ativa do funil.</div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">O Funil WhatsApp usa o mesmo Pixel configurado em Meta Ads. Use um único Pixel para consolidar os eventos do seu funil. O FlipForm diferencia a origem dos eventos automaticamente.</div>
+      </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!settings.whatsappFunnelEnabled} onChange={e=>setSettings({...settings, whatsappFunnelEnabled:e.target.checked})} /> Ativar Funil WhatsApp</label>
+      <button className="px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={saveSettings} disabled={saving}>{saving ? 'Salvando...' : 'Salvar ativação'}</button>
+
+      <div className="border-t pt-4 space-y-3"><h3 className="font-semibold">Frases do funil</h3>
+        <p className="text-sm text-muted-foreground">Configure eventos por WhatsApp separados das etapas obrigatórias do Kanban.</p>
+        <div className="flex flex-wrap gap-2">{whatsappSuggestions.map((suggestion)=><button key={suggestion.triggerPhrase} className="rounded-full border px-3 py-1 text-xs" onClick={()=>setWhatsappForm({...whatsappForm, ...suggestion, matchType:'exact', currency:'BRL', oncePerLead:true, enabled:true})}>Usar modelo: {suggestion.triggerPhrase}</button>)}</div>
+        <div className="grid gap-2 md:grid-cols-4">
+          <input className="border rounded p-2" placeholder="Nome da etapa do funil" value={whatsappForm.name||''} onChange={e=>setWhatsappForm({...whatsappForm, name:e.target.value})} />
+          <input className="border rounded p-2" placeholder="Frase-gatilho enviada pelo vendedor" value={whatsappForm.triggerPhrase||''} onChange={e=>setWhatsappForm({...whatsappForm, triggerPhrase:e.target.value})} />
+          <select className="border rounded p-2" value={whatsappForm.matchType} onChange={e=>setWhatsappForm({...whatsappForm, matchType:e.target.value})}>{matchTypes.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}</select>
+          <select className="border rounded p-2" value={whatsappForm.eventName} onChange={e=>setWhatsappForm({...whatsappForm, eventName:e.target.value})}>{eventNames.map(e=><option key={e} value={e}>{e === 'CustomEvent' ? 'Evento personalizado' : e}</option>)}</select>
+          {whatsappForm.eventName === 'CustomEvent' && <input className="border rounded p-2" placeholder="Nome personalizado" value={whatsappForm.customEventName||''} onChange={e=>setWhatsappForm({...whatsappForm, customEventName:e.target.value})} />}
+          <input className="border rounded p-2" type="number" min="0" placeholder="Ordem" value={whatsappForm.orderIndex||''} onChange={e=>setWhatsappForm({...whatsappForm, orderIndex:e.target.value})} />
+          <input className="border rounded p-2" type="number" step="0.01" placeholder="Valor opcional" value={whatsappForm.conversionValue||''} onChange={e=>setWhatsappForm({...whatsappForm, conversionValue:e.target.value})} />
+          <input className="border rounded p-2" placeholder="Moeda" value={whatsappForm.currency||'BRL'} onChange={e=>setWhatsappForm({...whatsappForm, currency:e.target.value.toUpperCase()})} />
+          <label className="flex items-center gap-2 text-sm border rounded p-2"><input type="checkbox" checked={!!whatsappForm.oncePerLead} onChange={e=>setWhatsappForm({...whatsappForm, oncePerLead:e.target.checked})} /> Disparar apenas uma vez por lead/conversa</label>
+          <label className="flex items-center gap-2 text-sm border rounded p-2"><input type="checkbox" checked={!!whatsappForm.enabled} onChange={e=>setWhatsappForm({...whatsappForm, enabled:e.target.checked})} /> Ativo</label>
+        </div>
+        {whatsappForm.matchType === 'contains' && <p className="text-xs text-amber-700">A correspondência “contém” pode gerar disparos incorretos se a frase for muito genérica.</p>}
+        <div className="flex flex-wrap gap-2"><button className="px-4 py-2 rounded bg-black text-white" onClick={addWhatsappTrigger}>{whatsappForm.id ? 'Salvar frase-gatilho' : 'Adicionar frase-gatilho'}</button><input className="border rounded p-2" value={whatsappTestText} onChange={e=>setWhatsappTestText(e.target.value)} placeholder="Texto para testar" /><button className="px-4 py-2 rounded border" onClick={testWhatsappTrigger}>Testar gatilho</button></div>
+        <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Ordem</th><th className="p-2 text-left">Nome da etapa do funil</th><th className="p-2 text-left">Frase-gatilho</th><th className="p-2 text-left">Evento Meta correspondente</th><th className="p-2 text-left">Tipo de correspondência</th><th className="p-2 text-left">Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Último disparo</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{whatsappTriggers.map(trigger=><tr key={trigger.id} className="border-t"><td className="p-2">{trigger.orderIndex}</td><td className="p-2">{trigger.name}</td><td className="p-2">{trigger.triggerPhrase}</td><td className="p-2">Meta {trigger.customEventName || trigger.eventName}</td><td className="p-2">{matchTypes.find(m=>m.value===trigger.matchType)?.label || trigger.matchType}</td><td className="p-2">{trigger.conversionValue === null || trigger.conversionValue === undefined ? '-' : `R$ ${Number(trigger.conversionValue).toFixed(2)}`}</td><td className="p-2">{trigger.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2">{trigger.lastTriggeredAt ? new Date(trigger.lastTriggeredAt).toLocaleString('pt-BR') : '-'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>setWhatsappForm({...trigger})}>Editar</button><button className="underline" onClick={()=>toggleWhatsappTrigger(trigger)}>{trigger.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteWhatsappTrigger(trigger.id)}>Excluir</button></td></tr>)}{whatsappTriggers.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={9}>Nenhuma frase do Funil WhatsApp configurada.</td></tr>}</tbody></table></div>
+      </div>
     </div>
 
     <div className="grid gap-4 lg:grid-cols-2">

@@ -222,6 +222,7 @@ const steps: Step[] = [
       google_ads_enabled BOOLEAN NOT NULL DEFAULT false,
       google_ads_id TEXT,
       google_ads_label TEXT,
+      whatsapp_funnel_enabled BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
     )`,
@@ -260,6 +261,11 @@ const steps: Step[] = [
       reason TEXT,
       triggered_by_id TEXT,
       event_id TEXT,
+      conversation_id TEXT,
+      message_id TEXT,
+      trigger_rule_id TEXT,
+      message_direction TEXT,
+      source TEXT,
       created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
     )`,
   },
@@ -277,6 +283,7 @@ const steps: Step[] = [
   { label: 'tenant_integration_settings.google_ads_enabled', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS google_ads_enabled BOOLEAN NOT NULL DEFAULT false` },
   { label: 'tenant_integration_settings.google_ads_id', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS google_ads_id TEXT` },
   { label: 'tenant_integration_settings.google_ads_label', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS google_ads_label TEXT` },
+  { label: 'tenant_integration_settings.whatsapp_funnel_enabled', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS whatsapp_funnel_enabled BOOLEAN NOT NULL DEFAULT false` },
   { label: 'tenant_integration_settings.created_at', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()` },
   { label: 'tenant_integration_settings.updated_at', sql: `ALTER TABLE tenant_integration_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()` },
   { label: 'kanban_stage_tracking_events.id', sql: `ALTER TABLE kanban_stage_tracking_events ADD COLUMN IF NOT EXISTS id TEXT DEFAULT md5(random()::text || clock_timestamp()::text)` },
@@ -310,11 +317,32 @@ const steps: Step[] = [
   { label: 'tracking_event_logs.reason', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS reason TEXT` },
   { label: 'tracking_event_logs.triggered_by_id', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS triggered_by_id TEXT` },
   { label: 'tracking_event_logs.event_id', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS event_id TEXT` },
+  { label: 'tracking_event_logs.conversation_id', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS conversation_id TEXT` },
+  { label: 'tracking_event_logs.message_id', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS message_id TEXT` },
+  { label: 'tracking_event_logs.trigger_rule_id', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS trigger_rule_id TEXT` },
+  { label: 'tracking_event_logs.message_direction', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS message_direction TEXT` },
+  { label: 'tracking_event_logs.source', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS source TEXT` },
   { label: 'tracking_event_logs.created_at', sql: `ALTER TABLE tracking_event_logs ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()` },
+
+  {
+    label: 'whatsapp_event_triggers.create',
+    sql: `CREATE TABLE IF NOT EXISTS whatsapp_event_triggers (
+      id TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text), tenant_id TEXT NOT NULL, name TEXT NOT NULL,
+      order_index INTEGER NOT NULL DEFAULT 0, trigger_phrase TEXT NOT NULL, match_type TEXT NOT NULL DEFAULT 'exact', provider TEXT NOT NULL DEFAULT 'meta',
+      event_name TEXT NOT NULL, custom_event_name TEXT, conversion_value NUMERIC(10, 2), currency TEXT NOT NULL DEFAULT 'BRL', pipeline_id TEXT, stage_id TEXT,
+      once_per_lead BOOLEAN NOT NULL DEFAULT true, require_exact_match BOOLEAN NOT NULL DEFAULT true, enabled BOOLEAN NOT NULL DEFAULT true,
+      last_triggered_at TIMESTAMP WITHOUT TIME ZONE, created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(), updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
+    )`,
+  },
+  { label: 'whatsapp_event_triggers.index', sql: `CREATE INDEX IF NOT EXISTS whatsapp_event_triggers_tenant_id_idx ON whatsapp_event_triggers(tenant_id)` },
+  { label: 'whatsapp_event_triggers.enabled_order.index', sql: `CREATE INDEX IF NOT EXISTS whatsapp_event_triggers_tenant_enabled_order_idx ON whatsapp_event_triggers(tenant_id, enabled, order_index)` },
+  { label: 'whatsapp_event_triggers.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_event_triggers_tenant_phrase_match_key ON whatsapp_event_triggers(tenant_id, trigger_phrase, match_type)` },
   { label: 'tracking_event_logs.tenant_id.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_id_idx ON tracking_event_logs(tenant_id)` },
   { label: 'tracking_event_logs.lead_id.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_lead_id_idx ON tracking_event_logs(lead_id)` },
   { label: 'tracking_event_logs.created_at.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_created_at_idx ON tracking_event_logs(created_at)` },
   { label: 'tracking_event_logs.tenant_provider_created_at.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_provider_created_at_idx ON tracking_event_logs(tenant_id, provider, created_at)` },
+  { label: 'tracking_event_logs.tenant_trigger_rule_event.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_trigger_rule_event_idx ON tracking_event_logs(tenant_id, trigger_rule_id, event_name)` },
+  { label: 'tracking_event_logs.tenant_conversation.index', sql: `CREATE INDEX IF NOT EXISTS tracking_event_logs_tenant_conversation_idx ON tracking_event_logs(tenant_id, conversation_id)` },
 ];
 
 const defaultPlans: Step[] = [

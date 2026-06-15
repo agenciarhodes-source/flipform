@@ -32,7 +32,7 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers'];
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -43,9 +43,10 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'next_due_date', 'provider', 'payment_required', 'grace_period_ends_at', 'payment_provider', 'provider_customer_id', 'provider_subscription_id', 'created_at', 'updated_at', 'canceled_at'],
   plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
   payments: ['id', 'tenant_id', 'subscription_id', 'provider', 'provider_payment_id', 'status', 'value', 'due_date', 'paid_at', 'invoice_url', 'bank_slip_url', 'pix_qr_code', 'billing_type', 'raw_payload', 'created_at', 'updated_at'],
-  tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'created_at', 'updated_at'],
+  tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'whatsapp_funnel_enabled', 'created_at', 'updated_at'],
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
-  tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'created_at'],
+  tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
+  whatsapp_event_triggers: ['id', 'tenant_id', 'name', 'order_index', 'trigger_phrase', 'match_type', 'provider', 'event_name', 'custom_event_name', 'conversion_value', 'currency', 'pipeline_id', 'stage_id', 'once_per_lead', 'require_exact_match', 'enabled', 'last_triggered_at', 'created_at', 'updated_at'],
 };
 
 function add(checks: AdminSchemaCheck[], check: AdminSchemaCheck) {
@@ -210,7 +211,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers')
   `;
 
   type IdxRow = IndexInfo;

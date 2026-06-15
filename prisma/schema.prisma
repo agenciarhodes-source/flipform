@@ -107,6 +107,7 @@ model Tenant {
   integrationSettings   TenantIntegrationSettings?
   trackingEventMappings KanbanStageTrackingEvent[]
   trackingEventLogs     TrackingEventLog[]
+  whatsappEventTriggers WhatsAppEventTrigger[]
 
   @@map("tenants")
 }
@@ -586,6 +587,7 @@ model TenantIntegrationSettings {
   googleAdsEnabled         Boolean  @default(false) @map("google_ads_enabled")
   googleAdsId              String?  @map("google_ads_id")
   googleAdsLabel           String?  @map("google_ads_label")
+  whatsappFunnelEnabled    Boolean  @default(false) @map("whatsapp_funnel_enabled")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")
 
@@ -618,6 +620,37 @@ model KanbanStageTrackingEvent {
   @@map("kanban_stage_tracking_events")
 }
 
+model WhatsAppEventTrigger {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  name            String
+  orderIndex      Int      @default(0) @map("order_index")
+  triggerPhrase   String   @map("trigger_phrase")
+  matchType       String   @default("exact") @map("match_type")
+  provider        String   @default("meta")
+  eventName       String   @map("event_name")
+  customEventName String?  @map("custom_event_name")
+  conversionValue Decimal? @map("conversion_value") @db.Decimal(10, 2)
+  currency        String   @default("BRL")
+  pipelineId      String?  @map("pipeline_id")
+  stageId         String?  @map("stage_id")
+  oncePerLead     Boolean  @default(true) @map("once_per_lead")
+  requireExactMatch Boolean @default(true) @map("require_exact_match")
+  enabled         Boolean  @default(true)
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, triggerPhrase, matchType], name: "whatsapp_event_triggers_tenant_phrase_match_key")
+  @@index([tenantId])
+  @@index([tenantId, enabled, orderIndex])
+  @@index([pipelineId])
+  @@index([stageId])
+  @@map("whatsapp_event_triggers")
+}
+
 model TrackingEventLog {
   id            String   @id @default(cuid())
   tenantId      String   @map("tenant_id")
@@ -631,6 +664,11 @@ model TrackingEventLog {
   reason        String?
   triggeredById String?  @map("triggered_by_id")
   eventId       String?  @map("event_id")
+  conversationId String? @map("conversation_id")
+  messageId     String? @map("message_id")
+  triggerRuleId String? @map("trigger_rule_id")
+  messageDirection String? @map("message_direction")
+  source        String?
   createdAt     DateTime @default(now()) @map("created_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -639,5 +677,7 @@ model TrackingEventLog {
   @@index([leadId])
   @@index([createdAt])
   @@index([tenantId, provider, createdAt])
+  @@index([tenantId, triggerRuleId, eventName])
+  @@index([tenantId, conversationId])
   @@map("tracking_event_logs")
 }
