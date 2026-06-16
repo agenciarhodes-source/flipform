@@ -4,7 +4,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { serializeWhatsAppTrigger, toWhatsAppTriggerData, validateWhatsAppTriggerStage } from '@/lib/tracking/whatsapp-funnel';
-import { whatsappTriggerSchema } from '../route';
+import { whatsappTriggerSchema } from '@/lib/tracking/whatsapp-trigger-schema';
 export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
   const rl = rateLimit({ key: `whatsapp-funnel-put:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 }); if (!rl.allowed) return rateLimitResponse(rl);
   const existing = await prisma.whatsAppEventTrigger.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } }); if (!existing) return NextResponse.json({ error: 'Frase-gatilho não encontrada.' }, { status: 404 });
