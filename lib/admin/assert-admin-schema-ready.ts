@@ -32,7 +32,7 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains'];
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -47,6 +47,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
   tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
   whatsapp_event_triggers: ['id', 'tenant_id', 'name', 'order_index', 'trigger_phrase', 'match_type', 'provider', 'event_name', 'custom_event_name', 'conversion_value', 'currency', 'pipeline_id', 'stage_id', 'once_per_lead', 'require_exact_match', 'enabled', 'last_triggered_at', 'created_at', 'updated_at'],
+  custom_form_domains: ['id', 'tenant_id', 'domain', 'status', 'verification_status', 'ssl_status', 'is_primary', 'vercel_project_id', 'vercel_verified', 'verification_type', 'verification_domain', 'verification_value', 'verification_reason', 'dns_target', 'last_checked_at', 'verified_at', 'created_at', 'updated_at'],
 };
 
 function add(checks: AdminSchemaCheck[], check: AdminSchemaCheck) {
@@ -211,7 +212,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
   `;
 
   type IdxRow = IndexInfo;

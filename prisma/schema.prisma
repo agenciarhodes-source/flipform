@@ -108,8 +108,38 @@ model Tenant {
   trackingEventMappings KanbanStageTrackingEvent[]
   trackingEventLogs     TrackingEventLog[]
   whatsappEventTriggers WhatsAppEventTrigger[]
+  customFormDomains    CustomFormDomain[]
 
   @@map("tenants")
+}
+
+model CustomFormDomain {
+  id                 String    @id @default(cuid())
+  tenantId           String    @map("tenant_id")
+  domain             String    @unique
+  status             String    @default("pending")
+  verificationStatus String    @default("pending") @map("verification_status")
+  sslStatus          String    @default("pending") @map("ssl_status")
+  isPrimary          Boolean   @default(false) @map("is_primary")
+  vercelProjectId    String?   @map("vercel_project_id")
+  vercelVerified     Boolean   @default(false) @map("vercel_verified")
+  verificationType   String?   @map("verification_type")
+  verificationDomain String?   @map("verification_domain")
+  verificationValue  String?   @map("verification_value")
+  verificationReason String?   @map("verification_reason")
+  dnsTarget          String?   @map("dns_target")
+  lastCheckedAt      DateTime? @map("last_checked_at")
+  verifiedAt         DateTime? @map("verified_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([domain])
+  @@index([status])
+  @@index([tenantId, isPrimary])
+  @@map("custom_form_domains")
 }
 
 model User {

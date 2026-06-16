@@ -4,6 +4,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { slugify } from '@/lib/utils';
+import { buildPublicFormUrl, getPrimaryCustomFormDomain } from '@/lib/custom-form-domains';
 
 export const GET = withPermission('FORMS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -17,7 +18,8 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
     },
     orderBy: { createdAt: 'desc' },
   });
-  return NextResponse.json({ forms });
+  const primaryDomain = await getPrimaryCustomFormDomain(session.tenantId);
+  return NextResponse.json({ forms: forms.map((form) => ({ ...form, publicUrl: buildPublicFormUrl({ slug: form.slug, primaryDomain: primaryDomain?.domain }) })) });
 });
 
 async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
