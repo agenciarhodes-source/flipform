@@ -16,7 +16,12 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
   if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json();
   const parsed = integrationsSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Payload inválido' }, { status: 400 });
+  if (!parsed.success) {
+    return NextResponse.json({
+      error: parsed.error.errors[0]?.message || 'Dados inválidos para salvar integrações.',
+      issues: parsed.error.flatten(),
+    }, { status: 400 });
+  }
 
   const existing = await prisma.tenantIntegrationSettings.findUnique({ where: { tenantId: session.tenantId } });
   let data: Record<string, unknown>;
