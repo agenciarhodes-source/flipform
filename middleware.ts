@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getJoseSecretsForVerify } from '@/lib/jwt';
 import { isAdminHostname } from '@/lib/host-routing';
+import { isPlatformHost, normalizeHost } from '@/lib/form-domains';
 
 const COOKIE = 'flipform_token';
 
@@ -23,8 +24,29 @@ async function verifyJWT(token: string): Promise<any | null> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const host = req.headers.get('host');
+  const normalizedHost = normalizeHost(host);
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-pathname', pathname);
+
+  const isStaticAsset =
+    pathname.startsWith('/_next') ||
+    pathname === '/favicon.ico' ||
+    pathname.startsWith('/icon') ||
+    /\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|txt|xml|json|woff2?)$/i.test(pathname);
+
+  if (!isPlatformHost(normalizedHost) && !isStaticAsset) {
+    if (pathname.startsWith('/api/public/forms/')) {
+      return NextResponse.next({ request: { headers: requestHeaders } });
+    }
+    if (pathname.startsWith('/api') || pathname.startsWith('/admin') || pathname.startsWith('/login') || pathname.startsWith('/dashboard') || pathname.startsWith('/kanban') || pathname.startsWith('/billing') || pathname.startsWith('/settings') || pathname.startsWith('/integrations') || pathname.startsWith('/whatsapp-funnel')) {
+      const rewriteUrl = req.nextUrl.clone();
+      rewriteUrl.pathname = '/custom-domain/404';
+      return NextResponse.rewrite(rewriteUrl, { request: { headers: requestHeaders } });
+    }
+    const rewriteUrl = req.nextUrl.clone();
+    rewriteUrl.pathname = `/custom-domain${pathname === '/' ? '' : pathname}`;
+    return NextResponse.rewrite(rewriteUrl, { request: { headers: requestHeaders } });
+  }
 
   if (isAdminHostname(host)) {
     const ignore =
