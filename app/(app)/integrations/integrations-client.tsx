@@ -18,7 +18,30 @@ export function IntegrationsClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [showMetaToken, setShowMetaToken] = useState(false);
   const [form, setForm] = useState<any>({ provider: 'meta', eventName: 'Lead', enabled: true, currency: 'BRL' });
+
+  function cleanSecretValue(value: string) {
+    return value.trim().replace(/\s+/g, '');
+  }
+
+  async function pasteMetaToken() {
+    try {
+      const text = await navigator.clipboard.readText();
+      const cleaned = cleanSecretValue(text);
+
+      if (!cleaned) {
+        toast.error('Nenhum texto encontrado na área de transferência.');
+        return;
+      }
+
+      setSettings((prev: any) => ({ ...prev, metaAccessToken: cleaned }));
+      setShowMetaToken(true);
+      toast.success('Token colado no campo.');
+    } catch {
+      toast.error('Não foi possível acessar a área de transferência. Use Ctrl+V no campo.');
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -52,6 +75,7 @@ export function IntegrationsClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar integrações.');
       setSettings({ ...data.settings, metaAccessToken: '', ga4ApiSecret: '' });
+      setShowMetaToken(false);
       toast.success('Integrações salvas com sucesso.');
     } catch (error: any) {
       toast.error(error.message || 'Erro ao salvar integrações.');
@@ -114,8 +138,49 @@ export function IntegrationsClient() {
         <div><h2 className="font-semibold text-lg">Meta Ads</h2><p className="text-sm text-muted-foreground">Conecte seu Pixel e Token da API de Conversões para enviar eventos qualificados para o Meta.</p></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!settings.metaPixelEnabled} onChange={e=>setSettings({...settings, metaPixelEnabled:e.target.checked})} /> Ativar integração Meta</label>
         <input className="w-full border rounded p-2" placeholder="Meta Pixel ID" value={settings.metaPixelId||''} onChange={e=>setSettings({...settings, metaPixelId:e.target.value})} />
-        <input className="w-full border rounded p-2" type="password" placeholder={settings.metaAccessTokenMasked || 'Token da API de Conversões'} value={settings.metaAccessToken||''} onChange={e=>setSettings({...settings, metaAccessToken:e.target.value})} />
-        {settings.metaAccessTokenMasked && <p className="text-xs text-muted-foreground">Token salvo: {settings.metaAccessTokenMasked}</p>}
+        <div className="space-y-2">
+          <label className="text-sm font-medium" htmlFor="meta-access-token">Token da API de Conversões</label>
+          <textarea
+            id="meta-access-token"
+            className="w-full min-h-[88px] resize-y border rounded p-2 font-mono text-sm"
+            placeholder={settings.metaAccessTokenMasked || 'Cole aqui o Token da API de Conversões'}
+            value={settings.metaAccessToken || ''}
+            spellCheck={false}
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            style={!showMetaToken && settings.metaAccessToken ? ({ WebkitTextSecurity: 'disc' } as any) : undefined}
+            onChange={(e) => setSettings({ ...settings, metaAccessToken: e.target.value })}
+            onPaste={(e) => {
+              const pasted = e.clipboardData.getData('text');
+              const cleaned = cleanSecretValue(pasted);
+
+              if (cleaned) {
+                e.preventDefault();
+                setSettings({ ...settings, metaAccessToken: cleaned });
+                setShowMetaToken(true);
+              }
+            }}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="px-3 py-2 rounded border text-sm disabled:opacity-60" onClick={pasteMetaToken}>Colar token</button>
+            <button
+              type="button"
+              className="px-3 py-2 rounded border text-sm disabled:opacity-60"
+              onClick={() => setShowMetaToken((prev) => !prev)}
+              disabled={!settings.metaAccessToken}
+            >
+              {showMetaToken ? 'Ocultar token' : 'Mostrar token'}
+            </button>
+          </div>
+          {settings.metaAccessToken ? (
+            <p className="text-xs text-emerald-700">Novo token informado. Ele será criptografado ao salvar.</p>
+          ) : settings.metaAccessTokenMasked ? (
+            <p className="text-xs text-muted-foreground">Token já salvo: {settings.metaAccessTokenMasked}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Cole o Token da API de Conversões gerado no Gerenciador de Eventos da Meta.</p>
+          )}
+        </div>
         <input className="w-full border rounded p-2" placeholder="Código de teste da Meta (opcional)" value={settings.metaTestEventCode||''} onChange={e=>setSettings({...settings, metaTestEventCode:e.target.value})} />
         <p className="text-xs text-muted-foreground">O token da API é armazenado com segurança e nunca será exibido novamente.</p>
         <div className="flex gap-2"><button className="px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={saveSettings} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button><button className="px-4 py-2 rounded border disabled:opacity-60" onClick={testMeta} disabled={testing}>{testing ? 'Testando...' : 'Enviar evento de teste'}</button></div>
