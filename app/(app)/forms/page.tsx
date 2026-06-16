@@ -14,9 +14,6 @@ export default function FormsPage() {
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [filterPipeline, setFilterPipeline] = useState<string>('all');
   const [loading, setLoading] = useState(true);
-  const [origin, setOrigin] = useState('');
-
-  useEffect(() => { setOrigin(window.location.origin); }, []);
 
   const load = () => {
     const qs = filterPipeline && filterPipeline !== 'all' ? `?pipelineId=${filterPipeline}` : '';
@@ -31,8 +28,8 @@ export default function FormsPage() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterPipeline]);
 
-  const copyLink = (slug: string) => {
-    navigator.clipboard.writeText(`${origin}/f/${slug}`);
+  const copyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
     toast.success('Link copiado!');
   };
 
@@ -119,11 +116,15 @@ export default function FormsPage() {
                   <span>{f._count.leads} leads</span>
                   <span>{formatDate(f.createdAt)}</span>
                 </div>
+                <div className="rounded-md bg-muted/40 p-2 mb-3 text-xs break-all">
+                  <div className="font-medium">{f.publicUrl}</div>
+                  <div className="text-muted-foreground">Link gerado com o domínio configurado em Domínios.</div>
+                </div>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" onClick={() => copyLink(f.slug)} className="flex-1">
+                  <Button size="sm" variant="outline" onClick={() => copyLink(f.publicUrl)} className="flex-1">
                     <Copy className="w-3 h-3 mr-1.5" />Link
                   </Button>
-                  <Link href={`/f/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
+                  <Link href={f.publicUrl || `/f/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
                   <Link href={`/forms/${f.id}/edit`}><Button size="sm" variant="outline"><Edit className="w-3 h-3" /></Button></Link>
                   <Button size="sm" variant="outline" onClick={() => deleteForm(f.id)}><Trash2 className="w-3 h-3 text-destructive" /></Button>
                 </div>

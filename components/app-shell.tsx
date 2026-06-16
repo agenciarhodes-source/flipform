@@ -31,6 +31,7 @@ import {
   CreditCard,
   PlugZap,
   MessageCircle,
+  Globe2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -45,6 +46,7 @@ const NAV: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/forms", label: "Formulários", icon: FileText },
+  { href: "/domains", label: "Domínios", icon: Globe2 },
   { href: "/billing", label: "Financeiro", icon: CreditCard },
   {
     href: "/pipelines",
