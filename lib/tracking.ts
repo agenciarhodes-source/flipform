@@ -7,20 +7,30 @@ import { sendMetaCapiEvent } from './tracking/meta-capi';
 export const trackingProviders = ['meta', 'gtm', 'ga4', 'google_ads'] as const;
 export const funnelEventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'] as const;
 
-const optionalString = (max = 255) => z.string().trim().max(max).optional().or(z.literal(''));
+const optionalString = (max = 255) =>
+  z.preprocess(
+    (value) => (value === null ? '' : value),
+    z.string().trim().max(max).optional().or(z.literal('')),
+  );
+
+const optionalPatternString = (regex: RegExp, message: string) =>
+  z.preprocess(
+    (value) => (value === null ? '' : value),
+    z.string().trim().regex(regex, message).optional().or(z.literal('')),
+  );
 
 export const integrationsSchema = z.object({
   metaPixelEnabled: z.boolean().default(false),
-  metaPixelId: z.string().trim().regex(/^[0-9]{5,30}$/, 'Meta Pixel ID inválido. Use apenas números.').optional().or(z.literal('')),
-  metaAccessToken: z.string().trim().max(4096).optional().or(z.literal('')),
+  metaPixelId: optionalPatternString(/^[0-9]{5,30}$/, 'Meta Pixel ID inválido. Use apenas números.'),
+  metaAccessToken: optionalString(4096),
   metaTestEventCode: optionalString(120),
   gtmEnabled: z.boolean().default(false),
-  gtmContainerId: z.string().trim().regex(/^GTM-[A-Z0-9]+$/, 'GTM Container ID inválido. Exemplo: GTM-XXXXXXX.').optional().or(z.literal('')),
+  gtmContainerId: optionalPatternString(/^GTM-[A-Z0-9]+$/, 'GTM Container ID inválido. Exemplo: GTM-XXXXXXX.'),
   ga4Enabled: z.boolean().default(false),
-  ga4MeasurementId: z.string().trim().regex(/^G-[A-Z0-9]+$/, 'GA4 Measurement ID inválido. Exemplo: G-XXXXXXXXXX.').optional().or(z.literal('')),
-  ga4ApiSecret: z.string().trim().max(512).optional().or(z.literal('')),
+  ga4MeasurementId: optionalPatternString(/^G-[A-Z0-9]+$/, 'GA4 Measurement ID inválido. Exemplo: G-XXXXXXXXXX.'),
+  ga4ApiSecret: optionalString(512),
   googleAdsEnabled: z.boolean().default(false),
-  googleAdsId: z.string().trim().regex(/^AW-[0-9]+$/, 'Google Ads Conversion ID inválido. Exemplo: AW-123456789.').optional().or(z.literal('')),
+  googleAdsId: optionalPatternString(/^AW-[0-9]+$/, 'Google Ads Conversion ID inválido. Exemplo: AW-123456789.'),
   googleAdsLabel: optionalString(120),
   whatsappFunnelEnabled: z.boolean().default(false),
 });

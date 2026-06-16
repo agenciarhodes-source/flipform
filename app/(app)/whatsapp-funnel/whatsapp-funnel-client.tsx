@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 
 const eventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'];
 const matchTypes = [
@@ -44,7 +45,7 @@ export function WhatsAppFunnelClient() {
         fetch('/api/integrations/whatsapp-funnel').then((r) => r.json()),
         fetch('/api/integrations/event-logs').then((r) => r.json()),
       ]);
-      if (settingsRes.status === 'fulfilled' && settingsRes.value.settings) setSettings({ ...settingsRes.value.settings, metaAccessToken: '', ga4ApiSecret: '' });
+      if (settingsRes.status === 'fulfilled' && settingsRes.value.settings) setSettings(normalizeIntegrationSettings(settingsRes.value.settings));
       else setSettingsFailed(true);
       if (triggersRes.status === 'fulfilled') setTriggers(triggersRes.value.triggers || []);
       if (logsRes.status === 'fulfilled') setLogs(logsRes.value.logs || []);
@@ -59,10 +60,19 @@ export function WhatsAppFunnelClient() {
   async function saveActivation() {
     setSaving(true);
     try {
-      const res = await fetch('/api/integrations', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+      const res = await fetch('/api/integrations/whatsapp-funnel/activation', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          whatsappFunnelEnabled: Boolean(settings.whatsappFunnelEnabled),
+        }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar ativação.');
-      setSettings({ ...data.settings, metaAccessToken: '', ga4ApiSecret: '' });
+      setSettings((prev: any) => ({
+        ...prev,
+        ...normalizeIntegrationSettings(data.settings),
+      }));
       toast.success('Ativação do Funil WhatsApp salva.');
     } catch (error: any) {
       toast.error(error.message || 'Erro ao salvar ativação.');

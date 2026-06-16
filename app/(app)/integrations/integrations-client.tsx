@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 
 const providers = [
   { value: 'meta', label: 'Meta' },
@@ -51,7 +52,7 @@ export function IntegrationsClient() {
         fetch('/api/integrations/events').then(r=>r.json()),
         fetch('/api/integrations/event-logs').then(r=>r.json()),
       ]);
-      if (s.settings) setSettings({ ...s.settings, metaAccessToken: '', ga4ApiSecret: '' });
+      if (s.settings) setSettings(normalizeIntegrationSettings(s.settings));
       setEvents(e.events || []);
       setPipelines(e.pipelines || []);
       setLogs(l.logs || []);
@@ -74,7 +75,7 @@ export function IntegrationsClient() {
       const res = await fetch('/api/integrations', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao salvar integrações.');
-      setSettings({ ...data.settings, metaAccessToken: '', ga4ApiSecret: '' });
+      setSettings(normalizeIntegrationSettings(data.settings));
       setShowMetaToken(false);
       toast.success('Integrações salvas com sucesso.');
     } catch (error: any) {
