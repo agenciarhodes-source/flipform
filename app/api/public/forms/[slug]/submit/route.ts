@@ -148,16 +148,18 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return created;
     });
 
+    const requestHost = req.headers.get('host')?.split(':')[0]?.toLowerCase() || null;
+
     // Audit logs (fora da transaction para não bloquear retorno em caso de falha de log)
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'form', entityId: form.id, action: 'form.submitted',
-      metadata: { leadId: lead.id, source: 'public_form', slug },
+      metadata: { leadId: lead.id, source: 'public_form', slug, domain: requestHost, form_id: form.id, tenant_id: form.tenantId },
     });
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'lead', entityId: lead.id, action: 'lead.created',
-      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario' },
+      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario', domain: requestHost },
     });
 
     try {

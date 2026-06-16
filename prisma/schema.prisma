@@ -108,6 +108,8 @@ model Tenant {
   trackingEventMappings KanbanStageTrackingEvent[]
   trackingEventLogs     TrackingEventLog[]
   whatsappEventTriggers WhatsAppEventTrigger[]
+  customFormDomains     CustomFormDomain[]
+  customFormDomainRoutes CustomFormDomainRoute[]
 
   @@map("tenants")
 }
@@ -213,11 +215,64 @@ model Form {
   initialStage PipelineStage @relation(fields: [initialStageId], references: [id])
   fields       FormField[]
   leads        Lead[]
+  defaultCustomDomains CustomFormDomain[] @relation("DefaultCustomFormDomain")
+  customDomainRoutes   CustomFormDomainRoute[]
 
   @@index([tenantId, createdAt])
   @@index([tenantId, pipelineId])
   @@index([tenantId, isActive])
   @@map("forms")
+}
+
+model CustomFormDomain {
+  id                 String    @id @default(cuid())
+  tenantId           String    @map("tenant_id")
+  domain             String    @unique
+  status             String    @default("pending")
+  verificationStatus String    @default("pending") @map("verification_status")
+  sslStatus          String    @default("pending") @map("ssl_status")
+  vercelProjectId    String?   @map("vercel_project_id")
+  vercelVerified     Boolean   @default(false) @map("vercel_verified")
+  verificationType   String?   @map("verification_type")
+  verificationDomain String?   @map("verification_domain")
+  verificationValue  String?   @map("verification_value")
+  verificationReason String?   @map("verification_reason")
+  dnsTarget          String?   @map("dns_target")
+  defaultFormId      String?   @map("default_form_id")
+  lastCheckedAt      DateTime? @map("last_checked_at")
+  verifiedAt         DateTime? @map("verified_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  defaultForm Form?                   @relation("DefaultCustomFormDomain", fields: [defaultFormId], references: [id], onDelete: SetNull)
+  routes      CustomFormDomainRoute[]
+
+  @@index([tenantId])
+  @@index([domain])
+  @@index([status])
+  @@map("custom_form_domains")
+}
+
+model CustomFormDomainRoute {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  domainId  String   @map("domain_id")
+  formId    String   @map("form_id")
+  path      String   @default("/")
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  domain CustomFormDomain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  form   Form             @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@unique([domainId, path])
+  @@index([tenantId])
+  @@index([domainId])
+  @@index([formId])
+  @@map("custom_form_domain_routes")
 }
 
 model FormField {
