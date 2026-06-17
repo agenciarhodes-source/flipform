@@ -93,12 +93,12 @@ function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
   };
 }
 
-function getVerifyToast(domain?: Domain) {
-  if (!domain) return 'Verificação executada.';
-  if (domain.status === 'active' && domain.verificationStatus === 'verified' && domain.sslStatus === 'active') return 'Domínio verificado com sucesso.';
-  if (domain.status === 'error' || domain.verificationStatus === 'failed' || domain.sslStatus === 'failed') return 'Não foi possível verificar o domínio. Revise o DNS e tente novamente.';
-  if (domain.verificationStatus === 'pending') return 'Domínio ainda aguardando configuração DNS.';
-  return 'Verificação executada.';
+function isDomainActive(domain: Domain) {
+  return domain.status === 'active' && domain.verificationStatus === 'verified' && domain.sslStatus === 'active';
+}
+
+function isDomainError(domain: Domain) {
+  return domain.status === 'error' || domain.verificationStatus === 'failed' || domain.sslStatus === 'failed';
 }
 
 export default function DomainsPage() {
@@ -150,7 +150,9 @@ export default function DomainsPage() {
     const res = await fetch(`/api/domains/${domain.id}/verify`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error(data.error || 'Não foi possível verificar o domínio. Revise o DNS e tente novamente.');
-    toast.success(getVerifyToast(data.domain));
+    if (data.domain && isDomainActive(data.domain)) toast.success('Domínio verificado com sucesso.');
+    else if (data.domain && isDomainError(data.domain)) toast.error('Não foi possível verificar o domínio. Revise o DNS e tente novamente.');
+    else toast.warning('Domínio ainda aguardando configuração DNS.');
     if (data.domain) setDomains((current) => current.map((item) => (item.id === data.domain.id ? data.domain : item)));
     load();
   };
@@ -209,6 +211,7 @@ export default function DomainsPage() {
             const dnsTarget = d.verificationValue || d.dnsTarget || 'cname.vercel-dns.com';
             const connection = getDomainConnectionStatus(d);
             const StatusIcon = connection.icon;
+            const domainActive = isDomainActive(d);
             return (
               <Card key={d.id} className="p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -216,7 +219,7 @@ export default function DomainsPage() {
                     <div className="font-heading font-semibold flex items-center gap-2"><Globe2 className="w-4 h-4" />{d.domain}{d.isPrimary && <Badge>Principal</Badge>}</div>
                     <div className="text-xs text-muted-foreground">Domínio principal informado: {parts.rootDomain}</div>
                     <div className="text-xs text-muted-foreground">Subdomínio usado: {parts.subdomain}</div>
-                    <div className="text-xs text-muted-foreground">Todos os formulários publicados nesta conta usarão esse domínio automaticamente.</div>
+                    <div className="text-xs text-muted-foreground">{domainActive ? 'Todos os formulários publicados nesta conta usam esse domínio automaticamente.' : 'Após a verificação do DNS e ativação do SSL, os formulários desta conta passarão a usar esse domínio automaticamente.'}</div>
                     <div className="text-xs text-muted-foreground">Exemplos: https://{d.domain}/orcamento · https://{d.domain}/campanha-junho · https://{d.domain}/avaliacao</div>
                   </div>
                   <div className="flex gap-2 flex-wrap">

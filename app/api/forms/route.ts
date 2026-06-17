@@ -5,8 +5,8 @@ import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { slugify } from '@/lib/utils';
-import { getConfiguredAppDomain, getPrimaryCustomFormDomain } from '@/lib/custom-form-domains';
-import { buildPublicFormUrl } from '@/lib/forms/public-form-url';
+import { getConfiguredAppDomain } from '@/lib/custom-form-domains';
+import { buildPublicFormUrlState } from '@/lib/forms/public-form-url';
 
 export const GET = withPermission('FORMS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -20,8 +20,30 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
     },
     orderBy: { createdAt: 'desc' },
   });
-  const primaryDomain = await getPrimaryCustomFormDomain(session.tenantId);
-  return NextResponse.json({ forms: forms.map((form) => ({ ...form, publicUrl: buildPublicFormUrl({ slug: form.slug, primaryDomain: primaryDomain?.domain, appDomain: getConfiguredAppDomain() }) })) });
+  const primaryDomain = await prisma.customFormDomain.findFirst({
+    where: { tenantId: session.tenantId, isPrimary: true },
+    orderBy: { updatedAt: 'desc' },
+    select: { domain: true, status: true, verificationStatus: true, sslStatus: true },
+  });
+  const appDomain = getConfiguredAppDomain();
+
+  return NextResponse.json({
+    forms: forms.map((form) => {
+      const urlState = buildPublicFormUrlState({ slug: form.slug, primaryDomain, appDomain });
+      return {
+        ...form,
+        publicUrl: urlState.activeUrl,
+        publicUrlState: urlState.state,
+        publicUrlLabel: urlState.label,
+        customDomainUrl: urlState.customUrl,
+        customDomainStatus: primaryDomain ? {
+          status: primaryDomain.status,
+          verificationStatus: primaryDomain.verificationStatus,
+          sslStatus: primaryDomain.sslStatus,
+        } : null,
+      };
+    }),
+  });
 });
 
 async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
