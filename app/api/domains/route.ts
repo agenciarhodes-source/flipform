@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { addDomainToVercel, getConfiguredAppDomain, getManualDnsInstruction, validateCustomFormDomain } from '@/lib/custom-form-domains';
+import { addDomainToVercel, buildCustomFormDomainFromParts, getConfiguredAppDomain, getManualDnsInstruction, validateCustomFormDomain } from '@/lib/custom-form-domains';
 import { logAudit } from '@/lib/audit';
 
 export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
@@ -12,7 +12,9 @@ export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
 export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
   try {
     const body = await req.json();
-    const validated = validateCustomFormDomain(String(body.domain || ''));
+    const validated = body.rootDomain || body.subdomain
+      ? buildCustomFormDomainFromParts(String(body.rootDomain || ''), String(body.subdomain || 'leads'))
+      : validateCustomFormDomain(String(body.domain || ''));
     if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
     const existing = await prisma.customFormDomain.findUnique({ where: { domain: validated.domain } });
     if (existing && existing.tenantId !== session.tenantId) return NextResponse.json({ error: 'Este domínio já está vinculado a outra conta.' }, { status: 409 });
