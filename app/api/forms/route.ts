@@ -4,7 +4,8 @@ import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { slugify } from '@/lib/utils';
-import { buildPublicFormUrl, getPrimaryCustomFormDomain } from '@/lib/custom-form-domains';
+import { getConfiguredAppDomain, getPrimaryCustomFormDomain } from '@/lib/custom-form-domains';
+import { buildPublicFormUrl } from '@/lib/forms/public-form-url';
 
 export const GET = withPermission('FORMS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -19,7 +20,7 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
     orderBy: { createdAt: 'desc' },
   });
   const primaryDomain = await getPrimaryCustomFormDomain(session.tenantId);
-  return NextResponse.json({ forms: forms.map((form) => ({ ...form, publicUrl: buildPublicFormUrl({ slug: form.slug, primaryDomain: primaryDomain?.domain }) })) });
+  return NextResponse.json({ forms: forms.map((form) => ({ ...form, publicUrl: buildPublicFormUrl({ slug: form.slug, primaryDomain: primaryDomain?.domain, appDomain: getConfiguredAppDomain() }) })) });
 });
 
 async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
@@ -65,7 +66,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
     // Slug único
     let slug = slugify(data.name);
     let attempt = 0;
-    while (await prisma.form.findUnique({ where: { slug } })) {
+    while (await prisma.form.findFirst({ where: { tenantId: session.tenantId, slug } })) {
       attempt++;
       slug = `${slugify(data.name)}-${attempt}`;
     }

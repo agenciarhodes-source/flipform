@@ -138,6 +138,7 @@ model CustomFormDomain {
   @@index([tenantId])
   @@index([domain])
   @@index([status])
+  @@index([verificationStatus])
   @@index([tenantId, isPrimary])
   @@map("custom_form_domains")
 }
@@ -223,7 +224,7 @@ model Form {
   name              String
   publicTitle       String   @map("public_title")
   publicDescription String?  @map("public_description")
-  slug              String   @unique
+  slug              String
   primaryColor      String   @default("#2563EB") @map("primary_color")
   bgColor           String?  @map("bg_color")
   buttonColor       String?  @map("button_color")
@@ -247,6 +248,7 @@ model Form {
   @@index([tenantId, createdAt])
   @@index([tenantId, pipelineId])
   @@index([tenantId, isActive])
+  @@unique([tenantId, slug])
   @@map("forms")
 }
 

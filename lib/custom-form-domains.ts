@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { buildPublicFormUrl as buildPublicFormUrlBase } from '@/lib/forms/public-form-url';
 
 export const DEFAULT_APP_DOMAIN = 'app.flipform.com.br';
 const RESERVED_DOMAINS = new Set(['flipform.com.br', 'www.flipform.com.br', DEFAULT_APP_DOMAIN]);
@@ -12,9 +13,11 @@ export function getConfiguredAppDomain() {
 }
 
 export function buildPublicFormUrl(params: { slug: string; primaryDomain?: string | null; appDomain?: string | null }) {
-  const appDomain = (params.appDomain || getConfiguredAppDomain()).replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  if (params.primaryDomain) return `https://${params.primaryDomain}/${params.slug}`;
-  return `https://${appDomain}/f/${params.slug}`;
+  return buildPublicFormUrlBase({
+    slug: params.slug,
+    primaryDomain: params.primaryDomain,
+    appDomain: params.appDomain || getConfiguredAppDomain(),
+  });
 }
 
 export function normalizeCustomDomain(input: string) {

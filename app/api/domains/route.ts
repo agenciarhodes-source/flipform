@@ -15,7 +15,7 @@ export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
     const validated = validateCustomFormDomain(String(body.domain || ''));
     if (!validated.ok) return NextResponse.json({ error: validated.error }, { status: 400 });
     const existing = await prisma.customFormDomain.findUnique({ where: { domain: validated.domain } });
-    if (existing && existing.tenantId !== session.tenantId) return NextResponse.json({ error: 'Domínio já usado por outro cliente.' }, { status: 409 });
+    if (existing && existing.tenantId !== session.tenantId) return NextResponse.json({ error: 'Este domínio já está vinculado a outra conta.' }, { status: 409 });
     if (existing) return NextResponse.json({ error: 'Domínio já cadastrado.' }, { status: 409 });
 
     const vercel = await addDomainToVercel(validated.domain);
@@ -33,7 +33,7 @@ export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
         verificationValue: instruction.value,
       },
     });
-    await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'custom_form_domain', entityId: domain.id, action: 'custom_form_domain.created', metadata: { domain: domain.domain } });
+    await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'custom_form_domain', entityId: domain.id, action: 'domain.created', metadata: { domain: domain.domain } });
     return NextResponse.json({ domain }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Erro ao cadastrar domínio.' }, { status: 500 });
