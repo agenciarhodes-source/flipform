@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
+import { normalizeHostname } from '@/lib/host-routing';
 
 /**
  * Public form submit endpoint.
@@ -33,8 +34,18 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
+    const host = normalizeHostname(req.headers.get('host'));
+    const appDomain = normalizeHostname(process.env.NEXT_PUBLIC_APP_DOMAIN || 'app.flipform.com.br');
+    const isPlatformHost = !host || host === appDomain || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.vercel.app');
+    const customDomain = isPlatformHost
+      ? null
+      : await prisma.customFormDomain.findFirst({
+        where: { domain: host, status: 'active', verificationStatus: 'verified' },
+        select: { tenantId: true },
+      });
+
     const form = await prisma.form.findFirst({
-      where: { slug, isActive: true },
+      where: { slug, isActive: true, ...(customDomain ? { tenantId: customDomain.tenantId } : {}) },
       include: {
         fields: { orderBy: { orderIndex: 'asc' } },
         pipeline: { select: { id: true, isArchived: true } },

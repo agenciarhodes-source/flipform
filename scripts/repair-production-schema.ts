@@ -412,6 +412,7 @@ const steps: Step[] = [
   { label: 'custom_form_domains.tenant.index', sql: `CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_idx ON custom_form_domains(tenant_id)` },
   { label: 'custom_form_domains.domain.index', sql: `CREATE INDEX IF NOT EXISTS custom_form_domains_domain_idx ON custom_form_domains(domain)` },
   { label: 'custom_form_domains.status.index', sql: `CREATE INDEX IF NOT EXISTS custom_form_domains_status_idx ON custom_form_domains(status)` },
+  { label: 'custom_form_domains.verification_status.index', sql: `CREATE INDEX IF NOT EXISTS custom_form_domains_verification_status_idx ON custom_form_domains(verification_status)` },
   { label: 'custom_form_domains.tenant_primary.index', sql: `CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_is_primary_idx ON custom_form_domains(tenant_id, is_primary)` },
 ];
 

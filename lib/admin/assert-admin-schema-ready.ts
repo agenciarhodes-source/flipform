@@ -247,6 +247,10 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasWhatsAppTriggersPipeline = typedIndexes.some((idx) => idx.indexname === 'whatsapp_event_triggers_pipeline_id_idx' && idx.tablename === 'whatsapp_event_triggers' && indexHasColumn(idx.indexdef, 'pipeline_id'));
   const hasWhatsAppTriggersStage = typedIndexes.some((idx) => idx.indexname === 'whatsapp_event_triggers_stage_id_idx' && idx.tablename === 'whatsapp_event_triggers' && indexHasColumn(idx.indexdef, 'stage_id'));
   const hasWhatsAppTriggersTenantPhraseMatchUnique = typedIndexes.some((idx) => idx.indexname === 'whatsapp_event_triggers_tenant_phrase_match_key' && idx.tablename === 'whatsapp_event_triggers' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'trigger_phrase') && indexHasColumn(idx.indexdef, 'match_type'));
+  const hasCustomFormDomainsDomainUnique = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'domain'));
+  const hasCustomFormDomainsTenant = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasCustomFormDomainsTenantPrimary = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'is_primary'));
+  const hasCustomFormDomainsVerificationStatus = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'verification_status'));
 
   const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
   add(checks, {
@@ -298,6 +302,43 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.whatsapp_event_triggers.pipeline_id', ok: hasWhatsAppTriggersPipeline, suggestion: 'CREATE INDEX IF NOT EXISTS whatsapp_event_triggers_pipeline_id_idx ON whatsapp_event_triggers(pipeline_id);', runtimeEssential: false });
   add(checks, { label: 'index.whatsapp_event_triggers.stage_id', ok: hasWhatsAppTriggersStage, suggestion: 'CREATE INDEX IF NOT EXISTS whatsapp_event_triggers_stage_id_idx ON whatsapp_event_triggers(stage_id);', runtimeEssential: false });
   add(checks, { label: 'index.whatsapp_event_triggers.tenant_phrase_match_unique', ok: hasWhatsAppTriggersTenantPhraseMatchUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_event_triggers_tenant_phrase_match_key ON whatsapp_event_triggers(tenant_id, trigger_phrase, match_type);', runtimeEssential: false });
+
+  add(checks, { label: 'index.custom_form_domains.domain_unique', ok: hasCustomFormDomainsDomainUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS custom_form_domains_domain_key ON custom_form_domains(domain);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.tenant_id', ok: hasCustomFormDomainsTenant, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_idx ON custom_form_domains(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.tenant_primary', ok: hasCustomFormDomainsTenantPrimary, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_is_primary_idx ON custom_form_domains(tenant_id, is_primary);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.verification_status', ok: hasCustomFormDomainsVerificationStatus, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_verification_status_idx ON custom_form_domains(verification_status);', runtimeEssential: false });
+
+  if (tables.has('custom_form_domains') && columnMaps.get('custom_form_domains')?.has('tenant_id') && columnMaps.get('custom_form_domains')?.has('is_primary')) {
+    const tenantsWithMultiplePrimary = await prisma.$queryRaw<Array<{ tenant_id: string; count: bigint }>>`
+      select tenant_id, count(*)::bigint as count
+      from custom_form_domains
+      where is_primary = true
+      group by tenant_id
+      having count(*) > 1
+    `;
+    add(checks, {
+      label: 'data.custom_form_domains.single_primary_per_tenant',
+      ok: tenantsWithMultiplePrimary.length === 0,
+      detail: tenantsWithMultiplePrimary.length ? `tenants=${tenantsWithMultiplePrimary.length}` : undefined,
+      suggestion: 'Mantenha apenas um domínio principal por tenant.',
+      runtimeEssential: false,
+    });
+  }
+
+  if (tables.has('custom_form_domains') && columnMaps.get('custom_form_domains')?.has('status') && columnMaps.get('custom_form_domains')?.has('verification_status')) {
+    const activeUnverified = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      select count(*)::bigint as count
+      from custom_form_domains
+      where status = 'active' and verification_status <> 'verified'
+    `;
+    add(checks, {
+      label: 'data.custom_form_domains.no_active_unverified',
+      ok: Number(activeUnverified[0]?.count ?? 0) === 0,
+      detail: `count=${String(activeUnverified[0]?.count ?? 0)}`,
+      suggestion: 'Domínios ativos devem estar verificados.',
+      runtimeEssential: false,
+    });
+  }
 
   const enums = await enumValues();
   add(checks, {
