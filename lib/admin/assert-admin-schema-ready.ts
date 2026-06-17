@@ -248,8 +248,11 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasWhatsAppTriggersStage = typedIndexes.some((idx) => idx.indexname === 'whatsapp_event_triggers_stage_id_idx' && idx.tablename === 'whatsapp_event_triggers' && indexHasColumn(idx.indexdef, 'stage_id'));
   const hasWhatsAppTriggersTenantPhraseMatchUnique = typedIndexes.some((idx) => idx.indexname === 'whatsapp_event_triggers_tenant_phrase_match_key' && idx.tablename === 'whatsapp_event_triggers' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'trigger_phrase') && indexHasColumn(idx.indexdef, 'match_type'));
   const hasCustomFormDomainsDomainUnique = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'domain'));
+  const hasCustomFormDomainsDomain = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'domain'));
   const hasCustomFormDomainsTenant = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'tenant_id'));
   const hasCustomFormDomainsTenantPrimary = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'is_primary'));
+  const hasCustomFormDomainsOnePrimaryUnique = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && idx.indexdef.toLowerCase().includes('unique') && idx.indexdef.toLowerCase().includes('where') && indexHasColumn(idx.indexdef, 'tenant_id') && idx.indexdef.toLowerCase().includes('is_primary'));
+  const hasCustomFormDomainsStatus = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'status'));
   const hasCustomFormDomainsVerificationStatus = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'verification_status'));
 
   const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
@@ -305,8 +308,32 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
 
   add(checks, { label: 'index.custom_form_domains.domain_unique', ok: hasCustomFormDomainsDomainUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS custom_form_domains_domain_key ON custom_form_domains(domain);', runtimeEssential: false });
   add(checks, { label: 'index.custom_form_domains.tenant_id', ok: hasCustomFormDomainsTenant, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_idx ON custom_form_domains(tenant_id);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.domain', ok: hasCustomFormDomainsDomain, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_domain_idx ON custom_form_domains(domain);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.status', ok: hasCustomFormDomainsStatus, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_status_idx ON custom_form_domains(status);', runtimeEssential: false });
   add(checks, { label: 'index.custom_form_domains.tenant_primary', ok: hasCustomFormDomainsTenantPrimary, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_tenant_id_is_primary_idx ON custom_form_domains(tenant_id, is_primary);', runtimeEssential: false });
+  add(checks, { label: 'index.custom_form_domains.one_primary_per_tenant_unique', ok: hasCustomFormDomainsOnePrimaryUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS custom_form_domains_one_primary_per_tenant_idx ON custom_form_domains(tenant_id) WHERE is_primary = true;', runtimeEssential: false });
   add(checks, { label: 'index.custom_form_domains.verification_status', ok: hasCustomFormDomainsVerificationStatus, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_verification_status_idx ON custom_form_domains(verification_status);', runtimeEssential: false });
+
+
+
+  if (tables.has('custom_form_domains') && columnMaps.get('custom_form_domains')?.has('domain')) {
+    const duplicatedDomains = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      select count(*)::bigint as count
+      from (
+        select domain
+        from custom_form_domains
+        group by domain
+        having count(*) > 1
+      ) duplicates
+    `;
+    add(checks, {
+      label: 'data.custom_form_domains.no_duplicate_domains',
+      ok: Number(duplicatedDomains[0]?.count ?? 0) === 0,
+      detail: `count=${String(duplicatedDomains[0]?.count ?? 0)}`,
+      suggestion: 'Remova domínios duplicados antes de aplicar o índice único em custom_form_domains(domain).',
+      runtimeEssential: false,
+    });
+  }
 
   if (tables.has('custom_form_domains') && columnMaps.get('custom_form_domains')?.has('tenant_id') && columnMaps.get('custom_form_domains')?.has('is_primary')) {
     const tenantsWithMultiplePrimary = await prisma.$queryRaw<Array<{ tenant_id: string; count: bigint }>>`
@@ -336,6 +363,24 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
       ok: Number(activeUnverified[0]?.count ?? 0) === 0,
       detail: `count=${String(activeUnverified[0]?.count ?? 0)}`,
       suggestion: 'Domínios ativos devem estar verificados.',
+      runtimeEssential: false,
+    });
+  }
+
+
+
+  if (tables.has('custom_form_domains') && tables.has('tenants') && columnMaps.get('custom_form_domains')?.has('tenant_id') && columnMaps.get('custom_form_domains')?.has('is_primary')) {
+    const orphanPrimaryDomains = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      select count(*)::bigint as count
+      from custom_form_domains cfd
+      left join tenants t on t.id = cfd.tenant_id
+      where cfd.is_primary = true and t.id is null
+    `;
+    add(checks, {
+      label: 'data.custom_form_domains.primary_has_existing_tenant',
+      ok: Number(orphanPrimaryDomains[0]?.count ?? 0) === 0,
+      detail: `count=${String(orphanPrimaryDomains[0]?.count ?? 0)}`,
+      suggestion: 'Todo domínio principal deve pertencer a um tenant existente.',
       runtimeEssential: false,
     });
   }
