@@ -33,6 +33,12 @@ export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
         verificationType: instruction.type,
         verificationDomain: instruction.name,
         verificationValue: instruction.value,
+        verificationReason: vercel.reason || null,
+        status: vercel.status || 'pending',
+        verificationStatus: vercel.verificationStatus || 'pending',
+        sslStatus: vercel.sslStatus || 'pending',
+        vercelVerified: Boolean(vercel.existsOnVercel && vercel.verified),
+        lastCheckedAt: new Date(),
       },
     });
     await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'custom_form_domain', entityId: domain.id, action: 'domain.created', metadata: { domain: domain.domain } });

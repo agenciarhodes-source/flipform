@@ -12,7 +12,7 @@ import { cn, formatDateTime } from '@/lib/utils';
 
 type Domain = {
   id: string; domain: string; status: string; verificationStatus: string; sslStatus: string; isPrimary: boolean;
-  verificationType?: string | null; verificationDomain?: string | null; verificationValue?: string | null; dnsTarget?: string | null; lastCheckedAt?: string | null;
+  verificationType?: string | null; verificationDomain?: string | null; verificationValue?: string | null; verificationReason?: string | null; dnsTarget?: string | null; lastCheckedAt?: string | null;
 };
 
 function normalizeRootDomain(value: string) {
@@ -38,16 +38,21 @@ function splitDomain(domain: string) {
 type DomainConnectionStatus = {
   title: string;
   description: string;
+  action?: string;
+  state: 'active' | 'dns_pending' | 'dns_change_required' | 'ssl_pending' | 'not_on_vercel' | 'error' | 'unknown';
   icon: typeof CheckCircle2;
   className: string;
   iconClassName: string;
 };
 
 function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
+  const hasSpecificDnsTarget = Boolean(domain.dnsTarget && domain.dnsTarget !== 'cname.vercel-dns.com');
+
   if (domain.status === 'error' || domain.verificationStatus === 'failed' || domain.sslStatus === 'failed') {
     return {
+      state: 'error',
       title: 'Erro na conexão',
-      description: 'Revise o DNS ou tente verificar novamente.',
+      description: 'Não foi possível sincronizar o domínio com a Vercel.',
       icon: AlertTriangle,
       className: 'border-destructive/30 bg-destructive/10 text-destructive',
       iconClassName: 'text-destructive',
@@ -56,6 +61,7 @@ function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
 
   if (domain.status === 'active' && domain.verificationStatus === 'verified' && domain.sslStatus === 'active') {
     return {
+      state: 'active',
       title: 'Conexão ativa',
       description: 'Domínio verificado e SSL ativo.',
       icon: CheckCircle2,
@@ -66,18 +72,44 @@ function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
 
   if (domain.verificationStatus === 'verified' && domain.sslStatus !== 'active') {
     return {
+      state: 'ssl_pending',
       title: 'DNS verificado',
-      description: 'Aguardando ativação do SSL.',
+      description: 'Aguardando ativação do SSL pela Vercel.',
       icon: Clock3,
       className: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200',
       iconClassName: 'text-sky-600 dark:text-sky-400',
     };
   }
 
+  if (hasSpecificDnsTarget && domain.verificationReason?.toLowerCase().includes('recomend')) {
+    return {
+      state: 'dns_change_required',
+      title: 'DNS precisa ser atualizado',
+      description: 'A Vercel recomendou um destino DNS diferente. Atualize o CNAME na Cloudflare.',
+      action: `Destino recomendado: ${domain.dnsTarget}`,
+      icon: AlertTriangle,
+      className: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
+      iconClassName: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+
+  if (domain.verificationReason?.includes('Integração com a Vercel não configurada') || domain.verificationReason?.includes('não encontrado no projeto da Vercel')) {
+    return {
+      state: 'not_on_vercel',
+      title: 'Domínio não vinculado à Vercel',
+      description: 'O domínio existe no FlipForm, mas ainda não foi encontrado no projeto da Vercel.',
+      action: 'Clique em Verificar agora para sincronizar ou adicione manualmente na Vercel.',
+      icon: HelpCircle,
+      className: 'border-muted bg-muted/40 text-foreground',
+      iconClassName: 'text-muted-foreground',
+    };
+  }
+
   if (domain.verificationStatus === 'pending') {
     return {
+      state: 'dns_pending',
       title: 'Aguardando DNS',
-      description: 'Crie o CNAME informado e clique em Verificar agora.',
+      description: 'Crie ou atualize o CNAME informado e clique em Verificar agora.',
       icon: Clock3,
       className: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
       iconClassName: 'text-amber-600 dark:text-amber-400',
@@ -85,6 +117,7 @@ function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
   }
 
   return {
+    state: 'unknown',
     title: 'Status em análise',
     description: 'Clique em Verificar agora para atualizar.',
     icon: HelpCircle,
@@ -150,8 +183,11 @@ export default function DomainsPage() {
     const res = await fetch(`/api/domains/${domain.id}/verify`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error(data.error || 'Não foi possível verificar o domínio. Revise o DNS e tente novamente.');
-    if (data.domain && isDomainActive(data.domain)) toast.success('Domínio verificado com sucesso.');
-    else if (data.domain && isDomainError(data.domain)) toast.error('Não foi possível verificar o domínio. Revise o DNS e tente novamente.');
+    const state = data.connection?.state;
+    if (state === 'active') toast.success('Domínio verificado e ativo.');
+    else if (state === 'dns_change_required') toast.warning('A Vercel recomendou atualizar o DNS. Copie o novo destino exibido no card.');
+    else if (state === 'ssl_pending') toast.warning('DNS verificado. SSL ainda pendente.');
+    else if (state === 'error' || (data.domain && isDomainError(data.domain))) toast.error('Não foi possível sincronizar o domínio com a Vercel.');
     else toast.warning('Domínio ainda aguardando configuração DNS.');
     if (data.domain) setDomains((current) => current.map((item) => (item.id === data.domain.id ? data.domain : item)));
     load();
@@ -208,7 +244,7 @@ export default function DomainsPage() {
             const parts = splitDomain(d.domain);
             const dnsType = d.verificationType || 'CNAME';
             const dnsHost = dnsType.toUpperCase() === 'CNAME' ? parts.subdomain : d.verificationDomain || parts.subdomain;
-            const dnsTarget = d.verificationValue || d.dnsTarget || 'cname.vercel-dns.com';
+            const dnsTarget = d.dnsTarget || d.verificationValue || 'cname.vercel-dns.com';
             const connection = getDomainConnectionStatus(d);
             const StatusIcon = connection.icon;
             const domainActive = isDomainActive(d);
@@ -239,6 +275,7 @@ export default function DomainsPage() {
                     <div className="md:col-span-2"><span className="text-muted-foreground">Destino</span><div className="break-all">{dnsTarget}</div></div>
                     <div><span className="text-muted-foreground">TTL</span><div>Auto</div></div>
                   </div>
+                  <p className="text-xs text-muted-foreground">Use exatamente o destino exibido acima. Se você alterou algo na Vercel, clique em Verificar agora para atualizar esta instrução.</p>
                   <p className="text-xs text-muted-foreground">Proxy: DNS only, se estiver usando Cloudflare.</p>
                 </div>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -249,6 +286,7 @@ export default function DomainsPage() {
                       <div className="min-w-0">
                         <div className="font-medium leading-none">{connection.title}</div>
                         <div className="mt-1 text-xs opacity-80">{connection.description}</div>
+                        {connection.action && <div className="mt-1 text-xs font-medium opacity-90">{connection.action}</div>}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:justify-end">

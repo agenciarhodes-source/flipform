@@ -1,6 +1,8 @@
 export {
   addDomainToVercel,
+  syncDomainWithVercel,
   verifyDomainOnVercel as verifyVercelDomain,
+  type VercelDomainSyncResult,
 } from '@/lib/custom-form-domains';
 
 export async function getVercelDomain(domain: string) {
@@ -20,9 +22,10 @@ export function normalizeVercelDomainResponse(response: any) {
     configured: true,
     domain: response?.name,
     verified: Boolean(response?.verified),
+    sslActive: Boolean(response?.ssl?.status === 'active' || response?.certificate?.status === 'issued'),
     verificationType: verification?.type || null,
     verificationDomain: verification?.domain || null,
-    verificationValue: verification?.value || null,
+    verificationValue: verification?.value || verification?.target || null,
     verificationReason: verification?.reason || response?.error?.message || null,
   };
 }
