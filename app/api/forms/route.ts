@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
@@ -63,7 +64,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
       if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
-    // Slug único
+    // Slug único por tenant
     let slug = slugify(data.name);
     let attempt = 0;
     while (await prisma.form.findFirst({ where: { tenantId: session.tenantId, slug } })) {
@@ -109,8 +110,19 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
       metadata: { name: form.name, slug: form.slug, pipelineId: form.pipelineId, initialStageId: form.initialStageId },
     });
     return NextResponse.json({ form });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('form create error', e);
+
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      const target = Array.isArray(e.meta?.target) ? e.meta.target.join(',') : String(e.meta?.target ?? '');
+      if (target.includes('slug') || target.includes('forms_tenant_id_slug_key') || target.includes('forms_slug_key')) {
+        return NextResponse.json(
+          { error: 'Já existe um formulário com esse nome nesta conta. Tente outro nome.' },
+          { status: 409 },
+        );
+      }
+    }
+
     return NextResponse.json({ error: 'Erro ao criar formulário' }, { status: 500 });
   }
 });
