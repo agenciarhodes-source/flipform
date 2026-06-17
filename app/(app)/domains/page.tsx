@@ -90,6 +90,12 @@ export default function DomainsPage() {
       <Card className="p-5 space-y-3">
         <p className="text-sm text-muted-foreground">Seu painel continua em {appDomain}. O domínio configurado aqui será usado apenas nos links públicos dos formulários.</p>
         <p className="text-sm text-muted-foreground">Esse domínio será usado nos links públicos dos seus formulários. Para campanhas da Meta, recomendamos verificar esse domínio no Gerenciador de Negócios da Meta e usar o Pixel configurado em Integrações.</p>
+        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+          <div className="font-medium text-foreground">Cloudflare/DNS</div>
+          <p>Cloudflare &gt; Seu domínio &gt; DNS &gt; Records &gt; Add record.</p>
+          <p>Crie um CNAME com Nome: leads, Destino: valor informado pelo FlipForm/Vercel, TTL: Auto e Proxy status: DNS only.</p>
+          <p>Use DNS only, nuvem cinza, durante a verificação do domínio. Algumas plataformas podem ter problemas para validar DNS/SSL quando o proxy da Cloudflare está ativo.</p>
+        </div>
       </Card>
 
       <Card className="p-5 space-y-5">
