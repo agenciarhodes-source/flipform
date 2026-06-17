@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { buildPublicFormUrl as buildPublicFormUrlBase } from '@/lib/forms/public-form-url';
 
 export const DEFAULT_APP_DOMAIN = 'app.flipform.com.br';
 const RESERVED_DOMAINS = new Set(['flipform.com.br', 'www.flipform.com.br', DEFAULT_APP_DOMAIN]);
@@ -12,9 +13,11 @@ export function getConfiguredAppDomain() {
 }
 
 export function buildPublicFormUrl(params: { slug: string; primaryDomain?: string | null; appDomain?: string | null }) {
-  const appDomain = (params.appDomain || getConfiguredAppDomain()).replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  if (params.primaryDomain) return `https://${params.primaryDomain}/${params.slug}`;
-  return `https://${appDomain}/f/${params.slug}`;
+  return buildPublicFormUrlBase({
+    slug: params.slug,
+    primaryDomain: params.primaryDomain,
+    appDomain: params.appDomain || getConfiguredAppDomain(),
+  });
 }
 
 export function normalizeCustomDomain(input: string) {
@@ -38,6 +41,35 @@ export function validateCustomFormDomain(input: string) {
   if (RESERVED_DOMAINS.has(domain) || domain === getConfiguredAppDomain()) return { ok: false as const, domain, error: 'Domínio reservado da FlipForm não é permitido.' };
   if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}[a-z]{2,63}$/.test(domain)) return { ok: false as const, domain, error: 'Informe um subdomínio válido, como leads.suaempresa.com.br.' };
   return { ok: true as const, domain };
+}
+
+export function validateRootDomain(input: string) {
+  const domain = normalizeCustomDomain(input);
+  if (!domain) return { ok: false as const, domain, error: 'Informe o domínio principal.' };
+  if (domain === 'localhost' || domain.endsWith('.localhost')) return { ok: false as const, domain, error: 'localhost não é permitido.' };
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) return { ok: false as const, domain, error: 'Endereços IP não são permitidos.' };
+  if (domain.endsWith('.vercel.app')) return { ok: false as const, domain, error: 'Domínios preview da Vercel não são permitidos.' };
+  if (RESERVED_DOMAINS.has(domain) || domain === getConfiguredAppDomain()) return { ok: false as const, domain, error: 'Domínio reservado da FlipForm não é permitido.' };
+  if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain)) return { ok: false as const, domain, error: 'Informe um domínio válido, como suaempresa.com.br.' };
+  return { ok: true as const, domain };
+}
+
+export function validateSubdomain(input: string) {
+  const subdomain = String(input || 'leads').trim().toLowerCase();
+  if (!subdomain) return { ok: false as const, subdomain, error: 'Informe o subdomínio.' };
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain)) return { ok: false as const, subdomain, error: 'Use apenas letras, números e hífen no subdomínio.' };
+  return { ok: true as const, subdomain };
+}
+
+export function buildCustomFormDomainFromParts(rootDomainInput: string, subdomainInput: string) {
+  const root = validateRootDomain(rootDomainInput);
+  if (!root.ok) return root;
+  const sub = validateSubdomain(subdomainInput);
+  if (!sub.ok) return { ok: false as const, domain: '', error: sub.error };
+  const domain = `${sub.subdomain}.${root.domain}`;
+  const full = validateCustomFormDomain(domain);
+  if (!full.ok) return full;
+  return { ok: true as const, domain, rootDomain: root.domain, subdomain: sub.subdomain };
 }
 
 export async function getPrimaryCustomFormDomain(tenantId: string) {
