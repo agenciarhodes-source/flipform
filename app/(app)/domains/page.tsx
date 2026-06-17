@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Globe2, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Globe2, HelpCircle, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatDate } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 
 type Domain = {
   id: string; domain: string; status: string; verificationStatus: string; sslStatus: string; isPrimary: boolean;
@@ -33,6 +33,72 @@ function normalizeSubdomain(value: string) {
 function splitDomain(domain: string) {
   const [subdomain, ...rootParts] = domain.split('.');
   return { subdomain, rootDomain: rootParts.join('.') };
+}
+
+type DomainConnectionStatus = {
+  title: string;
+  description: string;
+  icon: typeof CheckCircle2;
+  className: string;
+  iconClassName: string;
+};
+
+function getDomainConnectionStatus(domain: Domain): DomainConnectionStatus {
+  if (domain.status === 'error' || domain.verificationStatus === 'failed' || domain.sslStatus === 'failed') {
+    return {
+      title: 'Erro na conexão',
+      description: 'Revise o DNS ou tente verificar novamente.',
+      icon: AlertTriangle,
+      className: 'border-destructive/30 bg-destructive/10 text-destructive',
+      iconClassName: 'text-destructive',
+    };
+  }
+
+  if (domain.status === 'active' && domain.verificationStatus === 'verified' && domain.sslStatus === 'active') {
+    return {
+      title: 'Conexão ativa',
+      description: 'Domínio verificado e SSL ativo.',
+      icon: CheckCircle2,
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200',
+      iconClassName: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+
+  if (domain.verificationStatus === 'verified' && domain.sslStatus !== 'active') {
+    return {
+      title: 'DNS verificado',
+      description: 'Aguardando ativação do SSL.',
+      icon: Clock3,
+      className: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200',
+      iconClassName: 'text-sky-600 dark:text-sky-400',
+    };
+  }
+
+  if (domain.verificationStatus === 'pending') {
+    return {
+      title: 'Aguardando DNS',
+      description: 'Crie o CNAME informado e clique em Verificar agora.',
+      icon: Clock3,
+      className: 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200',
+      iconClassName: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+
+  return {
+    title: 'Status em análise',
+    description: 'Clique em Verificar agora para atualizar.',
+    icon: HelpCircle,
+    className: 'border-muted bg-muted/40 text-foreground',
+    iconClassName: 'text-muted-foreground',
+  };
+}
+
+function getVerifyToast(domain?: Domain) {
+  if (!domain) return 'Verificação executada.';
+  if (domain.status === 'active' && domain.verificationStatus === 'verified' && domain.sslStatus === 'active') return 'Domínio verificado com sucesso.';
+  if (domain.status === 'error' || domain.verificationStatus === 'failed' || domain.sslStatus === 'failed') return 'Não foi possível verificar o domínio. Revise o DNS e tente novamente.';
+  if (domain.verificationStatus === 'pending') return 'Domínio ainda aguardando configuração DNS.';
+  return 'Verificação executada.';
 }
 
 export default function DomainsPage() {
@@ -78,6 +144,15 @@ export default function DomainsPage() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error(data.error || 'Ação não concluída.');
     toast.success(success); load();
+  };
+
+  const verifyDomain = async (domain: Domain) => {
+    const res = await fetch(`/api/domains/${domain.id}/verify`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data.error || 'Não foi possível verificar o domínio. Revise o DNS e tente novamente.');
+    toast.success(getVerifyToast(data.domain));
+    if (data.domain) setDomains((current) => current.map((item) => (item.id === data.domain.id ? data.domain : item)));
+    load();
   };
 
   return (
@@ -132,6 +207,8 @@ export default function DomainsPage() {
             const dnsType = d.verificationType || 'CNAME';
             const dnsHost = dnsType.toUpperCase() === 'CNAME' ? parts.subdomain : d.verificationDomain || parts.subdomain;
             const dnsTarget = d.verificationValue || d.dnsTarget || 'cname.vercel-dns.com';
+            const connection = getDomainConnectionStatus(d);
+            const StatusIcon = connection.icon;
             return (
               <Card key={d.id} className="p-5 space-y-4">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -161,12 +238,21 @@ export default function DomainsPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">Proxy: DNS only, se estiver usando Cloudflare.</p>
                 </div>
-                <div className="flex items-center justify-between gap-3 flex-wrap text-xs text-muted-foreground">
-                  <span>Última verificação: {d.lastCheckedAt ? formatDate(d.lastCheckedAt) : 'Nunca'}</span>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => action(`/api/domains/${d.id}/verify`, 'Verificação executada.')}><RefreshCw className="w-3 h-3 mr-1" />Verificar agora</Button>
-                    <Button size="sm" variant="outline" disabled={d.isPrimary} onClick={() => action(`/api/domains/${d.id}/primary`, 'Domínio principal atualizado.')}><Star className="w-3 h-3 mr-1" />Tornar principal</Button>
-                    <Button size="sm" variant="outline" onClick={() => action(`/api/domains/${d.id}`, 'Domínio excluído.', 'DELETE')}><Trash2 className="w-3 h-3 text-destructive" /></Button>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <span className="text-xs text-muted-foreground">Última verificação: {d.lastCheckedAt ? formatDateTime(d.lastCheckedAt) : 'nunca'}</span>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                    <div className={cn('flex min-w-0 items-start gap-2 rounded-md border px-3 py-2 text-sm', connection.className)} aria-label={`Conexão do domínio: ${connection.title}`}>
+                      <StatusIcon className={cn('mt-0.5 h-4 w-4 shrink-0', connection.iconClassName)} aria-hidden="true" />
+                      <div className="min-w-0">
+                        <div className="font-medium leading-none">{connection.title}</div>
+                        <div className="mt-1 text-xs opacity-80">{connection.description}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 sm:justify-end">
+                      <Button size="sm" variant="outline" onClick={() => verifyDomain(d)}><RefreshCw className="w-3 h-3 mr-1" />Verificar agora</Button>
+                      <Button size="sm" variant="outline" disabled={d.isPrimary} onClick={() => action(`/api/domains/${d.id}/primary`, 'Domínio principal atualizado.')}><Star className="w-3 h-3 mr-1" />Tornar principal</Button>
+                      <Button size="sm" variant="outline" onClick={() => action(`/api/domains/${d.id}`, 'Domínio excluído.', 'DELETE')}><Trash2 className="w-3 h-3 text-destructive" /></Button>
+                    </div>
                   </div>
                 </div>
               </Card>
