@@ -46,14 +46,18 @@ def test_public_url_helper_uses_primary_domain_or_platform_fallback():
     assert 'https://${appDomain}/f/${cleanSlug}' in helper
 
 
-def test_domains_page_uses_guided_root_domain_and_subdomain_flow():
+def test_domains_page_uses_fixed_leads_subdomain_flow():
     page = read('app/(app)/domains/page.tsx')
     assert 'Adicionar domínio de formulário' in page
     assert 'Domínio principal' in page
-    assert 'Subdomínio' in page
-    assert "useState('leads')" in page
-    assert '`${normalizedSubdomain}.${normalizedRootDomain}`' in page
-    assert 'Seu link ficará assim:' in page
+    assert 'Subdomínio fixo' in page
+    assert 'Subdomínio padrão: {REQUIRED_FORM_SUBDOMAIN}' in page
+    assert 'Usaremos automaticamente o subdomínio leads para publicar seus formulários.' in page
+    assert '`${REQUIRED_FORM_SUBDOMAIN}.${normalizedRootDomain}`' in page
+    assert 'https://{previewDomain}/nome-do-formulario' in page
+    assert 'body: JSON.stringify({ rootDomain: normalizedRootDomain })' in page
+    assert 'setSubdomain' not in page
+    assert 'normalizedSubdomain' not in page
     assert 'Próximo passo: configurar DNS' in page
 
 
@@ -139,3 +143,29 @@ def test_domains_page_shows_vercel_recommended_target_before_fallback():
     assert "toast.warning('A Vercel recomendou atualizar o DNS. Copie o novo destino exibido no card.')" in page
     assert "toast.warning('DNS verificado. SSL ainda pendente.')" in page
     assert "toast.success('Domínio verificado e ativo.')" in page
+
+
+def test_custom_domain_helper_requires_leads_subdomain_and_root_builder():
+    helper = read('lib/custom-form-domains.ts')
+    assert "export const REQUIRED_FORM_SUBDOMAIN = 'leads';" in helper
+    assert 'export function buildCustomFormDomainFromRoot(rootDomainInput: string)' in helper
+    assert 'const domain = `${REQUIRED_FORM_SUBDOMAIN}.${root.domain}`;' in helper
+    assert "if (subdomain !== REQUIRED_FORM_SUBDOMAIN) return { ok: false as const, subdomain, error: 'O subdomínio dos formulários deve ser sempre leads.' };" in helper
+    assert "return { type: 'CNAME', name: REQUIRED_FORM_SUBDOMAIN, value };" in helper
+
+
+def test_domains_api_builds_from_root_and_rejects_non_leads_subdomain():
+    route = read('app/api/domains/route.ts')
+    assert "buildCustomFormDomainFromRoot(String(body.rootDomain || ''))" in route
+    assert "String(body.subdomain).trim().toLowerCase() !== REQUIRED_FORM_SUBDOMAIN" in route
+    assert "O subdomínio dos formulários deve ser sempre leads." in route
+    assert "Este domínio já está cadastrado nesta conta." in route
+    assert "Este domínio já está vinculado a outra conta." in route
+
+
+def test_domains_page_dns_instruction_always_uses_leads_host():
+    page = read('app/(app)/domains/page.tsx')
+    assert "const dnsType = 'CNAME';" in page
+    assert 'const dnsHost = REQUIRED_FORM_SUBDOMAIN;' in page
+    assert '<div><span className="text-muted-foreground">Nome/Host</span><div>{dnsHost}</div></div>' in page
+    assert 'Subdomínio obrigatório: {REQUIRED_FORM_SUBDOMAIN}' in page

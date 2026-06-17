@@ -26,9 +26,7 @@ function normalizeRootDomain(value: string) {
   }
 }
 
-function normalizeSubdomain(value: string) {
-  return value.trim().toLowerCase();
-}
+const REQUIRED_FORM_SUBDOMAIN = 'leads';
 
 function splitDomain(domain: string) {
   const [subdomain, ...rootParts] = domain.split('.');
@@ -138,13 +136,11 @@ export default function DomainsPage() {
   const [domains, setDomains] = useState<Domain[]>([]);
   const [appDomain, setAppDomain] = useState('app.flipform.com.br');
   const [rootDomain, setRootDomain] = useState('');
-  const [subdomain, setSubdomain] = useState('leads');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const normalizedRootDomain = useMemo(() => normalizeRootDomain(rootDomain), [rootDomain]);
-  const normalizedSubdomain = useMemo(() => normalizeSubdomain(subdomain || 'leads'), [subdomain]);
-  const previewDomain = normalizedRootDomain && normalizedSubdomain ? `${normalizedSubdomain}.${normalizedRootDomain}` : `leads.seudominio.com.br`;
+  const previewDomain = normalizedRootDomain ? `${REQUIRED_FORM_SUBDOMAIN}.${normalizedRootDomain}` : `${REQUIRED_FORM_SUBDOMAIN}.seudominio.com.br`;
 
   const load = async () => {
     const res = await fetch('/api/domains');
@@ -161,13 +157,12 @@ export default function DomainsPage() {
       const res = await fetch('/api/domains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rootDomain: normalizedRootDomain, subdomain: normalizedSubdomain }),
+        body: JSON.stringify({ rootDomain: normalizedRootDomain }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao cadastrar domínio.');
       toast.success('Domínio adicionado ao FlipForm. Agora configure o DNS para concluir a verificação.');
       setRootDomain('');
-      setSubdomain('leads');
       load();
     } catch (e: any) { toast.error(e.message); } finally { setSaving(false); }
   };
@@ -197,7 +192,7 @@ export default function DomainsPage() {
     <div className="p-4 lg:p-8 space-y-6">
       <div>
         <h1 className="font-heading text-2xl lg:text-3xl font-bold">Domínios</h1>
-        <p className="text-muted-foreground text-sm">Configure um subdomínio próprio para gerar automaticamente os links públicos dos seus formulários.</p>
+        <p className="text-muted-foreground text-sm">Configure o domínio principal para gerar automaticamente links públicos dos seus formulários em leads.</p>
       </div>
 
       <Card className="p-5 space-y-3">
@@ -208,8 +203,8 @@ export default function DomainsPage() {
       <Card className="p-5 space-y-5">
         <div>
           <h2 className="font-heading text-lg font-semibold">Adicionar domínio de formulário</h2>
-          <p className="text-sm text-muted-foreground">Informe o domínio principal da sua empresa e escolha o subdomínio que será usado para captação.</p>
-          <p className="text-sm text-muted-foreground">O FlipForm irá gerar automaticamente um subdomínio para publicar seus formulários.</p>
+          <p className="text-sm text-muted-foreground">Informe apenas o domínio principal da sua empresa.</p>
+          <p className="text-sm text-muted-foreground">Usaremos automaticamente o subdomínio leads para publicar seus formulários.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-[1fr_220px]">
           <div className="space-y-2">
@@ -217,16 +212,18 @@ export default function DomainsPage() {
             <Input value={rootDomain} onChange={(e) => setRootDomain(e.target.value)} placeholder="seudominio.com.br" />
           </div>
           <div className="space-y-2">
-            <Label>Subdomínio</Label>
-            <Input value={subdomain} onChange={(e) => setSubdomain(e.target.value)} placeholder="leads" />
-            <p className="text-xs text-muted-foreground">Recomendamos usar leads para links de captação.</p>
+            <Label>Subdomínio fixo</Label>
+            <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
+              <Badge variant="secondary">Subdomínio padrão: {REQUIRED_FORM_SUBDOMAIN}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">O cliente informa apenas o domínio principal.</p>
           </div>
         </div>
         <div className="rounded-md bg-muted/40 p-3 text-sm">
           <div className="text-muted-foreground">Seu link ficará assim:</div>
           <div className="font-medium break-all">https://{previewDomain}/nome-do-formulario</div>
         </div>
-        <Button onClick={add} disabled={saving || !normalizedRootDomain || !normalizedSubdomain}>
+        <Button onClick={add} disabled={saving || !normalizedRootDomain}>
           <Plus className="w-4 h-4 mr-2" />Adicionar domínio
         </Button>
       </Card>
@@ -235,15 +232,15 @@ export default function DomainsPage() {
         <Card className="p-12 text-center">
           <Globe2 className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
           <h3 className="font-heading font-semibold text-lg mb-1">Você ainda não configurou nenhum domínio.</h3>
-          <p className="text-sm text-muted-foreground mb-4">Cadastre o domínio principal da sua empresa e use um subdomínio, como leads, para gerar automaticamente os links dos seus formulários.</p>
+          <p className="text-sm text-muted-foreground mb-4">Cadastre o domínio principal da sua empresa e o FlipForm usará automaticamente o subdomínio leads para gerar os links dos seus formulários.</p>
           <Button onClick={() => document.querySelector<HTMLInputElement>('input[placeholder="seudominio.com.br"]')?.focus()}>Adicionar domínio</Button>
         </Card>
       ) : (
         <div className="space-y-4">
           {domains.map((d) => {
             const parts = splitDomain(d.domain);
-            const dnsType = d.verificationType || 'CNAME';
-            const dnsHost = dnsType.toUpperCase() === 'CNAME' ? parts.subdomain : d.verificationDomain || parts.subdomain;
+            const dnsType = 'CNAME';
+            const dnsHost = REQUIRED_FORM_SUBDOMAIN;
             const dnsTarget = d.dnsTarget || d.verificationValue || 'cname.vercel-dns.com';
             const connection = getDomainConnectionStatus(d);
             const StatusIcon = connection.icon;
@@ -254,7 +251,7 @@ export default function DomainsPage() {
                   <div className="space-y-1">
                     <div className="font-heading font-semibold flex items-center gap-2"><Globe2 className="w-4 h-4" />{d.domain}{d.isPrimary && <Badge>Principal</Badge>}</div>
                     <div className="text-xs text-muted-foreground">Domínio principal informado: {parts.rootDomain}</div>
-                    <div className="text-xs text-muted-foreground">Subdomínio usado: {parts.subdomain}</div>
+                    <div className="text-xs text-muted-foreground">Subdomínio obrigatório: {REQUIRED_FORM_SUBDOMAIN}</div>
                     <div className="text-xs text-muted-foreground">{domainActive ? 'Todos os formulários publicados nesta conta usam esse domínio automaticamente.' : 'Após a verificação do DNS e ativação do SSL, os formulários desta conta passarão a usar esse domínio automaticamente.'}</div>
                     <div className="text-xs text-muted-foreground">Exemplos: https://{d.domain}/orcamento · https://{d.domain}/campanha-junho · https://{d.domain}/avaliacao</div>
                   </div>

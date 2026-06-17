@@ -5,6 +5,7 @@ import { buildPublicFormUrl as buildPublicFormUrlBase } from '@/lib/forms/public
 
 export const DEFAULT_APP_DOMAIN = 'app.flipform.com.br';
 export const DEFAULT_VERCEL_DNS_TARGET = 'cname.vercel-dns.com';
+export const REQUIRED_FORM_SUBDOMAIN = 'leads';
 const RESERVED_DOMAINS = new Set(['flipform.com.br', 'www.flipform.com.br', DEFAULT_APP_DOMAIN]);
 
 export type DnsInstruction = { type: 'CNAME' | 'A' | 'TXT'; name: string; value: string };
@@ -60,9 +61,22 @@ export function validateCustomFormDomain(input: string) {
   return { ok: true as const, domain };
 }
 
+export function hasPathQueryOrHash(input: string) {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  try {
+    const url = new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`);
+    return (url.pathname && url.pathname !== '/') || Boolean(url.search || url.hash);
+  } catch {
+    const withoutProtocol = trimmed.replace(/^https?:\/\//, '');
+    return /[/?#]/.test(withoutProtocol);
+  }
+}
+
 export function validateRootDomain(input: string) {
   const domain = normalizeCustomDomain(input);
   if (!domain) return { ok: false as const, domain, error: 'Informe o domínio principal.' };
+  if (hasPathQueryOrHash(input)) return { ok: false as const, domain, error: 'Informe apenas o domínio principal, sem caminho.' };
   if (domain === 'localhost' || domain.endsWith('.localhost')) return { ok: false as const, domain, error: 'localhost não é permitido.' };
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(domain)) return { ok: false as const, domain, error: 'Endereços IP não são permitidos.' };
   if (domain.endsWith('.vercel.app')) return { ok: false as const, domain, error: 'Domínios preview da Vercel não são permitidos.' };
@@ -72,21 +86,34 @@ export function validateRootDomain(input: string) {
 }
 
 export function validateSubdomain(input: string) {
-  const subdomain = String(input || 'leads').trim().toLowerCase();
+  const subdomain = String(input || REQUIRED_FORM_SUBDOMAIN).trim().toLowerCase();
   if (!subdomain) return { ok: false as const, subdomain, error: 'Informe o subdomínio.' };
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain)) return { ok: false as const, subdomain, error: 'Use apenas letras, números e hífen no subdomínio.' };
+  if (subdomain !== REQUIRED_FORM_SUBDOMAIN) return { ok: false as const, subdomain, error: 'O subdomínio dos formulários deve ser sempre leads.' };
   return { ok: true as const, subdomain };
 }
 
-export function buildCustomFormDomainFromParts(rootDomainInput: string, subdomainInput: string) {
+export function buildCustomFormDomainFromRoot(rootDomainInput: string) {
   const root = validateRootDomain(rootDomainInput);
   if (!root.ok) return root;
-  const sub = validateSubdomain(subdomainInput);
-  if (!sub.ok) return { ok: false as const, domain: '', error: sub.error };
-  const domain = `${sub.subdomain}.${root.domain}`;
+  const domain = `${REQUIRED_FORM_SUBDOMAIN}.${root.domain}`;
   const full = validateCustomFormDomain(domain);
   if (!full.ok) return full;
-  return { ok: true as const, domain, rootDomain: root.domain, subdomain: sub.subdomain };
+  return { ok: true as const, domain, rootDomain: root.domain, subdomain: REQUIRED_FORM_SUBDOMAIN };
+}
+
+export function buildCustomFormDomainFromParts(rootDomainInput: string, subdomainInput: string) {
+  const sub = validateSubdomain(subdomainInput);
+  if (!sub.ok) return { ok: false as const, domain: '', error: sub.error };
+  return buildCustomFormDomainFromRoot(rootDomainInput);
+}
+
+export function buildCustomFormDomainFromFullDomain(domainInput: string) {
+  const full = validateCustomFormDomain(domainInput);
+  if (!full.ok) return full;
+  const [subdomain, ...rootParts] = full.domain.split('.');
+  if (subdomain !== REQUIRED_FORM_SUBDOMAIN) return { ok: false as const, domain: full.domain, error: 'O subdomínio dos formulários deve ser sempre leads.' };
+  return { ok: true as const, domain: full.domain, rootDomain: rootParts.join('.'), subdomain: REQUIRED_FORM_SUBDOMAIN };
 }
 
 export async function getPrimaryCustomFormDomain(tenantId: string) {
@@ -98,8 +125,8 @@ export async function getTenantPublicFormUrl(tenantId: string, slug: string) {
   return buildPublicFormUrl({ slug, primaryDomain: primary?.domain });
 }
 
-export function getManualDnsInstruction(domain: string, value = DEFAULT_VERCEL_DNS_TARGET): DnsInstruction {
-  return { type: 'CNAME', name: domain.split('.')[0] || domain, value };
+export function getManualDnsInstruction(_domain: string, value = DEFAULT_VERCEL_DNS_TARGET): DnsInstruction {
+  return { type: 'CNAME', name: REQUIRED_FORM_SUBDOMAIN, value };
 }
 
 function vercelApi(path: string) {
@@ -154,7 +181,7 @@ function buildConnection(state: VercelConnectionState) {
 
 function normalizeSync(domain: string, details: any, verify: any, existsOnVercel: boolean, configured = true): VercelDomainSyncResult {
   const recommended = findDnsRecommendation(details) || findDnsRecommendation(verify);
-  const instruction = { ...(recommended || getManualDnsInstruction(domain)), name: (recommended?.name || domain.split('.')[0] || domain) };
+  const instruction: DnsInstruction = { type: 'CNAME', name: REQUIRED_FORM_SUBDOMAIN, value: (recommended || getManualDnsInstruction(domain)).value };
   const verified = Boolean(details?.verified || verify?.verified);
   const sslActive = hasSslActive(details) || Boolean(verify?.sslActive);
   const hasDnsChange = Boolean(recommended && !verified);
