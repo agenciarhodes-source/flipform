@@ -102,8 +102,40 @@ def test_forms_page_shows_pending_custom_domain_as_preview_and_copies_active_url
 
 def test_domains_page_uses_warning_toast_for_pending_verification_and_status_texts():
     page = read('app/(app)/domains/page.tsx')
-    assert "toast.success('Domínio verificado com sucesso.')" in page
+    assert "toast.success('Domínio verificado e ativo.')" in page
     assert "toast.warning('Domínio ainda aguardando configuração DNS.')" in page
-    assert "toast.error('Não foi possível verificar o domínio. Revise o DNS e tente novamente.')" in page
+    assert "toast.error('Não foi possível sincronizar o domínio com a Vercel.')" in page
     assert 'Após a verificação do DNS e ativação do SSL, os formulários desta conta passarão a usar esse domínio automaticamente.' in page
     assert 'Todos os formulários publicados nesta conta usam esse domínio automaticamente.' in page
+
+
+def test_vercel_domain_sync_normalizes_dns_ssl_and_connection_states():
+    helper = read('lib/custom-form-domains.ts')
+    assert 'export async function syncDomainWithVercel(domain: string)' in helper
+    assert "existsOnVercel: boolean" in helper
+    assert "sslStatus: 'pending' | 'active' | 'failed' | 'unknown'" in helper
+    assert "dns_change_required" in helper
+    assert "ssl_pending" in helper
+    assert "Integração com a Vercel não configurada. O domínio foi salvo, mas precisa ser adicionado manualmente na Vercel." in helper
+    assert 'findDnsRecommendation(details) || findDnsRecommendation(verify)' in helper
+    assert "state === 'active' ? 'active'" in helper
+
+
+def test_verify_route_persists_detailed_vercel_sync_state():
+    route = read('app/api/domains/[id]/verify/route.ts')
+    assert 'syncDomainWithVercel(domain.domain)' in route
+    assert 'sslStatus: result.sslStatus' in route
+    assert 'vercelVerified: result.existsOnVercel && result.verified' in route
+    assert 'dnsTarget: result.instruction.value' in route
+    assert 'verifiedAt: result.verified && result.sslActive' in route
+    assert 'connection: result.connection' in route
+
+
+def test_domains_page_shows_vercel_recommended_target_before_fallback():
+    page = read('app/(app)/domains/page.tsx')
+    assert "const dnsTarget = d.dnsTarget || d.verificationValue || 'cname.vercel-dns.com';" in page
+    assert 'Use exatamente o destino exibido acima. Se você alterou algo na Vercel, clique em Verificar agora para atualizar esta instrução.' in page
+    assert 'Destino recomendado: ${domain.dnsTarget}' in page
+    assert "toast.warning('A Vercel recomendou atualizar o DNS. Copie o novo destino exibido no card.')" in page
+    assert "toast.warning('DNS verificado. SSL ainda pendente.')" in page
+    assert "toast.success('Domínio verificado e ativo.')" in page
