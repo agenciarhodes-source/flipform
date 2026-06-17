@@ -116,9 +116,30 @@ export default function FormsPage() {
                   <span>{f._count.leads} leads</span>
                   <span>{formatDate(f.createdAt)}</span>
                 </div>
-                <div className="rounded-md bg-muted/40 p-2 mb-3 text-xs break-all">
-                  <div className="font-medium">{f.publicUrl}</div>
-                  <div className="text-muted-foreground">Link gerado com o domínio configurado em Domínios.</div>
+                <div className="rounded-md bg-muted/40 p-2 mb-3 text-xs break-all space-y-1.5">
+                  {f.publicUrlState === 'custom_pending' ? (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Link ativo:</span>
+                        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Domínio pendente</Badge>
+                      </div>
+                      <div className="font-medium">{f.publicUrl}</div>
+                      {f.customDomainUrl && (
+                        <div className="text-muted-foreground">
+                          Domínio personalizado pendente: <span className="font-medium text-foreground">{f.customDomainUrl}</span>
+                        </div>
+                      )}
+                      <div className="text-muted-foreground">O domínio personalizado ainda está aguardando verificação em Domínios.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium">{f.publicUrl}</div>
+                        {f.publicUrlState === 'custom_active' && <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Domínio ativo</Badge>}
+                      </div>
+                      <div className="text-muted-foreground">{f.publicUrlLabel || 'Link padrão do FlipForm.'}</div>
+                    </>
+                  )}
                 </div>
                 <div className="flex items-center gap-1">
                   <Button size="sm" variant="outline" onClick={() => copyLink(f.publicUrl)} className="flex-1">

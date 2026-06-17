@@ -62,3 +62,48 @@ def test_domains_page_does_not_show_fixed_cloudflare_dns_before_creation():
     intro = page.split('<Card className="p-5 space-y-5">', 1)[0]
     assert 'Cloudflare/DNS' not in intro
     assert 'Cloudflare &gt; Seu domínio &gt; DNS &gt; Records &gt; Add record.' not in page
+
+
+def test_public_url_helper_describes_default_pending_and_active_states():
+    helper = read('lib/forms/public-form-url.ts')
+    assert 'buildPublicFormUrlState' in helper
+    assert "state: 'default'" in helper
+    assert "state: 'custom_pending'" in helper
+    assert "state: 'custom_active'" in helper
+    assert "Link padrão do FlipForm." in helper
+    assert "Link padrão ativo enquanto o domínio personalizado aguarda verificação." in helper
+    assert "Link gerado com o domínio personalizado ativo." in helper
+    assert "params.primaryDomain.status === 'active'" in helper
+    assert "params.primaryDomain.verificationStatus === 'verified'" in helper
+    assert "params.primaryDomain.sslStatus === 'active'" in helper
+
+
+def test_forms_api_returns_functional_public_url_and_custom_domain_metadata():
+    route = read('app/api/forms/route.ts')
+    assert 'buildPublicFormUrlState' in route
+    assert 'publicUrl: urlState.activeUrl' in route
+    assert 'publicUrlState: urlState.state' in route
+    assert 'publicUrlLabel: urlState.label' in route
+    assert 'customDomainUrl: urlState.customUrl' in route
+    assert 'customDomainStatus:' in route
+    assert 'where: { tenantId: session.tenantId, isPrimary: true }' in route
+
+
+def test_forms_page_shows_pending_custom_domain_as_preview_and_copies_active_url():
+    page = read('app/(app)/forms/page.tsx')
+    assert "f.publicUrlState === 'custom_pending'" in page
+    assert 'Link ativo:' in page
+    assert 'Domínio personalizado pendente:' in page
+    assert 'O domínio personalizado ainda está aguardando verificação em Domínios.' in page
+    assert 'Domínio pendente' in page
+    assert 'Domínio ativo' in page
+    assert 'onClick={() => copyLink(f.publicUrl)}' in page
+
+
+def test_domains_page_uses_warning_toast_for_pending_verification_and_status_texts():
+    page = read('app/(app)/domains/page.tsx')
+    assert "toast.success('Domínio verificado com sucesso.')" in page
+    assert "toast.warning('Domínio ainda aguardando configuração DNS.')" in page
+    assert "toast.error('Não foi possível verificar o domínio. Revise o DNS e tente novamente.')" in page
+    assert 'Após a verificação do DNS e ativação do SSL, os formulários desta conta passarão a usar esse domínio automaticamente.' in page
+    assert 'Todos os formulários publicados nesta conta usam esse domínio automaticamente.' in page
