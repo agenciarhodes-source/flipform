@@ -143,6 +143,15 @@ const steps: Step[] = [
   { label: 'tenants.slug.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS tenants_slug_key ON tenants(slug)` },
   { label: 'tenant_users.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS tenant_users_tenant_id_user_id_key ON tenant_users(tenant_id, user_id)` },
 
+  { label: 'forms.drop.slug.constraint', sql: `ALTER TABLE forms DROP CONSTRAINT IF EXISTS forms_slug_key` },
+  { label: 'forms.drop.slug.index.lower', sql: `DROP INDEX IF EXISTS forms_slug_key` },
+  { label: 'forms.drop.slug.index.quoted', sql: `DROP INDEX IF EXISTS "forms_slug_key"` },
+  { label: 'forms.drop.slug.index.prisma', sql: `DROP INDEX IF EXISTS "Form_slug_key"` },
+  { label: 'forms.tenant_slug.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS forms_tenant_id_slug_key ON forms(tenant_id, slug)` },
+  { label: 'forms.tenant_created_at.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_created_at_idx ON forms(tenant_id, created_at)` },
+  { label: 'forms.tenant_pipeline.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_pipeline_id_idx ON forms(tenant_id, pipeline_id)` },
+  { label: 'forms.tenant_active.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_is_active_idx ON forms(tenant_id, is_active)` },
+
   {
     label: 'audit_logs.create',
     sql: `CREATE TABLE IF NOT EXISTS audit_logs (

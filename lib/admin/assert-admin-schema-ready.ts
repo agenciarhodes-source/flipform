@@ -32,7 +32,7 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'forms', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains'];
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -43,6 +43,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'next_due_date', 'provider', 'payment_required', 'grace_period_ends_at', 'payment_provider', 'provider_customer_id', 'provider_subscription_id', 'created_at', 'updated_at', 'canceled_at'],
   plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
   payments: ['id', 'tenant_id', 'subscription_id', 'provider', 'provider_payment_id', 'status', 'value', 'due_date', 'paid_at', 'invoice_url', 'bank_slip_url', 'pix_qr_code', 'billing_type', 'raw_payload', 'created_at', 'updated_at'],
+  forms: ['id', 'tenant_id', 'name', 'public_title', 'public_description', 'slug', 'primary_color', 'bg_color', 'button_color', 'text_color', 'theme', 'logo_url', 'cover_image_url', 'success_message', 'pipeline_id', 'initial_stage_id', 'is_active', 'created_at', 'updated_at'],
   tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'whatsapp_funnel_enabled', 'created_at', 'updated_at'],
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
   tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
@@ -212,7 +213,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'forms', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
   `;
 
   type IdxRow = IndexInfo;
@@ -231,6 +232,11 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasPaymentsTenantStatus = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'status'));
   const hasPaymentsTenantDueDate = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'due_date'));
   const hasPaymentsTenantCreatedAt = typedIndexes.some((idx) => idx.tablename === 'payments' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'created_at'));
+  const hasFormsTenantSlugUnique = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_slug_key' && idx.tablename === 'forms' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'slug'));
+  const globalFormsSlugUniqueIndexes = typedIndexes.filter((idx) => idx.tablename === 'forms' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'slug') && !indexHasColumn(idx.indexdef, 'tenant_id'));
+  const hasFormsTenantCreatedAt = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_created_at_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'created_at'));
+  const hasFormsTenantPipeline = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_pipeline_id_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'pipeline_id'));
+  const hasFormsTenantIsActive = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_is_active_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'is_active'));
   const hasTenantIntegrationTenantUnique = typedIndexes.some((idx) => idx.tablename === 'tenant_integration_settings' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id'));
   const hasTenantIntegrationTenant = typedIndexes.some((idx) => idx.indexname === 'tenant_integration_settings_tenant_id_idx' && idx.tablename === 'tenant_integration_settings' && indexHasColumn(idx.indexdef, 'tenant_id'));
   const hasKanbanTrackingTenant = typedIndexes.some((idx) => idx.indexname === 'kanban_stage_tracking_events_tenant_id_idx' && idx.tablename === 'kanban_stage_tracking_events' && indexHasColumn(idx.indexdef, 'tenant_id'));
@@ -288,6 +294,17 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.payments.tenant_id_due_date', ok: hasPaymentsTenantDueDate, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_due_date_idx ON payments(tenant_id, due_date);', runtimeEssential: false });
   add(checks, { label: 'index.payments.tenant_id_created_at', ok: hasPaymentsTenantCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS payments_tenant_id_created_at_idx ON payments(tenant_id, created_at);', runtimeEssential: false });
 
+  add(checks, { label: 'index.forms.tenant_id_slug_unique', ok: hasFormsTenantSlugUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS forms_tenant_id_slug_key ON forms(tenant_id, slug);', runtimeEssential: false });
+  add(checks, {
+    label: 'index.forms.no_global_slug_unique',
+    ok: globalFormsSlugUniqueIndexes.length === 0,
+    detail: globalFormsSlugUniqueIndexes.length ? globalFormsSlugUniqueIndexes.map((idx) => idx.indexname).join(', ') : undefined,
+    suggestion: 'ALTER TABLE forms DROP CONSTRAINT IF EXISTS forms_slug_key; DROP INDEX IF EXISTS forms_slug_key; DROP INDEX IF EXISTS "Form_slug_key";',
+    runtimeEssential: false,
+  });
+  add(checks, { label: 'index.forms.tenant_id_created_at', ok: hasFormsTenantCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_created_at_idx ON forms(tenant_id, created_at);', runtimeEssential: false });
+  add(checks, { label: 'index.forms.tenant_id_pipeline_id', ok: hasFormsTenantPipeline, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_pipeline_id_idx ON forms(tenant_id, pipeline_id);', runtimeEssential: false });
+  add(checks, { label: 'index.forms.tenant_id_is_active', ok: hasFormsTenantIsActive, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_is_active_idx ON forms(tenant_id, is_active);', runtimeEssential: false });
 
   add(checks, { label: 'index.tenant_integration_settings.tenant_id_unique', ok: hasTenantIntegrationTenantUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_key ON tenant_integration_settings(tenant_id);', runtimeEssential: false });
   add(checks, { label: 'index.tenant_integration_settings.tenant_id', ok: hasTenantIntegrationTenant, suggestion: 'CREATE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_idx ON tenant_integration_settings(tenant_id);', runtimeEssential: false });
@@ -315,6 +332,22 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.custom_form_domains.verification_status', ok: hasCustomFormDomainsVerificationStatus, suggestion: 'CREATE INDEX IF NOT EXISTS custom_form_domains_verification_status_idx ON custom_form_domains(verification_status);', runtimeEssential: false });
 
 
+
+  if (tables.has('forms') && columnMaps.get('forms')?.has('tenant_id') && columnMaps.get('forms')?.has('slug')) {
+    const duplicatedFormSlugs = await prisma.$queryRaw<Array<{ tenant_id: string; slug: string; count: bigint }>>`
+      select tenant_id, slug, count(*)::bigint as count
+      from forms
+      group by tenant_id, slug
+      having count(*) > 1
+    `;
+    add(checks, {
+      label: 'data.forms.no_duplicate_slug_per_tenant',
+      ok: duplicatedFormSlugs.length === 0,
+      detail: duplicatedFormSlugs.length ? `duplicates=${duplicatedFormSlugs.length}` : undefined,
+      suggestion: 'Remova ou renomeie formulários duplicados dentro do mesmo tenant antes de aplicar forms_tenant_id_slug_key.',
+      runtimeEssential: false,
+    });
+  }
 
   if (tables.has('custom_form_domains') && columnMaps.get('custom_form_domains')?.has('domain')) {
     const duplicatedDomains = await prisma.$queryRaw<Array<{ count: bigint }>>`
