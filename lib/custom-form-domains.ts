@@ -9,15 +9,17 @@ export const REQUIRED_FORM_SUBDOMAIN = 'leads';
 const RESERVED_DOMAINS = new Set(['flipform.com.br', 'www.flipform.com.br', DEFAULT_APP_DOMAIN]);
 
 export type DnsInstruction = { type: 'CNAME' | 'A' | 'TXT'; name: string; value: string };
-export type VercelConnectionState = 'active' | 'dns_pending' | 'dns_change_required' | 'ssl_pending' | 'not_on_vercel' | 'error';
+export type VercelConnectionState = 'vercel_not_configured' | 'not_on_vercel' | 'dns_change_required' | 'dns_pending' | 'ssl_pending' | 'active' | 'error';
 export type VercelDomainSyncResult = {
   configured: boolean;
   existsOnVercel: boolean;
+  addedToVercel: boolean;
   verified: boolean;
   sslActive: boolean;
   status: 'pending' | 'active' | 'error';
   verificationStatus: 'pending' | 'verified' | 'failed';
   sslStatus: 'pending' | 'active' | 'failed' | 'unknown';
+  connectionState: VercelConnectionState;
   instruction: DnsInstruction;
   connection: { state: VercelConnectionState; title: string; description: string };
   reason?: string | null;
@@ -129,24 +131,28 @@ export function getManualDnsInstruction(_domain: string, value = DEFAULT_VERCEL_
   return { type: 'CNAME', name: REQUIRED_FORM_SUBDOMAIN, value };
 }
 
-function vercelApi(path: string) {
-  const teamId = process.env.VERCEL_TEAM_ID;
-  return `https://api.vercel.com${path}${teamId ? `${path.includes('?') ? '&' : '?'}teamId=${teamId}` : ''}`;
+function hasVercelDomainConfig() {
+  return Boolean(process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID && process.env.VERCEL_TEAM_ID);
 }
 
-async function vercelRequest(path: string, init: RequestInit = {}): Promise<VercelRequestResult> {
+function vercelApi(path: string) {
+  const teamId = process.env.VERCEL_TEAM_ID;
+  return `https://api.vercel.com${path}${teamId ? `${path.includes('?') ? '&' : '?'}teamId=${encodeURIComponent(teamId)}` : ''}`;
+}
+
+export async function vercelRequest(path: string, init: RequestInit = {}): Promise<VercelRequestResult> {
   const res = await fetch(vercelApi(path), { ...init, headers: { Authorization: `Bearer ${process.env.VERCEL_TOKEN}`, ...(init.headers || {}) } });
   const data = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, data };
 }
 
-function findDnsRecommendation(value: any): DnsInstruction | null {
+export function findDnsRecommendation(value: any): DnsInstruction | null {
   const seen = new Set<any>();
   const walk = (node: any): DnsInstruction | null => {
     if (!node || typeof node !== 'object' || seen.has(node)) return null;
     seen.add(node);
     const type = String(node.type || node.recordType || '').toUpperCase();
-    const candidateValue = node.value || node.target || node.cname || node.configuredValue || node.expectedValue || node.recommendedValue;
+    const candidateValue = node.value || node.target || node.cname || node.configuredValue || node.expectedValue || node.recommendedValue || node.misconfigured?.value;
     const reason = String(node.reason || node.error?.message || '').toLowerCase();
     if (candidateValue && (type === 'CNAME' || String(candidateValue).includes('vercel-dns') || reason.includes('cname'))) {
       return { type: type === 'A' || type === 'TXT' ? type : 'CNAME', name: String(node.domain || node.name || node.host || '').replace(/\.$/, ''), value: String(candidateValue).replace(/\.$/, '') };
@@ -160,18 +166,19 @@ function findDnsRecommendation(value: any): DnsInstruction | null {
   return walk(value);
 }
 
-function hasSslActive(value: any) {
+export function hasSslActive(value: any) {
   const cert = value?.certs?.[0] || value?.certificate || value?.ssl;
   const text = JSON.stringify(cert || value || {}).toLowerCase();
   if (text.includes('invalid') || text.includes('error') || text.includes('failed')) return false;
   return Boolean(value?.verified && (value?.ready || value?.ssl?.status === 'active' || value?.certificate?.status === 'issued' || text.includes('issued') || text.includes('active')));
 }
 
-function buildConnection(state: VercelConnectionState) {
+export function buildConnection(state: VercelConnectionState) {
   const map = {
+    vercel_not_configured: { title: 'Integração Vercel não configurada', description: 'Configure VERCEL_TOKEN, VERCEL_PROJECT_ID e VERCEL_TEAM_ID para sincronizar domínios automaticamente.' },
     active: { title: 'Conexão ativa', description: 'Domínio verificado e SSL ativo.' },
     dns_pending: { title: 'Aguardando DNS', description: 'Crie ou atualize o CNAME informado e clique em Verificar agora.' },
-    dns_change_required: { title: 'DNS precisa ser atualizado', description: 'A Vercel recomendou um destino DNS diferente. Atualize o CNAME na Cloudflare.' },
+    dns_change_required: { title: 'DNS precisa ser atualizado', description: 'A Vercel recomendou outro destino DNS. Atualize o CNAME na Cloudflare.' },
     ssl_pending: { title: 'DNS verificado', description: 'Aguardando ativação do SSL pela Vercel.' },
     not_on_vercel: { title: 'Domínio não vinculado à Vercel', description: 'O domínio existe no FlipForm, mas ainda não foi encontrado no projeto da Vercel.' },
     error: { title: 'Erro na conexão', description: 'Não foi possível sincronizar o domínio com a Vercel.' },
@@ -179,38 +186,63 @@ function buildConnection(state: VercelConnectionState) {
   return { state, ...map[state] };
 }
 
-function normalizeSync(domain: string, details: any, verify: any, existsOnVercel: boolean, configured = true): VercelDomainSyncResult {
+function normalizeSync(domain: string, details: any, verify: any, existsOnVercel: boolean, addedToVercel: boolean, configured = true): VercelDomainSyncResult {
   const recommended = findDnsRecommendation(details) || findDnsRecommendation(verify);
-  const instruction: DnsInstruction = { type: 'CNAME', name: REQUIRED_FORM_SUBDOMAIN, value: (recommended || getManualDnsInstruction(domain)).value };
+  const instruction: DnsInstruction = { type: recommended?.type || 'CNAME', name: recommended?.name || REQUIRED_FORM_SUBDOMAIN, value: (recommended || getManualDnsInstruction(domain)).value };
   const verified = Boolean(details?.verified || verify?.verified);
   const sslActive = hasSslActive(details) || Boolean(verify?.sslActive);
   const hasDnsChange = Boolean(recommended && !verified);
   const failed = Boolean(details?.error || verify?.error);
-  const state: VercelConnectionState = !existsOnVercel ? 'not_on_vercel' : failed ? 'error' : verified && sslActive ? 'active' : verified ? 'ssl_pending' : hasDnsChange ? 'dns_change_required' : 'dns_pending';
-  const reason = state === 'ssl_pending' ? 'DNS verificado. Aguardando ativação do SSL.' : details?.error?.message || verify?.error?.message || details?.verification?.[0]?.reason || verify?.verification?.[0]?.reason || (state === 'dns_change_required' ? 'A Vercel recomendou atualizar o DNS.' : null);
-  return { configured, existsOnVercel, verified, sslActive, status: state === 'active' ? 'active' : failed ? 'error' : 'pending', verificationStatus: verified ? 'verified' : failed ? 'failed' : 'pending', sslStatus: sslActive ? 'active' : failed ? 'failed' : verified ? 'pending' : 'unknown', instruction, connection: buildConnection(state), reason, raw: { details, verify } };
+  const connectionState: VercelConnectionState = !existsOnVercel ? 'not_on_vercel' : failed ? 'error' : verified && sslActive ? 'active' : verified ? 'ssl_pending' : hasDnsChange ? 'dns_change_required' : 'dns_pending';
+  const reason = connectionState === 'ssl_pending' ? 'DNS verificado. Aguardando ativação do SSL.' : details?.error?.message || verify?.error?.message || details?.verification?.[0]?.reason || verify?.verification?.[0]?.reason || (connectionState === 'dns_change_required' ? 'A Vercel recomendou atualizar o DNS.' : null);
+  return { configured, existsOnVercel, addedToVercel, verified, sslActive, status: connectionState === 'active' ? 'active' : failed ? 'error' : 'pending', verificationStatus: verified ? 'verified' : failed ? 'failed' : 'pending', sslStatus: sslActive ? 'active' : failed ? 'failed' : verified ? 'pending' : 'unknown', connectionState, instruction, connection: buildConnection(connectionState), reason, raw: { details, verify } };
+}
+
+function notConfiguredResult(domain: string): VercelDomainSyncResult {
+  const connectionState: VercelConnectionState = 'vercel_not_configured';
+  return { configured: false, existsOnVercel: false, addedToVercel: false, verified: false, sslActive: false, status: 'pending', verificationStatus: 'pending', sslStatus: 'unknown', connectionState, instruction: getManualDnsInstruction(domain), connection: buildConnection(connectionState), reason: 'Integração com a Vercel não configurada. Configure VERCEL_TOKEN, VERCEL_PROJECT_ID e VERCEL_TEAM_ID.' };
+}
+
+function notOnVercelResult(domain: string, reason: string, raw?: unknown): VercelDomainSyncResult {
+  const connectionState: VercelConnectionState = 'not_on_vercel';
+  return { configured: true, existsOnVercel: false, addedToVercel: false, verified: false, sslActive: false, status: 'pending', verificationStatus: 'pending', sslStatus: 'unknown', connectionState, instruction: getManualDnsInstruction(domain), connection: buildConnection(connectionState), reason, raw };
+}
+
+function errorResult(domain: string, error: any): VercelDomainSyncResult {
+  console.error('vercel domain sync error', { domain, code: error?.code || error?.status || error?.data?.error?.code, message: error?.message || error?.data?.error?.message });
+  const connectionState: VercelConnectionState = 'error';
+  return { configured: true, existsOnVercel: false, addedToVercel: false, verified: false, sslActive: false, status: 'error', verificationStatus: 'failed', sslStatus: 'unknown', connectionState, instruction: getManualDnsInstruction(domain), connection: buildConnection(connectionState), reason: error?.message || error?.data?.error?.message || 'Não foi possível sincronizar o domínio com a Vercel.', raw: error };
+}
+
+
+export async function syncVercelProjectDomain(domain: string): Promise<VercelDomainSyncResult> {
+  if (!hasVercelDomainConfig()) return notConfiguredResult(domain);
+  try {
+    const projectId = process.env.VERCEL_PROJECT_ID;
+    let details = await vercelRequest(`/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`);
+    let existsOnVercel = details.ok && !details.data?.error;
+    let addedToVercel = false;
+
+    if (!existsOnVercel && (details.status === 404 || details.data?.error?.code === 'not_found')) {
+      const added = await vercelRequest(`/v10/projects/${projectId}/domains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: domain }) });
+      addedToVercel = added.ok;
+      existsOnVercel = added.ok || added.data?.error?.code === 'domain_already_in_use' || added.data?.error?.code === 'domain_already_exists';
+      if (!existsOnVercel) return notOnVercelResult(domain, added.data?.error?.message || 'Domínio não encontrado no projeto da Vercel.', { details: details.data, added: added.data });
+      details = await vercelRequest(`/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`);
+      if (!details.ok) details = added;
+    }
+
+    const verify = existsOnVercel ? await vercelRequest(`/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`, { method: 'POST' }) : { ok: false, status: 404, data: {} };
+    return normalizeSync(domain, details.data, verify.data, existsOnVercel, addedToVercel, true);
+  } catch (error: any) {
+    return errorResult(domain, error);
+  }
 }
 
 export async function syncDomainWithVercel(domain: string): Promise<VercelDomainSyncResult> {
-  if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID) {
-    return { configured: false, existsOnVercel: false, verified: false, sslActive: false, status: 'pending', verificationStatus: 'pending', sslStatus: 'unknown', instruction: getManualDnsInstruction(domain), connection: buildConnection('not_on_vercel'), reason: 'Integração com a Vercel não configurada. O domínio foi salvo, mas precisa ser adicionado manualmente na Vercel.' };
-  }
-  try {
-    let details = await vercelRequest(`/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${encodeURIComponent(domain)}`);
-    let existsOnVercel = details.ok && !details.data?.error;
-    if (!existsOnVercel && (details.status === 404 || details.data?.error?.code === 'not_found')) {
-      const added = await vercelRequest(`/v10/projects/${process.env.VERCEL_PROJECT_ID}/domains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: domain }) });
-      existsOnVercel = added.ok || added.data?.error?.code === 'domain_already_in_use';
-      if (!existsOnVercel) return { configured: true, existsOnVercel: false, verified: false, sslActive: false, status: 'pending', verificationStatus: 'pending', sslStatus: 'unknown', instruction: getManualDnsInstruction(domain), connection: buildConnection('not_on_vercel'), reason: added.data?.error?.message || 'Domínio não encontrado no projeto da Vercel.', raw: { details: details.data, added: added.data } };
-      details = await vercelRequest(`/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${encodeURIComponent(domain)}`);
-      if (!details.ok) details = added;
-    }
-    const verify = await vercelRequest(`/v9/projects/${process.env.VERCEL_PROJECT_ID}/domains/${encodeURIComponent(domain)}/verify`, { method: 'POST' });
-    return normalizeSync(domain, details.data, verify.data, existsOnVercel, true);
-  } catch (error: any) {
-    return { configured: true, existsOnVercel: false, verified: false, sslActive: false, status: 'error', verificationStatus: 'failed', sslStatus: 'unknown', instruction: getManualDnsInstruction(domain), connection: buildConnection('error'), reason: error?.message || 'Não foi possível sincronizar o domínio com a Vercel.', raw: error };
-  }
+  return syncVercelProjectDomain(domain);
 }
+
 
 export async function addDomainToVercel(domain: string) {
   return syncDomainWithVercel(domain);

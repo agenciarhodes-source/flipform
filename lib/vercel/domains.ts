@@ -1,12 +1,13 @@
 export {
   addDomainToVercel,
   syncDomainWithVercel,
+  syncVercelProjectDomain,
   verifyDomainOnVercel as verifyVercelDomain,
   type VercelDomainSyncResult,
 } from '@/lib/custom-form-domains';
 
 export async function getVercelDomain(domain: string) {
-  if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID) {
+  if (!process.env.VERCEL_TOKEN || !process.env.VERCEL_PROJECT_ID || !process.env.VERCEL_TEAM_ID) {
     return { configured: false, domain, verified: false };
   }
   const teamId = process.env.VERCEL_TEAM_ID;

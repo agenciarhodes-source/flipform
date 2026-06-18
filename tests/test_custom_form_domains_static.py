@@ -115,23 +115,27 @@ def test_domains_page_uses_warning_toast_for_pending_verification_and_status_tex
 
 def test_vercel_domain_sync_normalizes_dns_ssl_and_connection_states():
     helper = read('lib/custom-form-domains.ts')
+    assert 'export async function syncVercelProjectDomain(domain: string)' in helper
     assert 'export async function syncDomainWithVercel(domain: string)' in helper
     assert "existsOnVercel: boolean" in helper
     assert "sslStatus: 'pending' | 'active' | 'failed' | 'unknown'" in helper
     assert "dns_change_required" in helper
     assert "ssl_pending" in helper
-    assert "Integração com a Vercel não configurada. O domínio foi salvo, mas precisa ser adicionado manualmente na Vercel." in helper
+    assert "Integração com a Vercel não configurada. Configure VERCEL_TOKEN, VERCEL_PROJECT_ID e VERCEL_TEAM_ID." in helper
+    assert "connectionState: VercelConnectionState" in helper
+    assert "addedToVercel: boolean" in helper
     assert 'findDnsRecommendation(details) || findDnsRecommendation(verify)' in helper
-    assert "state === 'active' ? 'active'" in helper
+    assert "connectionState === 'active' ? 'active'" in helper
 
 
 def test_verify_route_persists_detailed_vercel_sync_state():
     route = read('app/api/domains/[id]/verify/route.ts')
-    assert 'syncDomainWithVercel(domain.domain)' in route
+    assert 'syncVercelProjectDomain(domain.domain)' in route
     assert 'sslStatus: result.sslStatus' in route
     assert 'vercelVerified: result.existsOnVercel && result.verified' in route
     assert 'dnsTarget: result.instruction.value' in route
-    assert 'verifiedAt: result.verified && result.sslActive' in route
+    assert 'verifiedAt: result.verified ?' in route
+    assert 'connectionState: result.connectionState' in route
     assert 'connection: result.connection' in route
 
 
