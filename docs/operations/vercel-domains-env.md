@@ -100,3 +100,22 @@ Após confirmação de pagamento:
 
 ## Production environment lock
 Consulte `docs/operations/production-env-checklist.md` para checklist final de produção e validação de envs.
+
+## Domínios personalizados de formulários
+
+A sincronização automática dos domínios de formulários na tela **Domínios** depende destas variáveis no backend do projeto `flipform`:
+
+```env
+VERCEL_TOKEN=
+VERCEL_PROJECT_ID=
+VERCEL_TEAM_ID=
+NEXT_PUBLIC_APP_DOMAIN=app.flipform.com.br
+```
+
+Se `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` ou `VERCEL_TEAM_ID` não estiverem configuradas, o card do domínio deve mostrar o estado **Integração Vercel não configurada**. Nesse cenário o FlipForm salva o domínio do tenant, mas não consegue consultar, adicionar ou verificar o domínio no projeto da Vercel.
+
+Ao sincronizar, o FlipForm consulta o domínio no projeto da Vercel, tenta adicioná-lo quando ele ainda não existe no projeto, consulta novamente os detalhes e só então executa a verificação. O endpoint de verificação não é usado como única fonte porque as instruções completas de DNS podem vir na consulta de detalhes/configuração do domínio.
+
+Quando a Vercel recomendar um destino DNS específico, o cliente deve copiar exatamente o valor exibido no card do FlipForm. Não substitua por `cname.vercel-dns.com` se o card mostrar um CNAME dedicado, por exemplo `fe005ac9dca143b0.vercel-dns-017.com`.
+
+Para Cloudflare, mantenha o registro dos formulários como **DNS only** até a ativação do domínio e do SSL pela Vercel.

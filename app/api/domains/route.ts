@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { addDomainToVercel, buildCustomFormDomainFromFullDomain, buildCustomFormDomainFromRoot, getConfiguredAppDomain, getManualDnsInstruction, REQUIRED_FORM_SUBDOMAIN } from '@/lib/custom-form-domains';
+import { syncVercelProjectDomain, buildCustomFormDomainFromFullDomain, buildCustomFormDomainFromRoot, getConfiguredAppDomain, getManualDnsInstruction, REQUIRED_FORM_SUBDOMAIN } from '@/lib/custom-form-domains';
 import { logAudit } from '@/lib/audit';
 
 export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
@@ -23,7 +23,7 @@ export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
     if (existing && existing.tenantId !== session.tenantId) return NextResponse.json({ error: 'Este domínio já está vinculado a outra conta.' }, { status: 409 });
     if (existing) return NextResponse.json({ error: 'Este domínio já está cadastrado nesta conta.' }, { status: 409 });
 
-    const vercel = await addDomainToVercel(validated.domain);
+    const vercel = await syncVercelProjectDomain(validated.domain);
     const instruction = vercel.instruction || getManualDnsInstruction(validated.domain);
     const count = await prisma.customFormDomain.count({ where: { tenantId: session.tenantId } });
     const domain = await prisma.customFormDomain.create({
@@ -45,7 +45,7 @@ export const POST = withPermission('SETTINGS_EDIT', async (req, session) => {
       },
     });
     await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'custom_form_domain', entityId: domain.id, action: 'domain.created', metadata: { domain: domain.domain } });
-    return NextResponse.json({ domain }, { status: 201 });
+    return NextResponse.json({ domain, connectionState: vercel.connectionState, connection: vercel.connection }, { status: 201 });
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Erro ao cadastrar domínio.' }, { status: 500 });
   }
