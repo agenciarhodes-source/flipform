@@ -2,6 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { buildPublicFormUrl as buildPublicFormUrlBase } from '@/lib/forms/public-form-url';
+import { logAudit } from '@/lib/audit';
 
 export const DEFAULT_APP_DOMAIN = 'app.flipform.com.br';
 export const DEFAULT_VERCEL_DNS_TARGET = 'cname.vercel-dns.com';
@@ -250,4 +251,49 @@ export async function addDomainToVercel(domain: string) {
 
 export async function verifyDomainOnVercel(domain: string) {
   return syncDomainWithVercel(domain);
+}
+
+
+export async function activateCustomFormDomain(params: { domainId: string; actorUserId?: string | null; source: 'admin' | 'client_verify' | 'vercel_sync'; data?: Record<string, any> }) {
+  const current = await prisma.customFormDomain.findUnique({ where: { id: params.domainId } });
+  if (!current) return null;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.customFormDomain.updateMany({
+      where: { tenantId: current.tenantId, id: { not: current.id } },
+      data: { isPrimary: false },
+    });
+
+    return tx.customFormDomain.update({
+      where: { id: current.id },
+      data: {
+        ...(params.data || {}),
+        status: 'active',
+        verificationStatus: 'verified',
+        sslStatus: 'active',
+        vercelVerified: true,
+        isPrimary: true,
+        verificationReason: null,
+        lastCheckedAt: new Date(),
+        verifiedAt: new Date(),
+      },
+      include: { tenant: { select: { id: true, name: true, slug: true } } },
+    });
+  });
+
+  await logAudit({
+    tenantId: current.tenantId,
+    userId: params.actorUserId ?? null,
+    entityType: 'custom_form_domain',
+    entityId: current.id,
+    action: 'domain.activated',
+    metadata: {
+      domainId: current.id,
+      domain: current.domain,
+      tenantId: current.tenantId,
+      source: params.source,
+    },
+  });
+
+  return updated;
 }

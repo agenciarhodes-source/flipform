@@ -116,6 +116,6 @@ Se `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` ou `VERCEL_TEAM_ID` não estiverem config
 
 Ao sincronizar, o FlipForm consulta o domínio no projeto da Vercel, tenta adicioná-lo quando ele ainda não existe no projeto, consulta novamente os detalhes e só então executa a verificação. O endpoint de verificação não é usado como única fonte porque as instruções completas de DNS podem vir na consulta de detalhes/configuração do domínio.
 
-Quando a Vercel recomendar um destino DNS específico, o cliente deve copiar exatamente o valor exibido no card do FlipForm. Não substitua por `cname.vercel-dns.com` se o card mostrar um CNAME dedicado, por exemplo `fe005ac9dca143b0.vercel-dns-017.com`.
+Quando a Vercel recomendar um destino DNS específico, o cliente deve copiar exatamente o valor exibido no card do FlipForm. Não substitua por `cname.vercel-dns.com` se o card mostrar um CNAME dedicado, por exemplo um destino dedicado retornado pela Vercel.
 
 Para Cloudflare, mantenha o registro dos formulários como **DNS only** até a ativação do domínio e do SSL pela Vercel.

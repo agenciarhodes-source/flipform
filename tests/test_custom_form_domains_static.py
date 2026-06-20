@@ -20,8 +20,8 @@ def test_custom_domain_schema_is_tenant_scoped_and_domain_unique():
 def test_custom_domain_public_resolution_uses_only_active_verified_domains():
     page = read('app/custom-domain/[slug]/page.tsx')
     assert 'domain: host' in page
-    assert "customDomain.status === 'active'" in page
-    assert "customDomain.verificationStatus === 'verified'" in page
+    assert "status: 'active'" in page
+    assert "verificationStatus: 'verified'" in page
     assert 'tenantId: customDomain.tenantId' in page
     assert 'slug: params.slug' in page
 
@@ -92,9 +92,12 @@ def test_domains_api_creates_request_without_vercel_sync_or_custom_subdomain():
     assert 'Solicitação recebida. Nosso time irá configurar o domínio e informar o próximo passo de DNS.' in route
 
 
-def test_client_verify_route_does_not_call_vercel():
+def test_client_verify_route_syncs_selected_domain_dynamically():
     route = read('app/api/domains/[id]/verify/route.ts')
-    assert 'syncVercelProjectDomain' not in route
+    assert 'where: { id: ctx.params.id, tenantId: session.tenantId }' in route
+    assert 'syncDomainWithVercel(domain.domain)' in route
+    assert 'where: { id: domain.id }' in route
+    assert 'domain: "leads.' not in route
     assert 'Domínio aguardando configuração técnica.' in route
 
 
@@ -146,14 +149,17 @@ def test_docs_describe_backoffice_operational_flow():
 
 def test_admin_domain_action_endpoints_exist_and_audit_required_events():
     for path, action in [
-        ('app/api/admin/domains/[id]/activate/route.ts', 'domain.admin_activated'),
+        ('app/api/admin/domains/[id]/activate/route.ts', 'domain.activated'),
         ('app/api/admin/domains/[id]/mark-dns-pending/route.ts', 'domain.admin_dns_pending'),
         ('app/api/admin/domains/[id]/mark-ssl-pending/route.ts', 'domain.admin_ssl_pending'),
         ('app/api/admin/domains/[id]/mark-error/route.ts', 'domain.admin_error'),
     ]:
         content = read(path)
         assert 'withPlatformAdmin' in content
-        assert action in content
+        if action == 'domain.activated':
+            assert action in read('lib/custom-form-domains.ts')
+        else:
+            assert action in content
     patch_route = read('app/api/admin/domains/[id]/route.ts')
     assert '"vercelVerified"' in patch_route
     assert 'domain.admin_updated' in patch_route
@@ -161,11 +167,12 @@ def test_admin_domain_action_endpoints_exist_and_audit_required_events():
     assert 'newStatus' in patch_route
 
 
-def test_custom_domain_public_pending_page_and_ssl_gate():
+def test_custom_domain_public_route_resolves_by_active_host_and_ssl_gate():
     page = read('app/custom-domain/[slug]/page.tsx')
-    assert "sslStatus === 'active'" in page
-    assert 'Domínio ainda não ativo' in page
-    assert 'Este domínio ainda está em configuração. Use o link padrão do formulário ou tente novamente mais tarde.' in page
+    assert "normalizeHostname(headers().get('host'))" in page
+    assert "where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' }" in page
+    assert 'tenantId: customDomain.tenantId' in page
+    assert 'slug: params.slug' in page
     submit = read('app/api/public/forms/[slug]/submit/route.ts')
     assert "sslStatus: 'active'" in submit
 
@@ -176,3 +183,41 @@ def test_forms_page_has_preview_and_functional_active_link_copy():
     assert 'href={f.publicUrl || `/f/${f.slug}`}' in page
     assert 'Domínio personalizado pendente' in page
     assert 'Domínio pendente' in page
+
+
+def test_custom_domain_flow_is_generic_for_multiple_tenants():
+    route = read('app/api/domains/route.ts')
+    assert 'buildCustomFormDomainFromRoot(' in route
+    helper = read('lib/custom-form-domains.ts')
+    assert "const domain = `${REQUIRED_FORM_SUBDOMAIN}.${root.domain}`;" in helper
+    assert 'leads.tenant-a.com' not in route + helper
+    assert 'leads.tenant-b.com' not in route + helper
+
+
+def test_domain_activation_by_id_scopes_primary_to_same_tenant():
+    helper = read('lib/custom-form-domains.ts')
+    assert 'activateCustomFormDomain' in helper
+    assert 'domainId: string' in helper
+    assert 'where: { id: params.domainId }' in helper
+    assert 'tenantId: current.tenantId, id: { not: current.id }' in helper
+    assert 'isPrimary: false' in helper
+    assert 'isPrimary: true' in helper
+
+
+def test_form_links_use_only_active_primary_domain_for_tenant():
+    route = read('app/api/forms/route.ts')
+    assert "tenantId: session.tenantId" in route
+    assert "isPrimary: true, status: 'active', verificationStatus: 'verified', sslStatus: 'active'" in route
+    assert 'buildPublicFormUrlState' in route
+
+
+def test_no_real_client_domain_references_in_custom_domain_static_suite():
+    combined = '\n'.join(read(path) for path in [
+        'app/api/domains/[id]/verify/route.ts',
+        'app/api/admin/domains/[id]/activate/route.ts',
+        'lib/custom-form-domains.ts',
+        'app/custom-domain/[slug]/page.tsx',
+        'app/api/forms/route.ts',
+    ])
+    assert 'WHERE domain =' not in combined
+    assert 'domain: "leads.' not in combined
