@@ -45,6 +45,14 @@ export const kanbanEventSchema = z.object({
   conversionValue: z.coerce.number().nonnegative().optional().nullable(),
   currency: z.string().trim().length(3).default('BRL'),
   enabled: z.boolean().default(true),
+}).superRefine((data, ctx) => {
+  if (data.provider === 'meta' && data.eventName === 'Purchase' && (!data.conversionValue || data.conversionValue <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['conversionValue'],
+      message: 'Informe um valor de conversão para eventos Purchase.',
+    });
+  }
 });
 
 export type TrackingDispatchContext = {
@@ -107,6 +115,15 @@ export async function logTrackingEvent(data: {
   provider: string; eventName: string; status: string; reason?: string | null; triggeredById?: string | null; eventId?: string | null;
   conversationId?: string | null; messageId?: string | null; triggerRuleId?: string | null; messageDirection?: string | null; source?: string | null;
 }) {
+  if (data.eventId) {
+    const existing = await prisma.trackingEventLog.findFirst({
+      where: { provider: data.provider, eventId: data.eventId },
+      select: { id: true },
+    });
+    if (existing) {
+      return prisma.trackingEventLog.update({ where: { id: existing.id }, data });
+    }
+  }
   return prisma.trackingEventLog.create({ data });
 }
 
@@ -134,7 +151,7 @@ function decimalToNumber(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function buildCustomData(mapping: any, source: TrackingDispatchContext['source']) {
+export function buildCustomData(mapping: any, source: TrackingDispatchContext['source']) {
   const value = decimalToNumber(mapping.conversionValue);
   const data: Record<string, unknown> = {
     content_name: mapping.customEventName || mapping.eventName,
@@ -142,6 +159,10 @@ function buildCustomData(mapping: any, source: TrackingDispatchContext['source']
     currency: mapping.currency || 'BRL',
   };
   if (value !== undefined) data.value = value;
+  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase') {
+    data.currency = mapping.currency || 'BRL';
+    if (value !== undefined) data.value = value;
+  }
   if (mapping.conversionLabel) data.conversion_label = mapping.conversionLabel;
   return data;
 }
@@ -159,6 +180,7 @@ async function dispatchMapping(mapping: any, settings: any, context: TrackingDis
     eventName,
     triggeredById: context.triggeredById || null,
     eventId,
+    source: context.source,
   };
 
   const skip = await shouldSkipDuplicate({ tenantId: context.tenantId, leadId: context.leadId, toStageId: context.toStageId || mapping.stageId, provider: mapping.provider, eventName });

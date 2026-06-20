@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
+import { getFinalTrackingLogs } from '@/lib/tracking/logs';
 
 const providers = [
   { value: 'meta', label: 'Meta' },
@@ -68,6 +69,8 @@ export function IntegrationsClient() {
   useEffect(() => { load(); }, []);
 
   const selectedPipeline = useMemo(() => pipelines.find((p) => p.id === form.pipelineId), [pipelines, form.pipelineId]);
+  const isMetaPurchase = form.provider === 'meta' && form.eventName === 'Purchase';
+  const visibleLogs = useMemo(() => getFinalTrackingLogs(logs), [logs]);
 
   async function saveSettings() {
     setSaving(true);
@@ -101,6 +104,10 @@ export function IntegrationsClient() {
   }
 
   async function addEvent() {
+    if (isMetaPurchase && (!Number(form.conversionValue) || Number(form.conversionValue) <= 0)) {
+      toast.error('Informe um valor de conversão para eventos Purchase.');
+      return;
+    }
     try {
       const res = await fetch('/api/integrations/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json();
@@ -210,7 +217,10 @@ export function IntegrationsClient() {
         <select className="border rounded p-2" value={form.eventName} onChange={e=>setForm({...form, eventName:e.target.value})}>{eventNames.map(e=><option key={e} value={e}>{e === 'CustomEvent' ? 'Evento personalizado' : e}</option>)}</select>
         {form.eventName === 'CustomEvent' && <input className="border rounded p-2" placeholder="Nome personalizado" value={form.customEventName||''} onChange={e=>setForm({...form, customEventName:e.target.value})} />}
         <input className="border rounded p-2" placeholder="Label Google / nome externo" value={form.conversionLabel||''} onChange={e=>setForm({...form, conversionLabel:e.target.value})} />
-        <input className="border rounded p-2" type="number" step="0.01" placeholder="Valor opcional" value={form.conversionValue||''} onChange={e=>setForm({...form, conversionValue:e.target.value})} />
+        <div className="space-y-1">
+          <input className="w-full border rounded p-2" type="number" step="0.01" placeholder={isMetaPurchase ? 'Ex: 1.00' : 'Valor opcional'} aria-label={isMetaPurchase ? 'Valor da compra' : 'Valor opcional'} value={form.conversionValue||''} onChange={e=>setForm({...form, conversionValue:e.target.value})} />
+          <p className="text-xs text-muted-foreground">{isMetaPurchase ? 'Valor da compra · Obrigatório para Purchase' : 'Valor opcional'}</p>
+        </div>
         <label className="flex items-center gap-2 text-sm border rounded p-2"><input type="checkbox" checked={!!form.enabled} onChange={e=>setForm({...form, enabled:e.target.checked})} /> Ativo</label>
       </div>
       <button className="px-4 py-2 rounded bg-black text-white" onClick={addEvent}>Adicionar evento</button>
@@ -229,7 +239,7 @@ export function IntegrationsClient() {
 
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-xl border bg-blue-50 p-5 text-sm text-blue-950"><h2 className="font-semibold mb-2">Como usar</h2><p>Para melhores resultados, configure um evento Purchase na etapa final do seu funil. Use eventos intermediários para treinar suas campanhas com sinais mais qualificados. Eventos falhos não impedem o funcionamento do CRM.</p></div>
-      <div className="rounded-xl border bg-white p-5"><h2 className="font-semibold mb-2">Últimos logs</h2><div className="space-y-2 text-sm">{logs.slice(0,6).map(log=><div key={log.id} className="flex justify-between border-b pb-1"><span>{log.provider} · {log.eventName}</span><span className="text-muted-foreground">{log.status}</span></div>)}{logs.length===0 && <p className="text-muted-foreground">Nenhum evento registrado ainda.</p>}</div></div>
+      <div className="rounded-xl border bg-white p-5"><h2 className="font-semibold mb-2">Últimos logs</h2><div className="space-y-2 text-sm">{visibleLogs.slice(0,6).map(log=><div key={log.id} className="flex justify-between gap-3 border-b pb-1"><span>{log.provider} · {log.eventName}{log.source ? ` · ${log.source}` : ''}</span><span className="text-right text-muted-foreground">{log.status}{log.reason ? ` · ${log.reason}` : ''}</span></div>)}{visibleLogs.length===0 && <p className="text-muted-foreground">Nenhum evento registrado ainda.</p>}</div></div>
     </div>
   </div>;
 }
