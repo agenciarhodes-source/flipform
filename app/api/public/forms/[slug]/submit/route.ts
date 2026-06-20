@@ -40,7 +40,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const customDomain = isPlatformHost
       ? null
       : await prisma.customFormDomain.findFirst({
-        where: { domain: host, status: 'active', verificationStatus: 'verified' },
+        where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' },
         select: { tenantId: true },
       });
 

@@ -9,8 +9,19 @@ const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 export default async function CustomDomainPublicFormPage({ params }: { params: { slug: string } }) {
   const host = normalizeHostname(headers().get('host'));
   if (!host || !params.slug) return notFound();
-  const customDomain = await prisma.customFormDomain.findFirst({ where: { domain: host, status: 'active', verificationStatus: 'verified' } });
+  const customDomain = await prisma.customFormDomain.findFirst({ where: { domain: host } });
   if (!customDomain) return notFound();
+  const isReady = customDomain.status === 'active' && customDomain.verificationStatus === 'verified' && customDomain.sslStatus === 'active';
+  if (!isReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-slate-900">
+        <section className="max-w-md rounded-2xl border bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-bold">Domínio ainda não ativo</h1>
+          <p className="mt-3 text-sm text-slate-600">Este domínio ainda está em configuração. Use o link padrão do formulário ou tente novamente mais tarde.</p>
+        </section>
+      </main>
+    );
+  }
   const form = await prisma.form.findFirst({
     where: { tenantId: customDomain.tenantId, slug: params.slug, isActive: true },
     include: { fields: { orderBy: { orderIndex: 'asc' } }, tenant: { select: { name: true, primaryColor: true, logoUrl: true, status: true } } },

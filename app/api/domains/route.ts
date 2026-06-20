@@ -52,8 +52,8 @@ export const POST = withPermission("SETTINGS_EDIT", async (req, session) => {
       data: {
         tenantId: session.tenantId,
         domain: validated.domain,
-        isPrimary: false,
-        status: "requested",
+        isPrimary: (await prisma.customFormDomain.count({ where: { tenantId: session.tenantId } })) === 0,
+        status: "pending",
         verificationStatus: "pending",
         sslStatus: "unknown",
         vercelVerified: false,

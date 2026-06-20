@@ -41,7 +41,7 @@ export function buildPublicFormUrlState(params: {
       activeUrl: fallbackUrl,
       customUrl,
       state: 'custom_pending' as const,
-      label: 'Link padrão ativo enquanto o domínio personalizado aguarda verificação.',
+      label: 'Link padrão ativo enquanto o domínio personalizado aguarda ativação.',
     };
   }
 

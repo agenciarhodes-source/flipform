@@ -13,12 +13,9 @@ const ALLOWED = new Set([
   "verificationValue",
   "verificationReason",
   "isPrimary",
+  "vercelVerified",
 ]);
 const STATUS_VALUES = new Set([
-  "requested",
-  "pending_setup",
-  "dns_pending",
-  "ssl_pending",
   "pending",
   "active",
   "error",
@@ -99,8 +96,8 @@ export const PATCH = withPlatformAdmin<Ctx>(async (req, session, ctx) => {
     userId: session.userId,
     entityType: "custom_form_domain",
     entityId: current.id,
-    action: "admin.domain.updated",
-    metadata: { before: current, after: data },
+    action: "domain.admin_updated",
+    metadata: { domain: current.domain, tenantId: current.tenantId, previousStatus: current.status, newStatus: updated.status, dnsTarget: updated.dnsTarget, verificationReason: updated.verificationReason, before: current, after: data },
   });
   return NextResponse.json({ domain: updated });
 });
