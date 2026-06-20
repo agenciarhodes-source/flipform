@@ -119,7 +119,7 @@ export function buildCustomFormDomainFromFullDomain(domainInput: string) {
 }
 
 export async function getPrimaryCustomFormDomain(tenantId: string) {
-  return prisma.customFormDomain.findFirst({ where: { tenantId, isPrimary: true, status: 'active', verificationStatus: 'verified' }, orderBy: { updatedAt: 'desc' } });
+  return prisma.customFormDomain.findFirst({ where: { tenantId, isPrimary: true, status: 'active', verificationStatus: 'verified', sslStatus: 'active' }, orderBy: { updatedAt: 'desc' } });
 }
 
 export async function getTenantPublicFormUrl(tenantId: string, slug: string) {

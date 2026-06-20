@@ -280,7 +280,7 @@ export default function DomainsPage() {
             <Label>Subdomínio fixo</Label>
             <div className="flex h-10 items-center rounded-md border bg-muted/40 px-3 text-sm">
               <Badge variant="secondary">
-                Subdomínio padrão: {REQUIRED_FORM_SUBDOMAIN}
+                Subdomínio obrigatório: {REQUIRED_FORM_SUBDOMAIN}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -416,20 +416,14 @@ export default function DomainsPage() {
                       Proxy: DNS only
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Use exatamente o destino informado acima. Depois de
-                      configurar na Cloudflare, avise o suporte.
+                      Use exatamente o destino informado acima na Cloudflare.
                     </p>
                   </div>
                 ) : (
                   <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-2">
-                    <div className="font-medium">Solicitação recebida</div>
+                    <div className="font-medium">Aguardando configuração técnica</div>
                     <p className="text-xs text-muted-foreground">
-                      Seu domínio foi solicitado e está aguardando configuração
-                      técnica.
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Assim que o registro DNS estiver disponível, ele aparecerá
-                      aqui para configuração na Cloudflare.
+                      Seu domínio foi solicitado. O time FlipForm está configurando o destino DNS necessário para ativação.
                     </p>
                   </div>
                 )}
@@ -465,6 +459,18 @@ export default function DomainsPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:justify-end">
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (domainActive) return toast.success("Domínio ativo e pronto para uso.");
+                          if (shouldShowDns) return toast.info("Domínio aguardando configuração DNS.");
+                          return toast.info("Domínio aguardando configuração técnica.");
+                        }}
+                      >
+                        Verificar DNS
+                      </Button>
                       {shouldShowDns && (
                         <Button
                           size="sm"

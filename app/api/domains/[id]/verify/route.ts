@@ -10,9 +10,17 @@ export const POST = withPermission(
     });
     if (!domain)
       return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
-    return NextResponse.json(
-      { error: "A verificação de domínios é realizada pelo time FlipForm." },
-      { status: 409 },
-    );
+
+    const isActive = domain.status === "active" && domain.verificationStatus === "verified" && domain.sslStatus === "active";
+    const hasDnsTarget = Boolean(domain.dnsTarget || domain.verificationValue);
+    return NextResponse.json({
+      domain,
+      state: isActive ? "active" : hasDnsTarget ? "dns_pending" : "pending_setup",
+      message: isActive
+        ? "Domínio ativo e pronto para uso."
+        : hasDnsTarget
+          ? "Domínio aguardando configuração DNS."
+          : "Domínio aguardando configuração técnica.",
+    });
   },
 );

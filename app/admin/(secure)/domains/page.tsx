@@ -29,19 +29,13 @@ type Domain = {
   verificationValue?: string | null;
   verificationReason?: string | null;
   isPrimary: boolean;
+  vercelVerified: boolean;
   lastCheckedAt?: string | null;
+  verifiedAt?: string | null;
   createdAt: string;
   tenant: { id: string; name: string; slug: string };
 };
-const statuses = [
-  "requested",
-  "pending_setup",
-  "dns_pending",
-  "ssl_pending",
-  "pending",
-  "active",
-  "error",
-];
+const statuses = ["pending", "active", "error"];
 const verificationStatuses = ["pending", "verified", "failed"];
 const sslStatuses = ["unknown", "pending", "active", "failed"];
 
@@ -76,6 +70,25 @@ export default function AdminDomainsPage() {
       ),
     );
   };
+  const postAction = async (id: string, action: string, body?: Record<string, unknown>) => {
+    const res = await fetch(`/api/admin/domains/${id}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return toast.error(data.error || "Ação não concluída.");
+    toast.success("Domínio atualizado.");
+    setDomains((items) =>
+      items.map((d) =>
+        d.id === id
+          ? data.domain
+          : data.domain?.isPrimary && d.tenant.id === data.domain.tenant.id
+            ? { ...d, isPrimary: false }
+            : d,
+      ),
+    );
+  };
   const copy = async (value?: string | null) => {
     if (!value) return;
     await navigator.clipboard.writeText(value);
@@ -86,7 +99,7 @@ export default function AdminDomainsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold">
-            Domínios personalizados
+            Domínios
           </h1>
           <p className="text-sm text-muted-foreground">
             Backoffice para configurar CNAME, status de DNS e SSL dos domínios
@@ -107,7 +120,7 @@ export default function AdminDomainsPage() {
       ) : (
         <div className="space-y-4">
           {domains.map((d) => (
-            <DomainCard key={d.id} domain={d} onUpdate={update} onCopy={copy} />
+            <DomainCard key={d.id} domain={d} onUpdate={update} onAction={postAction} onCopy={copy} />
           ))}
         </div>
       )}
@@ -118,10 +131,12 @@ export default function AdminDomainsPage() {
 function DomainCard({
   domain,
   onUpdate,
+  onAction,
   onCopy,
 }: {
   domain: Domain;
   onUpdate: (id: string, patch: Partial<Domain>) => void;
+  onAction: (id: string, action: string, body?: Record<string, unknown>) => void;
   onCopy: (value?: string | null) => void;
 }) {
   const [draft, setDraft] = useState(domain);
@@ -148,7 +163,7 @@ function DomainCard({
             Criado em {formatDateTime(domain.createdAt)} · Última verificação:{" "}
             {domain.lastCheckedAt
               ? formatDateTime(domain.lastCheckedAt)
-              : "nunca"}
+              : "nunca"} · Verificado em: {domain.verifiedAt ? formatDateTime(domain.verifiedAt) : "nunca"}
           </div>
         </div>
         <a
@@ -226,41 +241,17 @@ function DomainCard({
           <Save className="w-4 h-4 mr-2" />
           Salvar
         </Button>
-        <Button
-          variant="outline"
-          onClick={() =>
-            onUpdate(domain.id, {
-              status: "dns_pending",
-              verificationStatus: "pending",
-              sslStatus: "unknown",
-            })
-          }
-        >
+        <Button variant="outline" onClick={() => onUpdate(domain.id, { status: "pending", verificationStatus: "pending", sslStatus: "unknown", verificationReason: "Aguardando configuração técnica pelo time FlipForm." })}>
+          Aguardando configuração
+        </Button>
+        <Button variant="outline" onClick={() => onAction(domain.id, "mark-dns-pending")}>
           Aguardando DNS
         </Button>
-        <Button
-          variant="outline"
-          onClick={() =>
-            onUpdate(domain.id, {
-              verificationStatus: "verified",
-              sslStatus: "pending",
-              status: "ssl_pending",
-            })
-          }
-        >
-          DNS verificado
+        <Button variant="outline" onClick={() => onAction(domain.id, "mark-ssl-pending")}>
+          SSL pendente
         </Button>
-        <Button
-          variant="outline"
-          onClick={() =>
-            onUpdate(domain.id, {
-              status: "active",
-              verificationStatus: "verified",
-              sslStatus: "active",
-            })
-          }
-        >
-          Ativar
+        <Button variant="outline" onClick={() => onAction(domain.id, "activate")}>
+          Marcar como ativo
         </Button>
         <Button
           variant="outline"
@@ -271,9 +262,12 @@ function DomainCard({
         </Button>
         <Button
           variant="outline"
-          onClick={() => onUpdate(domain.id, { status: "error" })}
+          onClick={() => {
+            const reason = window.prompt("Motivo do erro", domain.verificationReason || "");
+            if (reason !== null) onAction(domain.id, "mark-error", { reason });
+          }}
         >
-          Marcar erro
+          Marcar como erro
         </Button>
       </div>
     </Card>
