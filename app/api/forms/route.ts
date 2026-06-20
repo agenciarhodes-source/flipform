@@ -21,7 +21,7 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
     orderBy: { createdAt: 'desc' },
   });
   const primaryDomain = await prisma.customFormDomain.findFirst({
-    where: { tenantId: session.tenantId, isPrimary: true },
+    where: { tenantId: session.tenantId, isPrimary: true, status: 'active', verificationStatus: 'verified', sslStatus: 'active' },
     orderBy: { updatedAt: 'desc' },
     select: { domain: true, status: true, verificationStatus: true, sslStatus: true },
   });
