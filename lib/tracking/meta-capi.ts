@@ -35,6 +35,19 @@ function buildUserData(user: MetaCapiPayload['user']) {
   return data;
 }
 
+export function formatMetaCapiError(data: any, fallback: string) {
+  const error = data?.error;
+  if (!error) return fallback;
+  const parts = [error.message ? `Meta CAPI: ${error.message}` : fallback];
+  if (error.code !== undefined) parts.push(`code: ${error.code}`);
+  if (error.error_subcode !== undefined) parts.push(`subcode: ${error.error_subcode}`);
+  if (error.type) parts.push(`type: ${error.type}`);
+  if (error.error_user_title) parts.push(`title: ${error.error_user_title}`);
+  if (error.error_user_msg) parts.push(`msg: ${error.error_user_msg}`);
+  if (error.fbtrace_id) parts.push(`fbtrace_id: ${error.fbtrace_id}`);
+  return parts.join(' | ');
+}
+
 export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<{ ok: boolean; reason?: string }> {
   const body = {
     data: [
@@ -61,7 +74,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<{ ok:
     let reason = `Meta CAPI HTTP ${res.status}`;
     try {
       const data = await res.json();
-      reason = data?.error?.message ? `Meta CAPI: ${data.error.message}` : reason;
+      reason = formatMetaCapiError(data, reason);
     } catch {}
     return { ok: false, reason };
   }
