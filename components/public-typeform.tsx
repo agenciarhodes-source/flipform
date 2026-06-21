@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
-import { formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail } from '@/lib/form-field-validation';
+import { cleanOptions, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 interface PublicField {
   id: string;
@@ -13,6 +13,7 @@ interface PublicField {
   description?: string | null;
   fieldType: string;
   options?: string[] | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -54,8 +55,24 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   const validate = () => {
     const val = answers[current.id];
     if (current.isRequired && (val === undefined || val === '' || (Array.isArray(val) && val.length === 0))) {
-      setError('Este campo é obrigatório.');
+      if (requiresOptions(current.fieldType)) {
+        setError(normalizeSelectionMode(current.fieldType, current.validationRules) === 'multiple' ? 'Selecione pelo menos uma opção.' : 'Selecione uma opção.');
+      } else {
+        setError('Este campo é obrigatório.');
+      }
       return false;
+    }
+    if (requiresOptions(current.fieldType) && val !== undefined && val !== '' && !(Array.isArray(val) && val.length === 0)) {
+      const allowed = cleanOptions(current.options);
+      const mode = normalizeSelectionMode(current.fieldType, current.validationRules);
+      if (mode === 'single' && (Array.isArray(val) || !allowed.includes(String(val)))) {
+        setError('Selecione uma opção válida.');
+        return false;
+      }
+      if (mode === 'multiple' && (!Array.isArray(val) || val.some((item) => !allowed.includes(String(item))))) {
+        setError('Selecione pelo menos uma opção válida.');
+        return false;
+      }
     }
     if (current.fieldType === 'email' && val && !isValidEmail(val)) {
       setError('Informe um e-mail válido.');
@@ -205,44 +222,34 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
       return <Textarea value={value || ''} placeholder={field.placeholder || ''} onChange={(e) => onChange(e.target.value)} rows={4} className="text-base" />;
     case 'single_select':
     case 'dropdown':
+    case 'multi_select': {
+      const mode = normalizeSelectionMode(field.fieldType, field.validationRules);
+      if (mode === 'single') {
+        return (
+          <div className="space-y-2">
+            {cleanOptions(field.options).map((opt) => (
+              <button key={opt} type="button" onClick={() => { onChange(opt); setTimeout(onEnter, 200); }} className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`} style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
+                <span className="mr-2">{value === opt ? '●' : '○'}</span>{opt}
+              </button>
+            ))}
+          </div>
+        );
+      }
       return (
         <div className="space-y-2">
-          {(field.options || []).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => { onChange(opt); setTimeout(onEnter, 200); }}
-              className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`}
-              style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      );
-    case 'multi_select':
-      return (
-        <div className="space-y-2">
-          {(field.options || []).map((opt) => {
+          {cleanOptions(field.options).map((opt) => {
             const arr: string[] = Array.isArray(value) ? value : [];
             const checked = arr.includes(opt);
             return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => onChange(checked ? arr.filter((x) => x !== opt) : [...arr, opt])}
-                className={`w-full text-left p-3 rounded-md border-2 flex items-center gap-3 transition ${checked ? '' : 'hover:bg-slate-50'}`}
-                style={checked ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}
-              >
-                <div className="w-5 h-5 rounded border-2 flex items-center justify-center" style={{ borderColor: checked ? primaryColor : '#CBD5E1', backgroundColor: checked ? primaryColor : 'transparent' }}>
-                  {checked && <Check className="w-3 h-3 text-white" />}
-                </div>
+              <button key={opt} type="button" onClick={() => onChange(checked ? arr.filter((x) => x !== opt) : [...arr, opt])} className={`w-full text-left p-3 rounded-md border-2 flex items-center gap-3 transition ${checked ? '' : 'hover:bg-slate-50'}`} style={checked ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
+                <div className="w-5 h-5 rounded border-2 flex items-center justify-center" style={{ borderColor: checked ? primaryColor : '#CBD5E1', backgroundColor: checked ? primaryColor : 'transparent' }}>{checked && <Check className="w-3 h-3 text-white" />}</div>
                 {opt}
               </button>
             );
           })}
         </div>
       );
+    }
     case 'rating':
       return (
         <div className="flex gap-2 flex-wrap">

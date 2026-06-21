@@ -23,6 +23,6 @@ export default async function CustomDomainPublicFormPage({ params }: { params: {
   return <PublicFormView form={{
     slug: form.slug, publicTitle: form.publicTitle, publicDescription: form.publicDescription, primaryColor, bgColor: form.bgColor,
     buttonColor: form.buttonColor, textColor: form.textColor, theme: form.theme, coverImageUrl: form.coverImageUrl, successMessage: form.successMessage,
-    logoUrl, tenantName: form.tenant?.name || '', fields: form.fields.map((f) => ({ id: f.id, label: f.label, placeholder: f.placeholder, description: f.description, fieldType: f.fieldType, options: f.options as any, isRequired: f.isRequired, orderIndex: f.orderIndex })),
+    logoUrl, tenantName: form.tenant?.name || '', fields: form.fields.map((f) => ({ id: f.id, label: f.label, placeholder: f.placeholder, description: f.description, fieldType: f.fieldType, options: f.options as any, validationRules: f.validationRules as any, isRequired: f.isRequired, orderIndex: f.orderIndex })),
   }} />;
 }

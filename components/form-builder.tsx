@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
-import { cleanOptions } from '@/lib/form-field-validation';
+import { cleanOptions, defaultSelectionModeFor, normalizeOptions, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
 
 const FIELD_TYPES = [
   { v: 'short_text', l: 'Texto curto' },
@@ -40,6 +40,7 @@ interface Field {
   description?: string | null;
   fieldType: string;
   options?: string[] | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -62,6 +63,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const optionInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Pipelines / Stages
   const [pipelines, setPipelines] = useState<any[]>([]);
@@ -104,7 +106,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setInitialStageId(f.initialStageId || '');
       setFields(f.fields.map((ff: any) => ({
         id: ff.id, label: ff.label, placeholder: ff.placeholder, description: ff.description,
-        fieldType: ff.fieldType, options: ff.options, isRequired: ff.isRequired, orderIndex: ff.orderIndex,
+        fieldType: ff.fieldType, options: normalizeOptions(ff.options), validationRules: ff.validationRules, isRequired: ff.isRequired, orderIndex: ff.orderIndex,
       })));
     });
   }, [formId]);
@@ -145,6 +147,45 @@ export function FormBuilder({ formId }: { formId?: string }) {
     setFields(fields.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
   };
 
+
+  const ensureChoiceDefaults = (fieldType: string, field: Field): Partial<Field> => {
+    if (!['single_select', 'multi_select', 'dropdown'].includes(fieldType)) return {};
+    const normalized = normalizeOptions(field.options);
+    return {
+      options: normalized.length ? normalized : ['', ''],
+      validationRules: { ...(field.validationRules || {}), selectionMode: defaultSelectionModeFor(fieldType) },
+    };
+  };
+
+  const updateOption = (idx: number, optionIdx: number, value: string) => {
+    const options = normalizeOptions(fields[idx].options);
+    options[optionIdx] = value;
+    updateField(idx, { options });
+  };
+
+  const addOption = (idx: number) => {
+    const options = [...normalizeOptions(fields[idx].options), ''];
+    updateField(idx, { options });
+    setTimeout(() => optionInputRefs.current[`${idx}-${options.length - 1}`]?.focus(), 0);
+  };
+
+  const removeOption = (idx: number, optionIdx: number) => {
+    const options = normalizeOptions(fields[idx].options);
+    if (options.length <= 2) {
+      toast.error('Adicione pelo menos duas opções.');
+      return;
+    }
+    updateField(idx, { options: options.filter((_, i) => i !== optionIdx) });
+  };
+
+  const moveOption = (idx: number, optionIdx: number, dir: -1 | 1) => {
+    const nextIdx = optionIdx + dir;
+    const options = normalizeOptions(fields[idx].options);
+    if (nextIdx < 0 || nextIdx >= options.length) return;
+    [options[optionIdx], options[nextIdx]] = [options[nextIdx], options[optionIdx]];
+    updateField(idx, { options });
+  };
+
   const removeField = (idx: number) => {
     setFields(fields.filter((_, i) => i !== idx));
     setSelectedIdx(null);
@@ -167,6 +208,16 @@ export function FormBuilder({ formId }: { formId?: string }) {
     if (pipelineArchived || stageArchived) {
       toast.error('Pipeline ou etapa estão arquivados. Escolha ativos antes de salvar.');
       return;
+    }
+    for (const field of fields) {
+      if (['single_select', 'multi_select', 'dropdown'].includes(field.fieldType)) {
+        const validation = validateChoiceOptions(normalizeOptions(field.options));
+        if (!validation.ok) {
+          toast.error(validation.error);
+          setSelectedIdx(fields.indexOf(field));
+          return;
+        }
+      }
     }
     setSaving(true);
     try {
@@ -368,7 +419,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <div className="space-y-3">
                   <div><Label>Pergunta</Label><Input value={selected.label} onChange={(e) => updateField(selectedIdx!, { label: e.target.value })} /></div>
                   <div><Label>Tipo de campo</Label>
-                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v, placeholder: selected.placeholder || defaultPlaceholderFor(v), options: ['single_select', 'multi_select', 'dropdown'].includes(v) ? (selected.options || []) : selected.options })}>
+                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v, placeholder: selected.placeholder || defaultPlaceholderFor(v), ...ensureChoiceDefaults(v, selected) })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{FIELD_TYPES.map((t) => <SelectItem key={t.v} value={t.v}>{t.l}</SelectItem>)}</SelectContent>
                     </Select>
@@ -376,15 +427,34 @@ export function FormBuilder({ formId }: { formId?: string }) {
                   <div><Label>Placeholder</Label><Input value={selected.placeholder || ''} onChange={(e) => updateField(selectedIdx!, { placeholder: e.target.value })} placeholder={defaultPlaceholderFor(selected.fieldType)} /></div>
                   <div><Label>Descrição (opcional)</Label><Input value={selected.description || ''} onChange={(e) => updateField(selectedIdx!, { description: e.target.value })} /></div>
                   {needsOptions && (
-                    <div>
-                      <Label>Opções (uma por linha)</Label>
-                      <Textarea
-                        value={(selected.options || []).join('\n')}
-                        onChange={(e) => updateField(selectedIdx!, { options: cleanOptions(e.target.value) })}
-                        rows={6}
-                        placeholder={'Sim\nNão\nTalvez'}
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">{selected.fieldType === 'multi_select' ? 'Múltipla escolha: o lead pode escolher várias opções.' : 'Seleção única/lista suspensa: o lead escolhe apenas uma opção.'}</p>
+                    <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+                      <div className="space-y-2">
+                        <Label>Como o lead pode responder?</Label>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {(['single', 'multiple'] as const).map((mode) => {
+                            const checked = normalizeSelectionMode(selected.fieldType, selected.validationRules) === mode;
+                            const disabled = selected.fieldType !== 'multi_select' && mode === 'multiple';
+                            return (
+                              <button key={mode} type="button" disabled={disabled} onClick={() => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), selectionMode: mode } })} className={`rounded-md border p-3 text-left text-sm transition ${checked ? 'border-brand-500 bg-brand-50' : 'border-border hover:bg-muted'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}>
+                                <span className="font-medium">{mode === 'single' ? 'Apenas uma opção' : 'Várias opções'}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Opções de resposta</Label>
+                        <p className="text-xs text-muted-foreground">{normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple' ? 'O lead poderá escolher uma ou mais opções.' : 'O lead poderá escolher apenas uma opção.'}</p>
+                        {normalizeOptions(selected.options).map((option, optionIdx) => (
+                          <div key={optionIdx} className="flex items-center gap-2 rounded-md border bg-background p-2">
+                            <Input ref={(el) => { optionInputRefs.current[`${selectedIdx}-${optionIdx}`] = el; }} value={option} onChange={(e) => updateOption(selectedIdx!, optionIdx, e.target.value)} placeholder={`Opção ${optionIdx + 1}`} />
+                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, -1)} disabled={optionIdx === 0}>↑</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, 1)} disabled={optionIdx === normalizeOptions(selected.options).length - 1}>↓</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => removeOption(selectedIdx!, optionIdx)} disabled={normalizeOptions(selected.options).length <= 2}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                          </div>
+                        ))}
+                        <Button type="button" variant="outline" size="sm" onClick={() => addOption(selectedIdx!)}><Plus className="mr-1 h-3 w-3" />Adicionar opção</Button>
+                      </div>
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-2">

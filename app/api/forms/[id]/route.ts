@@ -1,9 +1,10 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
-import { cleanOptions, requiresOptions } from '@/lib/form-field-validation';
+import { cleanOptions, requiresOptions, validateChoiceOptions } from '@/lib/form-field-validation';
 
 async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
   const pipeline = await prisma.pipeline.findFirst({
@@ -38,10 +39,14 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
     }
-    const data = { ...parsed.data, fields: parsed.data.fields.map((field) => ({ ...field, options: cleanOptions(field.options) })) };
+    const data = { ...parsed.data, fields: parsed.data.fields.map((field) => ({ ...field })) };
     for (const field of data.fields) {
-      if (requiresOptions(field.fieldType) && (field.options || []).length < 2) {
-        return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
+      if (requiresOptions(field.fieldType)) {
+        const validation = validateChoiceOptions(field.options);
+        if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+        field.options = validation.options;
+      } else {
+        field.options = cleanOptions(field.options);
       }
     }
 
@@ -87,6 +92,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
             description: f.description ?? null,
             fieldType: f.fieldType,
             options: f.options ? f.options : undefined,
+            validationRules: f.validationRules ? (f.validationRules as Prisma.InputJsonValue) : undefined,
             isRequired: f.isRequired,
             orderIndex: i,
           },
