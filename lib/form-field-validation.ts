@@ -78,9 +78,45 @@ export function isValidEmail(value: unknown): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+export type SelectionMode = 'single' | 'multiple';
+
+export type ChoiceOptionsValidationResult =
+  | { ok: true; options: string[] }
+  | { ok: false; error: 'Adicione pelo menos duas opções.' | 'Remova opções vazias antes de salvar.' | 'Existem opções duplicadas.' };
+
+export function normalizeOptions(input: unknown): string[] {
+  if (Array.isArray(input)) return input.map((option) => String(option).trim());
+  if (typeof input === 'string') return input.split('\n').map((option) => option.trim());
+  return [];
+}
+
+export function dedupeOptions(options: string[]): string[] {
+  return Array.from(new Set(options));
+}
+
+export function validateChoiceOptions(options: unknown): ChoiceOptionsValidationResult {
+  const normalized = normalizeOptions(options);
+  if (normalized.some((option) => option.length === 0)) return { ok: false, error: 'Remova opções vazias antes de salvar.' };
+  const nonEmpty = normalized.filter(Boolean);
+  if (nonEmpty.length < 2) return { ok: false, error: 'Adicione pelo menos duas opções.' };
+  if (dedupeOptions(nonEmpty).length !== nonEmpty.length) return { ok: false, error: 'Existem opções duplicadas.' };
+  return { ok: true, options: nonEmpty };
+}
+
 export function cleanOptions(options: unknown): string[] {
-  const arr = Array.isArray(options) ? options : String(options ?? '').split('\n');
-  return Array.from(new Set(arr.map((o) => String(o).trim()).filter(Boolean)));
+  return dedupeOptions(normalizeOptions(options).filter(Boolean));
+}
+
+export function defaultSelectionModeFor(fieldType: string): SelectionMode {
+  return fieldType === 'multi_select' ? 'multiple' : 'single';
+}
+
+export function normalizeSelectionMode(fieldType: string, validationRules?: unknown): SelectionMode {
+  if (validationRules && typeof validationRules === 'object' && 'selectionMode' in validationRules) {
+    const mode = (validationRules as { selectionMode?: unknown }).selectionMode;
+    if (mode === 'single' || mode === 'multiple') return mode;
+  }
+  return defaultSelectionModeFor(fieldType);
 }
 
 export function requiresOptions(fieldType: string): boolean {

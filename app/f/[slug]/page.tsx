@@ -48,7 +48,7 @@ export default async function PublicFormPage({ params }: { params: { slug: strin
     tenantName: form.tenant?.name || '',
     fields: form.fields.map((f: {id: string; label: string; fieldType: string; isRequired: boolean; placeholder?: string | null; description?: string | null; options?: unknown; orderIndex: number; validationRules?: unknown}) => ({
       id: f.id, label: f.label, placeholder: f.placeholder, description: f.description,
-      fieldType: f.fieldType, options: f.options as any, isRequired: f.isRequired, orderIndex: f.orderIndex,
+      fieldType: f.fieldType, options: f.options as any, validationRules: f.validationRules as any, isRequired: f.isRequired, orderIndex: f.orderIndex,
     })),
   }} />;
 }

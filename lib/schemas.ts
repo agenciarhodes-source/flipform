@@ -42,6 +42,7 @@ export const formFieldSchema = z.object({
   description: z.string().optional().nullable(),
   fieldType: fieldTypeEnum,
   options: z.array(z.string()).optional().nullable(),
+  validationRules: z.object({ selectionMode: z.enum(['single', 'multiple']).optional() }).passthrough().optional().nullable(),
   isRequired: z.boolean().default(false),
   orderIndex: z.number().int(),
 });

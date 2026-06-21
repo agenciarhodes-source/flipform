@@ -5,7 +5,7 @@ import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
-import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, requiresOptions } from '@/lib/form-field-validation';
+import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 /**
  * Public form submit endpoint.
@@ -139,10 +139,12 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         if (allowed.length < 2) return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
         const values = Array.isArray(a.value) ? a.value : [a.value];
         const invalid = values.some((value) => !allowed.includes(String(value)));
-        const expectsArray = a.fieldType === 'multi_select';
+        const selectionMode = normalizeSelectionMode(a.fieldType, field.validationRules);
+        const expectsArray = selectionMode === 'multiple';
         if (invalid || (!expectsArray && Array.isArray(a.value)) || (expectsArray && !Array.isArray(a.value))) {
           return NextResponse.json({ error: `Resposta inválida para o campo ${a.label}.` }, { status: 400 });
         }
+        if (expectsArray && Array.isArray(a.value)) a.value = values.map(String);
       }
     }
 
