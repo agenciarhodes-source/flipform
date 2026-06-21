@@ -5,6 +5,7 @@ import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
+import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, requiresOptions } from '@/lib/form-field-validation';
 
 /**
  * Public form submit endpoint.
@@ -69,7 +70,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (etapa inicial arquivada).' }, { status: 410 });
     }
 
-    type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; [key: string]: unknown };
+    type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; [key: string]: unknown };
     const fieldsById = new Map<string, FieldRow>((form.fields as FieldRow[]).map((f) => [f.id, f]));
 
     // Filtra apenas answers com fieldId válido para este form
@@ -109,26 +110,52 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       );
     }
 
-    // Validações básicas de tipo
-    for (const a of cleanAnswers) {
-      if (a.fieldType === 'email' && !isEmpty(a.value)) {
-        const s = String(a.value);
-        if (!/^\S+@\S+\.\S+$/.test(s)) {
-          return NextResponse.json({ error: `E-mail inválido em "${a.label}".` }, { status: 400 });
+    // Validações e normalização server-side por tipo de campo.
+    const normalizedAnswers = cleanAnswers.map((a) => ({ ...a }));
+    for (const a of normalizedAnswers) {
+      if (isEmpty(a.value)) continue;
+      const field = fieldsById.get(a.fieldId) as FieldRow;
+      if (a.fieldType === 'email') {
+        if (!isValidEmail(a.value)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
+        a.value = normalizeEmail(a.value);
+      }
+      if (a.fieldType === 'phone' || a.fieldType === 'phone_br') {
+        const normalized = normalizeBrazilPhone(a.value);
+        if (/[A-Za-zÀ-ÿ]/.test(String(a.value)) || !isValidBrazilMobilePhone(normalized)) return NextResponse.json({ error: 'O telefone deve seguir o formato +55 (00) 9 0000-0000.' }, { status: 400 });
+        a.value = normalized;
+      }
+      if (a.fieldType === 'cpf') {
+        const normalized = normalizeCpf(a.value);
+        if (/[A-Za-zÀ-ÿ]/.test(String(a.value)) || !isValidCpf(normalized)) return NextResponse.json({ error: 'Informe um CPF válido com 11 dígitos.' }, { status: 400 });
+        a.value = normalized;
+      }
+      if (a.fieldType === 'cnpj') {
+        const normalized = normalizeCnpj(a.value);
+        if (/[A-Za-zÀ-ÿ]/.test(String(a.value)) || !isValidCnpj(normalized)) return NextResponse.json({ error: 'Informe um CNPJ válido com 14 dígitos.' }, { status: 400 });
+        a.value = normalized;
+      }
+      if (requiresOptions(a.fieldType)) {
+        const allowed = cleanOptions(field.options);
+        if (allowed.length < 2) return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
+        const values = Array.isArray(a.value) ? a.value : [a.value];
+        const invalid = values.some((value) => !allowed.includes(String(value)));
+        const expectsArray = a.fieldType === 'multi_select';
+        if (invalid || (!expectsArray && Array.isArray(a.value)) || (expectsArray && !Array.isArray(a.value))) {
+          return NextResponse.json({ error: `Resposta inválida para o campo ${a.label}.` }, { status: 400 });
         }
       }
     }
 
     // Extrair name/email/phone direto do tipo de campo
     const pickByType = (types: string[]) => {
-      for (const a of cleanAnswers) {
+      for (const a of normalizedAnswers) {
         if (types.includes(a.fieldType) && !isEmpty(a.value)) return String(a.value);
       }
       return null;
     };
     const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
     const email = pickByType(['email']);
-    const phone = pickByType(['phone']);
+    const phone = pickByType(['phone_br', 'phone']);
 
     // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
     const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
@@ -145,7 +172,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           status: 'open',
           temperature: 'warm',
           answers: {
-            create: cleanAnswers.map((a) => ({
+            create: normalizedAnswers.map((a) => ({
               fieldId: a.fieldId,
               questionLabel: a.label,
               answer: (a.value ?? null) as any,

@@ -13,16 +13,18 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
+import { cleanOptions } from '@/lib/form-field-validation';
 
 const FIELD_TYPES = [
   { v: 'short_text', l: 'Texto curto' },
   { v: 'long_text', l: 'Texto longo' },
   { v: 'name', l: 'Nome' },
   { v: 'email', l: 'E-mail' },
-  { v: 'phone', l: 'Telefone' },
+  { v: 'phone_br', l: 'Telefone Brasil' },
   { v: 'number', l: 'Número' },
   { v: 'date', l: 'Data' },
-  { v: 'document', l: 'CPF/CNPJ' },
+  { v: 'cpf', l: 'CPF' },
+  { v: 'cnpj', l: 'CNPJ' },
   { v: 'single_select', l: 'Seleção única' },
   { v: 'multi_select', l: 'Múltipla escolha' },
   { v: 'dropdown', l: 'Lista suspensa' },
@@ -80,7 +82,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setPublicTitle('Como podemos ajudar?');
       setFields([
         { label: 'Qual seu nome?', fieldType: 'name', isRequired: true, orderIndex: 0, placeholder: 'Seu nome' },
-        { label: 'E-mail', fieldType: 'email', isRequired: true, orderIndex: 1, placeholder: 'voce@email.com' },
+        { label: 'E-mail', fieldType: 'email', isRequired: true, orderIndex: 1, placeholder: 'nome@email.com' },
       ]);
       return;
     }
@@ -131,6 +133,14 @@ export function FormBuilder({ formId }: { formId?: string }) {
     setSelectedIdx(fields.length);
   };
 
+  const defaultPlaceholderFor = (fieldType: string) => ({
+    phone_br: '+55 (00) 9 0000-0000',
+    phone: '+55 (00) 9 0000-0000',
+    cpf: '000.000.000-00',
+    cnpj: '00.000.000/0000-00',
+    email: 'nome@email.com',
+  } as Record<string, string>)[fieldType] || '';
+
   const updateField = (idx: number, patch: Partial<Field>) => {
     setFields(fields.map((f, i) => (i === idx ? { ...f, ...patch } : f)));
   };
@@ -168,7 +178,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         theme,
         coverImageUrl: coverImageUrl || null,
         logoUrl: formLogoUrl || null,
-        successMessage, isActive, fields, pipelineId, initialStageId,
+        successMessage, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptions(field.options) })), pipelineId, initialStageId,
       };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
@@ -222,7 +232,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <span className="text-xs font-semibold text-muted-foreground">{i + 1}.</span>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{f.label}</div>
-                  <div className="text-xs text-muted-foreground">{FIELD_TYPES.find(t => t.v === f.fieldType)?.l}</div>
+                  <div className="text-xs text-muted-foreground">{FIELD_TYPES.find(t => t.v === f.fieldType)?.l || (f.fieldType === 'document' ? 'CPF/CNPJ (legado)' : f.fieldType)}</div>
                 </div>
                 {f.isRequired && <Badge variant="secondary" className="text-[10px] h-4 px-1">*</Badge>}
               </div>
@@ -358,21 +368,23 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <div className="space-y-3">
                   <div><Label>Pergunta</Label><Input value={selected.label} onChange={(e) => updateField(selectedIdx!, { label: e.target.value })} /></div>
                   <div><Label>Tipo de campo</Label>
-                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v })}>
+                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v, placeholder: selected.placeholder || defaultPlaceholderFor(v), options: ['single_select', 'multi_select', 'dropdown'].includes(v) ? (selected.options || []) : selected.options })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{FIELD_TYPES.map((t) => <SelectItem key={t.v} value={t.v}>{t.l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div><Label>Placeholder</Label><Input value={selected.placeholder || ''} onChange={(e) => updateField(selectedIdx!, { placeholder: e.target.value })} /></div>
+                  <div><Label>Placeholder</Label><Input value={selected.placeholder || ''} onChange={(e) => updateField(selectedIdx!, { placeholder: e.target.value })} placeholder={defaultPlaceholderFor(selected.fieldType)} /></div>
                   <div><Label>Descrição (opcional)</Label><Input value={selected.description || ''} onChange={(e) => updateField(selectedIdx!, { description: e.target.value })} /></div>
                   {needsOptions && (
                     <div>
                       <Label>Opções (uma por linha)</Label>
                       <Textarea
                         value={(selected.options || []).join('\n')}
-                        onChange={(e) => updateField(selectedIdx!, { options: e.target.value.split('\n').filter(Boolean) })}
-                        rows={4}
+                        onChange={(e) => updateField(selectedIdx!, { options: cleanOptions(e.target.value) })}
+                        rows={6}
+                        placeholder={'Sim\nNão\nTalvez'}
                       />
+                      <p className="text-xs text-muted-foreground mt-1">{selected.fieldType === 'multi_select' ? 'Múltipla escolha: o lead pode escolher várias opções.' : 'Seleção única/lista suspensa: o lead escolhe apenas uma opção.'}</p>
                     </div>
                   )}
                   <div className="flex items-center justify-between pt-2">

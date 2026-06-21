@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
+import { cleanOptions, requiresOptions } from '@/lib/form-field-validation';
 import { slugify } from '@/lib/utils';
 import { getConfiguredAppDomain } from '@/lib/custom-form-domains';
 import { buildPublicFormUrlState } from '@/lib/forms/public-form-url';
@@ -66,7 +67,12 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
     }
-    const data = parsed.data;
+    const data = { ...parsed.data, fields: parsed.data.fields.map((field) => ({ ...field, options: cleanOptions(field.options) })) };
+    for (const field of data.fields) {
+      if (requiresOptions(field.fieldType) && (field.options || []).length < 2) {
+        return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
+      }
+    }
 
     // Pipeline padrão
     let pipelineId = data.pipelineId;
