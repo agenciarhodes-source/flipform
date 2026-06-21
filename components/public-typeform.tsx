@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
+import { formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail } from '@/lib/form-field-validation';
 
 interface PublicField {
   id: string;
@@ -56,8 +57,20 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
       setError('Este campo é obrigatório.');
       return false;
     }
-    if (current.fieldType === 'email' && val && !/^\S+@\S+\.\S+$/.test(val)) {
-      setError('E-mail inválido.');
+    if (current.fieldType === 'email' && val && !isValidEmail(val)) {
+      setError('Informe um e-mail válido.');
+      return false;
+    }
+    if ((current.fieldType === 'phone' || current.fieldType === 'phone_br') && val && !isValidBrazilMobilePhone(val)) {
+      setError('Informe um telefone válido com DDD.');
+      return false;
+    }
+    if (current.fieldType === 'cpf' && val && !isValidCpf(val)) {
+      setError('Informe um CPF válido com 11 dígitos.');
+      return false;
+    }
+    if (current.fieldType === 'cnpj' && val && !isValidCnpj(val)) {
+      setError('Informe um CNPJ válido com 14 dígitos.');
       return false;
     }
     setError('');
@@ -72,7 +85,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
       submitGuard.current = true;
       setSubmitting(true);
       try {
-        await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: answers[f.id] ?? null })));
+        await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: normalizeAnswerForSubmit(f, answers[f.id]) })));
         setDone(true);
       } catch (e: any) {
         setError(e?.message || 'Erro ao enviar. Tente novamente.');
@@ -249,12 +262,26 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
     case 'number':
       return <Input type="number" value={value || ''} placeholder={field.placeholder || ''} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" />;
     case 'email':
-      return <Input type="email" value={value || ''} placeholder={field.placeholder || 'voce@email.com'} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" />;
+      return <Input type="email" value={value || ''} placeholder={field.placeholder || 'nome@email.com'} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" />;
     case 'phone':
-      return <Input type="tel" value={value || ''} placeholder={field.placeholder || '(11) 99999-9999'} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" />;
+    case 'phone_br':
+      return <Input type="tel" value={value || '+55'} placeholder={field.placeholder || '+55 (00) 9 0000-0000'} onChange={(e) => onChange(formatBrazilPhone(e.target.value))} onKeyDown={handleKey} className="text-base" />;
+    case 'cpf':
+      return <Input inputMode="numeric" value={value || ''} placeholder={field.placeholder || '000.000.000-00'} onChange={(e) => onChange(formatCpf(e.target.value))} onKeyDown={handleKey} className="text-base" />;
+    case 'cnpj':
+      return <Input inputMode="numeric" value={value || ''} placeholder={field.placeholder || '00.000.000/0000-00'} onChange={(e) => onChange(formatCnpj(e.target.value))} onKeyDown={handleKey} className="text-base" />;
     case 'url':
       return <Input type="url" value={value || ''} placeholder={field.placeholder || 'https://'} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" />;
     default:
       return <Input value={value || ''} placeholder={field.placeholder || ''} onChange={(e) => onChange(e.target.value)} onKeyDown={handleKey} className="text-base" autoFocus />;
   }
+}
+
+function normalizeAnswerForSubmit(field: PublicField, value: any) {
+  if (value === undefined) return null;
+  if (field.fieldType === 'email' && value) return normalizeEmail(value);
+  if ((field.fieldType === 'phone' || field.fieldType === 'phone_br') && value) return normalizeBrazilPhone(value);
+  if (field.fieldType === 'cpf' && value) return normalizeCpf(value);
+  if (field.fieldType === 'cnpj' && value) return normalizeCnpj(value);
+  return value;
 }
