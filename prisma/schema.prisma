@@ -233,6 +233,7 @@ model Form {
   logoUrl           String?  @map("logo_url")
   coverImageUrl     String?  @map("cover_image_url")
   successMessage    String   @default("Obrigado pelo envio!") @map("success_message")
+  disqualificationSettings Json?    @map("disqualification_settings")
   pipelineId        String   @map("pipeline_id")
   initialStageId    String   @map("initial_stage_id")
   isActive          Boolean  @default(true) @map("is_active")

@@ -21,6 +21,7 @@ export function PublicFormView({ form }: { form: any }) {
       } catch {}
       throw new Error(msg);
     }
+    return res.json();
   };
   return <div className="min-h-screen"><PublicTypeform form={form} onSubmit={submit} /></div>;
 }

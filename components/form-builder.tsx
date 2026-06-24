@@ -13,7 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
-import { cleanOptions, defaultSelectionModeFor, normalizeOptions, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
+import { cleanOptionObjects, cleanOptions, defaultSelectionModeFor, isQualifier, normalizeOptionObjects, normalizeOptions, normalizeQualificationMode, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
 
 const FIELD_TYPES = [
   { v: 'short_text', l: 'Texto curto' },
@@ -39,8 +39,8 @@ interface Field {
   placeholder?: string | null;
   description?: string | null;
   fieldType: string;
-  options?: string[] | null;
-  validationRules?: { selectionMode?: 'single' | 'multiple'; [key: string]: unknown } | null;
+  options?: any[] | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -58,6 +58,10 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [coverImageUrl, setCoverImageUrl] = useState('');
   const [formLogoUrl, setFormLogoUrl] = useState('');
   const [successMessage, setSuccessMessage] = useState('Obrigado pelo envio!');
+  const [dqTitle, setDqTitle] = useState('Obrigado pelo interesse');
+  const [dqMessage, setDqMessage] = useState('No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.');
+  const [dqButtonText, setDqButtonText] = useState('Entendi');
+  const [dqRedirectUrl, setDqRedirectUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [fields, setFields] = useState<Field[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -101,12 +105,16 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setCoverImageUrl(f.coverImageUrl || '');
       setFormLogoUrl(f.logoUrl || '');
       setSuccessMessage(f.successMessage);
+      setDqTitle(f.disqualificationSettings?.title || 'Obrigado pelo interesse');
+      setDqMessage(f.disqualificationSettings?.message || 'No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.');
+      setDqButtonText(f.disqualificationSettings?.buttonText || 'Entendi');
+      setDqRedirectUrl(f.disqualificationSettings?.redirectUrl || '');
       setIsActive(f.isActive);
       setPipelineId(f.pipelineId || '');
       setInitialStageId(f.initialStageId || '');
       setFields(f.fields.map((ff: any) => ({
         id: ff.id, label: ff.label, placeholder: ff.placeholder, description: ff.description,
-        fieldType: ff.fieldType, options: normalizeOptions(ff.options), validationRules: ff.validationRules, isRequired: ff.isRequired, orderIndex: ff.orderIndex,
+        fieldType: ff.fieldType, options: normalizeOptionObjects(ff.options), validationRules: ff.validationRules, isRequired: ff.isRequired, orderIndex: ff.orderIndex,
       })));
     });
   }, [formId]);
@@ -150,27 +158,27 @@ export function FormBuilder({ formId }: { formId?: string }) {
 
   const ensureChoiceDefaults = (fieldType: string, field: Field): Partial<Field> => {
     if (!['single_select', 'multi_select', 'dropdown'].includes(fieldType)) return {};
-    const normalized = normalizeOptions(field.options);
+    const normalized = normalizeOptionObjects(field.options);
     return {
-      options: normalized.length ? normalized : ['', ''],
+      options: normalized.length ? normalized : [{ id: 'opt_1', label: '', qualifies: false }, { id: 'opt_2', label: '', qualifies: false }],
       validationRules: { ...(field.validationRules || {}), selectionMode: defaultSelectionModeFor(fieldType) },
     };
   };
 
   const updateOption = (idx: number, optionIdx: number, value: string) => {
-    const options = normalizeOptions(fields[idx].options);
-    options[optionIdx] = value;
+    const options = normalizeOptionObjects(fields[idx].options);
+    options[optionIdx] = { ...options[optionIdx], label: value };
     updateField(idx, { options });
   };
 
   const addOption = (idx: number) => {
-    const options = [...normalizeOptions(fields[idx].options), ''];
+    const options = [...normalizeOptionObjects(fields[idx].options), { id: `opt_${Date.now()}`, label: '', qualifies: false }];
     updateField(idx, { options });
     setTimeout(() => optionInputRefs.current[`${idx}-${options.length - 1}`]?.focus(), 0);
   };
 
   const removeOption = (idx: number, optionIdx: number) => {
-    const options = normalizeOptions(fields[idx].options);
+    const options = normalizeOptionObjects(fields[idx].options);
     if (options.length <= 2) {
       toast.error('Adicione pelo menos duas opções.');
       return;
@@ -180,7 +188,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
 
   const moveOption = (idx: number, optionIdx: number, dir: -1 | 1) => {
     const nextIdx = optionIdx + dir;
-    const options = normalizeOptions(fields[idx].options);
+    const options = normalizeOptionObjects(fields[idx].options);
     if (nextIdx < 0 || nextIdx >= options.length) return;
     [options[optionIdx], options[nextIdx]] = [options[nextIdx], options[optionIdx]];
     updateField(idx, { options });
@@ -211,7 +219,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
     }
     for (const field of fields) {
       if (['single_select', 'multi_select', 'dropdown'].includes(field.fieldType)) {
-        const validation = validateChoiceOptions(normalizeOptions(field.options));
+        const validation = validateChoiceOptions(field.options, field.validationRules);
         if (!validation.ok) {
           toast.error(validation.error);
           setSelectedIdx(fields.indexOf(field));
@@ -229,7 +237,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         theme,
         coverImageUrl: coverImageUrl || null,
         logoUrl: formLogoUrl || null,
-        successMessage, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptions(field.options) })), pipelineId, initialStageId,
+        successMessage, disqualificationSettings: { title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptionObjects(field.options) })), pipelineId, initialStageId,
       };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
@@ -367,6 +375,13 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <div><Label>Título público</Label><Input value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} /></div>
                 <div><Label>Descrição</Label><Textarea value={publicDescription} onChange={(e) => setPublicDescription(e.target.value)} rows={2} /></div>
                 <div><Label>Mensagem de sucesso</Label><Input value={successMessage} onChange={(e) => setSuccessMessage(e.target.value)} /></div>
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                  <div><Label>Mensagem para lead não qualificado</Label><p className="text-xs text-muted-foreground">Tela exibida quando uma pergunta qualificatória encerra o cadastro.</p></div>
+                  <Input value={dqTitle} onChange={(e) => setDqTitle(e.target.value)} placeholder="Título da tela" />
+                  <Textarea value={dqMessage} onChange={(e) => setDqMessage(e.target.value)} rows={2} placeholder="Mensagem" />
+                  <Input value={dqButtonText} onChange={(e) => setDqButtonText(e.target.value)} placeholder="Texto do botão" />
+                  <Input value={dqRedirectUrl} onChange={(e) => setDqRedirectUrl(e.target.value)} placeholder="URL de redirecionamento opcional" />
+                </div>
               </div>
             </Card>
 
@@ -442,15 +457,53 @@ export function FormBuilder({ formId }: { formId?: string }) {
                           })}
                         </div>
                       </div>
+                      <div className="space-y-3 rounded-md border bg-background p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <Label>Usar como pergunta qualificatória</Label>
+                            <p className="text-xs text-muted-foreground">Se ativado, apenas respostas marcadas como qualificatórias permitirão que o lead continue o cadastro.</p>
+                          </div>
+                          <Switch
+                            checked={isQualifier(selected.validationRules)}
+                            onCheckedChange={(checked) => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), isQualifier: checked, qualificationMode: normalizeQualificationMode(selected.validationRules) } })}
+                          />
+                        </div>
+                        {isQualifier(selected.validationRules) && normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple' && (
+                          <div>
+                            <Label>Critério de qualificação</Label>
+                            <Select value={normalizeQualificationMode(selected.validationRules)} onValueChange={(v: 'any' | 'all') => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), qualificationMode: v } })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="any">Qualifica se marcar pelo menos uma opção qualificatória</SelectItem>
+                                <SelectItem value="all">Qualifica somente se todas as opções marcadas forem qualificatórias</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <Label>Opções de resposta</Label>
                         <p className="text-xs text-muted-foreground">{normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple' ? 'O lead poderá escolher uma ou mais opções.' : 'O lead poderá escolher apenas uma opção.'}</p>
-                        {normalizeOptions(selected.options).map((option, optionIdx) => (
+                        {normalizeOptionObjects(selected.options).map((option, optionIdx) => (
                           <div key={optionIdx} className="flex items-center gap-2 rounded-md border bg-background p-2">
-                            <Input ref={(el) => { optionInputRefs.current[`${selectedIdx}-${optionIdx}`] = el; }} value={option} onChange={(e) => updateOption(selectedIdx!, optionIdx, e.target.value)} placeholder={`Opção ${optionIdx + 1}`} />
+                            <Input ref={(el) => { optionInputRefs.current[`${selectedIdx}-${optionIdx}`] = el; }} value={option.label} onChange={(e) => updateOption(selectedIdx!, optionIdx, e.target.value)} placeholder={`Opção ${optionIdx + 1}`} />
+                            {isQualifier(selected.validationRules) && (
+                              <label className="flex min-w-[120px] items-center gap-2 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={option.qualifies === true}
+                                  onChange={(e) => {
+                                    const options = normalizeOptionObjects(selected.options);
+                                    options[optionIdx] = { ...options[optionIdx], qualifies: e.target.checked };
+                                    updateField(selectedIdx!, { options });
+                                  }}
+                                />
+                                Qualifica
+                              </label>
+                            )}
                             <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, -1)} disabled={optionIdx === 0}>↑</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, 1)} disabled={optionIdx === normalizeOptions(selected.options).length - 1}>↓</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => removeOption(selectedIdx!, optionIdx)} disabled={normalizeOptions(selected.options).length <= 2}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, 1)} disabled={optionIdx === normalizeOptionObjects(selected.options).length - 1}>↓</Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => removeOption(selectedIdx!, optionIdx)} disabled={normalizeOptionObjects(selected.options).length <= 2}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                           </div>
                         ))}
                         <Button type="button" variant="outline" size="sm" onClick={() => addOption(selectedIdx!)}><Plus className="mr-1 h-3 w-3" />Adicionar opção</Button>
@@ -479,6 +532,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         primaryColor={primaryColor}
         successMessage={successMessage}
         fields={fields}
+        disqualificationSettings={{ title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }}
         onClose={() => setShowPreview(false)}
       />}
     </div>

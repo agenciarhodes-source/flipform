@@ -5,7 +5,7 @@ import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
-import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
+import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 /**
  * Public form submit endpoint.
@@ -70,7 +70,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (etapa inicial arquivada).' }, { status: 410 });
     }
 
-    type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; [key: string]: unknown };
+    type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; validationRules?: unknown; [key: string]: unknown };
     const fieldsById = new Map<string, FieldRow>((form.fields as FieldRow[]).map((f) => [f.id, f]));
 
     // Filtra apenas answers com fieldId válido para este form
@@ -139,13 +139,30 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         if (allowed.length < 2) return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
         const values = Array.isArray(a.value) ? a.value : [a.value];
         const invalid = values.some((value) => !allowed.includes(String(value)));
-        const selectionMode = normalizeSelectionMode(a.fieldType, field.validationRules);
+        const selectionMode = normalizeSelectionMode(a.fieldType, field.validationRules as any);
         const expectsArray = selectionMode === 'multiple';
         if (invalid || (!expectsArray && Array.isArray(a.value)) || (expectsArray && !Array.isArray(a.value))) {
           return NextResponse.json({ error: `Resposta inválida para o campo ${a.label}.` }, { status: 400 });
         }
         if (expectsArray && Array.isArray(a.value)) a.value = values.map(String);
       }
+    }
+
+    const disqualified = normalizedAnswers.find((a) => {
+      const field = fieldsById.get(a.fieldId) as FieldRow;
+      return !evaluateQualification(field as any, a.value);
+    });
+    if (disqualified) {
+      return NextResponse.json({
+        ok: true,
+        qualified: false,
+        disqualification: form.disqualificationSettings || {
+          title: 'Obrigado pelo interesse',
+          message: 'No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.',
+          buttonText: 'Entendi',
+          redirectUrl: null,
+        },
+      });
     }
 
     // Extrair name/email/phone direto do tipo de campo
@@ -219,6 +236,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       ok: true,
       leadId: lead.id,
       successMessage: form.successMessage,
+      qualified: true,
     });
   } catch (e: any) {
     console.error('public submit error', e);

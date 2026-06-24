@@ -41,8 +41,8 @@ export const formFieldSchema = z.object({
   placeholder: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   fieldType: fieldTypeEnum,
-  options: z.array(z.string()).optional().nullable(),
-  validationRules: z.object({ selectionMode: z.enum(['single', 'multiple']).optional() }).passthrough().optional().nullable(),
+  options: z.array(z.union([z.string(), z.object({ id: z.string().optional(), label: z.string(), qualifies: z.boolean().optional() })])).optional().nullable(),
+  validationRules: z.object({ selectionMode: z.enum(['single', 'multiple']).optional(), isQualifier: z.boolean().optional(), qualificationMode: z.enum(['any', 'all']).optional() }).passthrough().optional().nullable(),
   isRequired: z.boolean().default(false),
   orderIndex: z.number().int(),
 });
@@ -59,6 +59,12 @@ export const formCreateSchema = z.object({
   coverImageUrl: z.string().optional().nullable(),
   logoUrl: z.string().optional().nullable(),
   successMessage: z.string().optional(),
+  disqualificationSettings: z.object({
+    title: z.string().optional(),
+    message: z.string().optional(),
+    buttonText: z.string().optional(),
+    redirectUrl: z.string().optional().nullable(),
+  }).optional().nullable(),
   pipelineId: z.string().optional(),
   initialStageId: z.string().optional(),
   isActive: z.boolean().optional(),
