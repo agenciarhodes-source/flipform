@@ -119,7 +119,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
         coverImageUrl: data.coverImageUrl ?? null,
         logoUrl: data.logoUrl ?? null,
         successMessage: data.successMessage || 'Obrigado pelo envio!',
-        disqualificationSettings: data.disqualificationSettings ? (data.disqualificationSettings as Prisma.InputJsonValue) : undefined,
+        disqualificationSettings: data.disqualificationSettings == null ? Prisma.JsonNull : (data.disqualificationSettings as Prisma.InputJsonValue),
         pipelineId: pipelineId!,
         initialStageId: initialStageId!,
         isActive: data.isActive ?? true,
