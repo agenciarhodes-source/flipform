@@ -52,7 +52,10 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   const progress = ((step) / fields.length) * 100;
   const isLast = step === fields.length - 1;
 
-  const setVal = (v: any) => setAnswers({ ...answers, [current.id]: v });
+  const setVal = (v: any) => {
+    setAnswers((currentAnswers) => ({ ...currentAnswers, [current.id]: v }));
+    setError('');
+  };
 
   const validate = () => {
     const val = answers[current.id];
@@ -211,9 +214,9 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
 
           <div className="flex items-center justify-between mt-8">
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={prev} disabled={step === 0}><ArrowLeft className="w-4 h-4 mr-1" />Voltar</Button>
+              <Button type="button" variant="ghost" onClick={prev} disabled={step === 0}><ArrowLeft className="w-4 h-4 mr-1" />Voltar</Button>
             </div>
-            <Button onClick={next} disabled={submitting} style={{ backgroundColor: buttonColor }} className="text-white hover:opacity-90 min-w-[110px]">
+            <Button type="button" onClick={next} disabled={submitting} style={{ backgroundColor: buttonColor }} className="text-white hover:opacity-90 min-w-[110px]">
               {submitting ? (
                 <><Loader2 className="w-4 h-4 mr-1 animate-spin" />Enviando...</>
               ) : isLast ? (
@@ -245,7 +248,7 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
         return (
           <div className="space-y-2">
             {cleanOptionObjects(field.options).map((option) => { const opt = option.label; return (
-              <button key={opt} type="button" onClick={() => onChange(opt)} className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`} style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
+              <button key={opt} type="button" role="radio" aria-checked={value === opt} onClick={() => onChange(opt)} onDoubleClick={(event) => event.preventDefault()} className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`} style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
                 <span className="mr-2">{value === opt ? '●' : '○'}</span>{opt}
               </button>
             ); })}
@@ -259,7 +262,7 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
             const arr: string[] = Array.isArray(value) ? value : [];
             const checked = arr.includes(opt);
             return (
-              <button key={opt} type="button" onClick={() => onChange(checked ? arr.filter((x) => x !== opt) : [...arr, opt])} className={`w-full text-left p-3 rounded-md border-2 flex items-center gap-3 transition ${checked ? '' : 'hover:bg-slate-50'}`} style={checked ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
+              <button key={opt} type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(checked ? arr.filter((x) => x !== opt) : [...arr, opt])} onDoubleClick={(event) => event.preventDefault()} className={`w-full text-left p-3 rounded-md border-2 flex items-center gap-3 transition ${checked ? '' : 'hover:bg-slate-50'}`} style={checked ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
                 <div className="w-5 h-5 rounded border-2 flex items-center justify-center" style={{ borderColor: checked ? primaryColor : '#CBD5E1', backgroundColor: checked ? primaryColor : 'transparent' }}>{checked && <Check className="w-3 h-3 text-white" />}</div>
                 {opt}
               </button>
