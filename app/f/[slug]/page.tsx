@@ -44,6 +44,7 @@ export default async function PublicFormPage({ params }: { params: { slug: strin
     theme: form.theme,
     coverImageUrl: form.coverImageUrl,
     successMessage: form.successMessage,
+    disqualificationSettings: form.disqualificationSettings as any,
     logoUrl,
     tenantName: form.tenant?.name || '',
     fields: form.fields.map((f: {id: string; label: string; fieldType: string; isRequired: boolean; placeholder?: string | null; description?: string | null; options?: unknown; orderIndex: number; validationRules?: unknown}) => ({

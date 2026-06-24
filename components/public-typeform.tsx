@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
-import { cleanOptions, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
+import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 interface PublicField {
   id: string;
@@ -12,8 +12,8 @@ interface PublicField {
   placeholder?: string | null;
   description?: string | null;
   fieldType: string;
-  options?: string[] | null;
-  validationRules?: { selectionMode?: 'single' | 'multiple'; [key: string]: unknown } | null;
+  options?: any[] | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -25,9 +25,10 @@ interface Props {
     bgColor?: string | null; buttonColor?: string | null; textColor?: string | null;
     theme?: string | null; coverImageUrl?: string | null;
     successMessage: string; logoUrl?: string | null; tenantName?: string;
+    disqualificationSettings?: { title?: string; message?: string; buttonText?: string; redirectUrl?: string | null } | null;
     fields: PublicField[];
   };
-  onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<void>;
+  onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<any>;
   previewMode?: boolean;
 }
 
@@ -37,6 +38,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [disqualified, setDisqualified] = useState(false);
   const [error, setError] = useState('');
   const submitGuard = useRef(false);
 
@@ -96,14 +98,15 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
 
   const next = async () => {
     if (!validate()) return;
+    if (!evaluateQualification(current, answers[current.id])) { setDisqualified(true); return; }
     if (isLast) {
       if (previewMode) { setDone(true); return; }
       if (submitGuard.current || submitting) return; // guard contra double-click
       submitGuard.current = true;
       setSubmitting(true);
       try {
-        await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: normalizeAnswerForSubmit(f, answers[f.id]) })));
-        setDone(true);
+        const result = await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: normalizeAnswerForSubmit(f, answers[f.id]) })));
+        if ((result as any)?.qualified === false) setDisqualified(true); else setDone(true);
       } catch (e: any) {
         setError(e?.message || 'Erro ao enviar. Tente novamente.');
         submitGuard.current = false;
@@ -129,6 +132,20 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
     : isDark
     ? { color: '#e2e8f0' }
     : {};
+
+  if (disqualified) {
+    const settings = form.disqualificationSettings || {};
+    const redirectUrl = settings.redirectUrl || null;
+    return (
+      <div className={`min-h-full flex items-center justify-center p-6 ${themeBgClass}`} style={themeBgStyle}>
+        <div className="max-w-md w-full text-center animate-fade-in" style={textStyle}>
+          <h2 className="font-heading text-2xl font-bold mb-2">{settings.title || 'Obrigado pelo interesse'}</h2>
+          <p className={isDark ? 'text-slate-400' : 'text-muted-foreground'}>{settings.message || 'No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.'}</p>
+          {redirectUrl && <Button className="mt-6 text-white" style={{ backgroundColor: buttonColor }} onClick={() => { window.location.href = redirectUrl; }}>{settings.buttonText || 'Entendi'}</Button>}
+        </div>
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -227,17 +244,18 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
       if (mode === 'single') {
         return (
           <div className="space-y-2">
-            {cleanOptions(field.options).map((opt) => (
-              <button key={opt} type="button" onClick={() => { onChange(opt); setTimeout(onEnter, 200); }} className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`} style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
+            {cleanOptionObjects(field.options).map((option) => { const opt = option.label; return (
+              <button key={opt} type="button" onClick={() => onChange(opt)} className={`w-full text-left p-3 rounded-md border-2 transition ${value === opt ? 'bg-opacity-10' : 'hover:bg-slate-50'}`} style={value === opt ? { ...baseStyle, backgroundColor: `${primaryColor}11` } : { borderColor: '#E2E8F0' }}>
                 <span className="mr-2">{value === opt ? '●' : '○'}</span>{opt}
               </button>
-            ))}
+            ); })}
           </div>
         );
       }
       return (
         <div className="space-y-2">
-          {cleanOptions(field.options).map((opt) => {
+          {cleanOptionObjects(field.options).map((option) => {
+            const opt = option.label;
             const arr: string[] = Array.isArray(value) ? value : [];
             const checked = arr.includes(opt);
             return (

@@ -70,7 +70,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
     const data = { ...parsed.data, fields: parsed.data.fields.map((field) => ({ ...field })) };
     for (const field of data.fields) {
       if (requiresOptions(field.fieldType)) {
-        const validation = validateChoiceOptions(field.options);
+        const validation = validateChoiceOptions(field.options, field.validationRules);
         if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
         field.options = validation.options;
       } else {
@@ -119,6 +119,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
         coverImageUrl: data.coverImageUrl ?? null,
         logoUrl: data.logoUrl ?? null,
         successMessage: data.successMessage || 'Obrigado pelo envio!',
+        disqualificationSettings: data.disqualificationSettings ? (data.disqualificationSettings as Prisma.InputJsonValue) : undefined,
         pipelineId: pipelineId!,
         initialStageId: initialStageId!,
         isActive: data.isActive ?? true,

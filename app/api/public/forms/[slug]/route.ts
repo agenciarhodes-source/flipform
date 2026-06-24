@@ -31,6 +31,7 @@ export async function GET(_req: Request, ctx: { params: { slug: string } }) {
       logoUrl: form.logoUrl || form.tenant.logoUrl,
       tenantName: form.tenant.name,
       fields: form.fields,
+      disqualificationSettings: form.disqualificationSettings,
     },
   });
 }

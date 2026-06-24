@@ -1,124 +1,35 @@
 export const OPTION_FIELD_TYPES = ['single_select', 'multi_select', 'dropdown'] as const;
 
-export function onlyDigits(value: unknown): string {
-  return String(value ?? '').replace(/\D/g, '');
-}
+export type SelectionMode = 'single' | 'multiple';
+export type QualificationMode = 'any' | 'all';
+export type FormFieldOption = { id: string; label: string; qualifies?: boolean };
+export type FieldRules = { selectionMode?: SelectionMode; isQualifier?: boolean; qualificationMode?: QualificationMode; [key: string]: unknown } | null | undefined;
 
-export function normalizeBrazilPhone(value: unknown): string {
-  const digits = onlyDigits(value);
-  if (digits.startsWith('55')) return digits.slice(0, 13);
-  return `55${digits}`.slice(0, 13);
-}
-
-export function formatBrazilPhone(value: unknown): string {
-  const digits = normalizeBrazilPhone(value).replace(/^55/, '').slice(0, 11);
-  const ddd = digits.slice(0, 2);
-  const ninth = digits.slice(2, 3);
-  const first = digits.slice(3, 7);
-  const last = digits.slice(7, 11);
-  let out = '+55';
-  if (ddd) out += ` (${ddd}${ddd.length === 2 ? ')' : ''}`;
-  if (ninth) out += ` ${ninth}`;
-  if (first) out += ` ${first}`;
-  if (last) out += `-${last}`;
-  return out;
-}
-
-export function isValidBrazilMobilePhone(value: unknown): boolean {
-  const digits = normalizeBrazilPhone(value);
-  return /^55\d{2}9\d{8}$/.test(digits);
-}
-
+export function onlyDigits(value: unknown): string { return String(value ?? '').replace(/\D/g, ''); }
+export function normalizeBrazilPhone(value: unknown): string { const digits = onlyDigits(value); if (digits.startsWith('55')) return digits.slice(0, 13); return `55${digits}`.slice(0, 13); }
+export function formatBrazilPhone(value: unknown): string { const digits = normalizeBrazilPhone(value).replace(/^55/, '').slice(0, 11); const ddd = digits.slice(0, 2); const ninth = digits.slice(2, 3); const first = digits.slice(3, 7); const last = digits.slice(7, 11); let out = '+55'; if (ddd) out += ` (${ddd}${ddd.length === 2 ? ')' : ''}`; if (ninth) out += ` ${ninth}`; if (first) out += ` ${first}`; if (last) out += `-${last}`; return out; }
+export function isValidBrazilMobilePhone(value: unknown): boolean { return /^55\d{2}9\d{8}$/.test(normalizeBrazilPhone(value)); }
 export function normalizeCpf(value: unknown): string { return onlyDigits(value).slice(0, 11); }
 export function normalizeCnpj(value: unknown): string { return onlyDigits(value).slice(0, 14); }
-
-export function formatCpf(value: unknown): string {
-  const d = normalizeCpf(value);
-  return [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)].filter(Boolean).join('.') + (d.length > 9 ? `-${d.slice(9, 11)}` : '');
-}
-
-export function formatCnpj(value: unknown): string {
-  const d = normalizeCnpj(value);
-  let out = d.slice(0, 2);
-  if (d.length > 2) out += `.${d.slice(2, 5)}`;
-  if (d.length > 5) out += `.${d.slice(5, 8)}`;
-  if (d.length > 8) out += `/${d.slice(8, 12)}`;
-  if (d.length > 12) out += `-${d.slice(12, 14)}`;
-  return out;
-}
-
+export function formatCpf(value: unknown): string { const d = normalizeCpf(value); return [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)].filter(Boolean).join('.') + (d.length > 9 ? `-${d.slice(9, 11)}` : ''); }
+export function formatCnpj(value: unknown): string { const d = normalizeCnpj(value); let out = d.slice(0, 2); if (d.length > 2) out += `.${d.slice(2, 5)}`; if (d.length > 5) out += `.${d.slice(5, 8)}`; if (d.length > 8) out += `/${d.slice(8, 12)}`; if (d.length > 12) out += `-${d.slice(12, 14)}`; return out; }
 const allSame = (value: string) => /^(\d)\1+$/.test(value);
-
-export function isValidCpf(value: unknown): boolean {
-  const cpf = normalizeCpf(value);
-  if (cpf.length !== 11 || allSame(cpf)) return false;
-  const calc = (factor: number) => {
-    let total = 0;
-    for (let i = 0; i < factor - 1; i++) total += Number(cpf[i]) * (factor - i);
-    const rest = (total * 10) % 11;
-    return rest === 10 ? 0 : rest;
-  };
-  return calc(10) === Number(cpf[9]) && calc(11) === Number(cpf[10]);
-}
-
-export function isValidCnpj(value: unknown): boolean {
-  const cnpj = normalizeCnpj(value);
-  if (cnpj.length !== 14 || allSame(cnpj)) return false;
-  const calc = (weights: number[]) => {
-    const total = weights.reduce((sum, weight, index) => sum + Number(cnpj[index]) * weight, 0);
-    const rest = total % 11;
-    return rest < 2 ? 0 : 11 - rest;
-  };
-  return calc([5,4,3,2,9,8,7,6,5,4,3,2]) === Number(cnpj[12]) && calc([6,5,4,3,2,9,8,7,6,5,4,3,2]) === Number(cnpj[13]);
-}
-
+export function isValidCpf(value: unknown): boolean { const cpf = normalizeCpf(value); if (cpf.length !== 11 || allSame(cpf)) return false; const calc = (factor: number) => { let total = 0; for (let i = 0; i < factor - 1; i++) total += Number(cpf[i]) * (factor - i); const rest = (total * 10) % 11; return rest === 10 ? 0 : rest; }; return calc(10) === Number(cpf[9]) && calc(11) === Number(cpf[10]); }
+export function isValidCnpj(value: unknown): boolean { const cnpj = normalizeCnpj(value); if (cnpj.length !== 14 || allSame(cnpj)) return false; const calc = (weights: number[]) => { const total = weights.reduce((sum, weight, index) => sum + Number(cnpj[index]) * weight, 0); const rest = total % 11; return rest < 2 ? 0 : 11 - rest; }; return calc([5,4,3,2,9,8,7,6,5,4,3,2]) === Number(cnpj[12]) && calc([6,5,4,3,2,9,8,7,6,5,4,3,2]) === Number(cnpj[13]); }
 export function normalizeEmail(value: unknown): string { return String(value ?? '').trim().toLowerCase(); }
-export function isValidEmail(value: unknown): boolean {
-  const email = normalizeEmail(value);
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+export function isValidEmail(value: unknown): boolean { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value)); }
 
-export type SelectionMode = 'single' | 'multiple';
-
-export type ChoiceOptionsValidationResult =
-  | { ok: true; options: string[] }
-  | { ok: false; error: 'Adicione pelo menos duas opções.' | 'Remova opções vazias antes de salvar.' | 'Existem opções duplicadas.' };
-
-export function normalizeOptions(input: unknown): string[] {
-  if (Array.isArray(input)) return input.map((option) => String(option).trim());
-  if (typeof input === 'string') return input.split('\n').map((option) => option.trim());
-  return [];
-}
-
-export function dedupeOptions(options: string[]): string[] {
-  return Array.from(new Set(options));
-}
-
-export function validateChoiceOptions(options: unknown): ChoiceOptionsValidationResult {
-  const normalized = normalizeOptions(options);
-  if (normalized.some((option) => option.length === 0)) return { ok: false, error: 'Remova opções vazias antes de salvar.' };
-  const nonEmpty = normalized.filter(Boolean);
-  if (nonEmpty.length < 2) return { ok: false, error: 'Adicione pelo menos duas opções.' };
-  if (dedupeOptions(nonEmpty).length !== nonEmpty.length) return { ok: false, error: 'Existem opções duplicadas.' };
-  return { ok: true, options: nonEmpty };
-}
-
-export function cleanOptions(options: unknown): string[] {
-  return dedupeOptions(normalizeOptions(options).filter(Boolean));
-}
-
-export function defaultSelectionModeFor(fieldType: string): SelectionMode {
-  return fieldType === 'multi_select' ? 'multiple' : 'single';
-}
-
-export function normalizeSelectionMode(fieldType: string, validationRules?: unknown): SelectionMode {
-  if (validationRules && typeof validationRules === 'object' && 'selectionMode' in validationRules) {
-    const mode = (validationRules as { selectionMode?: unknown }).selectionMode;
-    if (mode === 'single' || mode === 'multiple') return mode;
-  }
-  return defaultSelectionModeFor(fieldType);
-}
-
-export function requiresOptions(fieldType: string): boolean {
-  return OPTION_FIELD_TYPES.includes(fieldType as any);
-}
+export type ChoiceOptionsValidationResult = | { ok: true; options: FormFieldOption[] } | { ok: false; error: 'Adicione pelo menos duas opções.' | 'Remova opções vazias antes de salvar.' | 'Existem opções duplicadas.' | 'Marque pelo menos uma opção como qualificatória.' };
+const optionId = (label: string, index: number) => `opt_${label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || index}_${index}`;
+export function normalizeOptionObjects(input: unknown): FormFieldOption[] { const raw = typeof input === 'string' ? input.split('\n') : Array.isArray(input) ? input : []; return raw.map((option, index) => { if (option && typeof option === 'object' && 'label' in option) { const o = option as { id?: unknown; label?: unknown; qualifies?: unknown }; const label = String(o.label ?? '').trim(); return { id: String(o.id || optionId(label, index)), label, qualifies: o.qualifies === true }; } const label = String(option ?? '').trim(); return { id: optionId(label, index), label, qualifies: false }; }); }
+export function normalizeOptions(input: unknown): string[] { return normalizeOptionObjects(input).map((option) => option.label); }
+export function dedupeOptions(options: string[]): string[] { return Array.from(new Set(options)); }
+export function validateChoiceOptions(options: unknown, rules?: FieldRules): ChoiceOptionsValidationResult { const normalized = normalizeOptionObjects(options); if (normalized.some((option) => option.label.length === 0)) return { ok: false, error: 'Remova opções vazias antes de salvar.' }; const nonEmpty = normalized.filter((option) => option.label); if (nonEmpty.length < 2) return { ok: false, error: 'Adicione pelo menos duas opções.' }; if (dedupeOptions(nonEmpty.map((option) => option.label)).length !== nonEmpty.length) return { ok: false, error: 'Existem opções duplicadas.' }; if (isQualifier(rules) && !nonEmpty.some((option) => option.qualifies)) return { ok: false, error: 'Marque pelo menos uma opção como qualificatória.' }; return { ok: true, options: nonEmpty }; }
+export function cleanOptions(options: unknown): string[] { return dedupeOptions(normalizeOptions(options).filter(Boolean)); }
+export function cleanOptionObjects(options: unknown): FormFieldOption[] { const seen = new Set<string>(); return normalizeOptionObjects(options).filter((option) => { if (!option.label || seen.has(option.label)) return false; seen.add(option.label); return true; }); }
+export function defaultSelectionModeFor(fieldType: string): SelectionMode { return fieldType === 'multi_select' ? 'multiple' : 'single'; }
+export function normalizeSelectionMode(fieldType: string, validationRules?: FieldRules): SelectionMode { const mode = validationRules?.selectionMode; if (mode === 'single' || mode === 'multiple') return mode; return defaultSelectionModeFor(fieldType); }
+export function normalizeQualificationMode(validationRules?: FieldRules): QualificationMode { return validationRules?.qualificationMode === 'all' ? 'all' : 'any'; }
+export function isQualifier(validationRules?: FieldRules): boolean { return validationRules?.isQualifier === true; }
+export function requiresOptions(fieldType: string): boolean { return OPTION_FIELD_TYPES.includes(fieldType as any); }
+export function evaluateQualification(field: { fieldType: string; options?: unknown; validationRules?: FieldRules }, value: unknown): boolean { if (!requiresOptions(field.fieldType) || !isQualifier(field.validationRules)) return true; const options = cleanOptionObjects(field.options); const byLabel = new Map(options.map((option) => [option.label, option])); const values = Array.isArray(value) ? value.map(String) : [String(value ?? '')].filter(Boolean); if (values.length === 0 || values.some((value) => !byLabel.has(value))) return false; const qualifies = values.map((value) => byLabel.get(value)?.qualifies === true); if (normalizeSelectionMode(field.fieldType, field.validationRules) === 'multiple') return normalizeQualificationMode(field.validationRules) === 'all' ? qualifies.every(Boolean) : qualifies.some(Boolean); return qualifies[0] === true; }
