@@ -43,7 +43,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   subscriptions: ['id', 'tenant_id', 'plan_id', 'status', 'current_period_start', 'current_period_end', 'next_due_date', 'provider', 'payment_required', 'grace_period_ends_at', 'payment_provider', 'provider_customer_id', 'provider_subscription_id', 'created_at', 'updated_at', 'canceled_at'],
   plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
   payments: ['id', 'tenant_id', 'subscription_id', 'provider', 'provider_payment_id', 'status', 'value', 'due_date', 'paid_at', 'invoice_url', 'bank_slip_url', 'pix_qr_code', 'billing_type', 'raw_payload', 'created_at', 'updated_at'],
-  forms: ['id', 'tenant_id', 'name', 'public_title', 'public_description', 'slug', 'primary_color', 'bg_color', 'button_color', 'text_color', 'theme', 'logo_url', 'cover_image_url', 'success_message', 'pipeline_id', 'initial_stage_id', 'is_active', 'created_at', 'updated_at'],
+  forms: ['id', 'tenant_id', 'name', 'public_title', 'public_description', 'slug', 'primary_color', 'bg_color', 'button_color', 'text_color', 'theme', 'logo_url', 'cover_image_url', 'success_message', 'disqualification_settings', 'pipeline_id', 'initial_stage_id', 'is_active', 'created_at', 'updated_at'],
   tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'whatsapp_funnel_enabled', 'created_at', 'updated_at'],
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
   tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
@@ -203,7 +203,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
       add(checks, {
         label: `column.${table}.${column}`,
         ok: tableColumns.has(column),
-        suggestion: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ...;`,
+        suggestion: table === 'forms' && column === 'disqualification_settings' ? 'forms.disqualification_settings ausente. Rode repair schema ou migration.' : `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${column} ...;`,
         runtimeEssential: RUNTIME_REQUIRED_TABLES.has(table),
       });
     }

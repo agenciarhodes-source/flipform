@@ -143,6 +143,7 @@ const steps: Step[] = [
   { label: 'tenants.slug.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS tenants_slug_key ON tenants(slug)` },
   { label: 'tenant_users.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS tenant_users_tenant_id_user_id_key ON tenant_users(tenant_id, user_id)` },
 
+  { label: 'forms.disqualification_settings', sql: `ALTER TABLE public.forms ADD COLUMN IF NOT EXISTS disqualification_settings JSONB` },
   { label: 'forms.drop.slug.constraint', sql: `ALTER TABLE forms DROP CONSTRAINT IF EXISTS forms_slug_key` },
   { label: 'forms.drop.slug.index.lower', sql: `DROP INDEX IF EXISTS forms_slug_key` },
   { label: 'forms.drop.slug.index.quoted', sql: `DROP INDEX IF EXISTS "forms_slug_key"` },

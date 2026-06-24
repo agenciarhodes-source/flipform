@@ -76,7 +76,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
           coverImageUrl: data.coverImageUrl ?? null,
           logoUrl: data.logoUrl ?? null,
           successMessage: data.successMessage || existing.successMessage,
-          disqualificationSettings: data.disqualificationSettings ? (data.disqualificationSettings as Prisma.InputJsonValue) : undefined,
+          disqualificationSettings: data.disqualificationSettings == null ? Prisma.JsonNull : (data.disqualificationSettings as Prisma.InputJsonValue),
           isActive: data.isActive ?? existing.isActive,
           pipelineId: newPipelineId,
           initialStageId: newStageId,
