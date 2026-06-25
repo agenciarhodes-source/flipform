@@ -2,13 +2,21 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, BarChart3, CheckCircle2, ClipboardList, Filter, Flame, LineChart as LineChartIcon, ListChecks, RefreshCw, Target, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, BarChart3, CheckCircle2, CircleDollarSign, ClipboardList, Clock3, Filter, Flame, LineChart as LineChartIcon, ListChecks, RefreshCw, Target, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 type ProfileItem = { key: string; label: string; count: number; percentage: number; color: string };
+type ActivityBucket = { label: string; start: string; end: string; count: number; intensity: number };
 type DashboardData = {
+  executive: {
+    activityPulse: { buckets: ActivityBucket[]; live: boolean; lastActivityAt?: string };
+    revenue: { current: number; previous: number | null; deltaPercent: number | null; hasRevenueSource: boolean };
+    openDeals: { current: number; previous: number | null; delta: number | null; deltaPercent: number | null };
+    averageTimeToClose: { currentSeconds: number | null; previousSeconds: number | null; deltaSeconds: number | null };
+    conversionRate: { current: number; previous: number | null; deltaPoints: number | null };
+  };
   filters: {
     period: 'today' | '7d' | '30d' | 'custom';
     pipelineId: string | null;
@@ -38,6 +46,34 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 function rate(value: number | null) { return value == null ? '—' : `${value}%`; }
+
+
+function money(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
+function formatDuration(seconds: number | null) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}min ${seconds % 60}s`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${minutes % 60}min`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
+function signed(value: number | null, suffix = '') { return value == null ? 'Sem base anterior' : `${value > 0 ? '+' : ''}${value}${suffix} vs. período anterior`; }
+
+function TeamActivityPulse({ pulse }: { pulse: DashboardData['executive']['activityPulse'] }) {
+  return <Card className="overflow-hidden border-slate-200 bg-white/95 p-4 shadow-sm"><div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-heading text-base font-semibold tracking-tight text-slate-950">Pulso do dia — atividade da equipe nas últimas 24h</h2><p className="text-xs text-muted-foreground">Audit logs, movimentações de leads, tarefas, notas e eventos de tracking.</p></div><div className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100"><span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />Ao vivo</div></div><div className="overflow-x-auto"><div className="flex min-w-[720px] items-end gap-1 rounded-2xl bg-gradient-to-b from-slate-50 to-white px-3 pb-2 pt-4 ring-1 ring-slate-100">{pulse.buckets.map((bucket, index) => <div key={bucket.start} className="group flex min-w-2 flex-1 flex-col items-center gap-1"><div title={`${bucket.count} atividades`} className={`w-full rounded-t-md transition-all ${index > pulse.buckets.length - 5 ? 'bg-emerald-500' : 'bg-blue-500/80'}`} style={{ height: `${Math.max(8, 56 * bucket.intensity)}px`, opacity: bucket.count ? 1 : 0.25 }} /><span className="h-4 text-[10px] text-muted-foreground">{bucket.label}</span></div>)}</div></div>{pulse.lastActivityAt && <p className="mt-2 text-[11px] text-muted-foreground">Última atividade: {formatDate(pulse.lastActivityAt)}</p>}</Card>;
+}
+
+function ExecutiveMetricCard({ title, value, hint, positive, icon: Icon }: { title: string; value: string; hint: string; positive?: boolean; icon: any }) {
+  const TrendIcon = positive == null ? TrendingUp : positive ? ArrowUp : ArrowDown;
+  return <Card className="relative min-h-[112px] overflow-hidden border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{title}</p><p className="mt-2 font-heading text-2xl font-bold tracking-tight text-slate-950">{value}</p><p className={`mt-2 inline-flex items-center gap-1 text-xs font-medium ${positive == null ? 'text-muted-foreground' : positive ? 'text-emerald-700' : 'text-rose-700'}`}><TrendIcon className="h-3.5 w-3.5" />{hint}</p></div><div className="rounded-2xl border border-slate-100 bg-slate-50 p-2 text-slate-700"><Icon className="h-4 w-4" /></div></div><div className="absolute bottom-3 right-4 flex h-8 items-end gap-0.5 opacity-40">{[20, 34, 26, 42, 32, 48, 38].map((h, i) => <span key={i} className="w-1 rounded-full bg-slate-400" style={{ height: h / 2 }} />)}</div></Card>;
+}
+
+function ExecutiveTop({ data }: { data: DashboardData }) {
+  const avgDelta = data.executive.averageTimeToClose.deltaSeconds;
+  return <section className="space-y-3"><TeamActivityPulse pulse={data.executive.activityPulse} /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><ExecutiveMetricCard title="Receita do mês" value={money(data.executive.revenue.current)} hint={data.executive.revenue.hasRevenueSource ? signed(data.executive.revenue.deltaPercent, '%') : 'Sem fonte de receita configurada'} icon={CircleDollarSign} /><ExecutiveMetricCard title="Negócios abertos" value={`${data.executive.openDeals.current} deals`} hint={signed(data.executive.openDeals.delta)} positive={(data.executive.openDeals.delta ?? 0) >= 0} icon={ClipboardList} /><ExecutiveMetricCard title="Tempo médio até fechamento" value={formatDuration(data.executive.averageTimeToClose.currentSeconds)} hint={avgDelta == null ? 'Sem base anterior' : `${avgDelta < 0 ? '↓ ' : '↑ '}${formatDuration(Math.abs(avgDelta))} vs. período anterior`} positive={avgDelta == null ? undefined : avgDelta <= 0} icon={Clock3} /><ExecutiveMetricCard title="Taxa de conversão" value={`${data.executive.conversionRate.current}%`} hint={signed(data.executive.conversionRate.deltaPoints, 'pp')} positive={(data.executive.conversionRate.deltaPoints ?? 0) >= 0} icon={TrendingUp} /></div></section>;
+}
 
 function MetricCard({ title, value, hint, icon: Icon, tone = 'blue' }: { title: string; value: string | number; hint?: string; icon: any; tone?: 'blue' | 'green' | 'amber' | 'red' | 'purple' }) {
   const tones = { blue: 'from-blue-50 to-sky-50 text-blue-700 border-blue-100', green: 'from-emerald-50 to-green-50 text-emerald-700 border-emerald-100', amber: 'from-amber-50 to-orange-50 text-amber-700 border-amber-100', red: 'from-rose-50 to-red-50 text-rose-700 border-rose-100', purple: 'from-violet-50 to-purple-50 text-violet-700 border-violet-100' }[tone];
@@ -89,6 +125,8 @@ export default function DashboardPage() {
     {!loading && !error && data && !hasData && <Card className="p-6 text-center"><Filter className="mx-auto mb-2 h-7 w-7 text-muted-foreground" /><p className="font-medium">Ainda não há leads suficientes para gerar métricas.</p><p className="text-sm text-muted-foreground">Crie e divulgue formulários para visualizar o desempenho aqui.</p></Card>}
 
     {data && !error && <>
+      <ExecutiveTop data={data} />
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7"><MetricCard title="Total de leads" value={data.summary.totalLeads} icon={Users} hint={data.summary.variationVsPrevious == null ? 'Sem base anterior' : `${data.summary.variationVsPrevious > 0 ? '+' : ''}${data.summary.variationVsPrevious}% vs anterior`} /><MetricCard title="Novos no período" value={data.summary.newLeads} icon={UserPlus} /><MetricCard title="Em atendimento" value={data.summary.inProgress} icon={ClipboardList} tone="amber" /><MetricCard title="Qualificados" value={data.summary.qualified} icon={Flame} tone="purple" /><MetricCard title="Fechamentos" value={data.summary.won} icon={Trophy} tone="green" /><MetricCard title="Conversão" value={`${data.summary.conversionRate}%`} icon={TrendingUp} tone="green" /><MetricCard title="Taxa de avanço" value={`${data.summary.advancementRate}%`} icon={Target} /></div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2"><Card className="p-4"><div className="mb-3"><h2 className="font-heading text-base font-semibold">Funil visual por etapas</h2><p className="text-xs text-muted-foreground">Etapas reais do pipeline selecionado.</p></div>{!data.funnel ? <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">Selecione um pipeline para visualizar as etapas do funil.</div> : <div className="space-y-2">{data.funnel.stages.map((stage, index) => <div key={stage.id} className="relative rounded-xl border bg-gradient-to-r from-white to-slate-50 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold"><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />{stage.name}</span>{stage.isFinal && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">final</span>}</div><div className="grid grid-cols-4 items-end gap-2 text-xs"><strong className="text-2xl">{stage.count}</strong><span>{stage.percentage}% total</span><span className="text-emerald-700">Avanço {rate(stage.advanceRate)}</span><span className="text-rose-700">Queda {rate(stage.dropOffRate)}</span></div><div className="mt-2 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, stage.percentage)}%`, backgroundColor: stage.color }} /></div>{index < data.funnel!.stages.length - 1 && <ArrowRight className="absolute -right-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-muted-foreground xl:block" />}</div>)}</div>}</Card><Card className="p-4"><div className="mb-2 flex items-center justify-between"><div><h2 className="font-heading text-base font-semibold">Leads por dia</h2><p className="text-xs text-muted-foreground">Real diário e linha projetada.</p></div>{data.projection.total !== null && <div className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Projeção: {data.projection.total}</div>}</div><ResponsiveContainer width="100%" height={265}><LineChart data={data.leadsByDay}><CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} allowDecimals={false} /><Tooltip /><Legend /><Line name="Real" type="monotone" dataKey="real" stroke="#2563EB" strokeWidth={3} dot={{ r: 2 }} /><Line name="Projetado" type="monotone" dataKey="projected" stroke="#10B981" strokeWidth={2} strokeDasharray="6 6" dot={false} /></LineChart></ResponsiveContainer></Card></div>

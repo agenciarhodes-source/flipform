@@ -128,6 +128,134 @@ function previousWindow(startDate: Date, totalDays: number) {
   return { start, end };
 }
 
+
+
+type ExecutiveMetricParams = {
+  tenantId: string;
+  pipelineId?: string;
+  formId?: string;
+  assignedTo?: string;
+  startDate: Date;
+  endDate: Date;
+};
+
+function deltaPercent(current: number, previous: number | null) {
+  return previous && previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
+}
+
+async function getFinalStages(db: Db, tenantId: string, pipelineId?: string) {
+  const pipelines = pipelineId
+    ? await db.pipeline.findMany({ where: { id: pipelineId, tenantId, isArchived: false }, select: { id: true } })
+    : await db.pipeline.findMany({ where: { tenantId, isArchived: false }, select: { id: true } });
+  if (pipelines.length === 0) return new Map<string, string>();
+  const stages = await db.pipelineStage.findMany({
+    where: { pipelineId: { in: pipelines.map((pipeline) => pipeline.id) }, isArchived: false },
+    orderBy: [{ pipelineId: 'asc' }, { orderIndex: 'desc' }],
+    select: { id: true, pipelineId: true, orderIndex: true },
+  });
+  const finalStages = new Map<string, string>();
+  for (const stage of stages) if (!finalStages.has(stage.pipelineId)) finalStages.set(stage.pipelineId, stage.id);
+  return finalStages;
+}
+
+export async function calculateRevenue() {
+  return { current: 0, previous: null, deltaPercent: null, hasRevenueSource: false };
+}
+
+export async function calculateOpenDeals(db: Db, params: ExecutiveMetricParams) {
+  const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
+  const finalStageIds = Array.from(finalStages.values());
+  const where = leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate });
+  const current = await db.lead.count({ where: { ...where, status: { not: 'lost' as LeadStatus }, ...(finalStageIds.length ? { stageId: { notIn: finalStageIds } } : {}) } });
+  return current;
+}
+
+export async function calculateAverageTimeToClose(db: Db, params: ExecutiveMetricParams) {
+  const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
+  if (finalStages.size === 0) return null;
+  const leads = await db.lead.findMany({
+    where: { ...leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate }) },
+    select: { id: true, pipelineId: true, stageId: true, status: true, createdAt: true, updatedAt: true },
+  });
+  if (leads.length === 0) return null;
+  const finalLeadIds = leads.filter((lead) => finalStages.get(lead.pipelineId) === lead.stageId || lead.status === ('won' as LeadStatus)).map((lead) => lead.id);
+  if (finalLeadIds.length === 0) return null;
+  const histories = await db.leadStageHistory.findMany({
+    where: { leadId: { in: finalLeadIds }, toStageId: { in: Array.from(finalStages.values()) } },
+    orderBy: { createdAt: 'asc' },
+    select: { leadId: true, createdAt: true },
+  });
+  const firstCloseByLead = new Map<string, Date>();
+  for (const history of histories) if (!firstCloseByLead.has(history.leadId)) firstCloseByLead.set(history.leadId, history.createdAt);
+  const durations = leads.flatMap((lead) => {
+    if (!finalLeadIds.includes(lead.id)) return [];
+    const closedAt = firstCloseByLead.get(lead.id) || (finalStages.get(lead.pipelineId) === lead.stageId ? lead.updatedAt : null);
+    return closedAt ? [Math.max(0, Math.round((closedAt.getTime() - lead.createdAt.getTime()) / 1000))] : [];
+  });
+  return durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null;
+}
+
+async function calculateConversionRate(db: Db, params: ExecutiveMetricParams) {
+  const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
+  const leads = await db.lead.findMany({
+    where: leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate }),
+    select: { id: true, pipelineId: true, stageId: true, status: true },
+  });
+  const won = leads.filter((lead) => finalStages.get(lead.pipelineId) === lead.stageId || lead.status === ('won' as LeadStatus)).length;
+  return percent(won, leads.length);
+}
+
+export async function getActivityPulseLast24h(db: Db, params: { tenantId: string; assignedTo?: string; now?: Date }) {
+  const now = params.now || new Date();
+  const start = new Date(now.getTime() - DAY_MS);
+  const bucketMs = 30 * 60 * 1000;
+  const buckets = Array.from({ length: 48 }, (_, index) => {
+    const bucketStart = new Date(start.getTime() + index * bucketMs);
+    const bucketEnd = new Date(bucketStart.getTime() + bucketMs);
+    return { label: index % 8 === 0 ? `${String(bucketStart.getHours()).padStart(2, '0')}h` : index === 47 ? 'agora' : '', start: bucketStart.toISOString(), end: bucketEnd.toISOString(), count: 0, intensity: 0 };
+  });
+  const scopedLeadWhere = { tenantId: params.tenantId, ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}) };
+  const [auditLogs, leadCreated, leadUpdated, stageHistory, tasks, notes, trackingLogs] = await Promise.all([
+    db.auditLog.findMany({ where: { tenantId: params.tenantId, createdAt: { gte: start, lte: now }, ...(params.assignedTo ? { userId: params.assignedTo } : {}) }, select: { createdAt: true } }),
+    db.lead.findMany({ where: { ...scopedLeadWhere, createdAt: { gte: start, lte: now } }, select: { createdAt: true } }),
+    db.lead.findMany({ where: { ...scopedLeadWhere, updatedAt: { gte: start, lte: now } }, select: { updatedAt: true } }),
+    db.leadStageHistory.findMany({ where: { createdAt: { gte: start, lte: now }, lead: scopedLeadWhere }, select: { createdAt: true } }),
+    db.task.findMany({ where: { tenantId: params.tenantId, createdAt: { gte: start, lte: now }, ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}) }, select: { createdAt: true } }),
+    db.note.findMany({ where: { tenantId: params.tenantId, createdAt: { gte: start, lte: now }, ...(params.assignedTo ? { userId: params.assignedTo } : {}) }, select: { createdAt: true } }),
+    (db as any).trackingEventLog?.findMany ? (db as any).trackingEventLog.findMany({ where: { tenantId: params.tenantId, createdAt: { gte: start, lte: now } }, select: { createdAt: true } }) : Promise.resolve([]),
+  ]);
+  const events = [...auditLogs.map((event) => event.createdAt), ...leadCreated.map((event) => event.createdAt), ...leadUpdated.map((event) => event.updatedAt), ...stageHistory.map((event) => event.createdAt), ...tasks.map((event) => event.createdAt), ...notes.map((event) => event.createdAt), ...trackingLogs.map((event: { createdAt: Date }) => event.createdAt)];
+  for (const date of events) {
+    const index = Math.floor((date.getTime() - start.getTime()) / bucketMs);
+    if (index >= 0 && index < buckets.length) buckets[index].count += 1;
+  }
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
+  return { buckets: buckets.map((bucket) => ({ ...bucket, intensity: Math.round((bucket.count / max) * 100) / 100 })), live: true, lastActivityAt: events.sort((a, b) => b.getTime() - a.getTime())[0]?.toISOString() };
+}
+
+async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string | undefined, params: { pipelineId?: string; formId?: string; period: ReturnType<typeof resolveDashboardPeriod> }) {
+  const previous = previousWindow(params.period.startDate, params.period.totalDays);
+  const currentArgs = { tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo, startDate: params.period.startDate, endDate: params.period.endDate };
+  const previousArgs = { ...currentArgs, startDate: previous.start, endDate: previous.end };
+  const [activityPulse, revenue, openDealsCurrent, openDealsPrevious, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
+    getActivityPulseLast24h(db, { tenantId, assignedTo }),
+    calculateRevenue(),
+    calculateOpenDeals(db, currentArgs),
+    calculateOpenDeals(db, previousArgs),
+    calculateAverageTimeToClose(db, currentArgs),
+    calculateAverageTimeToClose(db, previousArgs),
+    calculateConversionRate(db, currentArgs),
+    calculateConversionRate(db, previousArgs),
+  ]);
+  return {
+    activityPulse,
+    revenue,
+    openDeals: { current: openDealsCurrent, previous: openDealsPrevious, delta: openDealsCurrent - openDealsPrevious, deltaPercent: deltaPercent(openDealsCurrent, openDealsPrevious) },
+    averageTimeToClose: { currentSeconds: avgCloseCurrent, previousSeconds: avgClosePrevious, deltaSeconds: avgCloseCurrent != null && avgClosePrevious != null ? avgCloseCurrent - avgClosePrevious : null },
+    conversionRate: { current: conversionCurrent, previous: conversionPrevious, deltaPoints: conversionPrevious != null ? Math.round((conversionCurrent - conversionPrevious) * 10) / 10 : null },
+  };
+}
+
 function leadScope(params: { tenantId: string; pipelineId?: string; formId?: string; startDate?: Date; endDate?: Date; assignedTo?: string }) {
   return {
     tenantId: params.tenantId,
@@ -160,8 +288,10 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const currentWhere = leadScope({ tenantId, pipelineId, formId, assignedTo: agentScope, startDate: period.startDate, endDate: period.endDate });
   const previous = previousWindow(period.startDate, period.totalDays);
   const previousWhere = leadScope({ tenantId, pipelineId, formId, assignedTo: agentScope, startDate: previous.start, endDate: previous.end });
+  const executivePromise = getExecutiveMetrics(db, tenantId, agentScope, { pipelineId, formId, period });
 
-  const [baseLeads, previousLeads, stages, pipelines, filterForms, forms, tasks, sources] = await Promise.all([
+  const [executive, baseLeads, previousLeads, stages, pipelines, filterForms, forms, tasks, sources] = await Promise.all([
+    executivePromise,
     db.lead.findMany({
       where: currentWhere,
       select: {
@@ -282,6 +412,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   }
 
   return {
+    executive,
     filters: { period: period.period, startDate: period.startDate.toISOString(), endDate: period.endDate.toISOString(), pipelineId: pipelineId || null, formId: formId || null, state: selectedState || null, city: selectedCity || null, pipelines, forms: filterForms },
     summary: {
       totalLeads: total,

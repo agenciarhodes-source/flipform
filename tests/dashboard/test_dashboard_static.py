@@ -53,3 +53,34 @@ def test_dashboard_geo_and_final_stage_rules_are_present():
     assert "Qualificados" or "qualified" in metrics
     assert "finalStageId = stages.at(-1)?.id" in metrics
     assert "lead.status === ('won' as LeadStatus)" in metrics
+
+
+def test_dashboard_executive_metrics_helpers_and_payload_are_present():
+    metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
+    assert "getExecutiveMetrics" in metrics
+    assert "activityPulse" in metrics
+    assert "calculateRevenue" in metrics
+    assert "hasRevenueSource: false" in metrics
+    assert "calculateOpenDeals" in metrics
+    assert "status: { not: 'lost' as LeadStatus }" in metrics
+    assert "calculateAverageTimeToClose" in metrics
+    assert "leadStageHistory.findMany" in metrics
+    assert "calculateConversionRate" in metrics
+    assert "deltaPoints" in metrics
+    assert "previousWindow(params.period.startDate" in metrics
+    assert "getActivityPulseLast24h" in metrics
+    assert "Array.from({ length: 48 }" in metrics
+    assert "tenantId, pipelineId" in metrics
+
+
+def test_dashboard_ui_has_executive_top_and_activity_pulse():
+    page = (ROOT / "app/(app)/dashboard/page.tsx").read_text()
+    assert "TeamActivityPulse" in page
+    assert "Pulso do dia — atividade da equipe nas últimas 24h" in page
+    assert "Ao vivo" in page
+    assert "Receita do mês" in page
+    assert "Sem fonte de receita configurada" in page
+    assert "Negócios abertos" in page
+    assert "Tempo médio até fechamento" in page
+    assert "Taxa de conversão" in page
+    assert "vs. período anterior" in page
