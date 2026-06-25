@@ -76,6 +76,18 @@ export function extractLeadLocation(lead: { answers?: { questionLabel: string; a
 
 const DAY_MS = 86_400_000;
 
+export function formatChartDateBR(value: string | Date): string {
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[3]}-${match[2]}`;
+  }
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(value)).replace('/', '-');
+}
+
 function startOfDay(date: Date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -216,7 +228,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const leadsByDay = Array.from(byDayMap.entries()).map(([date, count], index) => {
     cumulative += count;
     const projected = period.period === 'today' ? count : index + 1 <= elapsedDays ? cumulative : Math.round(avg * (index + 1));
-    return { date, label: date.slice(5).replace('-', '/'), real: count, projected };
+    return { date, label: formatChartDateBR(date), real: count, projected };
   });
 
   const tempCounts = new Map<LeadTemperature | 'won', number>([['cold', 0], ['warm', 0], ['hot', 0], ['won', finalStageCount]]);
