@@ -18,8 +18,12 @@ def test_dashboard_metrics_include_dynamic_funnel_projection_and_profiles():
     assert "pipelineStage.findMany" in metrics
     assert "orderBy: { orderIndex: 'asc' }" in metrics
     assert "dropOffRate" in metrics
+    assert "Math.max(0, percent(previousCount - count, previousCount))" in metrics
+    assert "advanceRate = index === 0 ? 100 : previousCount > 0" in metrics
     assert "projectionTotal" in metrics
-    assert "temperature" in metrics
+    assert "lead.stageId === finalStageId" in metrics
+    assert "extractLeadLocation" in metrics
+    assert "BRAZIL_STATES" in metrics
     assert "formsPerformance" in metrics
 
 
@@ -28,8 +32,24 @@ def test_dashboard_ui_has_filters_charts_empty_and_error_states():
     assert "Período" in page
     assert "Pipeline" in page
     assert "Formulário" in page
-    assert "Leads gerados no período" in page
-    assert "Perfil dos leads" in page
+    assert "Estado" in page
+    assert "Cidade" in page
+    assert "Leads por dia" in page
+    assert "Perfil do funil" in page
+    assert "Mapa de leads" in page
     assert "Selecione um pipeline para visualizar as etapas do funil." in page
-    assert "Não foi possível carregar o Dashboard. Tente novamente." in page
+    assert "Não foi possível carregar o dashboard." in page
+    assert "Tentar novamente" in page
     assert "Ainda não há leads suficientes para gerar métricas." in page
+
+
+def test_dashboard_geo_and_final_stage_rules_are_present():
+    metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
+    assert "state: z.string().trim()" in metrics
+    assert "city: z.string().trim()" in metrics
+    assert "selectedState" in metrics
+    assert "byState" in metrics
+    assert "byCity" in metrics
+    assert "Qualificados" or "qualified" in metrics
+    assert "finalStageId = stages.at(-1)?.id" in metrics
+    assert "lead.status === ('won' as LeadStatus)" in metrics
