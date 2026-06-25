@@ -12,8 +12,34 @@ def test_lead_sale_value_schema_migration_and_repair_are_present():
     assert 'saleValueUpdatedAt DateTime? @map("sale_value_updated_at")' in schema
     assert 'saleValueUpdatedBy String?   @map("sale_value_updated_by")' in schema
     assert 'ADD COLUMN IF NOT EXISTS sale_value_cents INTEGER' in migration
-    assert "DEFAULT 'BRL'" in migration
+    assert "ADD COLUMN IF NOT EXISTS sale_currency TEXT NOT NULL DEFAULT 'BRL'" in migration
+    assert 'ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP(3)' in migration
+    assert 'ADD COLUMN IF NOT EXISTS sale_value_updated_by TEXT' in migration
     assert 'leads.sale_value_cents' in repair
+    assert "ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_currency TEXT NOT NULL DEFAULT 'BRL'" in repair
+    assert 'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP(3)' in repair
+    assert 'ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_by TEXT' in repair
+
+
+def test_lead_sale_value_readiness_checks_are_present():
+    readiness = (ROOT / "lib/admin/assert-admin-schema-ready.ts").read_text()
+    assert "'leads'" in readiness
+    assert "'sale_value_cents'" in readiness
+    assert "'sale_currency'" in readiness
+    assert "'sale_value_updated_at'" in readiness
+    assert "'sale_value_updated_by'" in readiness
+    assert 'leads.sale_value_cents ausente. Rode migration ou repair schema.' in readiness
+
+
+def test_lead_and_dashboard_null_sale_value_fallbacks_are_present():
+    leads_route = (ROOT / "app/api/leads/route.ts").read_text()
+    sale_value_route = (ROOT / "app/api/leads/[id]/sale-value/route.ts").read_text()
+    metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
+    assert "prisma.lead.findMany" in leads_route
+    assert "saleValueCents: z.number().int().min(0).nullable()" in sale_value_route
+    assert "const previousValueCents = lead.saleValueCents ?? null" in sale_value_route
+    assert "return result._sum.saleValueCents || 0" in metrics
+    assert "saleValueCents: { gt: 0 }" in metrics
 
 
 def test_brl_helpers_support_format_parse_and_negative_validation():

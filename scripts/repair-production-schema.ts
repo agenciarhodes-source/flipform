@@ -155,7 +155,7 @@ const steps: Step[] = [
 
   { label: 'leads.sale_value_cents', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_cents INTEGER` },
   { label: 'leads.sale_currency', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_currency TEXT NOT NULL DEFAULT 'BRL'` },
-  { label: 'leads.sale_value_updated_at', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP WITHOUT TIME ZONE` },
+  { label: 'leads.sale_value_updated_at', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP(3)` },
   { label: 'leads.sale_value_updated_by', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_by TEXT` },
 
   {
