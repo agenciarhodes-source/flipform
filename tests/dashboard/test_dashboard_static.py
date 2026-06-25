@@ -21,6 +21,10 @@ def test_dashboard_metrics_include_dynamic_funnel_projection_and_profiles():
     assert "projectionTotal" in metrics
     assert "temperature" in metrics
     assert "formsPerformance" in metrics
+    assert "extractLeadLocation" in metrics
+    assert "BR_STATES" in metrics
+    assert "selectedState" in metrics
+    assert "Math.max(0, percent(Math.max(0, previousCount - count), previousCount))" in metrics
 
 
 def test_dashboard_ui_has_filters_charts_empty_and_error_states():
@@ -28,8 +32,12 @@ def test_dashboard_ui_has_filters_charts_empty_and_error_states():
     assert "Período" in page
     assert "Pipeline" in page
     assert "Formulário" in page
-    assert "Leads gerados no período" in page
-    assert "Perfil dos leads" in page
+    assert "Estado" in page
+    assert "Cidade" in page
+    assert "Leads por dia" in page
+    assert "Perfil do funil" in page
+    assert "Mapa de leads" in page
     assert "Selecione um pipeline para visualizar as etapas do funil." in page
-    assert "Não foi possível carregar o Dashboard. Tente novamente." in page
+    assert "Não foi possível carregar o dashboard." in page
+    assert "Tentar novamente" in page
     assert "Ainda não há leads suficientes para gerar métricas." in page
