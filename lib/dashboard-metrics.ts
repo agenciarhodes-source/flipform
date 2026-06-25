@@ -158,8 +158,48 @@ async function getFinalStages(db: Db, tenantId: string, pipelineId?: string) {
   return finalStages;
 }
 
-export async function calculateRevenue() {
-  return { current: 0, previous: null, deltaPercent: null, hasRevenueSource: false };
+async function calculateRevenueForWindow(db: Db, params: ExecutiveMetricParams) {
+  const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
+  const finalStageIds = Array.from(finalStages.values());
+  if (finalStageIds.length === 0) return 0;
+
+  const closeHistories = await db.leadStageHistory.findMany({
+    where: {
+      toStageId: { in: finalStageIds },
+      createdAt: { gte: params.startDate, lte: params.endDate },
+      lead: {
+        tenantId: params.tenantId,
+        ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
+        ...(params.formId ? { formId: params.formId } : {}),
+        ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
+      },
+    },
+    select: { leadId: true },
+    distinct: ['leadId'],
+  });
+  const closedByHistoryIds = closeHistories.map((history) => history.leadId);
+
+  const closedLeadWhere: Prisma.LeadWhereInput = {
+    tenantId: params.tenantId,
+    ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
+    ...(params.formId ? { formId: params.formId } : {}),
+    ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
+    saleValueCents: { gt: 0 },
+    OR: [
+      ...(closedByHistoryIds.length ? [{ id: { in: closedByHistoryIds } }] : []),
+      // Fallback para bases sem histórico confiável: leads já finais cujo valor foi atualizado no período.
+      { stageId: { in: finalStageIds }, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } },
+      { status: 'won' as LeadStatus, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } },
+    ],
+  };
+
+  const result = await db.lead.aggregate({ where: closedLeadWhere, _sum: { saleValueCents: true } });
+  return result._sum.saleValueCents || 0;
+}
+
+export async function calculateRevenue(db: Db, current: ExecutiveMetricParams, previous: ExecutiveMetricParams) {
+  const [currentCents, previousCents] = await Promise.all([calculateRevenueForWindow(db, current), calculateRevenueForWindow(db, previous)]);
+  return { currentCents, previousCents, current: currentCents / 100, previous: previousCents / 100, deltaPercent: deltaPercent(currentCents, previousCents), currency: 'BRL', hasRevenueSource: true };
 }
 
 export async function calculateOpenDeals(db: Db, params: ExecutiveMetricParams) {
@@ -239,7 +279,7 @@ async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string 
   const previousArgs = { ...currentArgs, startDate: previous.start, endDate: previous.end };
   const [activityPulse, revenue, openDealsCurrent, openDealsPrevious, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
     getActivityPulseLast24h(db, { tenantId, assignedTo }),
-    calculateRevenue(),
+    calculateRevenue(db, currentArgs, previousArgs),
     calculateOpenDeals(db, currentArgs),
     calculateOpenDeals(db, previousArgs),
     calculateAverageTimeToClose(db, currentArgs),

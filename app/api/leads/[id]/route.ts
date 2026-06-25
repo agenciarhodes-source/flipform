@@ -27,7 +27,12 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     },
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
-  return NextResponse.json({ lead });
+  const saleValueAuditLogs = await prisma.auditLog.findMany({
+    where: { tenantId: session.tenantId, entityType: 'lead', entityId: lead.id, action: 'lead.sale_value_updated' },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, userId: true, metadata: true, createdAt: true },
+  });
+  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {
