@@ -60,7 +60,9 @@ def test_dashboard_executive_metrics_helpers_and_payload_are_present():
     assert "getExecutiveMetrics" in metrics
     assert "activityPulse" in metrics
     assert "calculateRevenue" in metrics
-    assert "hasRevenueSource: false" in metrics
+    assert "hasRevenueSource: true" in metrics
+    assert "saleValueCents" in metrics
+    assert "leadStageHistory.findMany" in metrics
     assert "calculateOpenDeals" in metrics
     assert "status: { not: 'lost' as LeadStatus }" in metrics
     assert "calculateAverageTimeToClose" in metrics
@@ -78,8 +80,8 @@ def test_dashboard_ui_has_executive_top_and_activity_pulse():
     assert "TeamActivityPulse" in page
     assert "Pulso do dia — atividade da equipe nas últimas 24h" in page
     assert "Ao vivo" in page
-    assert "Receita do mês" in page
-    assert "Sem fonte de receita configurada" in page
+    assert "Receita do período" in page
+    assert "moneyFromCents" in page
     assert "Negócios abertos" in page
     assert "Tempo médio até fechamento" in page
     assert "Taxa de conversão" in page

@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
+import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2 } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
 
@@ -17,11 +18,14 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [noteContent, setNoteContent] = useState('');
+  const [saleValueInput, setSaleValueInput] = useState('');
+  const [savingSaleValue, setSavingSaleValue] = useState(false);
 
   const load = async () => {
     setLoading(true);
     const res = await fetch(`/api/leads/${leadId}`).then((r) => r.json());
     setLead(res.lead);
+    setSaleValueInput(formatCurrencyBRLFromCents(res.lead?.saleValueCents ?? null));
     setLoading(false);
   };
   useEffect(() => { load(); }, [leadId]);
@@ -37,6 +41,25 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     await fetch(`/api/leads/${leadId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ temperature }) });
     toast.success('Temperatura atualizada');
     load(); onChange();
+  };
+
+  const saveSaleValue = async () => {
+    try {
+      const saleValueCents = saleValueInput.trim() ? parseBRLToCents(saleValueInput) : null;
+      setSavingSaleValue(true);
+      const res = await fetch(`/api/leads/${leadId}/sale-value`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleValueCents }) });
+      if (!res.ok) throw new Error('save_failed');
+      const data = await res.json();
+      setLead((current: any) => ({ ...current, ...data.lead }));
+      setSaleValueInput(formatCurrencyBRLFromCents(data.lead.saleValueCents ?? null));
+      toast.success('Valor vendido atualizado.');
+      await load();
+      onChange();
+    } catch {
+      toast.error('Não foi possível salvar o valor vendido.');
+    } finally {
+      setSavingSaleValue(false);
+    }
   };
 
   const addNote = async () => {
@@ -56,6 +79,9 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     onChange();
     onClose();
   };
+
+  const finalStageId = stages.at(-1)?.id;
+  const isFinalStage = Boolean(finalStageId && lead?.stageId === finalStageId) || lead?.status === 'won';
 
   if (loading || !lead) {
     return (
@@ -95,12 +121,42 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </TabsList>
 
           <TabsContent value="info" className="pb-6 space-y-4">
+            <section className="space-y-3 rounded-xl border bg-white p-4">
+              <h3 className="font-heading text-sm font-semibold">Informações do lead</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><div className="text-muted-foreground">Origem</div><div className="font-medium capitalize">{lead.source}</div></div>
               <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{lead.status}</div></div>
               <div><div className="text-muted-foreground">Criado em</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
               <div><div className="text-muted-foreground">Última atualização</div><div className="font-medium">{formatDateTime(lead.updatedAt)}</div></div>
             </div>
+            </section>
+
+            <section className="space-y-3 rounded-xl border bg-emerald-50/40 p-4 ring-1 ring-emerald-100">
+              <div>
+                <h3 className="font-heading text-sm font-semibold">Comercial</h3>
+                <p className="text-xs text-muted-foreground">Informe o valor vendido para contabilizar na receita do Dashboard.</p>
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Valor vendido</span>
+                <input
+                  className="w-full rounded-md border bg-white px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
+                  inputMode="decimal"
+                  placeholder="R$ 0,00"
+                  value={saleValueInput}
+                  onChange={(event) => setSaleValueInput(event.target.value)}
+                  onBlur={() => { try { setSaleValueInput(formatCurrencyBRLFromCents(parseBRLToCents(saleValueInput))); } catch {} }}
+                />
+              </label>
+              <p className={`rounded-lg px-3 py-2 text-xs ${isFinalStage ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                {isFinalStage ? 'Este valor já está sendo contabilizado na receita.' : 'Este valor só entra como receita quando o lead estiver na etapa final do funil.'}
+              </p>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs text-muted-foreground">{lead.saleValueUpdatedAt ? `Atualizado em ${formatDateTime(lead.saleValueUpdatedAt)}` : 'Nenhum valor salvo ainda.'}</div>
+                <Button size="sm" onClick={saveSaleValue} disabled={savingSaleValue}>{savingSaleValue ? 'Salvando...' : 'Salvar valor'}</Button>
+              </div>
+            </section>
+
+            <section className="rounded-xl border bg-white p-4">
             <div className="grid grid-cols-2 gap-4 pt-2">
               <div>
                 <div className="text-sm font-medium mb-2">Mover para etapa</div>
@@ -118,6 +174,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 </div>
               </div>
             </div>
+            </section>
           </TabsContent>
 
           <TabsContent value="answers" className="pb-6 space-y-3">
@@ -132,6 +189,14 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </TabsContent>
 
           <TabsContent value="history" className="pb-6 space-y-2">
+            {lead.saleValueAuditLogs?.map((log: any) => (
+              <div key={log.id} className="flex items-start gap-3 text-sm border-l-2 border-emerald-200 pl-3 py-1">
+                <div className="flex-1">
+                  <div className="font-medium">{log.metadata?.message || 'Valor vendido atualizado.'}</div>
+                  <div className="text-xs text-muted-foreground">Auditoria comercial • {formatDateTime(log.createdAt)}</div>
+                </div>
+              </div>
+            ))}
             {lead.history.map((h: any) => (
               <div key={h.id} className="flex items-start gap-3 text-sm border-l-2 border-brand-200 pl-3 py-1">
                 <div className="flex-1">

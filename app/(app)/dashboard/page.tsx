@@ -12,7 +12,7 @@ type ActivityBucket = { label: string; start: string; end: string; count: number
 type DashboardData = {
   executive: {
     activityPulse: { buckets: ActivityBucket[]; live: boolean; lastActivityAt?: string };
-    revenue: { current: number; previous: number | null; deltaPercent: number | null; hasRevenueSource: boolean };
+    revenue: { currentCents: number; previousCents: number | null; current: number; previous: number | null; deltaPercent: number | null; currency: 'BRL'; hasRevenueSource: boolean };
     openDeals: { current: number; previous: number | null; delta: number | null; deltaPercent: number | null };
     averageTimeToClose: { currentSeconds: number | null; previousSeconds: number | null; deltaSeconds: number | null };
     conversionRate: { current: number; previous: number | null; deltaPoints: number | null };
@@ -48,7 +48,7 @@ function formatDate(value: string | null) {
 function rate(value: number | null) { return value == null ? '—' : `${value}%`; }
 
 
-function money(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value); }
+function moneyFromCents(valueCents: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valueCents / 100); }
 function formatDuration(seconds: number | null) {
   if (seconds == null) return '—';
   if (seconds < 60) return `${seconds}s`;
@@ -72,7 +72,7 @@ function ExecutiveMetricCard({ title, value, hint, positive, icon: Icon }: { tit
 
 function ExecutiveTop({ data }: { data: DashboardData }) {
   const avgDelta = data.executive.averageTimeToClose.deltaSeconds;
-  return <section className="space-y-3"><TeamActivityPulse pulse={data.executive.activityPulse} /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><ExecutiveMetricCard title="Receita do mês" value={money(data.executive.revenue.current)} hint={data.executive.revenue.hasRevenueSource ? signed(data.executive.revenue.deltaPercent, '%') : 'Sem fonte de receita configurada'} icon={CircleDollarSign} /><ExecutiveMetricCard title="Negócios abertos" value={`${data.executive.openDeals.current} deals`} hint={signed(data.executive.openDeals.delta)} positive={(data.executive.openDeals.delta ?? 0) >= 0} icon={ClipboardList} /><ExecutiveMetricCard title="Tempo médio até fechamento" value={formatDuration(data.executive.averageTimeToClose.currentSeconds)} hint={avgDelta == null ? 'Sem base anterior' : `${avgDelta < 0 ? '↓ ' : '↑ '}${formatDuration(Math.abs(avgDelta))} vs. período anterior`} positive={avgDelta == null ? undefined : avgDelta <= 0} icon={Clock3} /><ExecutiveMetricCard title="Taxa de conversão" value={`${data.executive.conversionRate.current}%`} hint={signed(data.executive.conversionRate.deltaPoints, 'pp')} positive={(data.executive.conversionRate.deltaPoints ?? 0) >= 0} icon={TrendingUp} /></div></section>;
+  return <section className="space-y-3"><TeamActivityPulse pulse={data.executive.activityPulse} /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><ExecutiveMetricCard title="Receita do período" value={moneyFromCents(data.executive.revenue.currentCents)} hint={data.executive.revenue.hasRevenueSource ? signed(data.executive.revenue.deltaPercent, '%') : 'Sem fonte de receita configurada'} positive={(data.executive.revenue.deltaPercent ?? 0) >= 0} icon={CircleDollarSign} /><ExecutiveMetricCard title="Negócios abertos" value={`${data.executive.openDeals.current} deals`} hint={signed(data.executive.openDeals.delta)} positive={(data.executive.openDeals.delta ?? 0) >= 0} icon={ClipboardList} /><ExecutiveMetricCard title="Tempo médio até fechamento" value={formatDuration(data.executive.averageTimeToClose.currentSeconds)} hint={avgDelta == null ? 'Sem base anterior' : `${avgDelta < 0 ? '↓ ' : '↑ '}${formatDuration(Math.abs(avgDelta))} vs. período anterior`} positive={avgDelta == null ? undefined : avgDelta <= 0} icon={Clock3} /><ExecutiveMetricCard title="Taxa de conversão" value={`${data.executive.conversionRate.current}%`} hint={signed(data.executive.conversionRate.deltaPoints, 'pp')} positive={(data.executive.conversionRate.deltaPoints ?? 0) >= 0} icon={TrendingUp} /></div></section>;
 }
 
 function MetricCard({ title, value, hint, icon: Icon, tone = 'blue' }: { title: string; value: string | number; hint?: string; icon: any; tone?: 'blue' | 'green' | 'amber' | 'red' | 'purple' }) {

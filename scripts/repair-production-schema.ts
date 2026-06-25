@@ -153,6 +153,11 @@ const steps: Step[] = [
   { label: 'forms.tenant_pipeline.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_pipeline_id_idx ON forms(tenant_id, pipeline_id)` },
   { label: 'forms.tenant_active.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_is_active_idx ON forms(tenant_id, is_active)` },
 
+  { label: 'leads.sale_value_cents', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_cents INTEGER` },
+  { label: 'leads.sale_currency', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_currency TEXT NOT NULL DEFAULT 'BRL'` },
+  { label: 'leads.sale_value_updated_at', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP WITHOUT TIME ZONE` },
+  { label: 'leads.sale_value_updated_by', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_by TEXT` },
+
   {
     label: 'audit_logs.create',
     sql: `CREATE TABLE IF NOT EXISTS audit_logs (
