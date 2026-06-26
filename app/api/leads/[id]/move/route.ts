@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPermission, can, canMoveLead } from '@/lib/rbac-server';
+import { withPermission, canMoveLead } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { dispatchKanbanStageTracking } from '@/lib/tracking';
 
@@ -30,15 +30,28 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
       return NextResponse.json({ ok: true, trackingEvents: [] });
     }
 
+    const finalStage = await prisma.pipelineStage.findFirst({
+      where: { pipelineId: newStage.pipelineId, isArchived: false, pipeline: { tenantId: session.tenantId } },
+      orderBy: { orderIndex: 'desc' },
+      select: { id: true },
+    });
+    const isMovingToFinalStage = finalStage?.id === stageId;
+
     let newStatus = lead.status;
-    if (newStage.name === 'Ganho') newStatus = 'won';
-    else if (newStage.name === 'Perdido') newStatus = 'lost';
+    let newTemperature = lead.temperature;
+    let automationMessage: string | null = null;
+    if (isMovingToFinalStage) {
+      newStatus = 'won';
+      newTemperature = 'hot';
+      automationMessage = 'Lead marcado como ganho ao chegar na etapa final.';
+    } else if (newStage.name === 'Perdido') newStatus = 'lost';
+    else if (lead.status === 'won') newStatus = 'open';
     else newStatus = 'open';
 
     await prisma.$transaction([
       prisma.lead.update({
         where: { id: lead.id },
-        data: { stageId, status: newStatus },
+        data: { stageId, status: newStatus, temperature: newTemperature },
       }),
       prisma.leadStageHistory.create({
         data: { leadId: lead.id, fromStageId: lead.stageId, toStageId: stageId, changedBy: session.userId },
@@ -59,7 +72,7 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     await logAudit({
       tenantId: session.tenantId, userId: session.userId,
       entityType: 'lead', entityId: lead.id, action: 'lead.moved',
-      metadata: { fromStageId: lead.stageId, toStageId: stageId, newStatus },
+      metadata: { fromStageId: lead.stageId, toStageId: stageId, newStatus, newTemperature, message: automationMessage || undefined },
     });
 
     return NextResponse.json({ ok: true, trackingEvents });
