@@ -25,7 +25,7 @@ export const PATCH = withAuth(async (req: NextRequest, session, ctx: { params: {
 
   const previousValueCents = lead.saleValueCents ?? null;
   const newValueCents = parsed.data.saleValueCents;
-  const updatedLead = await prisma.lead.update({
+  const updatedLead = await (prisma.lead as any).update({
     where: { id: lead.id },
     data: {
       saleValueCents: newValueCents,

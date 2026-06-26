@@ -21,7 +21,7 @@ def test_dashboard_metrics_include_dynamic_funnel_projection_and_profiles():
     assert "Math.max(0, percent(previousCount - count, previousCount))" in metrics
     assert "advanceRate = index === 0 ? 100 : previousCount > 0" in metrics
     assert "projectionTotal" in metrics
-    assert "lead.stageId === finalStageId" in metrics
+    assert "isClosedLead(lead, finalStagesByPipeline)" in metrics
     assert "extractLeadLocation" in metrics
     assert "BRAZIL_STATES" in metrics
     assert "formsPerformance" in metrics
@@ -51,7 +51,7 @@ def test_dashboard_geo_and_final_stage_rules_are_present():
     assert "byState" in metrics
     assert "byCity" in metrics
     assert "Qualificados" or "qualified" in metrics
-    assert "finalStageId = stages.at(-1)?.id" in metrics
+    assert "finalStagesByPipeline.get(lead.pipelineId)" in metrics
     assert "lead.status === ('won' as LeadStatus)" in metrics
 
 
@@ -86,3 +86,23 @@ def test_dashboard_ui_has_executive_top_and_activity_pulse():
     assert "Tempo médio até fechamento" in page
     assert "Taxa de conversão" in page
     assert "vs. período anterior" in page
+
+
+def test_dashboard_counts_final_stage_by_pipeline_for_all_pipelines():
+    metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
+    assert "getPipelineStageMetrics(db, tenantId, pipelineId)" in metrics
+    assert "initialStagesByPipeline" in metrics
+    assert "finalStagesByPipeline" in metrics
+    assert "stageOrderByPipeline" in metrics
+    assert "const finalStageCount = filteredLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)).length" in metrics
+    assert "lead.status !== ('lost' as LeadStatus) && lead.stageId !== initial && lead.stageId !== final" in metrics
+    assert "formsPerformance" in metrics and "counts.final" in metrics
+
+
+def test_kanban_move_marks_final_stage_as_won_and_hot():
+    route = (ROOT / "app/api/leads/[id]/move/route.ts").read_text()
+    assert "orderBy: { orderIndex: 'desc' }" in route
+    assert "isMovingToFinalStage" in route
+    assert "newStatus = 'won'" in route
+    assert "newTemperature = 'hot'" in route
+    assert "Lead marcado como ganho ao chegar na etapa final." in route

@@ -144,7 +144,7 @@ function deltaPercent(current: number, previous: number | null) {
   return previous && previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
 }
 
-async function getFinalStages(db: Db, tenantId: string, pipelineId?: string) {
+export async function getFinalStages(db: Db, tenantId: string, pipelineId?: string) {
   const pipelines = pipelineId
     ? await db.pipeline.findMany({ where: { id: pipelineId, tenantId, isArchived: false }, select: { id: true } })
     : await db.pipeline.findMany({ where: { tenantId, isArchived: false }, select: { id: true } });
@@ -157,6 +157,38 @@ async function getFinalStages(db: Db, tenantId: string, pipelineId?: string) {
   const finalStages = new Map<string, string>();
   for (const stage of stages) if (!finalStages.has(stage.pipelineId)) finalStages.set(stage.pipelineId, stage.id);
   return finalStages;
+}
+
+async function getPipelineStageMetrics(db: Db, tenantId: string, pipelineId?: string) {
+  const where = pipelineId
+    ? { pipelineId, pipeline: { tenantId, isArchived: false }, isArchived: false }
+    : { pipeline: { tenantId, isArchived: false }, isArchived: false };
+  const stages = await db.pipelineStage.findMany({
+    where,
+    orderBy: [{ pipelineId: 'asc' }, { orderIndex: 'asc' }],
+    select: { id: true, pipelineId: true, orderIndex: true },
+  });
+  const initialStagesByPipeline = new Map<string, string>();
+  const finalStagesByPipeline = new Map<string, string>();
+  const stageOrderByPipeline = new Map<string, Map<string, number>>();
+  for (const stage of stages) {
+    if (!initialStagesByPipeline.has(stage.pipelineId)) initialStagesByPipeline.set(stage.pipelineId, stage.id);
+    finalStagesByPipeline.set(stage.pipelineId, stage.id);
+    const order = stageOrderByPipeline.get(stage.pipelineId) || new Map<string, number>();
+    order.set(stage.id, order.size);
+    stageOrderByPipeline.set(stage.pipelineId, order);
+  }
+  return { initialStagesByPipeline, finalStagesByPipeline, stageOrderByPipeline };
+}
+
+function isClosedLead(lead: { pipelineId: string; stageId: string; status: LeadStatus }, finalStagesByPipeline: Map<string, string>) {
+  const finalStageId = finalStagesByPipeline.get(lead.pipelineId);
+  return lead.stageId === finalStageId || lead.status === ('won' as LeadStatus);
+}
+
+function isQualifiedLead(lead: { pipelineId: string; stageId: string; status: LeadStatus; temperature: LeadTemperature }, finalStagesByPipeline: Map<string, string>, stageOrderByPipeline: Map<string, Map<string, number>>) {
+  const index = stageOrderByPipeline.get(lead.pipelineId)?.get(lead.stageId);
+  return (index != null && index > 0) || isClosedLead(lead, finalStagesByPipeline) || ['warm', 'hot'].includes(lead.temperature);
 }
 
 async function calculateRevenueForWindow(db: Db, params: ExecutiveMetricParams) {
@@ -180,7 +212,7 @@ async function calculateRevenueForWindow(db: Db, params: ExecutiveMetricParams) 
   });
   const closedByHistoryIds = closeHistories.map((history) => history.leadId);
 
-  const closedLeadWhere: Prisma.LeadWhereInput = {
+  const closedLeadWhere = {
     tenantId: params.tenantId,
     ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
     ...(params.formId ? { formId: params.formId } : {}),
@@ -189,12 +221,12 @@ async function calculateRevenueForWindow(db: Db, params: ExecutiveMetricParams) 
     OR: [
       ...(closedByHistoryIds.length ? [{ id: { in: closedByHistoryIds } }] : []),
       // Fallback para bases sem histórico confiável: leads já finais cujo valor foi atualizado no período.
-      { stageId: { in: finalStageIds }, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } },
-      { status: 'won' as LeadStatus, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } },
+      { stageId: { in: finalStageIds }, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } } as Prisma.LeadWhereInput,
+      { status: 'won' as LeadStatus, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } } as Prisma.LeadWhereInput,
     ],
-  };
+  } as Prisma.LeadWhereInput;
 
-  const result = await db.lead.aggregate({ where: closedLeadWhere, _sum: { saleValueCents: true } });
+  const result = await (db.lead as any).aggregate({ where: closedLeadWhere, _sum: { saleValueCents: true } });
   return result._sum.saleValueCents || 0;
 }
 
@@ -336,12 +368,18 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     db.lead.findMany({
       where: currentWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     }),
-    db.lead.count({ where: previousWhere }),
+    db.lead.findMany({
+      where: previousWhere,
+      select: {
+        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, createdAt: true,
+        answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
+      },
+    }),
     pipelineId ? db.pipelineStage.findMany({ where: { pipelineId, isArchived: false }, orderBy: { orderIndex: 'asc' }, select: { id: true, name: true, color: true, orderIndex: true } }) : Promise.resolve([]),
     db.pipeline.findMany({ where: { tenantId, isArchived: false }, select: { id: true, name: true }, orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }] }),
     db.form.findMany({ where: { tenantId, isActive: true }, select: { id: true, name: true, pipelineId: true }, orderBy: { name: 'asc' } }),
@@ -362,26 +400,31 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     return true;
   });
 
+  const previousLeadsWithLocation = previousLeads.map((lead) => ({ ...lead, location: extractLeadLocation(lead) }));
+  const filteredPreviousLeads = previousLeadsWithLocation.filter((lead) => {
+    if (selectedState && lead.location.state !== selectedState) return false;
+    if (selectedCity && normalizeText(lead.location.city || '') !== normalizeText(selectedCity)) return false;
+    return true;
+  });
+
   const total = filteredLeads.length;
   const newLeads = total;
   const stageOrder = new Map(stages.map((stage, index) => [stage.id, index]));
   const initialStageId = stages[0]?.id || selectedForm?.initialStageId;
   const finalStageId = stages.at(-1)?.id;
-  const finalStageCount = finalStageId ? filteredLeads.filter((lead) => lead.stageId === finalStageId).length : filteredLeads.filter((lead) => lead.status === ('won' as LeadStatus)).length;
-  const firstStageCount = initialStageId ? filteredLeads.filter((lead) => lead.stageId === initialStageId).length : 0;
-  const inProgress = stages.length > 2
-    ? filteredLeads.filter((lead) => {
-      const index = stageOrder.get(lead.stageId);
-      return index != null && index > 0 && index < stages.length - 1;
-    }).length
-    : Math.max(0, total - firstStageCount - finalStageCount);
-  const qualified = filteredLeads.filter((lead) => {
-    const index = stageOrder.get(lead.stageId);
-    return (index != null && index > 0) || lead.stageId === finalStageId || lead.status === ('won' as LeadStatus) || ['warm', 'hot'].includes(lead.temperature);
+  const { initialStagesByPipeline, finalStagesByPipeline, stageOrderByPipeline } = await getPipelineStageMetrics(db, tenantId, pipelineId);
+  const finalStageCount = filteredLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)).length;
+  const firstStageCount = filteredLeads.filter((lead) => lead.stageId === (initialStagesByPipeline.get(lead.pipelineId) || initialStageId)).length;
+  const inProgress = filteredLeads.filter((lead) => {
+    const initial = initialStagesByPipeline.get(lead.pipelineId) || initialStageId;
+    const final = finalStagesByPipeline.get(lead.pipelineId);
+    return lead.status !== ('lost' as LeadStatus) && lead.stageId !== initial && lead.stageId !== final;
   }).length;
+  const qualified = filteredLeads.filter((lead) => isQualifiedLead(lead, finalStagesByPipeline, stageOrderByPipeline)).length;
   const advancedCount = filteredLeads.filter((lead) => {
-    const index = stageOrder.get(lead.stageId);
-    return index != null ? index > 0 : lead.stageId !== initialStageId;
+    const index = stageOrderByPipeline.get(lead.pipelineId)?.get(lead.stageId);
+    const initial = initialStagesByPipeline.get(lead.pipelineId) || initialStageId;
+    return index != null ? index > 0 : lead.stageId !== initial;
   }).length;
 
   const byDayMap = new Map<string, number>();
@@ -404,7 +447,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
 
   const tempCounts = new Map<LeadTemperature | 'won', number>([['cold', 0], ['warm', 0], ['hot', 0], ['won', finalStageCount]]);
   for (const lead of filteredLeads) {
-    if (lead.stageId === finalStageId) tempCounts.set('hot', (tempCounts.get('hot') || 0) + 1);
+    if (isClosedLead(lead, finalStagesByPipeline)) tempCounts.set('hot', (tempCounts.get('hot') || 0) + 1);
     else tempCounts.set(lead.temperature, (tempCounts.get(lead.temperature) || 0) + 1);
   }
   const profileBase = [
@@ -440,14 +483,28 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const byState = Array.from(byStateMap.entries()).map(([state, leads]) => ({ state, label: BRAZIL_STATES[state], leads })).sort((a, b) => b.leads - a.leads);
   const byCity = Array.from(byCityMap.values()).filter((row) => !selectedState || row.state === selectedState).sort((a, b) => b.leads - a.leads).slice(0, 12);
 
+  const revenueCurrentCents = filteredLeads
+    .filter((lead) => isClosedLead(lead, finalStagesByPipeline))
+    .reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
+  const revenuePreviousCents = filteredPreviousLeads
+    .filter((lead) => isClosedLead(lead, finalStagesByPipeline))
+    .reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
+  executive.revenue = {
+    ...executive.revenue,
+    currentCents: revenueCurrentCents,
+    previousCents: revenuePreviousCents,
+    current: revenueCurrentCents / 100,
+    previous: revenuePreviousCents / 100,
+    deltaPercent: deltaPercent(revenueCurrentCents, revenuePreviousCents),
+  };
+
   const formLeadCounts = new Map<string, { total: number; final: number; qualified: number; lastLeadAt: Date | null }>();
   for (const lead of filteredLeads) {
     if (!lead.formId) continue;
     const current = formLeadCounts.get(lead.formId) || { total: 0, final: 0, qualified: 0, lastLeadAt: null };
     current.total += 1;
-    if (lead.stageId === finalStageId || lead.status === ('won' as LeadStatus)) current.final += 1;
-    const index = stageOrder.get(lead.stageId);
-    if ((index != null && index > 0) || ['warm', 'hot'].includes(lead.temperature) || lead.status === ('won' as LeadStatus)) current.qualified += 1;
+    if (isClosedLead(lead, finalStagesByPipeline)) current.final += 1;
+    if (isQualifiedLead(lead, finalStagesByPipeline, stageOrderByPipeline)) current.qualified += 1;
     if (!current.lastLeadAt || lead.createdAt > current.lastLeadAt) current.lastLeadAt = lead.createdAt;
     formLeadCounts.set(lead.formId, current);
   }
@@ -465,7 +522,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       conversionRate: percent(finalStageCount, total),
       advancementRate: percent(advancedCount, total),
       projectionTotal: period.period === 'today' ? null : Math.round(avg * period.totalDays),
-      variationVsPrevious: previousLeads > 0 ? percent(newLeads - previousLeads, previousLeads) : null,
+      variationVsPrevious: filteredPreviousLeads.length > 0 ? percent(newLeads - filteredPreviousLeads.length, filteredPreviousLeads.length) : null,
     },
     funnel: pipelineId ? { pipelineId, stages: stages.map((stage, index) => {
       const count = filteredLeads.filter((lead) => lead.stageId === stage.id).length;

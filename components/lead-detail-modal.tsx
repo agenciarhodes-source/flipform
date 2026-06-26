@@ -100,6 +100,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <DialogTitle className="font-heading text-xl flex items-center gap-2">
                 {lead.name}
                 <Badge style={{ backgroundColor: lead.stage.color }} className="text-white border-0">{lead.stage.name}</Badge>
+                {isFinalStage && <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Fechamento</Badge>}
               </DialogTitle>
               <div className="flex gap-3 text-xs text-muted-foreground mt-2">
                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
@@ -125,7 +126,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <h3 className="font-heading text-sm font-semibold">Informações do lead</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><div className="text-muted-foreground">Origem</div><div className="font-medium capitalize">{lead.source}</div></div>
-              <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{lead.status}</div></div>
+              <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{isFinalStage ? 'Ganho' : lead.status}</div></div>
               <div><div className="text-muted-foreground">Criado em</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
               <div><div className="text-muted-foreground">Última atualização</div><div className="font-medium">{formatDateTime(lead.updatedAt)}</div></div>
             </div>
