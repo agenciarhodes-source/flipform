@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="flipformGradient" x1="220" y1="160" x2="820" y2="860" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#123FB3"/>
+    </linearGradient>
+  </defs>
+
+  <path
+    d="M318 820V392C318 258 426 150 560 150H740"
+    stroke="url(#flipformGradient)"
+    stroke-width="112"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M512 150H760"
+    stroke="url(#flipformGradient)"
+    stroke-width="112"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <path
+    d="M382 500C410 458 458 432 512 432H664"
+    stroke="url(#flipformGradient)"
+    stroke-width="112"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>
