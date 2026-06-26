@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   FORMS_EDIT:           ['owner', 'admin', 'manager'] as RoleName[],
   FORMS_DELETE:         ['owner', 'admin'] as RoleName[],
   LEADS_VIEW:           ['owner', 'admin', 'manager', 'agent', 'viewer'] as RoleName[],
+  LEADS_CREATE:         ['owner', 'admin', 'manager', 'agent'] as RoleName[],
   LEADS_EDIT_ANY:       ['owner', 'admin', 'manager'] as RoleName[],
   LEADS_EDIT_ASSIGNED:  ['owner', 'admin', 'manager', 'agent'] as RoleName[],
   LEADS_MOVE:           ['owner', 'admin', 'manager', 'agent'] as RoleName[],

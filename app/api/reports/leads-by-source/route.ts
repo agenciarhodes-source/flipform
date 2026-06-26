@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { buildReportContext, validateFiltersBelongToTenant } from '@/lib/reports-helpers';
+import { formatLeadSource } from '@/lib/leads';
 
 export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -18,7 +19,7 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   });
   type SourceRow = { source: string; _count: { _all: number } };
   const data = (grouped as SourceRow[])
-    .map((g) => ({ source: g.source, count: g._count._all }))
+    .map((g) => ({ source: formatLeadSource(g.source), count: g._count._all }))
     .sort((a, b) => b.count - a.count);
   return NextResponse.json({ data });
 });

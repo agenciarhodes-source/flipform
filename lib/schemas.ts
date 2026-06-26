@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MANUAL_LEAD_SOURCE_VALUES } from './leads';
 
 export const registerSchema = z.object({
   companyName: z.string().min(2, 'Nome da empresa muito curto'),
@@ -72,12 +73,16 @@ export const formCreateSchema = z.object({
 });
 
 export const leadCreateSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional().nullable(),
+  name: z.string().min(1, 'Informe o nome do lead.'),
+  email: z.string().optional().nullable(),
   phone: z.string().optional().nullable(),
-  pipelineId: z.string(),
-  stageId: z.string(),
-  source: z.string().optional(),
+  source: z.string().refine((source) => MANUAL_LEAD_SOURCE_VALUES.includes(source as any), 'Selecione a origem do lead.'),
+  pipelineId: z.string().min(1, 'Selecione o pipeline.'),
+  stageId: z.string().min(1, 'Selecione a etapa.'),
+  assignedTo: z.string().optional().nullable(),
+  temperature: z.enum(['cold', 'warm', 'hot']).default('cold'),
+  saleValueCents: z.number().int().min(0).optional().nullable(),
+  notes: z.string().optional().nullable(),
 });
 
 export const publicSubmitSchema = z.object({

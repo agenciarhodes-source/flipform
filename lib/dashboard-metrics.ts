@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Prisma, type LeadStatus, type LeadTemperature, type PrismaClient } from '@prisma/client';
+import { formatLeadSource } from './leads';
 
 export const dashboardQuerySchema = z.object({
   period: z.enum(['today', '7d', '30d', 'custom']).default('30d'),
@@ -485,7 +486,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       const counts = formLeadCounts.get(form.id) || { total: 0, final: 0, qualified: 0, lastLeadAt: null };
       return { id: form.id, name: form.name, slug: form.slug, totalLeads: counts.total, conversionRate: percent(counts.final, counts.total), qualificationRate: percent(counts.qualified, counts.total), lastLeadAt: counts.lastLeadAt?.toISOString() || null, publicUrl: `/f/${form.slug}`, editUrl: `/forms/${form.id}` };
     }),
-    sources: sources.map((row) => ({ source: row.source || 'outro', count: row._count, percentage: percent(row._count, baseLeads.length) })).sort((a, b) => b.count - a.count),
+    sources: sources.map((row) => ({ source: formatLeadSource(row.source), count: row._count, percentage: percent(row._count, baseLeads.length) })).sort((a, b) => b.count - a.count),
     tasks: { pending: tasks[0], overdue: tasks[1], completedToday: tasks[2], mine: tasks[3], recommendations: [tasks[1] > 0 ? `${tasks[1]} tarefas vencidas` : null, (tempCounts.get('hot') || 0) > 0 ? `${tempCounts.get('hot')} leads quentes para priorizar` : null].filter(Boolean) },
   };
 }

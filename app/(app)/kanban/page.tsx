@@ -8,10 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
+import { ManualLeadDialog } from '@/components/manual-lead-dialog';
+import { formatLeadSource } from '@/lib/leads';
 
 interface Stage { id: string; name: string; color: string; orderIndex: number; isArchived?: boolean; }
 interface Pipeline { id: string; name: string; isDefault: boolean; isArchived: boolean; stages: Stage[]; }
@@ -82,7 +84,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
       </div>
       <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/60 gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge variant="secondary" className="text-[10px] py-0 h-4 capitalize">{lead.source}</Badge>
+          <Badge variant="secondary" className="text-[10px] py-0 h-4">{formatLeadSource(lead.source)}</Badge>
           <TaskBadge ind={taskInd} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -123,6 +125,7 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [horizontalOffset, setHorizontalOffset] = useState(0);
   const [maxOffset, setMaxOffset] = useState(0);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -219,9 +222,12 @@ export default function KanbanPage() {
             </Button>
           </div>
         </div>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Button type="button" onClick={() => setManualOpen(true)} disabled={!pipelineId}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar lead por nome, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
         </div>
       </div>
       <div className="w-full flex-1 min-h-0 overflow-hidden p-4 lg:p-6">
@@ -268,6 +274,7 @@ export default function KanbanPage() {
           </DndContext>
         )}
       </div>
+      <ManualLeadDialog open={manualOpen} onOpenChange={setManualOpen} pipelines={pipelines} defaultPipelineId={pipelineId} onCreated={loadLeads} />
       {selectedLeadId && (
         <LeadDetailModal
           leadId={selectedLeadId}
