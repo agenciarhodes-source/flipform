@@ -4,15 +4,20 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Mail, Phone, Flame, Snowflake, Thermometer } from 'lucide-react';
+import { Search, Mail, Phone, Flame, Snowflake, Thermometer, Plus } from 'lucide-react';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { formatDate } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { ManualLeadDialog } from '@/components/manual-lead-dialog';
+import { formatLeadSource } from '@/lib/leads';
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
+  const [pipelines, setPipelines] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const load = async () => {
     const [l, p] = await Promise.all([
@@ -20,6 +25,7 @@ export default function LeadsPage() {
       fetch('/api/pipelines').then((r) => r.json()),
     ]);
     setLeads(l.leads);
+    setPipelines(p.pipelines || []);
     setStages(p.pipelines[0]?.stages || []);
   };
   useEffect(() => { load(); }, []);
@@ -34,9 +40,12 @@ export default function LeadsPage() {
           <h1 className="font-heading text-2xl lg:text-3xl font-bold">Leads</h1>
           <p className="text-muted-foreground text-sm">{leads.length} leads encontrados</p>
         </div>
-        <div className="relative w-72">
+        <div className="flex items-center gap-2">
+          <Button type="button" onClick={() => setManualOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
+          <div className="relative w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
         </div>
       </div>
       <Card className="overflow-hidden">
@@ -63,7 +72,7 @@ export default function LeadsPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3"><Badge style={{ backgroundColor: l.stage.color }} className="text-white border-0">{l.stage.name}</Badge></td>
-                <td className="px-4 py-3 capitalize text-muted-foreground">{l.source}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatLeadSource(l.source)}</td>
                 <td className="px-4 py-3">{l.assignedUser?.name || '—'}</td>
                 <td className="px-4 py-3">{tempIcon(l.temperature)}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(l.createdAt)}</td>
@@ -73,6 +82,7 @@ export default function LeadsPage() {
           </tbody>
         </table>
       </Card>
+      <ManualLeadDialog open={manualOpen} onOpenChange={setManualOpen} pipelines={pipelines} onCreated={load} />
       {selectedId && <LeadDetailModal leadId={selectedId} stages={stages} onClose={() => setSelectedId(null)} onChange={load} />}
     </div>
   );
