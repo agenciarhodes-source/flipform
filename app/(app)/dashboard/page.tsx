@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 
 type ProfileItem = { key: string; label: string; count: number; percentage: number; color: string };
 type ActivityBucket = { label: string; start: string; end: string; count: number; intensity: number };
+type DashboardFinancial = { revenue: any; firstPurchaseRevenue: any; recurringRevenue: any; purchases: { current: number; previous: number; delta: number; deltaPercent: number | null }; buyingCustomers: { current: number; previous: number; delta: number; deltaPercent: number | null }; recurringCustomers: { current: number; previous: number; delta: number; deltaPercent: number | null }; repurchaseRate: { current: number; previous: number; deltaPoints: number | null }; averageTicket: { currentCents: number; previousCents: number; deltaPercent: number | null }; averageLtv: { currentCents: number; previousCents: number; deltaPercent: number | null } };
 type DashboardData = {
   executive: {
     activityPulse: { buckets: ActivityBucket[]; live: boolean; lastActivityAt?: string };
     revenue: { currentCents: number; previousCents: number | null; current: number; previous: number | null; deltaPercent: number | null; currency: 'BRL'; hasRevenueSource: boolean };
+    financial: DashboardFinancial;
     openDeals: { current: number; previous: number | null; delta: number | null; deltaPercent: number | null };
     averageTimeToClose: { currentSeconds: number | null; previousSeconds: number | null; deltaSeconds: number | null };
     conversionRate: { current: number; previous: number | null; deltaPoints: number | null };
@@ -29,6 +31,7 @@ type DashboardData = {
   summary: { totalLeads: number; newLeads: number; inProgress: number; qualified: number; won: number; conversionRate: number; advancementRate: number; projectionTotal: number | null; variationVsPrevious: number | null };
   funnel: null | { pipelineId: string; stages: { id: string; name: string; color: string; count: number; percentage: number; advanceRate: number | null; dropOffRate: number | null; isFinal: boolean }[] };
   leadsByDay: { date: string; label: string; real: number; projected: number }[];
+  revenueByDay: { date: string; label: string; amountCents: number }[];
   projection: { total: number | null; averagePerDay: number };
   profile: { temperature: ProfileItem[]; status: ProfileItem[] };
   leadProfile: ProfileItem[];
@@ -38,7 +41,7 @@ type DashboardData = {
   tasks: { pending: number; overdue: number; completedToday: number; mine: number; recommendations: string[] };
 };
 
-const periodOptions = [{ value: 'today', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }] as const;
+const periodOptions = [{ value: 'today', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }] as const;
 const mapPositions: Record<string, { x: number; y: number }> = { AC: { x: 12, y: 45 }, AM: { x: 24, y: 32 }, RR: { x: 32, y: 16 }, RO: { x: 28, y: 52 }, PA: { x: 47, y: 33 }, AP: { x: 53, y: 18 }, MT: { x: 45, y: 58 }, MS: { x: 50, y: 75 }, GO: { x: 58, y: 62 }, DF: { x: 62, y: 61 }, TO: { x: 60, y: 48 }, MA: { x: 69, y: 40 }, PI: { x: 75, y: 46 }, CE: { x: 82, y: 42 }, RN: { x: 89, y: 44 }, PB: { x: 87, y: 49 }, PE: { x: 84, y: 53 }, AL: { x: 83, y: 58 }, SE: { x: 80, y: 62 }, BA: { x: 72, y: 63 }, MG: { x: 66, y: 76 }, ES: { x: 76, y: 78 }, RJ: { x: 71, y: 84 }, SP: { x: 61, y: 84 }, PR: { x: 58, y: 92 }, SC: { x: 62, y: 97 }, RS: { x: 55, y: 102 } };
 
 function formatDate(value: string | null) {
@@ -75,6 +78,11 @@ function ExecutiveTop({ data }: { data: DashboardData }) {
   return <section className="space-y-3"><TeamActivityPulse pulse={data.executive.activityPulse} /><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4"><ExecutiveMetricCard title="Receita do período" value={moneyFromCents(data.executive.revenue.currentCents)} hint={data.executive.revenue.hasRevenueSource ? signed(data.executive.revenue.deltaPercent, '%') : 'Sem fonte de receita configurada'} positive={(data.executive.revenue.deltaPercent ?? 0) >= 0} icon={CircleDollarSign} /><ExecutiveMetricCard title="Negócios abertos" value={`${data.executive.openDeals.current} deals`} hint={signed(data.executive.openDeals.delta)} positive={(data.executive.openDeals.delta ?? 0) >= 0} icon={ClipboardList} /><ExecutiveMetricCard title="Tempo médio até fechamento" value={formatDuration(data.executive.averageTimeToClose.currentSeconds)} hint={avgDelta == null ? 'Sem base anterior' : `${avgDelta < 0 ? '↓ ' : '↑ '}${formatDuration(Math.abs(avgDelta))} vs. período anterior`} positive={avgDelta == null ? undefined : avgDelta <= 0} icon={Clock3} /><ExecutiveMetricCard title="Taxa de conversão" value={`${data.executive.conversionRate.current}%`} hint={signed(data.executive.conversionRate.deltaPoints, 'pp')} positive={(data.executive.conversionRate.deltaPoints ?? 0) >= 0} icon={TrendingUp} /></div></section>;
 }
 
+function FinancialPanel({ data }: { data: DashboardData }) {
+  const financial = data.executive.financial;
+  return <Card className="p-4"><div className="mb-3"><h2 className="font-heading text-base font-semibold">Financeiro do período</h2><p className="text-xs text-muted-foreground">Receita baseada em compras registradas, com fallback seguro para valor vendido legado.</p></div><div className="grid grid-cols-2 gap-3 lg:grid-cols-4"><MetricCard title="Compras" value={financial.purchases.current} hint={signed(financial.purchases.delta)} icon={CircleDollarSign} tone="green" /><MetricCard title="Ticket médio" value={moneyFromCents(financial.averageTicket.currentCents)} hint={signed(financial.averageTicket.deltaPercent, '%')} icon={TrendingUp} /><MetricCard title="Receita recorrente" value={moneyFromCents(financial.recurringRevenue.currentCents)} hint={signed(financial.recurringRevenue.deltaPercent, '%')} icon={RefreshCw} tone="purple" /><MetricCard title="Taxa de recompra" value={`${financial.repurchaseRate.current}%`} hint={signed(financial.repurchaseRate.deltaPoints, 'pp')} icon={Users} tone="amber" /></div><div className="mt-4"><h3 className="text-sm font-semibold">Receita por dia</h3><ResponsiveContainer width="100%" height={220}><BarChart data={data.revenueByDay}><CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => moneyFromCents(Number(value))} /><Tooltip formatter={(value) => moneyFromCents(Number(value))} /><Bar dataKey="amountCents" name="Receita" fill="#10B981" radius={[8, 8, 0, 0]} /></BarChart></ResponsiveContainer></div></Card>;
+}
+
 function MetricCard({ title, value, hint, icon: Icon, tone = 'blue' }: { title: string; value: string | number; hint?: string; icon: any; tone?: 'blue' | 'green' | 'amber' | 'red' | 'purple' }) {
   const tones = { blue: 'from-blue-50 to-sky-50 text-blue-700 border-blue-100', green: 'from-emerald-50 to-green-50 text-emerald-700 border-emerald-100', amber: 'from-amber-50 to-orange-50 text-amber-700 border-amber-100', red: 'from-rose-50 to-red-50 text-rose-700 border-rose-100', purple: 'from-violet-50 to-purple-50 text-violet-700 border-violet-100' }[tone];
   return <Card className="min-h-[94px] border bg-white p-3 shadow-sm"><div className="flex items-start justify-between gap-2"><div><p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{title}</p><p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>{hint && <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>}</div><div className={`rounded-xl border bg-gradient-to-br p-2 ${tones}`}><Icon className="h-4 w-4" /></div></div></Card>;
@@ -88,7 +96,9 @@ function GeoPanel({ data, state, setState, city, setCity }: { data: DashboardDat
 }
 
 export default function DashboardPage() {
-  const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
+  const [period, setPeriod] = useState<'today' | '7d' | '30d' | 'custom'>('30d');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [pipelineId, setPipelineId] = useState('');
   const [formId, setFormId] = useState('');
   const [state, setState] = useState('');
@@ -103,22 +113,24 @@ export default function DashboardPage() {
     const timeout = setTimeout(() => controller.abort(), 15000);
     setLoading(true); setError('');
     const params = new URLSearchParams({ period });
+    if (period === 'custom') { if (startDate) params.set('startDate', startDate); if (endDate) params.set('endDate', endDate); }
     if (pipelineId) params.set('pipelineId', pipelineId);
     if (formId) params.set('formId', formId);
     if (state) params.set('state', state);
     if (city) params.set('city', city);
+    window.history.replaceState(null, '', `/dashboard?${params.toString()}`);
     fetch(`/api/dashboard?${params.toString()}`, { signal: controller.signal }).then(async (response) => {
       if (!response.ok) throw new Error((await response.json()).error || 'Erro ao carregar dashboard');
       return response.json();
     }).then(setData).catch((err) => { if (err.name !== 'AbortError') setError('Não foi possível carregar o dashboard.'); else setError('Não foi possível carregar o dashboard.'); }).finally(() => { clearTimeout(timeout); setLoading(false); });
     return () => { clearTimeout(timeout); controller.abort(); };
-  }, [period, pipelineId, formId, state, city, retry]);
+  }, [period, startDate, endDate, pipelineId, formId, state, city, retry]);
 
   const hasData = (data?.summary.totalLeads || 0) > 0;
   const formOptions = useMemo(() => data?.filters.forms.filter((form) => !pipelineId || form.pipelineId === pipelineId) || [], [data, pipelineId]);
 
   return <div className="space-y-4 p-3 lg:p-5 animate-fade-in">
-    <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-brand-900 to-blue-700 p-4 text-white shadow-lg"><div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/20"><BarChart3 className="h-3 w-3" /> Dashboard executivo</div><h1 className="font-heading text-2xl font-bold">Dashboard</h1><p className="mt-1 text-xs text-blue-100">Leads, funil e desempenho comercial.</p></div><div className="grid gap-2 rounded-xl bg-white/10 p-2 ring-1 ring-white/20 sm:grid-cols-5"><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Período</span><select value={period} onChange={(e) => setPeriod(e.target.value as any)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900">{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Pipeline</span><select value={pipelineId} onChange={(e) => { setPipelineId(e.target.value); setFormId(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.filters.pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Formulário</span><select value={formId} onChange={(e) => setFormId(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{formOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Estado</span><select value={state} onChange={(e) => { setState(e.target.value); setCity(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.geo.byState.map((s) => <option key={s.state} value={s.state}>{s.state}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Cidade</span><select value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">Todas</option>{data?.geo.byCity.map((c) => <option key={`${c.state}-${c.city}`} value={c.city}>{c.city}</option>)}</select></label></div></div></div>
+    <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-brand-900 to-blue-700 p-4 text-white shadow-lg"><div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/20"><BarChart3 className="h-3 w-3" /> Dashboard executivo</div><h1 className="font-heading text-2xl font-bold">Dashboard</h1><p className="mt-1 text-xs text-blue-100">Leads, funil e desempenho comercial.</p></div><div className="grid gap-2 rounded-xl bg-white/10 p-2 ring-1 ring-white/20 sm:grid-cols-5 xl:grid-cols-7"><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Período</span><select value={period} onChange={(e) => setPeriod(e.target.value as any)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900">{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>{period === 'custom' && <><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data inicial</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data final</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label></>}<label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Pipeline</span><select value={pipelineId} onChange={(e) => { setPipelineId(e.target.value); setFormId(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.filters.pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Formulário</span><select value={formId} onChange={(e) => setFormId(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{formOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Estado</span><select value={state} onChange={(e) => { setState(e.target.value); setCity(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.geo.byState.map((s) => <option key={s.state} value={s.state}>{s.state}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Cidade</span><select value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">Todas</option>{data?.geo.byCity.map((c) => <option key={`${c.state}-${c.city}`} value={c.city}>{c.city}</option>)}</select></label></div></div></div>
 
     {loading && <Skeleton />}
     {error && <Card className="flex items-center justify-between gap-3 border-red-200 bg-red-50 p-4 text-red-700"><span className="flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</span><Button size="sm" variant="outline" onClick={() => setRetry((value) => value + 1)}><RefreshCw className="mr-2 h-3.5 w-3.5" />Tentar novamente</Button></Card>}
@@ -126,6 +138,8 @@ export default function DashboardPage() {
 
     {data && !error && <>
       <ExecutiveTop data={data} />
+
+      <FinancialPanel data={data} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7"><MetricCard title="Total de leads" value={data.summary.totalLeads} icon={Users} hint={data.summary.variationVsPrevious == null ? 'Sem base anterior' : `${data.summary.variationVsPrevious > 0 ? '+' : ''}${data.summary.variationVsPrevious}% vs anterior`} /><MetricCard title="Novos no período" value={data.summary.newLeads} icon={UserPlus} /><MetricCard title="Em atendimento" value={data.summary.inProgress} icon={ClipboardList} tone="amber" /><MetricCard title="Qualificados" value={data.summary.qualified} icon={Flame} tone="purple" /><MetricCard title="Fechamentos" value={data.summary.won} icon={Trophy} tone="green" /><MetricCard title="Conversão" value={`${data.summary.conversionRate}%`} icon={TrendingUp} tone="green" /><MetricCard title="Taxa de avanço" value={`${data.summary.advancementRate}%`} icon={Target} /></div>
 

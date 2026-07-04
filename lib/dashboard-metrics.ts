@@ -11,6 +11,13 @@ export const dashboardQuerySchema = z.object({
   formId: z.string().uuid().optional(),
   state: z.string().trim().min(2).max(30).optional(),
   city: z.string().trim().min(1).max(80).optional(),
+}).superRefine((value, ctx) => {
+  if (value.period !== 'custom') return;
+  if (!value.startDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Data inicial obrigatória para período personalizado.' });
+  if (!value.endDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endDate'], message: 'Data final obrigatória para período personalizado.' });
+  if (value.startDate && value.endDate && startOfDay(new Date(value.startDate)) > startOfDay(new Date(value.endDate))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endDate'], message: 'Data final deve ser maior ou igual à data inicial.' });
+  }
 });
 
 type DashboardParams = z.infer<typeof dashboardQuerySchema>;
@@ -115,7 +122,7 @@ export function resolveDashboardPeriod(params: DashboardParams, now = new Date()
   }
   const startDate = params.startDate ? startOfDay(new Date(params.startDate)) : startOfDay(new Date(now.getTime() - 29 * DAY_MS));
   const endDate = params.endDate ? endOfDay(new Date(params.endDate)) : endOfDay(now);
-  const totalDays = Math.max(1, Math.ceil((endOfDay(endDate).getTime() - startOfDay(startDate).getTime()) / DAY_MS));
+  const totalDays = Math.max(1, Math.floor((endOfDay(endDate).getTime() - startOfDay(startDate).getTime()) / DAY_MS) + 1);
   return { period: 'custom', startDate, endDate, totalDays };
 }
 
@@ -139,6 +146,87 @@ type ExecutiveMetricParams = {
   startDate: Date;
   endDate: Date;
 };
+
+function metricDelta(current: number, previous: number) {
+  return { current, previous, delta: current - previous, deltaPercent: deltaPercent(current, previous) };
+}
+
+async function getPurchasesForWindow(db: Db, params: ExecutiveMetricParams) {
+  return (db as any).leadPurchase.findMany({
+    where: {
+      tenantId: params.tenantId,
+      purchaseDate: { gte: params.startDate, lte: params.endDate },
+      lead: {
+        tenantId: params.tenantId,
+        ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
+        ...(params.formId ? { formId: params.formId } : {}),
+        ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
+      },
+    },
+    include: { lead: { select: { id: true } } },
+    orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
+  });
+}
+
+async function calculateFinancialMetricsForWindow(db: Db, params: ExecutiveMetricParams) {
+  const purchases = await getPurchasesForWindow(db, params);
+  const leadIds: string[] = Array.from(new Set((purchases as any[]).map((purchase: any) => String(purchase.leadId))));
+  const historical = leadIds.length ? await (db as any).leadPurchase.findMany({ where: { tenantId: params.tenantId, leadId: { in: leadIds } }, orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }], select: { id: true, leadId: true, amountCents: true, purchaseDate: true, createdAt: true } }) : [];
+  const firstPurchaseByLead = new Map<string, string>();
+  const totalByLead = new Map<string, number>();
+  const countByLead = new Map<string, number>();
+  for (const purchase of historical as any[]) {
+    if (!firstPurchaseByLead.has(purchase.leadId)) firstPurchaseByLead.set(purchase.leadId, purchase.id);
+    totalByLead.set(purchase.leadId, (totalByLead.get(purchase.leadId) || 0) + purchase.amountCents);
+    countByLead.set(purchase.leadId, (countByLead.get(purchase.leadId) || 0) + 1);
+  }
+  const revenueCents = purchases.reduce((sum: number, purchase: any) => sum + purchase.amountCents, 0);
+  const firstPurchaseRevenueCents = purchases.filter((purchase: any) => firstPurchaseByLead.get(purchase.leadId) === purchase.id).reduce((sum: number, purchase: any) => sum + purchase.amountCents, 0);
+  const recurringRevenueCents = revenueCents - firstPurchaseRevenueCents;
+  const recurringCustomers = leadIds.filter((id) => (countByLead.get(id) || 0) > 1).length;
+  const historicalLtvCents = leadIds.reduce((sum: number, id: string) => sum + (totalByLead.get(id) || 0), 0);
+
+  const fallbackLeads = await db.lead.findMany({
+    where: {
+      tenantId: params.tenantId,
+      ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
+      ...(params.formId ? { formId: params.formId } : {}),
+      ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
+      saleValueCents: { gt: 0 },
+      saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate },
+      purchases: { none: {} },
+    },
+    select: { id: true, saleValueCents: true },
+  });
+  const fallbackRevenueCents = fallbackLeads.reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
+
+  return {
+    revenueCents: revenueCents + fallbackRevenueCents,
+    firstPurchaseRevenueCents: firstPurchaseRevenueCents + fallbackRevenueCents,
+    recurringRevenueCents,
+    purchases: purchases.length + fallbackLeads.length,
+    buyingCustomers: new Set([...leadIds, ...fallbackLeads.map((lead) => lead.id)]).size,
+    recurringCustomers,
+    repurchaseRate: leadIds.length || fallbackLeads.length ? Math.round((recurringCustomers / (leadIds.length + fallbackLeads.length)) * 1000) / 10 : 0,
+    averageTicketCents: purchases.length + fallbackLeads.length ? Math.round((revenueCents + fallbackRevenueCents) / (purchases.length + fallbackLeads.length)) : 0,
+    averageLtvCents: leadIds.length + fallbackLeads.length ? Math.round((historicalLtvCents + fallbackRevenueCents) / (leadIds.length + fallbackLeads.length)) : 0,
+  };
+}
+
+export async function calculateFinancialMetrics(db: Db, current: ExecutiveMetricParams, previous: ExecutiveMetricParams) {
+  const [cur, prev] = await Promise.all([calculateFinancialMetricsForWindow(db, current), calculateFinancialMetricsForWindow(db, previous)]);
+  return {
+    revenue: { currentCents: cur.revenueCents, previousCents: prev.revenueCents, deltaPercent: deltaPercent(cur.revenueCents, prev.revenueCents) },
+    firstPurchaseRevenue: { currentCents: cur.firstPurchaseRevenueCents, previousCents: prev.firstPurchaseRevenueCents, deltaPercent: deltaPercent(cur.firstPurchaseRevenueCents, prev.firstPurchaseRevenueCents) },
+    recurringRevenue: { currentCents: cur.recurringRevenueCents, previousCents: prev.recurringRevenueCents, deltaPercent: deltaPercent(cur.recurringRevenueCents, prev.recurringRevenueCents) },
+    purchases: metricDelta(cur.purchases, prev.purchases),
+    buyingCustomers: metricDelta(cur.buyingCustomers, prev.buyingCustomers),
+    recurringCustomers: metricDelta(cur.recurringCustomers, prev.recurringCustomers),
+    repurchaseRate: { current: cur.repurchaseRate, previous: prev.repurchaseRate, deltaPoints: Math.round((cur.repurchaseRate - prev.repurchaseRate) * 10) / 10 },
+    averageTicket: { currentCents: cur.averageTicketCents, previousCents: prev.averageTicketCents, deltaPercent: deltaPercent(cur.averageTicketCents, prev.averageTicketCents) },
+    averageLtv: { currentCents: cur.averageLtvCents, previousCents: prev.averageLtvCents, deltaPercent: deltaPercent(cur.averageLtvCents, prev.averageLtvCents) },
+  };
+}
 
 function deltaPercent(current: number, previous: number | null) {
   return previous && previous > 0 ? Math.round(((current - previous) / previous) * 1000) / 10 : null;
@@ -310,9 +398,9 @@ async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string 
   const previous = previousWindow(params.period.startDate, params.period.totalDays);
   const currentArgs = { tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo, startDate: params.period.startDate, endDate: params.period.endDate };
   const previousArgs = { ...currentArgs, startDate: previous.start, endDate: previous.end };
-  const [activityPulse, revenue, openDealsCurrent, openDealsPrevious, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
+  const [activityPulse, financial, openDealsCurrent, openDealsPrevious, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
     getActivityPulseLast24h(db, { tenantId, assignedTo }),
-    calculateRevenue(db, currentArgs, previousArgs),
+    calculateFinancialMetrics(db, currentArgs, previousArgs),
     calculateOpenDeals(db, currentArgs),
     calculateOpenDeals(db, previousArgs),
     calculateAverageTimeToClose(db, currentArgs),
@@ -322,7 +410,8 @@ async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string 
   ]);
   return {
     activityPulse,
-    revenue,
+    revenue: { ...financial.revenue, current: financial.revenue.currentCents / 100, previous: financial.revenue.previousCents / 100, currency: 'BRL' as const, hasRevenueSource: true },
+    financial,
     openDeals: { current: openDealsCurrent, previous: openDealsPrevious, delta: openDealsCurrent - openDealsPrevious, deltaPercent: deltaPercent(openDealsCurrent, openDealsPrevious) },
     averageTimeToClose: { currentSeconds: avgCloseCurrent, previousSeconds: avgClosePrevious, deltaSeconds: avgCloseCurrent != null && avgClosePrevious != null ? avgCloseCurrent - avgClosePrevious : null },
     conversionRate: { current: conversionCurrent, previous: conversionPrevious, deltaPoints: conversionPrevious != null ? Math.round((conversionCurrent - conversionPrevious) * 10) / 10 : null },
@@ -483,20 +572,14 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const byState = Array.from(byStateMap.entries()).map(([state, leads]) => ({ state, label: BRAZIL_STATES[state], leads })).sort((a, b) => b.leads - a.leads);
   const byCity = Array.from(byCityMap.values()).filter((row) => !selectedState || row.state === selectedState).sort((a, b) => b.leads - a.leads).slice(0, 12);
 
-  const revenueCurrentCents = filteredLeads
-    .filter((lead) => isClosedLead(lead, finalStagesByPipeline))
-    .reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
-  const revenuePreviousCents = filteredPreviousLeads
-    .filter((lead) => isClosedLead(lead, finalStagesByPipeline))
-    .reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
-  executive.revenue = {
-    ...executive.revenue,
-    currentCents: revenueCurrentCents,
-    previousCents: revenuePreviousCents,
-    current: revenueCurrentCents / 100,
-    previous: revenuePreviousCents / 100,
-    deltaPercent: deltaPercent(revenueCurrentCents, revenuePreviousCents),
-  };
+  const revenueByDayMap = new Map(byDayMap);
+  const periodPurchases = await getPurchasesForWindow(db, { tenantId, pipelineId, formId, assignedTo: agentScope, startDate: period.startDate, endDate: period.endDate });
+  for (const purchase of periodPurchases as any[]) {
+    const key = purchase.purchaseDate.toISOString().slice(0, 10);
+    revenueByDayMap.set(key, (revenueByDayMap.get(key) || 0) + purchase.amountCents);
+  }
+  const revenueByDay = Array.from(revenueByDayMap.entries()).map(([date, amountCents]) => ({ date, label: formatChartDateBR(date), amountCents }));
+
 
   const formLeadCounts = new Map<string, { total: number; final: number; qualified: number; lastLeadAt: Date | null }>();
   for (const lead of filteredLeads) {
@@ -532,6 +615,8 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       return { ...stage, count, percentage: percent(count, total), advanceRate, dropOffRate, isFinal: index === stages.length - 1 };
     }) } : null,
     leadsByDay,
+    revenueByDay,
+    financial: executive.financial,
     projection: { total: period.period === 'today' ? null : Math.round(avg * period.totalDays), averagePerDay: Math.round(avg * 10) / 10 },
     profile: {
       temperature: profileBase.map((row) => ({ ...row, percentage: percent(row.count, profileTotal) })),
