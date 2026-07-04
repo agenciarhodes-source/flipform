@@ -109,6 +109,7 @@ model Tenant {
   trackingEventLogs     TrackingEventLog[]
   whatsappEventTriggers WhatsAppEventTrigger[]
   customFormDomains    CustomFormDomain[]
+  leadPurchases        LeadPurchase[]
 
   @@map("tenants")
 }
@@ -304,6 +305,7 @@ model Lead {
   history      LeadStageHistory[]
   notes        Note[]
   tasks        Task[]
+  purchases    LeadPurchase[]
 
   @@index([tenantId])
   @@index([stageId])
@@ -313,6 +315,31 @@ model Lead {
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
   @@map("leads")
+}
+
+model LeadPurchase {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  leadId        String   @map("lead_id")
+  amountCents   Int      @map("amount_cents")
+  currency      String   @default("BRL")
+  purchaseDate  DateTime @map("purchase_date")
+  orderNumber   String?  @map("order_number")
+  paymentMethod String?  @map("payment_method")
+  notes         String?
+  createdBy     String?  @map("created_by")
+  updatedBy     String?  @map("updated_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([leadId])
+  @@index([tenantId, purchaseDate])
+  @@index([tenantId, leadId, purchaseDate])
+  @@map("lead_purchases")
 }
 
 model LeadAnswer {

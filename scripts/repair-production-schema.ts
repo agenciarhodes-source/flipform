@@ -453,6 +453,29 @@ END $$;`,
   },
 ];
 
+
+steps.push(
+  { label: 'lead_purchases.table', sql: `CREATE TABLE IF NOT EXISTS public.lead_purchases (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, lead_id TEXT NOT NULL, amount_cents INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'BRL', purchase_date TIMESTAMP(3) NOT NULL, order_number TEXT, payment_method TEXT, notes TEXT, created_by TEXT, updated_by TEXT, created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP)` },
+  { label: 'lead_purchases.id', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS id TEXT` },
+  { label: 'lead_purchases.tenant_id', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS tenant_id TEXT` },
+  { label: 'lead_purchases.lead_id', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS lead_id TEXT` },
+  { label: 'lead_purchases.amount_cents', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS amount_cents INTEGER` },
+  { label: 'lead_purchases.currency', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'BRL'` },
+  { label: 'lead_purchases.purchase_date', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS purchase_date TIMESTAMP(3)` },
+  { label: 'lead_purchases.order_number', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS order_number TEXT` },
+  { label: 'lead_purchases.payment_method', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS payment_method TEXT` },
+  { label: 'lead_purchases.notes', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS notes TEXT` },
+  { label: 'lead_purchases.created_by', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS created_by TEXT` },
+  { label: 'lead_purchases.updated_by', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS updated_by TEXT` },
+  { label: 'lead_purchases.created_at', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP` },
+  { label: 'lead_purchases.updated_at', sql: `ALTER TABLE public.lead_purchases ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP` },
+  { label: 'lead_purchases.tenant.index', sql: `CREATE INDEX IF NOT EXISTS lead_purchases_tenant_id_idx ON public.lead_purchases(tenant_id)` },
+  { label: 'lead_purchases.lead.index', sql: `CREATE INDEX IF NOT EXISTS lead_purchases_lead_id_idx ON public.lead_purchases(lead_id)` },
+  { label: 'lead_purchases.tenant_date.index', sql: `CREATE INDEX IF NOT EXISTS lead_purchases_tenant_purchase_date_idx ON public.lead_purchases(tenant_id, purchase_date)` },
+  { label: 'lead_purchases.tenant_lead_date.index', sql: `CREATE INDEX IF NOT EXISTS lead_purchases_tenant_lead_purchase_date_idx ON public.lead_purchases(tenant_id, lead_id, purchase_date)` },
+  { label: 'lead_purchases.fkeys', sql: `DO $$ BEGIN IF to_regclass('public.tenants') IS NOT NULL AND to_regclass('public.lead_purchases') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_purchases_tenant_id_fkey') THEN ALTER TABLE public.lead_purchases ADD CONSTRAINT lead_purchases_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE; END IF; IF to_regclass('public.leads') IS NOT NULL AND to_regclass('public.lead_purchases') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_purchases_lead_id_fkey') THEN ALTER TABLE public.lead_purchases ADD CONSTRAINT lead_purchases_lead_id_fkey FOREIGN KEY (lead_id) REFERENCES public.leads(id) ON DELETE CASCADE; END IF; END $$;` }
+);
+
 const defaultPlans: Step[] = [
   {
     label: 'plans.seed.starter',
