@@ -151,6 +151,29 @@ function metricDelta(current: number, previous: number) {
   return { current, previous, delta: current - previous, deltaPercent: deltaPercent(current, previous) };
 }
 
+function isLeadPurchasesMissingError(error: unknown) {
+  const err = error as { code?: string; meta?: { table?: string }; message?: string; cause?: { code?: string; message?: string } };
+  const message = `${err?.message || ''} ${err?.cause?.message || ''}`.toLowerCase();
+  return err?.code === 'P2021'
+    || err?.cause?.code === '42P01'
+    || err?.meta?.table === 'public.lead_purchases'
+    || (message.includes('lead_purchases') && (message.includes('does not exist') || message.includes('não exist') || message.includes('relation') || message.includes('tabela')));
+}
+
+function emptyFinancialWindowMetrics() {
+  return {
+    revenueCents: 0,
+    firstPurchaseRevenueCents: 0,
+    recurringRevenueCents: 0,
+    purchases: 0,
+    buyingCustomers: 0,
+    recurringCustomers: 0,
+    repurchaseRate: 0,
+    averageTicketCents: 0,
+    averageLtvCents: 0,
+  };
+}
+
 async function getPurchasesForWindow(db: Db, params: ExecutiveMetricParams) {
   return (db as any).leadPurchase.findMany({
     where: {
@@ -169,9 +192,27 @@ async function getPurchasesForWindow(db: Db, params: ExecutiveMetricParams) {
 }
 
 async function calculateFinancialMetricsForWindow(db: Db, params: ExecutiveMetricParams) {
-  const purchases = await getPurchasesForWindow(db, params);
-  const leadIds: string[] = Array.from(new Set((purchases as any[]).map((purchase: any) => String(purchase.leadId))));
-  const historical = leadIds.length ? await (db as any).leadPurchase.findMany({ where: { tenantId: params.tenantId, leadId: { in: leadIds } }, orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }], select: { id: true, leadId: true, amountCents: true, purchaseDate: true, createdAt: true } }) : [];
+  let purchases: any[];
+  try {
+    purchases = await getPurchasesForWindow(db, params);
+  } catch (error) {
+    if (isLeadPurchasesMissingError(error)) {
+      console.error('lead_purchases table missing; returning zero financial dashboard metrics until migration or repair-production-schema runs.', { tenantId: params.tenantId });
+      return emptyFinancialWindowMetrics();
+    }
+    throw error;
+  }
+  const leadIds: string[] = Array.from(new Set(purchases.map((purchase: any) => String(purchase.leadId))));
+  let historical: any[] = [];
+  try {
+    historical = leadIds.length ? await (db as any).leadPurchase.findMany({ where: { tenantId: params.tenantId, leadId: { in: leadIds } }, orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }], select: { id: true, leadId: true, amountCents: true, purchaseDate: true, createdAt: true } }) : [];
+  } catch (error) {
+    if (isLeadPurchasesMissingError(error)) {
+      console.error('lead_purchases table missing while loading historical purchases; returning zero financial dashboard metrics until migration or repair-production-schema runs.', { tenantId: params.tenantId });
+      return emptyFinancialWindowMetrics();
+    }
+    throw error;
+  }
   const firstPurchaseByLead = new Map<string, string>();
   const totalByLead = new Map<string, number>();
   const countByLead = new Map<string, number>();
