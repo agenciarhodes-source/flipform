@@ -11,6 +11,7 @@ import { formatDateTime } from '@/lib/utils';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
+import { getBrazilStates, getCitiesByState, formatLeadLocation } from '@/lib/brazil-locations';
 
 interface Stage { id: string; name: string; color: string; }
 
@@ -24,12 +25,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [purchaseSummary, setPurchaseSummary] = useState<any>(null);
   const [purchaseForm, setPurchaseForm] = useState({ amount: '', purchaseDate: new Date().toISOString().slice(0, 10), orderNumber: '', paymentMethod: '', notes: '' });
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [locationForm, setLocationForm] = useState({ state: '', city: '' });
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const load = async () => {
     setLoading(true);
     const res = await fetch(`/api/leads/${leadId}`).then((r) => r.json());
     setLead(res.lead);
     setSaleValueInput(formatCurrencyBRLFromCents(res.lead?.saleValueCents ?? null));
+    setLocationForm({ state: res.lead?.state || '', city: res.lead?.city || '' });
     try { const purchasesRes = await fetch(`/api/leads/${leadId}/purchases`).then((r) => r.json()); setPurchases(purchasesRes.purchases || []); setPurchaseSummary(purchasesRes.summary || null); } catch { toast.error('Não foi possível carregar as compras deste lead.'); }
     setLoading(false);
   };
@@ -67,6 +71,18 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     }
   };
 
+
+  const saveLocation = async () => {
+    try {
+      setSavingLocation(true);
+      const res = await fetch(`/api/leads/${leadId}/location`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: locationForm.state || null, city: locationForm.city || null }) });
+      if (!res.ok) throw new Error('save_failed');
+      const data = await res.json();
+      setLead((current: any) => ({ ...current, ...data.lead }));
+      toast.success('Localização atualizada.');
+      await load(); onChange();
+    } catch { toast.error('Não foi possível atualizar a localização.'); } finally { setSavingLocation(false); }
+  };
 
   const resetPurchaseForm = () => { setEditingPurchaseId(null); setPurchaseForm({ amount: '', purchaseDate: new Date().toISOString().slice(0, 10), orderNumber: '', paymentMethod: '', notes: '' }); };
   const savePurchase = async () => {
@@ -130,6 +146,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
                 {lead.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
                 {lead.assignedUser && <span className="flex items-center gap-1"><User className="w-3 h-3" />{lead.assignedUser.name}</span>}
+                {(lead.state || lead.city) && <span>{formatLeadLocation(lead.city, lead.state)}</span>}
               </div>
             </div>
             <Button variant="ghost" size="icon" onClick={deleteLead} title="Excluir lead"><Trash2 className="w-4 h-4 text-destructive" /></Button>
@@ -155,6 +172,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <div><div className="text-muted-foreground">Criado em</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
               <div><div className="text-muted-foreground">Última atualização</div><div className="font-medium">{formatDateTime(lead.updatedAt)}</div></div>
             </div>
+            </section>
+
+            <section className="space-y-3 rounded-xl border bg-white p-4">
+              <h3 className="font-heading text-sm font-semibold">Localização</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div><div className="text-sm font-medium mb-2">Estado</div><Select value={locationForm.state || 'none'} onValueChange={(state) => setLocationForm({ state: state === 'none' ? '' : state, city: '' })}><SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger><SelectContent><SelectItem value="none">Sem estado</SelectItem>{getBrazilStates().map((s) => <SelectItem key={s.uf} value={s.uf}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+                <div><div className="text-sm font-medium mb-2">Cidade</div><Select value={locationForm.city || 'none'} disabled={!locationForm.state} onValueChange={(city) => setLocationForm({ ...locationForm, city: city === 'none' ? '' : city })}><SelectTrigger><SelectValue placeholder="Selecione a cidade" /></SelectTrigger><SelectContent><SelectItem value="none">Sem cidade</SelectItem>{getCitiesByState(locationForm.state).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+              </div>
+              <Button size="sm" onClick={saveLocation} disabled={savingLocation}>{savingLocation ? 'Salvando...' : 'Salvar localização'}</Button>
             </section>
 
             <section className="space-y-3 rounded-xl border bg-emerald-50/40 p-4 ring-1 ring-emerald-100">

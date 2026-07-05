@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MANUAL_LEAD_SOURCE_VALUES } from './leads';
+import { isValidBrazilCity, isValidBrazilState, normalizeBrazilCity, normalizeBrazilState } from './brazil-locations';
 
 export const registerSchema = z.object({
   companyName: z.string().min(2, 'Nome da empresa muito curto'),
@@ -82,7 +83,23 @@ export const leadCreateSchema = z.object({
   assignedTo: z.string().optional().nullable(),
   temperature: z.enum(['cold', 'warm', 'hot']).default('cold'),
   saleValueCents: z.number().int().min(0).optional().nullable(),
+  state: z.string().length(2, 'Estado inválido.').optional().nullable(),
+  city: z.string().min(1).max(100).optional().nullable(),
   notes: z.string().optional().nullable(),
+}).superRefine((value, ctx) => {
+  const state = value.state ? normalizeBrazilState(value.state) : null;
+  if (value.state && !state) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['state'], message: 'Estado inválido.' });
+  if (value.city && !state) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['state'], message: 'Selecione o estado.' });
+  if (value.city && state && !normalizeBrazilCity(state, value.city)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'Cidade inválida para o estado selecionado.' });
+});
+
+export const leadLocationSchema = z.object({
+  state: z.string().length(2, 'Estado inválido.').optional().nullable(),
+  city: z.string().min(1).max(100).optional().nullable(),
+}).superRefine((value, ctx) => {
+  if (!value.state && value.city) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['state'], message: 'Selecione o estado.' });
+  if (value.state && !isValidBrazilState(value.state)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['state'], message: 'Estado inválido.' });
+  if (value.state && value.city && !isValidBrazilCity(value.state, value.city)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'Cidade inválida para o estado selecionado.' });
 });
 
 export const publicSubmitSchema = z.object({

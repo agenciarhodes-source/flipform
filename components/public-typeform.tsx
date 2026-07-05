@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
+import { getBrazilStateName, getBrazilStates, getCitiesByState, normalizeLocationText } from '@/lib/brazil-locations';
 import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 interface PublicField {
@@ -59,7 +60,11 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
 
   const validate = () => {
     const val = answers[current.id];
-    if (current.isRequired && (val === undefined || val === '' || (Array.isArray(val) && val.length === 0))) {
+    if (current.fieldType === 'city_state') {
+      if (current.isRequired && (!val?.state || !val?.city)) { setError(!val?.state ? 'Selecione o estado.' : 'Selecione a cidade.'); return false; }
+      if ((val?.state && !val?.city) || (!val?.state && val?.city)) { setError(!val?.state ? 'Selecione o estado.' : 'Selecione a cidade.'); return false; }
+    }
+    if (current.isRequired && current.fieldType !== 'city_state' && (val === undefined || val === '' || (Array.isArray(val) && val.length === 0))) {
       if (requiresOptions(current.fieldType)) {
         setError(normalizeSelectionMode(current.fieldType, current.validationRules) === 'multiple' ? 'Selecione pelo menos uma opção.' : 'Selecione uma opção.');
       } else {
@@ -238,6 +243,8 @@ function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { fiel
   const baseStyle = { borderColor: primaryColor };
 
   switch (field.fieldType) {
+    case 'city_state':
+      return <CityStateField value={value} onChange={onChange} />;
     case 'long_text':
       return <Textarea value={value || ''} placeholder={field.placeholder || ''} onChange={(e) => onChange(e.target.value)} rows={4} className="text-base" />;
     case 'single_select':
@@ -311,5 +318,24 @@ function normalizeAnswerForSubmit(field: PublicField, value: any) {
   if ((field.fieldType === 'phone' || field.fieldType === 'phone_br') && value) return normalizeBrazilPhone(value);
   if (field.fieldType === 'cpf' && value) return normalizeCpf(value);
   if (field.fieldType === 'cnpj' && value) return normalizeCnpj(value);
+  if (field.fieldType === 'city_state' && value?.state) return { state: value.state, stateName: getBrazilStateName(value.state), city: value.city };
   return value;
+}
+
+function CityStateField({ value, onChange }: { value: any; onChange: (v: any) => void }) {
+  const state = value?.state || '';
+  const city = value?.city || '';
+  const [search, setSearch] = useState('');
+  const cities = getCitiesByState(state).filter((name) => normalizeLocationText(name).includes(normalizeLocationText(search)));
+  return (
+    <div className="grid gap-3">
+      <label className="space-y-1.5"><span className="text-sm font-medium">Estado</span><select className="w-full rounded-md border bg-white px-3 py-2 text-base" value={state} onChange={(e) => { setSearch(''); onChange({ state: e.target.value, stateName: getBrazilStateName(e.target.value), city: '' }); }}>
+        <option value="">Selecione o estado</option>{getBrazilStates().map((s) => <option key={s.uf} value={s.uf}>{s.name}</option>)}
+      </select></label>
+      <label className="space-y-1.5"><span className="text-sm font-medium">Cidade</span><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cidade" disabled={!state} />
+      <select className="w-full rounded-md border bg-white px-3 py-2 text-base" value={city} disabled={!state} onChange={(e) => onChange({ state, stateName: getBrazilStateName(state), city: e.target.value })}>
+        <option value="">Selecione a cidade</option>{cities.map((name) => <option key={name} value={name}>{name}</option>)}
+      </select></label>
+    </div>
+  );
 }

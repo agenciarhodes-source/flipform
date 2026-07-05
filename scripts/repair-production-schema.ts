@@ -157,6 +157,11 @@ const steps: Step[] = [
   { label: 'leads.sale_currency', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_currency TEXT NOT NULL DEFAULT 'BRL'` },
   { label: 'leads.sale_value_updated_at', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_at TIMESTAMP(3)` },
   { label: 'leads.sale_value_updated_by', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS sale_value_updated_by TEXT` },
+  { label: 'leads.state', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS state TEXT` },
+  { label: 'leads.city', sql: `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS city TEXT` },
+  { label: 'leads_tenant_state_idx', sql: `CREATE INDEX IF NOT EXISTS leads_tenant_state_idx ON public.leads(tenant_id, state)` },
+  { label: 'leads_tenant_city_idx', sql: `CREATE INDEX IF NOT EXISTS leads_tenant_city_idx ON public.leads(tenant_id, city)` },
+  { label: 'leads_tenant_state_city_idx', sql: `CREATE INDEX IF NOT EXISTS leads_tenant_state_city_idx ON public.leads(tenant_id, state, city)` },
 
   {
     label: 'audit_logs.create',

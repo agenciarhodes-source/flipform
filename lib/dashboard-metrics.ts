@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Prisma, type LeadStatus, type LeadTemperature, type PrismaClient } from '@prisma/client';
 import { formatLeadSource } from './leads';
+import { BRAZIL_STATES as BRAZIL_STATE_LIST, getBrazilStateName, normalizeBrazilCity, normalizeBrazilState, normalizeLocationText } from './brazil-locations';
 
 export const dashboardQuerySchema = z.object({
   period: z.enum(['today', '7d', '30d', 'custom']).default('30d'),
@@ -24,22 +25,11 @@ type DashboardParams = z.infer<typeof dashboardQuerySchema>;
 type Db = PrismaClient | Prisma.TransactionClient;
 
 
-export const BRAZIL_STATES: Record<string, string> = {
-  AC: 'Acre', AL: 'Alagoas', AP: 'Amapá', AM: 'Amazonas', BA: 'Bahia', CE: 'Ceará', DF: 'Distrito Federal', ES: 'Espírito Santo', GO: 'Goiás', MA: 'Maranhão', MT: 'Mato Grosso', MS: 'Mato Grosso do Sul', MG: 'Minas Gerais', PA: 'Pará', PB: 'Paraíba', PR: 'Paraná', PE: 'Pernambuco', PI: 'Piauí', RJ: 'Rio de Janeiro', RN: 'Rio Grande do Norte', RS: 'Rio Grande do Sul', RO: 'Rondônia', RR: 'Roraima', SC: 'Santa Catarina', SP: 'São Paulo', SE: 'Sergipe', TO: 'Tocantins',
-};
+const BRAZIL_STATES: Record<string, string> = Object.fromEntries(BRAZIL_STATE_LIST.map((state) => [state.uf, state.name]));
 
-const STATE_ALIASES = new Map(Object.entries(BRAZIL_STATES).flatMap(([uf, label]) => [[uf, uf], [normalizeText(label), uf]]));
+function normalizeText(value: string) { return normalizeLocationText(value); }
 
-function normalizeText(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-}
-
-function normalizeState(value?: string | null) {
-  if (!value) return undefined;
-  const compact = value.trim().toUpperCase();
-  if (BRAZIL_STATES[compact]) return compact;
-  return STATE_ALIASES.get(normalizeText(value));
-}
+function normalizeState(value?: string | null) { return value ? normalizeBrazilState(value) || undefined : undefined; }
 
 function cleanCity(value?: string | null) {
   const city = value?.replace(/\s+/g, ' ').trim();
@@ -57,9 +47,10 @@ function answerToString(answer: Prisma.JsonValue) {
   return '';
 }
 
-export function extractLeadLocation(lead: { answers?: { questionLabel: string; answer: Prisma.JsonValue; field?: { fieldType: string } | null }[] }) {
-  let state: string | undefined;
-  let city: string | undefined;
+export function extractLeadLocation(lead: { state?: string | null; city?: string | null; answers?: { questionLabel: string; answer: Prisma.JsonValue; field?: { fieldType: string } | null }[] }) {
+  let state: string | undefined = lead.state ? normalizeState(lead.state) : undefined;
+  let city: string | undefined = lead.city ? cleanCity(lead.city) : undefined;
+  if (state && city) city = normalizeBrazilCity(state, city) || city;
   for (const item of lead.answers || []) {
     const label = normalizeText(item.questionLabel || '');
     const fieldType = normalizeText(item.field?.fieldType || '');
@@ -498,7 +489,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     db.lead.findMany({
       where: currentWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
       orderBy: { createdAt: 'asc' },
@@ -506,7 +497,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     db.lead.findMany({
       where: previousWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
     }),
@@ -610,7 +601,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       byCityMap.set(key, current);
     }
   }
-  const byState = Array.from(byStateMap.entries()).map(([state, leads]) => ({ state, label: BRAZIL_STATES[state], leads })).sort((a, b) => b.leads - a.leads);
+  const byState = Array.from(byStateMap.entries()).map(([state, leads]) => ({ state, label: getBrazilStateName(state) || BRAZIL_STATES[state], leads })).sort((a, b) => b.leads - a.leads);
   const byCity = Array.from(byCityMap.values()).filter((row) => !selectedState || row.state === selectedState).sort((a, b) => b.leads - a.leads).slice(0, 12);
 
   const revenueByDayMap = new Map(byDayMap);
