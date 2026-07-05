@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Zap, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { ROLE_LABELS_PT_BR, type RoleName } from '@/lib/rbac';
 
 export function InviteAcceptClient({ token, invite }: { token: string; invite: any }) {
   const router = useRouter();
@@ -57,7 +58,7 @@ export function InviteAcceptClient({ token, invite }: { token: string; invite: a
           <div className="text-xs text-muted-foreground mb-1">Você foi convidado a participar de</div>
           <h1 className="font-heading text-2xl font-bold flex items-center gap-2">
             {invite.tenant.name}
-            <Badge variant="outline" className="capitalize">{invite.role}</Badge>
+            <Badge variant="outline">{ROLE_LABELS_PT_BR[invite.role as RoleName] || invite.role}</Badge>
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Como <strong>{invite.email}</strong>. Defina seus dados abaixo para entrar.</p>
         </div>

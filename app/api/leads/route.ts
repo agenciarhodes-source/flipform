@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
+import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
@@ -10,7 +11,7 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const pipelineId = searchParams.get('pipelineId');
   const search = searchParams.get('q')?.toLowerCase();
 
-  const where: any = { tenantId: session.tenantId };
+  const where: any = { tenantId: session.tenantId, ...getLeadScopeForRole(session) };
   if (pipelineId) where.pipelineId = pipelineId;
   if (search) {
     where.OR = [
@@ -71,7 +72,7 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
           source: parsed.data.source,
           pipelineId: parsed.data.pipelineId,
           stageId: parsed.data.stageId,
-          assignedTo: parsed.data.assignedTo || null,
+          assignedTo: session.role === 'agent' ? session.userId : (parsed.data.assignedTo || null),
           temperature: parsed.data.temperature as any,
           status: 'open',
           state,
