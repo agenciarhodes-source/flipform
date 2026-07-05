@@ -33,6 +33,7 @@
     "admin:create-test-access": "tsx scripts/create-manual-test-access.ts",
     "admin:diagnose-schema": "tsx scripts/diagnose-production-schema.ts",
     "admin:repair-schema": "tsx scripts/repair-production-schema.ts",
+    "repair:production-schema": "tsx scripts/repair-production-schema.ts",
     "leads:mark-final-stage-won": "tsx scripts/mark-final-stage-leads-won.ts"
   },
   "dependencies": {

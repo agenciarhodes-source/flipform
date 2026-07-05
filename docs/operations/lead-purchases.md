@@ -18,6 +18,15 @@ No Dashboard, selecione `Personalizado` e informe data inicial e data final. A A
 
 Registrar compras recorrentes não dispara automaticamente evento Meta Purchase neste PR. Eventos de conversão existentes no Kanban continuam inalterados.
 
-## Produção
+## Produção / Neon
 
-Após deploy, rode a migration no Neon. Se algum ambiente estiver defasado, `scripts/repair-production-schema.ts` cria `lead_purchases` e índices de forma idempotente.
+Após merge/deploy, garantir que a migration `20260704120000_add_lead_purchases` foi aplicada no Neon.
+
+Tabela esperada:
+`public.lead_purchases`
+
+Caso o ambiente esteja defasado, rodar:
+`npm run repair:production-schema`
+ou aplicar a migration pelo processo operacional definido.
+
+O repair é idempotente e valida/cria tabela, colunas, foreign keys e índices principais sem criar dados reais e sem apagar dados existentes.
