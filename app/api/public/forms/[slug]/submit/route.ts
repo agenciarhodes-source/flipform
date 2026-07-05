@@ -5,6 +5,7 @@ import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
+import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 /**
@@ -134,6 +135,14 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         if (/[A-Za-zÀ-ÿ]/.test(String(a.value)) || !isValidCnpj(normalized)) return NextResponse.json({ error: 'Informe um CNPJ válido com 14 dígitos.' }, { status: 400 });
         a.value = normalized;
       }
+      if (a.fieldType === 'city_state') {
+        const obj = a.value && typeof a.value === 'object' && !Array.isArray(a.value) ? a.value as Record<string, unknown> : {};
+        const state = normalizeBrazilState(String(obj.state || ''));
+        const city = state ? normalizeBrazilCity(state, String(obj.city || '')) : null;
+        if (!state) return NextResponse.json({ error: 'Selecione o estado.' }, { status: 400 });
+        if (!city) return NextResponse.json({ error: 'Selecione a cidade.' }, { status: 400 });
+        a.value = { state, stateName: getBrazilStateName(state), city };
+      }
       if (requiresOptions(a.fieldType)) {
         const allowed = cleanOptions(field.options);
         if (allowed.length < 2) return NextResponse.json({ error: 'Adicione pelo menos duas opções.' }, { status: 400 });
@@ -175,6 +184,9 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
     const email = pickByType(['email']);
     const phone = pickByType(['phone_br', 'phone']);
+    const locationAnswer = normalizedAnswers.find((a) => a.fieldType === 'city_state' && a.value && typeof a.value === 'object')?.value as any;
+    const leadState = locationAnswer?.state || null;
+    const leadCity = locationAnswer?.city || null;
 
     // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
     const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
@@ -190,6 +202,8 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           source: 'formulario',
           status: 'open',
           temperature: 'warm',
+          state: leadState,
+          city: leadCity,
           answers: {
             create: normalizedAnswers.map((a) => ({
               fieldId: a.fieldId,

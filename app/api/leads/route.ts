@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { leadCreateSchema } from '@/lib/schemas';
+import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
 
 export const GET = withPermission('LEADS_VIEW', async (req, session) => {
@@ -56,6 +57,8 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     if (!stage) return NextResponse.json({ error: 'Etapa inválida para o pipeline selecionado.' }, { status: 400 });
     if (parsed.data.assignedTo && !assignedUser) return NextResponse.json({ error: 'Responsável inválido.' }, { status: 400 });
     if (duplicate && !body.forceCreate) return NextResponse.json({ error: 'Já existe um lead com este contato.', duplicate }, { status: 409 });
+    const state = parsed.data.state ? normalizeBrazilState(parsed.data.state) : null;
+    const city = state && parsed.data.city ? normalizeBrazilCity(state, parsed.data.city) : null;
 
     const lead = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
@@ -71,6 +74,8 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
           assignedTo: parsed.data.assignedTo || null,
           temperature: parsed.data.temperature as any,
           status: 'open',
+          state,
+          city,
           saleValueCents: parsed.data.saleValueCents ?? null,
           saleValueUpdatedAt: parsed.data.saleValueCents != null ? new Date() : null,
           saleValueUpdatedBy: parsed.data.saleValueCents != null ? session.userId : null,

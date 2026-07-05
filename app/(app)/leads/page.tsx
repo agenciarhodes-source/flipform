@@ -10,6 +10,7 @@ import { formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ManualLeadDialog } from '@/components/manual-lead-dialog';
 import { formatLeadSource } from '@/lib/leads';
+import { formatLeadLocation } from '@/lib/brazil-locations';
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([]);
@@ -57,6 +58,7 @@ export default function LeadsPage() {
               <th className="text-left px-4 py-3 font-medium">Etapa</th>
               <th className="text-left px-4 py-3 font-medium">Origem</th>
               <th className="text-left px-4 py-3 font-medium">Responsável</th>
+              <th className="text-left px-4 py-3 font-medium">Localização</th>
               <th className="text-left px-4 py-3 font-medium">Temp.</th>
               <th className="text-left px-4 py-3 font-medium">Criado</th>
             </tr>
@@ -74,11 +76,12 @@ export default function LeadsPage() {
                 <td className="px-4 py-3"><Badge style={{ backgroundColor: l.stage.color }} className="text-white border-0">{l.stage.name}</Badge></td>
                 <td className="px-4 py-3 text-muted-foreground">{formatLeadSource(l.source)}</td>
                 <td className="px-4 py-3">{l.assignedUser?.name || '—'}</td>
+                <td className="px-4 py-3 text-muted-foreground">{formatLeadLocation(l.city, l.state)}</td>
                 <td className="px-4 py-3">{tempIcon(l.temperature)}</td>
                 <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(l.createdAt)}</td>
               </tr>
             ))}
-            {leads.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">Nenhum lead encontrado.</td></tr>}
+            {leads.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Nenhum lead encontrado.</td></tr>}
           </tbody>
         </table>
       </Card>

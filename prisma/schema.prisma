@@ -288,6 +288,8 @@ model Lead {
   status      LeadStatus      @default(open)
   temperature LeadTemperature @default(cold)
   lostReason  String?         @map("lost_reason")
+  state       String?         @map("state")
+  city        String?         @map("city")
   tags        String[]        @default([])
   saleValueCents Int?          @map("sale_value_cents")
   saleCurrency String          @default("BRL") @map("sale_currency")
@@ -314,6 +316,9 @@ model Lead {
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
+  @@index([tenantId, state])
+  @@index([tenantId, city])
+  @@index([tenantId, state, city])
   @@map("leads")
 }
 
