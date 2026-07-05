@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPermission, can, canEditLead } from '@/lib/rbac-server';
+import { withPermission, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
@@ -27,6 +27,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     },
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
+  try { assertCanAccessLead(session, lead); } catch { return NextResponse.json({ error: 'Você não tem permissão para acessar este lead.' }, { status: 403 }); }
   const saleValueAuditLogs = await prisma.auditLog.findMany({
     where: { tenantId: session.tenantId, entityType: 'lead', entityId: lead.id, action: 'lead.sale_value_updated' },
     orderBy: { createdAt: 'asc' },
@@ -43,7 +44,10 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
   }
   const body = await req.json();
   const allowed: any = {};
-  ['name', 'email', 'phone', 'temperature', 'assignedTo', 'lostReason'].forEach((k) => {
+  const editableFields = session.role === 'agent'
+    ? ['name', 'email', 'phone', 'temperature']
+    : ['name', 'email', 'phone', 'temperature', 'assignedTo', 'lostReason'];
+  editableFields.forEach((k) => {
     if (body[k] !== undefined) allowed[k] = body[k];
   });
   await prisma.lead.update({ where: { id: lead.id }, data: allowed });

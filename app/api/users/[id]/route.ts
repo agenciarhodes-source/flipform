@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
+import { canManageRole, ROLE_LABELS_PT_BR } from '@/lib/rbac';
 import { logAudit } from '@/lib/audit';
 import { userUpdateSchema } from '@/lib/schemas-users';
 
@@ -17,18 +18,20 @@ export const PUT = withPermission('USERS_EDIT', async (req, session, ctx: { para
     });
     if (!target) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
-    // Regras:
-    // - admin não pode rebaixar/inativar/alterar owner
-    // - apenas owner pode promover alguém a owner
-    // - não se pode rebaixar a si mesmo sem ser owner
-    if (target.role === 'owner' && session.role !== 'owner') {
-      return NextResponse.json({ error: 'Você não pode alterar um owner.' }, { status: 403 });
-    }
-    if (parsed.data.role === 'owner' && session.role !== 'owner') {
-      return NextResponse.json({ error: 'Apenas o owner pode promover a owner.' }, { status: 403 });
-    }
     if (target.userId === session.userId && parsed.data.role && parsed.data.role !== session.role) {
       return NextResponse.json({ error: 'Você não pode alterar seu próprio papel.' }, { status: 403 });
+    }
+    if (target.role === 'owner' && session.globalRole !== 'platform_admin') {
+      return NextResponse.json({ error: 'Apenas o Super Admin da plataforma pode alterar um Dono da empresa.' }, { status: 403 });
+    }
+    if (parsed.data.role && !canManageRole(session.role, parsed.data.role, session.globalRole)) {
+      const message = parsed.data.role === 'owner'
+        ? 'Apenas o Super Admin da plataforma pode definir um Dono da empresa.'
+        : `Você não tem permissão para definir o cargo ${ROLE_LABELS_PT_BR[parsed.data.role]}.`;
+      return NextResponse.json({ error: message }, { status: 403 });
+    }
+    if (!parsed.data.role && !canManageRole(session.role, target.role as any, session.globalRole)) {
+      return NextResponse.json({ error: 'Você não tem permissão para alterar este usuário.' }, { status: 403 });
     }
 
     const updates: any = {};
@@ -63,8 +66,8 @@ export const DELETE = withPermission('USERS_REMOVE', async (_req, session, ctx: 
   });
   if (!target) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
 
-  if (target.role === 'owner') {
-    return NextResponse.json({ error: 'Não é possível remover o owner.' }, { status: 403 });
+  if (target.role === 'owner' || !canManageRole(session.role, target.role as any, session.globalRole)) {
+    return NextResponse.json({ error: 'Você não tem permissão para remover este usuário.' }, { status: 403 });
   }
   if (target.userId === session.userId) {
     return NextResponse.json({ error: 'Você não pode remover a si mesmo.' }, { status: 403 });

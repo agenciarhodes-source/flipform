@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPermission, canEditLead } from '@/lib/rbac-server';
+import { withPermission, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formatBRLFromCents } from '@/lib/currency-brl';
 import { leadPurchaseSchema, summarizePurchases } from '@/lib/lead-purchases';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
-  const lead = await prisma.lead.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId }, select: { id: true } });
+  const lead = await prisma.lead.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId }, select: { id: true, assignedTo: true } });
   if (!lead) return NextResponse.json({ error: 'Lead não encontrado.' }, { status: 404 });
+  try { assertCanAccessLead(session, lead); } catch { return NextResponse.json({ error: 'Você não tem permissão para acessar compras deste lead.' }, { status: 403 }); }
   const purchases = await prisma.leadPurchase.findMany({ where: { tenantId: session.tenantId, leadId: lead.id }, orderBy: [{ purchaseDate: 'desc' }, { createdAt: 'desc' }] });
   return NextResponse.json({ purchases, summary: summarizePurchases(purchases) });
 });

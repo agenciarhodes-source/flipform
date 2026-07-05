@@ -15,7 +15,7 @@ export function withPermission<T = any>(
     const session = getSessionFromRequest(req);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!can(session.role, permission)) {
-      return NextResponse.json({ error: 'Forbidden', required: permission }, { status: 403 });
+      return NextResponse.json({ error: 'Você não tem permissão para acessar esta funcionalidade.', required: permission }, { status: 403 });
     }
     return handler(req, session, ctx);
   };

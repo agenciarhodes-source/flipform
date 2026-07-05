@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { PLATFORM_ADMIN_LABEL_PT_BR, ROLE_LABELS_PT_BR, type RoleName } from '@/lib/rbac';
 
 export default async function AccountPage() {
   const session = await getSession();
@@ -22,7 +23,7 @@ export default async function AccountPage() {
           <h2 className="font-semibold">Usuário</h2>
           <p><strong>Nome:</strong> {session.name}</p>
           <p><strong>E-mail:</strong> {session.email}</p>
-          <p><strong>Perfil:</strong> {session.role}</p>
+          <p><strong>Perfil:</strong> {session.globalRole === 'platform_admin' ? PLATFORM_ADMIN_LABEL_PT_BR : (ROLE_LABELS_PT_BR[session.role as RoleName] || session.role)}</p>
         </section>
         <section className="border rounded p-4 space-y-2">
           <h2 className="font-semibold">Empresa</h2>

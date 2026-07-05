@@ -13,17 +13,17 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { UserPlus, MoreHorizontal, Copy, Trash2, Mail, Shield, ShieldCheck, Eye, User as UserIcon, UserCog } from 'lucide-react';
 import { formatDate, formatDateTime } from '@/lib/utils';
-import { can } from '@/lib/rbac';
+import { can, canManageRole, ROLE_DESCRIPTIONS_PT_BR, ROLE_LABELS_PT_BR, ROLE_SHORT_DESCRIPTIONS_PT_BR, type RoleName } from '@/lib/rbac';
 import type { SessionPayload } from '@/lib/auth';
 
-type Role = 'owner' | 'admin' | 'manager' | 'agent' | 'viewer';
+type Role = RoleName;
 
 const ROLE_META: Record<Role, { label: string; color: string; icon: any; desc: string }> = {
-  owner: { label: 'Owner', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: ShieldCheck, desc: 'Acesso total à empresa' },
-  admin: { label: 'Admin', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: Shield, desc: 'Gerencia tudo, exceto remover owner' },
-  manager: { label: 'Manager', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: UserCog, desc: 'Dashboard, leads, pipeline, relatórios' },
-  agent: { label: 'Agent', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: UserIcon, desc: 'Atende leads atribuídos a ele' },
-  viewer: { label: 'Viewer', color: 'bg-slate-100 text-slate-600 border-slate-200', icon: Eye, desc: 'Apenas leitura' },
+  owner: { label: ROLE_LABELS_PT_BR.owner, color: 'bg-purple-100 text-purple-700 border-purple-200', icon: ShieldCheck, desc: ROLE_DESCRIPTIONS_PT_BR.owner },
+  admin: { label: ROLE_LABELS_PT_BR.admin, color: 'bg-blue-100 text-blue-700 border-blue-200', icon: Shield, desc: ROLE_DESCRIPTIONS_PT_BR.admin },
+  manager: { label: ROLE_LABELS_PT_BR.manager, color: 'bg-amber-100 text-amber-700 border-amber-200', icon: UserCog, desc: ROLE_DESCRIPTIONS_PT_BR.manager },
+  agent: { label: ROLE_LABELS_PT_BR.agent, color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: UserIcon, desc: ROLE_DESCRIPTIONS_PT_BR.agent },
+  viewer: { label: ROLE_LABELS_PT_BR.viewer, color: 'bg-slate-100 text-slate-600 border-slate-200', icon: Eye, desc: ROLE_DESCRIPTIONS_PT_BR.viewer },
 };
 
 export function UsersPageClient({ session }: { session: SessionPayload }) {
@@ -200,7 +200,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
 
       {inviteOpen && (
         <InviteDialog
-          ownerEnabled={session.role === 'owner'}
+          actorRole={session.role as Role}
           onClose={() => setInviteOpen(false)}
           onSent={(token) => {
             const url = `${origin}/invite/${token}`;
@@ -213,7 +213,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
       {editUser && (
         <EditUserDialog
           user={editUser}
-          ownerEnabled={session.role === 'owner'}
+          actorRole={session.role as Role}
           onClose={() => setEditUser(null)}
           onSaved={() => { setEditUser(null); load(); }}
         />
@@ -222,7 +222,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
   );
 }
 
-function InviteDialog({ onClose, onSent, ownerEnabled }: { onClose: () => void; onSent: (token: string) => void; ownerEnabled: boolean }) {
+function InviteDialog({ onClose, onSent, actorRole }: { onClose: () => void; onSent: (token: string) => void; actorRole: Role }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('agent');
   const [loading, setLoading] = useState(false);
@@ -253,11 +253,9 @@ function InviteDialog({ onClose, onSent, ownerEnabled }: { onClose: () => void; 
             <Select value={role} onValueChange={(v) => setRole(v as Role)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ownerEnabled && <SelectItem value="owner">Owner — acesso total</SelectItem>}
-                <SelectItem value="admin">Admin — gerencia tudo</SelectItem>
-                <SelectItem value="manager">Manager — leads + pipeline + relatórios</SelectItem>
-                <SelectItem value="agent">Agent — atendente</SelectItem>
-                <SelectItem value="viewer">Viewer — leitura</SelectItem>
+                {(['owner', 'admin', 'manager', 'agent', 'viewer'] as Role[]).filter((r) => canManageRole(actorRole, r)).map((r) => (
+                  <SelectItem key={r} value={r}>{ROLE_LABELS_PT_BR[r]} — {ROLE_SHORT_DESCRIPTIONS_PT_BR[r]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -275,7 +273,7 @@ function InviteDialog({ onClose, onSent, ownerEnabled }: { onClose: () => void; 
   );
 }
 
-function EditUserDialog({ user, ownerEnabled, onClose, onSaved }: { user: any; ownerEnabled: boolean; onClose: () => void; onSaved: () => void }) {
+function EditUserDialog({ user, actorRole, onClose, onSaved }: { user: any; actorRole: Role; onClose: () => void; onSaved: () => void }) {
   const [role, setRole] = useState<Role>(user.role);
   const [status, setStatus] = useState<'active' | 'inactive'>(user.status);
   const [saving, setSaving] = useState(false);
@@ -304,11 +302,9 @@ function EditUserDialog({ user, ownerEnabled, onClose, onSaved }: { user: any; o
             <Select value={role} onValueChange={(v) => setRole(v as Role)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {ownerEnabled && <SelectItem value="owner">Owner</SelectItem>}
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="manager">Manager</SelectItem>
-                <SelectItem value="agent">Agent</SelectItem>
-                <SelectItem value="viewer">Viewer</SelectItem>
+                {(['owner', 'admin', 'manager', 'agent', 'viewer'] as Role[]).filter((r) => canManageRole(actorRole, r)).map((r) => (
+                  <SelectItem key={r} value={r}>{ROLE_LABELS_PT_BR[r]} — {ROLE_SHORT_DESCRIPTIONS_PT_BR[r]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

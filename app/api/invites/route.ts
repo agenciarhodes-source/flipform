@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
+import { canManageRole, ROLE_LABELS_PT_BR } from '@/lib/rbac';
 import { logAudit, randomToken } from '@/lib/audit';
 import { inviteCreateSchema } from '@/lib/schemas-users';
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
@@ -25,8 +26,11 @@ export const POST = withPermission('USERS_INVITE', async (req, session) => {
     const parsed = inviteCreateSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
 
-    if (parsed.data.role === 'owner' && session.role !== 'owner') {
-      return NextResponse.json({ error: 'Apenas o owner pode convidar como owner.' }, { status: 403 });
+    if (!canManageRole(session.role, parsed.data.role, session.globalRole)) {
+      const message = parsed.data.role === 'owner'
+        ? 'Apenas o Super Admin da plataforma pode definir um Dono da empresa.'
+        : `Você não tem permissão para convidar um usuário como ${ROLE_LABELS_PT_BR[parsed.data.role]}.`;
+      return NextResponse.json({ error: message }, { status: 403 });
     }
 
     const normalizedEmail = parsed.data.email.trim().toLowerCase();
