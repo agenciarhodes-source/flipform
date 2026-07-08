@@ -13,7 +13,7 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
   const pipelineFilter = searchParams.get('pipelineId');
   const forms = await prisma.form.findMany({
-    where: { tenantId: session.tenantId, ...(pipelineFilter ? { pipelineId: pipelineFilter } : {}) },
+    where: { tenantId: session.tenantId, ...(session.role === 'agent' ? { isActive: true } : {}), ...(pipelineFilter ? { pipelineId: pipelineFilter } : {}) },
     include: {
       _count: { select: { leads: true, fields: true } },
       pipeline: { select: { id: true, name: true, isArchived: true, isDefault: true } },

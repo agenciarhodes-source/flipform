@@ -50,11 +50,18 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
   editableFields.forEach((k) => {
     if (body[k] !== undefined) allowed[k] = body[k];
   });
+  if (Object.prototype.hasOwnProperty.call(allowed, 'assignedTo')) {
+    allowed.assignedTo = allowed.assignedTo || null;
+    if (allowed.assignedTo) {
+      const assignee = await prisma.tenantUser.findFirst({ where: { tenantId: session.tenantId, userId: allowed.assignedTo, role: 'agent', status: 'active' }, include: { user: { select: { name: true } } } });
+      if (!assignee) return NextResponse.json({ error: 'Responsável inválido. Selecione um Atendente/Vendedor ativo deste tenant.' }, { status: 400 });
+    }
+  }
   await prisma.lead.update({ where: { id: lead.id }, data: allowed });
   await logAudit({
     tenantId: session.tenantId, userId: session.userId,
     entityType: 'lead', entityId: lead.id, action: 'lead.updated',
-    metadata: { changes: Object.keys(allowed) },
+    metadata: { changes: Object.keys(allowed), assignedTo: allowed.assignedTo, message: Object.prototype.hasOwnProperty.call(allowed, 'assignedTo') ? 'Responsável do lead atualizado manualmente.' : undefined },
   });
   return NextResponse.json({ ok: true });
 });

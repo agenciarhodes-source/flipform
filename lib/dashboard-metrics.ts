@@ -12,6 +12,7 @@ export const dashboardQuerySchema = z.object({
   formId: z.string().uuid().optional(),
   state: z.string().trim().min(2).max(30).optional(),
   city: z.string().trim().min(1).max(80).optional(),
+  assignedTo: z.string().uuid().optional(),
 }).superRefine((value, ctx) => {
   if (value.period !== 'custom') return;
   if (!value.startDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Data inicial obrigatória para período personalizado.' });
@@ -462,7 +463,8 @@ function leadScope(params: { tenantId: string; pipelineId?: string; formId?: str
 
 export async function getDashboardMetrics(db: Db, tenantId: string, userId: string, role: string, rawParams: DashboardParams) {
   const period = resolveDashboardPeriod(rawParams);
-  const agentScope = role === 'agent' ? userId : undefined;
+  const requestedAssignee = role === 'agent' ? userId : rawParams.assignedTo;
+  const agentScope = requestedAssignee || undefined;
   let pipelineId = rawParams.pipelineId;
   const formId = rawParams.formId;
   const selectedState = normalizeState(rawParams.state);
@@ -484,12 +486,12 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const previousWhere = leadScope({ tenantId, pipelineId, formId, assignedTo: agentScope, startDate: previous.start, endDate: previous.end });
   const executivePromise = getExecutiveMetrics(db, tenantId, agentScope, { pipelineId, formId, period });
 
-  const [executive, baseLeads, previousLeads, stages, pipelines, filterForms, forms, tasks, sources] = await Promise.all([
+  const [executive, baseLeads, previousLeads, stages, pipelines, filterForms, forms, tasks, sources, agents] = await Promise.all([
     executivePromise,
     db.lead.findMany({
       where: currentWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
       orderBy: { createdAt: 'asc' },
@@ -497,7 +499,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     db.lead.findMany({
       where: previousWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
     }),
@@ -512,6 +514,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       db.task.count({ where: { tenantId, assignedTo: userId } }),
     ]),
     db.lead.groupBy({ by: ['source'], where: currentWhere, _count: true }),
+    db.tenantUser.findMany({ where: { tenantId, role: 'agent', status: 'active' }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }),
   ]);
 
   const leadsWithLocation = baseLeads.map((lead) => ({ ...lead, location: extractLeadLocation(lead) }));
@@ -626,7 +629,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
 
   return {
     executive,
-    filters: { period: period.period, startDate: period.startDate.toISOString(), endDate: period.endDate.toISOString(), pipelineId: pipelineId || null, formId: formId || null, state: selectedState || null, city: selectedCity || null, pipelines, forms: filterForms },
+    filters: { period: period.period, startDate: period.startDate.toISOString(), endDate: period.endDate.toISOString(), pipelineId: pipelineId || null, formId: formId || null, state: selectedState || null, city: selectedCity || null, assignedTo: agentScope || null, pipelines, forms: filterForms, agents: role === 'agent' ? [] : (agents as any[]).map((a) => ({ userId: a.userId, name: a.user.name, email: a.user.email })) },
     summary: {
       totalLeads: total,
       newLeads,
@@ -661,6 +664,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       return { id: form.id, name: form.name, slug: form.slug, totalLeads: counts.total, conversionRate: percent(counts.final, counts.total), qualificationRate: percent(counts.qualified, counts.total), lastLeadAt: counts.lastLeadAt?.toISOString() || null, publicUrl: `/f/${form.slug}`, editUrl: `/forms/${form.id}` };
     }),
     sources: sources.map((row) => ({ source: formatLeadSource(row.source), count: row._count, percentage: percent(row._count, baseLeads.length) })).sort((a, b) => b.count - a.count),
+    teamPerformance: role === 'agent' ? [] : (agents as any[]).map((a) => { const sellerLeads = filteredLeads.filter((lead) => (lead as any).assignedTo === a.userId); const won = sellerLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)); const revenueCents = won.reduce((sum, lead) => sum + ((lead as any).saleValueCents || 0), 0); return { userId: a.userId, name: a.user.name, email: a.user.email, leadsReceived: sellerLeads.length, inProgress: sellerLeads.filter((lead) => lead.status !== ('lost' as LeadStatus) && !isClosedLead(lead, finalStagesByPipeline)).length, won: won.length, revenueCents, conversionRate: percent(won.length, sellerLeads.length), averageTicketCents: won.length ? Math.round(revenueCents / won.length) : 0, averageCloseTimeHours: null }; }),
     tasks: { pending: tasks[0], overdue: tasks[1], completedToday: tasks[2], mine: tasks[3], recommendations: [tasks[1] > 0 ? `${tasks[1]} tarefas vencidas` : null, (tempCounts.get('hot') || 0) > 0 ? `${tempCounts.get('hot')} leads quentes para priorizar` : null].filter(Boolean) },
   };
 }
