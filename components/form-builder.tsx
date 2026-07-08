@@ -67,6 +67,8 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [rotation, setRotation] = useState<any>(null);
+  const [savingRotation, setSavingRotation] = useState(false);
   const optionInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Pipelines / Stages
@@ -83,6 +85,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
   }, []);
 
   useEffect(() => {
+    if (formId) fetch(`/api/forms/${formId}/assignment-rotation`).then((r) => r.ok ? r.json() : null).then((d) => { if (d) setRotation(d); }).catch(() => null);
     if (!formId) {
       setName('Formulário sem título');
       setPublicTitle('Como podemos ajudar?');
@@ -130,6 +133,40 @@ export function FormBuilder({ formId }: { formId?: string }) {
       }
     }
   /* eslint-disable-next-line */ }, [pipelinesLoaded, pipelines, formId]);
+
+
+  const toggleRotationMember = (userId: string, checked: boolean) => {
+    setRotation((current: any) => {
+      const members = current?.members || [];
+      const exists = members.find((m: any) => m.userId === userId);
+      const nextMembers = exists
+        ? members.map((m: any) => m.userId === userId ? { ...m, isActive: checked } : m)
+        : [...members, { userId, orderIndex: members.length, isActive: checked }];
+      return { ...(current || {}), members: nextMembers.map((m: any, index: number) => ({ ...m, orderIndex: index })) };
+    });
+  };
+
+  const moveRotationMember = (userId: string, direction: -1 | 1) => {
+    setRotation((current: any) => {
+      const members = [...(current?.members || [])].sort((a, b) => a.orderIndex - b.orderIndex);
+      const index = members.findIndex((m: any) => m.userId === userId);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= members.length) return current;
+      [members[index], members[target]] = [members[target], members[index]];
+      return { ...current, members: members.map((m: any, orderIndex: number) => ({ ...m, orderIndex })) };
+    });
+  };
+
+  const saveRotation = async () => {
+    if (!formId || !rotation) return;
+    setSavingRotation(true);
+    const members = (rotation.members || []).filter((m: any) => m.isActive).map((m: any, index: number) => ({ userId: m.userId, orderIndex: index, isActive: true }));
+    const res = await fetch(`/api/forms/${formId}/assignment-rotation`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isEnabled: !!rotation.isEnabled, strategy: 'round_robin', members }) });
+    setSavingRotation(false);
+    if (!res.ok) return toast.error((await res.json()).error || 'Não foi possível salvar a distribuição.');
+    toast.success('Distribuição de leads salva.');
+    fetch(`/api/forms/${formId}/assignment-rotation`).then((r) => r.json()).then(setRotation);
+  };
 
   const currentPipeline = pipelines.find((p) => p.id === pipelineId);
   const availableStages = (currentPipeline?.stages || []).filter((s: any) => !s.isArchived);
@@ -303,6 +340,30 @@ export function FormBuilder({ formId }: { formId?: string }) {
         {/* Editor */}
         <div className="flex-1 overflow-y-auto bg-muted/30">
           <div className="max-w-2xl mx-auto p-6 space-y-6">
+
+            {formId && rotation && (
+              <Card className="p-5">
+                <h3 className="font-heading font-semibold mb-1 flex items-center gap-2"><Workflow className="w-4 h-4 text-brand-600" />Distribuição de leads</h3>
+                <p className="text-xs text-muted-foreground mb-4">Configure rodízio automático entre Atendentes/Vendedores ativos. Apenas usuários com perfil Atendente/Vendedor podem receber leads.</p>
+                <div className="space-y-3">
+                  <Label>Modo de distribuição</Label>
+                  <Select value={rotation.isEnabled ? 'round_robin' : 'none'} onValueChange={(v) => setRotation((current: any) => ({ ...current, isEnabled: v === 'round_robin' }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="none">Sem distribuição automática</SelectItem><SelectItem value="round_robin">Rodízio entre vendedores</SelectItem></SelectContent>
+                  </Select>
+                  {rotation.isEnabled && <div className="rounded-md border p-3 space-y-2">
+                    <div className="text-sm font-medium">Ordem do rodízio</div>
+                    {rotation.availableAgents?.length === 0 && <p className="text-xs text-muted-foreground">Nenhum Atendente/Vendedor ativo disponível.</p>}
+                    {rotation.availableAgents?.map((agent: any) => {
+                      const member = rotation.members?.find((m: any) => m.userId === agent.userId);
+                      return <div key={agent.userId} className="flex items-center gap-2 rounded-md bg-muted/40 p-2 text-sm"><input type="checkbox" checked={!!member?.isActive} onChange={(e) => toggleRotationMember(agent.userId, e.target.checked)} /><span className="flex-1">{agent.name} <span className="text-xs text-muted-foreground">{agent.email}</span></span><Button type="button" size="sm" variant="outline" onClick={() => moveRotationMember(agent.userId, -1)}>↑</Button><Button type="button" size="sm" variant="outline" onClick={() => moveRotationMember(agent.userId, 1)}>↓</Button></div>;
+                    })}
+                  </div>}
+                  <Button type="button" onClick={saveRotation} disabled={savingRotation}>{savingRotation ? 'Salvando...' : 'Salvar distribuição'}</Button>
+                </div>
+              </Card>
+            )}
+
             <Card className="p-5">
               <h3 className="font-heading font-semibold mb-1 flex items-center gap-2"><Workflow className="w-4 h-4 text-brand-600" />Destino do lead</h3>
               <p className="text-xs text-muted-foreground mb-4">Para qual pipeline e etapa este lead entra ao enviar.</p>

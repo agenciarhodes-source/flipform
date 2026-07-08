@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
 import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
+import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 /**
@@ -189,7 +190,12 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const leadCity = locationAnswer?.city || null;
 
     // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
+    const assignmentResult = { assignedTo: null as string | null, reason: 'not_started' };
     const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+      const rotation = await assignLeadByRotation({ tenantId: form.tenantId, formId: form.id, tx });
+      assignmentResult.assignedTo = rotation.assignedTo;
+      assignmentResult.reason = rotation.reason;
+      if (rotation.reason === 'no_active_agents') console.warn('lead assignment rotation enabled without valid agents', { tenantId: form.tenantId, formId: form.id });
       const created = await tx.lead.create({
         data: {
           tenantId: form.tenantId,
@@ -202,6 +208,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           source: 'formulario',
           status: 'open',
           temperature: 'warm',
+          assignedTo: rotation.assignedTo,
           state: leadState,
           city: leadCity,
           answers: {
@@ -228,8 +235,15 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'lead', entityId: lead.id, action: 'lead.created',
-      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario' },
+      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario', assignedTo: lead.assignedTo, assignmentReason: assignmentResult.reason },
     });
+    if (lead.assignedTo) {
+      await logAudit({
+        tenantId: form.tenantId, userId: null,
+        entityType: 'lead', entityId: lead.id, action: 'lead.auto_assigned',
+        metadata: { formId: form.id, assignedTo: lead.assignedTo, strategy: 'round_robin', message: 'Lead atribuído automaticamente pelo rodízio do formulário.' },
+      });
+    }
 
     try {
       await dispatchFormSubmissionTracking({
