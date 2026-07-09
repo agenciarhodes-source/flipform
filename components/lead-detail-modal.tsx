@@ -46,6 +46,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     onChange();
   };
 
+
+  const updateAssignee = async (assignedTo: string) => {
+    const res = await fetch(`/api/leads/${leadId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assignedTo: assignedTo === 'none' ? null : assignedTo }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(data.error || 'Não foi possível alterar o responsável.'); return; }
+    toast.success('Responsável atualizado');
+    load(); onChange();
+  };
+
   const updateTemp = async (temperature: string) => {
     await fetch(`/api/leads/${leadId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ temperature }) });
     toast.success('Temperatura atualizada');
@@ -171,6 +180,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{isFinalStage ? 'Ganho' : lead.status}</div></div>
               <div><div className="text-muted-foreground">Criado em</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
               <div><div className="text-muted-foreground">Última atualização</div><div className="font-medium">{formatDateTime(lead.updatedAt)}</div></div>
+              <div className="col-span-2"><div className="text-muted-foreground mb-2">Responsável</div>{lead.activeAgents?.length ? <Select value={lead.assignedTo || 'none'} onValueChange={updateAssignee}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem responsável</SelectItem>{lead.activeAgents.map((agent: any) => <SelectItem key={agent.userId} value={agent.userId}>{agent.name} — {agent.email}</SelectItem>)}</SelectContent></Select> : <div className="font-medium">{lead.assignedUser?.name || 'Sem responsável'}</div>}</div>
             </div>
             </section>
 

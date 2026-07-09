@@ -629,7 +629,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
 
   return {
     executive,
-    filters: { period: period.period, startDate: period.startDate.toISOString(), endDate: period.endDate.toISOString(), pipelineId: pipelineId || null, formId: formId || null, state: selectedState || null, city: selectedCity || null, assignedTo: agentScope || null, pipelines, forms: filterForms, agents: role === 'agent' ? [] : (agents as any[]).map((a) => ({ userId: a.userId, name: a.user.name, email: a.user.email })) },
+    filters: { period: period.period, startDate: period.startDate.toISOString(), endDate: period.endDate.toISOString(), pipelineId: pipelineId || null, formId: formId || null, state: selectedState || null, city: selectedCity || null, assignedTo: agentScope || null, canFilterByAssignee: role !== 'agent' && role !== 'viewer', pipelines, forms: filterForms, agents: role === 'agent' ? [] : (agents as any[]).map((a) => ({ userId: a.userId, name: a.user.name, email: a.user.email })) },
     summary: {
       totalLeads: total,
       newLeads,

@@ -59,7 +59,7 @@ export default function FormsPage() {
               ))}
             </SelectContent>
           </Select>
-          <Link href="/forms/new"><Button><Plus className="w-4 h-4 mr-2" />Novo formulário</Button></Link>
+          {forms.some((f) => f.canEdit) && <Link href="/forms/new"><Button><Plus className="w-4 h-4 mr-2" />Novo formulário</Button></Link>}
         </div>
       </div>
 
@@ -146,8 +146,8 @@ export default function FormsPage() {
                     <Copy className="w-3 h-3 mr-1.5" />Link
                   </Button>
                   <Link href={f.publicUrl || `/f/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
-                  <Link href={`/forms/${f.id}/edit`}><Button size="sm" variant="outline"><Edit className="w-3 h-3" /></Button></Link>
-                  <Button size="sm" variant="outline" onClick={() => deleteForm(f.id)}><Trash2 className="w-3 h-3 text-destructive" /></Button>
+                  {f.canEdit && <Link href={`/forms/${f.id}/edit`}><Button size="sm" variant="outline"><Edit className="w-3 h-3" /></Button></Link>}
+                  {f.canDelete && <Button size="sm" variant="outline" onClick={() => deleteForm(f.id)}><Trash2 className="w-3 h-3 text-destructive" /></Button>}
                 </div>
               </Card>
             );
