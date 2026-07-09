@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import { withPermission } from '@/lib/rbac-server';
+import { canManageRole } from '@/lib/rbac';
 import { logAudit } from '@/lib/audit';
 import { userCreateSchema } from '@/lib/schemas-users';
 
@@ -25,15 +26,14 @@ export const GET = withPermission('USERS_VIEW', async (_req, session) => {
   });
 });
 
-export const POST = withPermission('USERS_INVITE', async (req, session) => {
+export const POST = withPermission('USERS_CREATE_DIRECT', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = userCreateSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
 
-    // Apenas owner pode criar outro owner
-    if (parsed.data.role === 'owner' && session.role !== 'owner') {
-      return NextResponse.json({ error: 'Apenas o owner pode atribuir o papel owner.' }, { status: 403 });
+    if (!canManageRole(session.role, parsed.data.role, session.globalRole)) {
+      return NextResponse.json({ error: 'Você não tem permissão para criar usuário com este papel.' }, { status: 403 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email: parsed.data.email } });
@@ -59,6 +59,7 @@ export const POST = withPermission('USERS_INVITE', async (req, session) => {
     });
 
     return NextResponse.json({
+      message: 'Usuário criado com sucesso.',
       user: {
         tenantUserId: tu.id, userId: user.id, name: user.name, email: user.email,
         role: tu.role, status: tu.status, createdAt: tu.createdAt,

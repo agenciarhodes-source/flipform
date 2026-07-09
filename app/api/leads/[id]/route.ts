@@ -28,12 +28,13 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   try { assertCanAccessLead(session, lead); } catch { return NextResponse.json({ error: 'Você não tem permissão para acessar este lead.' }, { status: 403 }); }
+  const activeAgents = ['owner', 'admin', 'manager'].includes(session.role) ? await prisma.tenantUser.findMany({ where: { tenantId: session.tenantId, role: 'agent', status: 'active' }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }) : [];
   const saleValueAuditLogs = await prisma.auditLog.findMany({
     where: { tenantId: session.tenantId, entityType: 'lead', entityId: lead.id, action: 'lead.sale_value_updated' },
     orderBy: { createdAt: 'asc' },
     select: { id: true, userId: true, metadata: true, createdAt: true },
   });
-  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs } });
+  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })) } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { can } from "@/lib/rbac";
+import { can, ROLE_LABELS_PT_BR, type RoleName } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -21,6 +21,7 @@ import {
   Users,
   FileText,
   Settings,
+  Shuffle,
   BarChart3,
   LogOut,
   Zap,
@@ -46,6 +47,7 @@ const NAV: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/forms", label: "Formulários", icon: FileText },
+  { href: "/sales-rotation", label: "Rodízio de leads", icon: Shuffle, show: (r) => can(r, "LEAD_ASSIGNMENT_ROTATION_VIEW") },
   { href: "/domains", label: "Domínios", icon: Globe2 },
   { href: "/billing", label: "Financeiro", icon: CreditCard },
   {
@@ -249,7 +251,7 @@ export function AppShell({
                     {session.name}
                   </div>
                   <div className="text-xs text-muted-foreground capitalize">
-                    {session.role}
+                    {ROLE_LABELS_PT_BR[session.role as RoleName] || session.role}
                   </div>
                 </div>
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />

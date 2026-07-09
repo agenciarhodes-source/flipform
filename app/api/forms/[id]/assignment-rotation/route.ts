@@ -6,7 +6,7 @@ import { withPermission } from '@/lib/rbac-server';
 const rotationMemberSchema = z.object({ userId: z.string().uuid(), orderIndex: z.number().int().min(0), isActive: z.boolean().default(true) });
 const rotationPutSchema = z.object({ isEnabled: z.boolean(), strategy: z.literal('round_robin').default('round_robin'), members: z.array(rotationMemberSchema).default([]) });
 
-export const GET = withPermission('LEAD_ASSIGNMENT_ROTATION_MANAGE', async (_req, session, ctx: { params: { id: string } }) => {
+export const GET = withPermission('LEAD_ASSIGNMENT_ROTATION_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const form = await prisma.form.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId }, select: { id: true } });
   if (!form) return NextResponse.json({ error: 'Formulário não encontrado.' }, { status: 404 });
   const [rotation, agents] = await Promise.all([

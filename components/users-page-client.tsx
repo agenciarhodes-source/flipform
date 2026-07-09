@@ -31,11 +31,13 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
   const [invites, setInvites] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [origin, setOrigin] = useState('');
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
+  const canCreateDirect = can(session.role, 'USERS_CREATE_DIRECT');
   const canInvite = can(session.role, 'USERS_INVITE');
   const canEdit = can(session.role, 'USERS_EDIT');
 
@@ -58,9 +60,10 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
           <h1 className="font-heading text-2xl lg:text-3xl font-bold">Usuários &amp; Permissões</h1>
           <p className="text-muted-foreground text-sm">Gerencie a equipe que tem acesso a esta empresa.</p>
         </div>
-        {canInvite && (
-          <Button onClick={() => setInviteOpen(true)}><UserPlus className="w-4 h-4 mr-2" />Convidar usuário</Button>
-        )}
+        <div className="flex gap-2">
+          {canInvite && <Button variant="outline" onClick={() => setInviteOpen(true)}><Mail className="w-4 h-4 mr-2" />Enviar convite por link</Button>}
+          {canCreateDirect && <Button onClick={() => setCreateOpen(true)}><UserPlus className="w-4 h-4 mr-2" />Adicionar usuário</Button>}
+        </div>
       </div>
 
       <Tabs defaultValue="members">
@@ -198,6 +201,13 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
         </div>
       </Card>
 
+      {createOpen && (
+        <CreateUserDialog
+          actorRole={session.role as Role}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); toast.success('Usuário criado com sucesso.'); load(); }}
+        />
+      )}
       {inviteOpen && (
         <InviteDialog
           actorRole={session.role as Role}
@@ -219,6 +229,47 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
         />
       )}
     </div>
+  );
+}
+
+
+function CreateUserDialog({ onClose, onCreated, actorRole }: { onClose: () => void; onCreated: () => void; actorRole: Role }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState<Role>('agent');
+  const [status] = useState<'active'>('active');
+  const [loading, setLoading] = useState(false);
+
+  const create = async () => {
+    if (password !== confirmPassword) { toast.error('As senhas não conferem.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password, role, status }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao criar usuário');
+      onCreated();
+    } catch (e: any) { toast.error(e.message); } finally { setLoading(false); }
+  };
+
+  const roles = (['admin', 'manager', 'agent', 'viewer'] as Role[]).filter((r) => canManageRole(actorRole, r));
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle className="font-heading">Adicionar usuário</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div><Label>Nome</Label><Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Erica" /></div>
+          <div><Label>E-mail</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="erica@empresa.com" /></div>
+          <div className="grid grid-cols-2 gap-3"><div><Label>Senha</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="mínimo 6 caracteres" /></div><div><Label>Confirmar senha</Label><Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div></div>
+          <div><Label>Papel</Label><Select value={role} onValueChange={(v) => setRole(v as Role)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{roles.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS_PT_BR[r]} — {ROLE_SHORT_DESCRIPTIONS_PT_BR[r]}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Status</Label><Input value={status === 'active' ? 'Ativo' : status} disabled /></div>
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">O usuário será criado ativo, vinculado a esta empresa e poderá entrar com a senha definida. Nenhum convite será enviado.</div>
+        </div>
+        <DialogFooter><Button variant="outline" onClick={onClose}>Cancelar</Button><Button onClick={create} disabled={!name || !email || !password || loading}>{loading ? 'Criando...' : 'Adicionar usuário'}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -37,6 +37,8 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
         publicUrlState: urlState.state,
         publicUrlLabel: urlState.label,
         customDomainUrl: urlState.customUrl,
+        canEdit: session.role === 'owner' || session.role === 'admin',
+        canDelete: session.role === 'owner',
         customDomainStatus: primaryDomain ? {
           status: primaryDomain.status,
           verificationStatus: primaryDomain.verificationStatus,
