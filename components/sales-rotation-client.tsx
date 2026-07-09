@@ -11,6 +11,23 @@ import { ArrowDown, ArrowUp, Save, Shuffle, UserPlus } from 'lucide-react';
 type FormItem = { id: string; name: string; isActive: boolean; publicTitle?: string };
 type Agent = { userId: string; name: string; email: string };
 type RotationMember = Agent & { orderIndex: number; isActive: boolean };
+type RotationPreviewItem = { leadNumber: number; sellerName: string };
+
+function buildRotationPreview(activeMembers: RotationMember[], totalExamples = 6): RotationPreviewItem[] {
+  const orderedMembers = [...activeMembers]
+    .filter((member) => member.isActive)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
+
+  if (!orderedMembers.length) return [];
+
+  return Array.from({ length: totalExamples }, (_, index) => {
+    const member = orderedMembers[index % orderedMembers.length];
+    return {
+      leadNumber: index + 1,
+      sellerName: member.name || member.email || 'Vendedor',
+    };
+  });
+}
 
 export function SalesRotationClient({ canManage }: { canManage: boolean }) {
   const [forms, setForms] = useState<FormItem[]>([]);
@@ -41,8 +58,12 @@ export function SalesRotationClient({ canManage }: { canManage: boolean }) {
     }).catch((error) => toast.error(error.message)).finally(() => setLoading(false));
   }, [formId]);
 
-  const selectedIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
-  const orderedMembers = members.map((member, index) => ({ ...member, orderIndex: index }));
+  const selectedIds = useMemo(() => new Set(members.filter((member) => member.isActive).map((m) => m.userId)), [members]);
+  const orderedMembers = useMemo(() => members
+    .filter((member) => member.isActive)
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map((member, index) => ({ ...member, orderIndex: index })), [members]);
+  const rotationPreview = useMemo(() => buildRotationPreview(orderedMembers), [orderedMembers]);
 
   const toggleAgent = (agent: Agent, checked: boolean) => {
     if (!canManage) return;
@@ -90,7 +111,7 @@ export function SalesRotationClient({ canManage }: { canManage: boolean }) {
         <div className="space-y-2"><label className="text-sm font-medium">Modo de distribuição</label><div className="grid gap-2 sm:grid-cols-2"><button type="button" disabled={!canManage} onClick={() => setEnabled(false)} className={`rounded-lg border p-3 text-left text-sm ${!enabled ? 'border-blue-500 bg-blue-50' : 'bg-white'}`}><strong>Sem distribuição automática</strong><br /><span className="text-muted-foreground">Leads entram sem responsável automático.</span></button><button type="button" disabled={!canManage} onClick={() => setEnabled(true)} className={`rounded-lg border p-3 text-left text-sm ${enabled ? 'border-blue-500 bg-blue-50' : 'bg-white'}`}><strong>Rodízio entre vendedores</strong><br /><span className="text-muted-foreground">Distribui conforme a ordem abaixo.</span></button></div></div>
         <div className="space-y-3"><h2 className="font-heading font-semibold">Vendedores disponíveis</h2>{agents.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center"><p className="font-medium">Nenhum vendedor cadastrado ainda.</p><p className="text-sm text-muted-foreground mb-3">Adicione vendedores em Usuários & Permissões para configurar o rodízio.</p><Link href="/users"><Button><UserPlus className="w-4 h-4 mr-2" />Adicionar vendedor</Button></Link></div> : agents.map((agent) => <label key={agent.userId} className="flex items-center gap-3 rounded-lg border p-3"><input type="checkbox" disabled={!canManage} checked={selectedIds.has(agent.userId)} onChange={(event) => toggleAgent(agent, event.currentTarget.checked)} className="h-4 w-4 rounded border" /><span><span className="font-medium">{agent.name}</span><span className="text-muted-foreground"> — {agent.email}</span></span></label>)}</div>
       </Card>
-      <Card className="p-5 space-y-4"><div><h2 className="font-heading font-semibold">Ordem do rodízio</h2><p className="text-xs text-muted-foreground">Use as setas para definir quem recebe antes.</p></div>{orderedMembers.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Selecione vendedores para montar a ordem.</div> : orderedMembers.map((member, index) => <div key={member.userId} className="flex items-center justify-between gap-2 rounded-lg border p-3"><div><span className="font-semibold">{index + 1}. {member.name}</span><div className="text-xs text-muted-foreground">{member.email}</div></div><div className="flex gap-1"><Button type="button" size="icon" variant="outline" disabled={!canManage || index === 0} onClick={() => move(member.userId, -1)}><ArrowUp className="w-4 h-4" /></Button><Button type="button" size="icon" variant="outline" disabled={!canManage || index === orderedMembers.length - 1} onClick={() => move(member.userId, 1)}><ArrowDown className="w-4 h-4" /></Button></div></div>)}<div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground"><strong>Exemplo visual:</strong><br />Lead 1 → {orderedMembers[0]?.name || 'Vendedor 1'}<br />Lead 2 → {orderedMembers[1]?.name || 'Vendedor 2'}<br />Lead 3 → {orderedMembers[2]?.name || orderedMembers[0]?.name || 'Vendedor 3'}<br />Lead 4 → {orderedMembers[0]?.name || 'Vendedor 1'}</div><Button className="w-full" onClick={save} disabled={!canManage || saving || !formId || loading}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar rodízio'}</Button>{!canManage && <p className="text-xs text-muted-foreground">Seu papel permite visualizar, mas não alterar o rodízio.</p>}</Card>
+      <Card className="p-5 space-y-4"><div><h2 className="font-heading font-semibold">Ordem do rodízio</h2><p className="text-xs text-muted-foreground">Use as setas para definir quem recebe antes.</p></div>{orderedMembers.length === 0 ? <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">Selecione vendedores para montar a ordem.</div> : orderedMembers.map((member, index) => <div key={member.userId} className="flex items-center justify-between gap-2 rounded-lg border p-3"><div><span className="font-semibold">{index + 1}. {member.name}</span><div className="text-xs text-muted-foreground">{member.email}</div></div><div className="flex gap-1"><Button type="button" size="icon" variant="outline" disabled={!canManage || index === 0} onClick={() => move(member.userId, -1)}><ArrowUp className="w-4 h-4" /></Button><Button type="button" size="icon" variant="outline" disabled={!canManage || index === orderedMembers.length - 1} onClick={() => move(member.userId, 1)}><ArrowDown className="w-4 h-4" /></Button></div></div>)}<div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground"><strong>Exemplo visual:</strong>{rotationPreview.length === 0 ? <p className="mt-1">Selecione vendedores para visualizar o exemplo do rodízio.</p> : <div className="mt-1 space-y-1">{rotationPreview.map((item) => <div key={item.leadNumber}>Lead {item.leadNumber} → {item.sellerName}</div>)}</div>}</div><Button className="w-full" onClick={save} disabled={!canManage || saving || !formId || loading}><Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar rodízio'}</Button>{!canManage && <p className="text-xs text-muted-foreground">Seu papel permite visualizar, mas não alterar o rodízio.</p>}</Card>
     </div>
   </div>;
 }
