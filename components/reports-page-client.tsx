@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { StatCard } from '@/components/stat-card';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import {
-  Users, Trophy, TrendingUp, AlertCircle, Clock, Target, Download, Filter, Loader2, Inbox,
+  Users, Trophy, TrendingUp, AlertCircle, Clock, Target, FileSpreadsheet, Filter, Loader2, Inbox,
   ListChecks, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 
@@ -117,10 +117,10 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
     });
   }, [qs]);
 
-  const downloadCSV = async () => {
+  const downloadExcel = async () => {
     setExporting(true);
     try {
-      const res = await fetch(`/api/reports/export?${qs}`);
+      const res = await fetch(`/api/reports/export?${qs ? `${qs}&` : ''}format=xlsx`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || 'Erro ao exportar');
@@ -128,7 +128,7 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
       const blob = await res.blob();
       const cd = res.headers.get('content-disposition') || '';
       const match = cd.match(/filename="([^"]+)"/);
-      const filename = match ? match[1] : 'flipform-leads.csv';
+      const filename = match ? match[1] : 'flipform-relatorio.xlsx';
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -137,9 +137,9 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success('CSV exportado com sucesso');
+      toast.success('Excel exportado com sucesso.');
     } catch (e: any) {
-      toast.error(e.message || 'Erro ao exportar CSV');
+      toast.error(e.message || 'Não foi possível exportar o relatório em Excel.');
     } finally {
       setExporting(false);
     }
@@ -159,9 +159,9 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
           <p className="text-muted-foreground text-sm">Análise de performance comercial e operacional.</p>
         </div>
         {canExport && (
-          <Button onClick={downloadCSV} disabled={exporting || loading} data-testid="export-csv-btn">
-            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
-            Exportar CSV
+          <Button onClick={downloadExcel} disabled={exporting || loading} data-testid="export-excel-btn" title="Baixar relatório formatado em XLSX.">
+            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
+            Exportar Excel
           </Button>
         )}
       </div>
