@@ -80,13 +80,14 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
                   <th className="text-left px-4 py-3 font-medium">Usuário</th>
                   <th className="text-left px-4 py-3 font-medium">Papel</th>
                   <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 font-medium">Acesso autorizado</th>
                   <th className="text-left px-4 py-3 font-medium">Adicionado em</th>
                   <th className="text-right px-4 py-3 font-medium">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {loading ? <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Carregando...</td></tr> :
-                  users.length === 0 ? <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum membro ainda.</td></tr> :
+                {loading ? <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Carregando...</td></tr> :
+                  users.length === 0 ? <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Nenhum membro ainda.</td></tr> :
                   users.map((u) => {
                     const meta = ROLE_META[u.role as Role];
                     const Icon = meta?.icon || UserIcon;
@@ -110,6 +111,15 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Ativo</Badge>
                           ) : (
                             <Badge variant="outline" className="bg-slate-100 text-slate-600">Inativo</Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {u.accessStatus === 'authorized' ? (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Liberado</Badge>
+                          ) : u.accessStatus === 'blocked' ? (
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Bloqueado</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pendente</Badge>
                           )}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground text-xs">{formatDate(u.createdAt)}</td>
@@ -205,7 +215,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
         <CreateUserDialog
           actorRole={session.role as Role}
           onClose={() => setCreateOpen(false)}
-          onCreated={() => { setCreateOpen(false); toast.success('Usuário criado com sucesso.'); load(); }}
+          onCreated={(message) => { setCreateOpen(false); toast.success(message || 'Usuário criado e liberado para acesso.'); load(); }}
         />
       )}
       {inviteOpen && (
@@ -233,7 +243,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
 }
 
 
-function CreateUserDialog({ onClose, onCreated, actorRole }: { onClose: () => void; onCreated: () => void; actorRole: Role }) {
+function CreateUserDialog({ onClose, onCreated, actorRole }: { onClose: () => void; onCreated: (message?: string) => void; actorRole: Role }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -249,7 +259,9 @@ function CreateUserDialog({ onClose, onCreated, actorRole }: { onClose: () => vo
       const res = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password, role, status }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar usuário');
-      onCreated();
+      setPassword('');
+      setConfirmPassword('');
+      onCreated(data.message);
     } catch (e: any) { toast.error(e.message); } finally { setLoading(false); }
   };
 
