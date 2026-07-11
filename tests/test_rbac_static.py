@@ -63,3 +63,27 @@ def test_frontend_uses_portuguese_labels_for_roles():
     assert 'PLATFORM_ADMIN_LABEL_PT_BR' in account
     invite_accept = read('app/invite/[token]/invite-accept-client.tsx')
     assert 'ROLE_LABELS_PT_BR[invite.role as RoleName]' in invite_accept
+
+
+
+def test_agent_cannot_see_or_access_domains_and_billing_account_areas():
+    rbac = read('lib/rbac.ts')
+    assert "DOMAINS_VIEW: ['owner', 'admin']" in rbac
+    assert "DOMAINS_MANAGE: ['owner', 'admin']" in rbac
+    assert "BILLING_VIEW: ['owner']" in rbac
+    assert "BILLING_MANAGE: ['owner']" in rbac
+
+    shell = read('components/app-shell.tsx')
+    assert 'permission?: PermissionKey' in shell
+    assert 'label: "Domínios", icon: Globe2, permission: "DOMAINS_VIEW"' in shell
+    assert 'label: "Financeiro", icon: CreditCard, permission: "BILLING_VIEW"' in shell
+    assert 'can(session.role, item.permission)' in shell
+
+    billing_page = read('app/(app)/billing/page.tsx')
+    assert 'can(session.role, "BILLING_VIEW")' in billing_page
+    assert 'redirect("/dashboard?error=permission-denied")' in billing_page
+
+    for path in ['app/api/billing/cancel/route.ts', 'app/api/billing/change-plan/route.ts']:
+        content = read(path)
+        assert "withPermission('BILLING_MANAGE'" in content
+        assert "['owner', 'admin']" not in content

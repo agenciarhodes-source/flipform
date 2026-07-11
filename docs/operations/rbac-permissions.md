@@ -77,3 +77,10 @@ Visualizador pode acessar telas e dados em modo leitura conforme liberado, mas n
 7. Confirmar que Administrador pode convidar Gestor, Atendente/Vendedor e Visualizador, mas não Administrador nem Dono.
 8. Confirmar que Super Admin consegue definir Dono da empresa nos fluxos globais da plataforma.
 9. Executar `npx prisma generate`, `npm run typecheck`, `JWT_SECRET_CURRENT='staging-local-secret' npm run build` e a suíte de testes aplicável.
+
+
+## Atendente/Vendedor — áreas sensíveis bloqueadas
+
+- Atendente/Vendedor não acessa Domínios: o item não aparece no menu, a rota `/domains` é bloqueada server-side e as APIs de domínios exigem `DOMAINS_VIEW` ou `DOMAINS_MANAGE`.
+- Atendente/Vendedor não acessa billing/Financeiro da assinatura: o item não aparece no menu, a rota `/billing` é bloqueada server-side e ações de plano, assinatura, cobranças e pagamentos exigem `BILLING_VIEW` ou `BILLING_MANAGE`.
+- Esse bloqueio não remove o financeiro comercial dos próprios leads; compras/vendas dos leads atribuídos continuam seguindo `PURCHASES_VIEW_OWN`, `PURCHASES_CREATE_OWN` e `PURCHASES_EDIT_OWN`, quando permitido.

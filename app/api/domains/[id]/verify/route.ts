@@ -5,7 +5,7 @@ import { activateCustomFormDomain, syncDomainWithVercel } from "@/lib/custom-for
 import { logAudit } from "@/lib/audit";
 
 export const POST = withPermission(
-  "SETTINGS_EDIT",
+  "DOMAINS_MANAGE",
   async (_req, session, ctx: { params: { id: string } }) => {
     const domain = await prisma.customFormDomain.findFirst({
       where: { id: ctx.params.id, tenantId: session.tenantId },

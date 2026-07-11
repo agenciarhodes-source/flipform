@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { cancelSubscription } from '@/lib/asaas';
 import { logAudit } from '@/lib/audit';
 
-export const POST = withAuth(async (req: NextRequest, session) => {
+export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, session) => {
   const rlTenant = rateLimit({ key: `billing:cancel:tenant:${session.tenantId}`, limit: 5, windowMs: 60 * 60 * 1000 });
   if (!rlTenant.allowed) return rateLimitResponse(rlTenant);
   const rlIp = rateLimit({ key: `billing:cancel:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 60 * 1000 });
   if (!rlIp.allowed) return rateLimitResponse(rlIp);
-  if (!['owner', 'admin'].includes(session.role)) return NextResponse.json({ error: 'Você não tem permissão para cancelar a assinatura.', code: 'FORBIDDEN' }, { status: 403 });
-
   const body = await req.json().catch(() => ({}));
   const reason = String(body.reason || '').trim();
   const tenant = await prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { id: true, status: true } });

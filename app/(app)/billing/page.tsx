@@ -14,6 +14,8 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { getSession } from "@/lib/auth";
+import { can } from "@/lib/rbac";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,6 +100,7 @@ function paymentUrl(payment: { invoiceUrl: string | null; bankSlipUrl: string | 
 export default async function BillingPage() {
   const session = await getSession();
   if (!session) return null;
+  if (!can(session.role, "BILLING_VIEW")) redirect("/dashboard?error=permission-denied");
 
   const [tenant, subscription, payments, pendingPayments] = await Promise.all([
     prisma.tenant.findUnique({
