@@ -38,7 +38,7 @@ def test_public_url_helper_uses_fallback_until_domain_is_active():
 
 
 def test_domains_page_is_backoffice_managed_and_client_friendly():
-    page = read('app/(app)/domains/page.tsx')
+    page = read('app/(app)/domains/domains-client.tsx')
     assert 'Solicite a configuração de um subdomínio próprio para publicar seus' in page
     assert 'Solicitar domínio de formulário' in page
     assert 'Domínio principal' in page
@@ -57,7 +57,7 @@ def test_domains_page_is_backoffice_managed_and_client_friendly():
 
 
 def test_domains_page_dns_appears_only_when_backoffice_set_target():
-    page = read('app/(app)/domains/page.tsx')
+    page = read('app/(app)/domains/domains-client.tsx')
     assert 'const dnsTarget = d.dnsTarget || d.verificationValue || "";' in page
     assert 'const shouldShowDns = Boolean(dnsTarget);' in page
     assert 'cname.vercel-dns.com' not in page
@@ -69,7 +69,7 @@ def test_domains_page_dns_appears_only_when_backoffice_set_target():
 
 
 def test_domains_page_status_labels_are_managed_flow():
-    page = read('app/(app)/domains/page.tsx')
+    page = read('app/(app)/domains/domains-client.tsx')
     assert 'Solicitação recebida' in page
     assert 'Aguardando configuração técnica' in page
     assert 'Aguardando DNS' in page
@@ -221,3 +221,19 @@ def test_no_real_client_domain_references_in_custom_domain_static_suite():
     ])
     assert 'WHERE domain =' not in combined
     assert 'domain: "leads.' not in combined
+
+
+
+def test_domains_page_and_api_are_protected_by_domains_permissions():
+    page = read('app/(app)/domains/page.tsx')
+    assert 'can(session.role, "DOMAINS_VIEW")' in page
+    assert 'redirect("/dashboard?error=permission-denied")' in page
+    route = read('app/api/domains/route.ts')
+    assert 'withPermission("DOMAINS_VIEW"' in route
+    assert 'withPermission("DOMAINS_MANAGE"' in route
+    for path in [
+        'app/api/domains/[id]/route.ts',
+        'app/api/domains/[id]/primary/route.ts',
+        'app/api/domains/[id]/verify/route.ts',
+    ]:
+        assert 'DOMAINS_MANAGE' in read(path)

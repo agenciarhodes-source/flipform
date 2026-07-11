@@ -7,7 +7,7 @@ import {
 } from "@/lib/custom-form-domains";
 import { logAudit } from "@/lib/audit";
 
-export const GET = withPermission("SETTINGS_VIEW", async (_req, session) => {
+export const GET = withPermission("DOMAINS_VIEW", async (_req, session) => {
   const domains = await prisma.customFormDomain.findMany({
     where: { tenantId: session.tenantId },
     orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }],
@@ -15,7 +15,7 @@ export const GET = withPermission("SETTINGS_VIEW", async (_req, session) => {
   return NextResponse.json({ domains, appDomain: getConfiguredAppDomain() });
 });
 
-export const POST = withPermission("SETTINGS_EDIT", async (req, session) => {
+export const POST = withPermission("DOMAINS_MANAGE", async (req, session) => {
   try {
     const body = await req.json();
     if (

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/auth';
+import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logAudit } from '@/lib/audit';
@@ -7,13 +7,10 @@ import { validateTenantWithinPlanLimits } from '@/lib/plan-limits';
 
 const SELF_SERVE = new Set(['starter', 'growth', 'pro']);
 
-export const POST = withAuth(async (req: NextRequest, session) => {
+export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, session) => {
   const rl = rateLimit({ key: `billing:change-plan:user:${session.userId}:ip:${getClientIp(req)}`, limit: 20, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  if (!['owner', 'admin'].includes(session.role)) {
-    return NextResponse.json({ error: 'Você não tem permissão para alterar o plano.', code: 'FORBIDDEN' }, { status: 403 });
-  }
 
   const body = await req.json().catch(() => ({}));
   const targetPlanSlug = String(body.targetPlanSlug || '').trim().toLowerCase();

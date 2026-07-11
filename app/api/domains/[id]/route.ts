@@ -4,7 +4,7 @@ import { withPermission } from "@/lib/rbac-server";
 import { logAudit } from "@/lib/audit";
 
 export const DELETE = withPermission(
-  "SETTINGS_EDIT",
+  "DOMAINS_MANAGE",
   async (_req, session, ctx: { params: { id: string } }) => {
     const domain = await prisma.customFormDomain.findFirst({
       where: { id: ctx.params.id, tenantId: session.tenantId },

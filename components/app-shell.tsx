@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { can, ROLE_LABELS_PT_BR, type RoleName } from "@/lib/rbac";
+import { can, ROLE_LABELS_PT_BR, type PermissionKey, type RoleName } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -40,6 +40,7 @@ type NavItem = {
   href: string;
   label: string;
   icon: any;
+  permission?: PermissionKey;
   show?: (role: string) => boolean;
 };
 const NAV: NavItem[] = [
@@ -47,44 +48,44 @@ const NAV: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/forms", label: "Formulários", icon: FileText },
-  { href: "/sales-rotation", label: "Rodízio de leads", icon: Shuffle, show: (r) => can(r, "LEAD_ASSIGNMENT_ROTATION_VIEW") },
-  { href: "/domains", label: "Domínios", icon: Globe2 },
-  { href: "/billing", label: "Financeiro", icon: CreditCard },
+  { href: "/sales-rotation", label: "Rodízio de leads", icon: Shuffle, permission: "LEAD_ASSIGNMENT_ROTATION_VIEW" },
+  { href: "/domains", label: "Domínios", icon: Globe2, permission: "DOMAINS_VIEW" },
+  { href: "/billing", label: "Financeiro", icon: CreditCard, permission: "BILLING_VIEW" },
   {
     href: "/pipelines",
     label: "Pipelines",
     icon: Workflow,
-    show: (r) => can(r, "PIPELINES_VIEW"),
+    permission: "PIPELINES_VIEW",
   },
   {
     href: "/reports",
     label: "Relatórios",
     icon: BarChart3,
-    show: (r) => can(r, "REPORTS_VIEW"),
+    permission: "REPORTS_VIEW",
   },
   {
     href: "/users",
     label: "Usuários",
     icon: UserCog,
-    show: (r) => can(r, "USERS_VIEW"),
+    permission: "USERS_VIEW",
   },
   {
     href: "/integrations",
     label: "Integrações",
     icon: PlugZap,
-    show: (r) => can(r, "INTEGRATIONS_VIEW"),
+    permission: "INTEGRATIONS_VIEW",
   },
   {
     href: "/whatsapp-funnel",
     label: "Funil WhatsApp",
     icon: MessageCircle,
-    show: (r) => can(r, "INTEGRATIONS_VIEW"),
+    permission: "INTEGRATIONS_VIEW",
   },
   {
     href: "/settings",
     label: "Configurações",
     icon: Settings,
-    show: (r) => can(r, "SETTINGS_VIEW"),
+    permission: "SETTINGS_VIEW",
   },
 ];
 
@@ -173,7 +174,7 @@ export function AppShell({
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
-          {NAV.filter((item) => !item.show || item.show(session.role)).map(
+          {NAV.filter((item) => (!item.permission || can(session.role, item.permission)) && (!item.show || item.show(session.role))).map(
             (item) => {
               const active = pathname.startsWith(item.href);
               const Icon = item.icon;
