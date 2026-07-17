@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPermission, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
+import { withPermission, canDeleteLead, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
@@ -34,7 +34,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     orderBy: { createdAt: 'asc' },
     select: { id: true, userId: true, metadata: true, createdAt: true },
   });
-  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })) } });
+  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role) } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {
@@ -68,6 +68,11 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
 });
 
 export const DELETE = withPermission('LEADS_DELETE', async (_req, session, ctx: { params: { id: string } }) => {
+  // Keep the agent restriction explicit at the destructive endpoint. This
+  // remains enforced even if permissions are changed elsewhere in the future.
+  if (!canDeleteLead(session.role)) {
+    return NextResponse.json({ error: 'Atendente/Vendedor não pode excluir leads.' }, { status: 403 });
+  }
   const lead = await prisma.lead.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   await prisma.lead.delete({ where: { id: lead.id } });
