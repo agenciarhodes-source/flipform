@@ -237,6 +237,7 @@ model Form {
   coverImageUrl     String?  @map("cover_image_url")
   successMessage    String   @default("Obrigado pelo envio!") @map("success_message")
   disqualificationSettings Json?    @map("disqualification_settings")
+  leadSource        String   @default("formulario") @map("lead_source")
   pipelineId        String   @map("pipeline_id")
   initialStageId    String   @map("initial_stage_id")
   isActive          Boolean  @default(true) @map("is_active")
@@ -253,6 +254,7 @@ model Form {
   @@index([tenantId, createdAt])
   @@index([tenantId, pipelineId])
   @@index([tenantId, isActive])
+  @@index([tenantId, leadSource])
   @@unique([tenantId, slug])
   @@map("forms")
 }
@@ -319,6 +321,7 @@ model Lead {
   @@index([tenantId, createdAt])
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
+  @@index([tenantId, source])
   @@index([tenantId, state])
   @@index([tenantId, city])
   @@index([tenantId, state, city])

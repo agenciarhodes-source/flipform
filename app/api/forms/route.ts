@@ -122,6 +122,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
         logoUrl: data.logoUrl ?? null,
         successMessage: data.successMessage || 'Obrigado pelo envio!',
         disqualificationSettings: data.disqualificationSettings == null ? Prisma.JsonNull : (data.disqualificationSettings as Prisma.InputJsonValue),
+        leadSource: data.leadSource || 'formulario',
         pipelineId: pipelineId!,
         initialStageId: initialStageId!,
         isActive: data.isActive ?? true,
@@ -143,7 +144,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
     await logAudit({
       tenantId: session.tenantId, userId: session.userId,
       entityType: 'form', entityId: form.id, action: 'form.created',
-      metadata: { name: form.name, slug: form.slug, pipelineId: form.pipelineId, initialStageId: form.initialStageId },
+      metadata: { name: form.name, slug: form.slug, pipelineId: form.pipelineId, initialStageId: form.initialStageId, leadSource: form.leadSource },
     });
     return NextResponse.json({ form });
   } catch (e: unknown) {

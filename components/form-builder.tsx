@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
+import { FORM_LEAD_SOURCES } from '@/lib/leads';
 import { cleanOptionObjects, cleanOptions, defaultSelectionModeFor, isQualifier, normalizeOptionObjects, normalizeOptions, normalizeQualificationMode, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
 
 const FIELD_TYPES = [
@@ -63,6 +64,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [dqButtonText, setDqButtonText] = useState('Entendi');
   const [dqRedirectUrl, setDqRedirectUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [leadSource, setLeadSource] = useState('formulario');
   const [fields, setFields] = useState<Field[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -89,6 +91,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
     if (!formId) {
       setName('Formulário sem título');
       setPublicTitle('Como podemos ajudar?');
+      setLeadSource('formulario');
       setFields([
         { label: 'Qual seu nome?', fieldType: 'name', isRequired: true, orderIndex: 0, placeholder: 'Seu nome' },
         { label: 'E-mail', fieldType: 'email', isRequired: true, orderIndex: 1, placeholder: 'nome@email.com' },
@@ -113,6 +116,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setDqButtonText(f.disqualificationSettings?.buttonText || 'Entendi');
       setDqRedirectUrl(f.disqualificationSettings?.redirectUrl || '');
       setIsActive(f.isActive);
+      setLeadSource(f.leadSource || 'formulario');
       setPipelineId(f.pipelineId || '');
       setInitialStageId(f.initialStageId || '');
       setFields(f.fields.map((ff: any) => ({
@@ -274,7 +278,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         theme,
         coverImageUrl: coverImageUrl || null,
         logoUrl: formLogoUrl || null,
-        successMessage, disqualificationSettings: { title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptionObjects(field.options) })), pipelineId, initialStageId,
+        successMessage, leadSource, disqualificationSettings: { title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptionObjects(field.options) })), pipelineId, initialStageId,
       };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
@@ -363,6 +367,21 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 </div>
               </Card>
             )}
+
+            <Card className="p-5">
+              <h3 className="font-heading font-semibold mb-1">Origem automática do lead</h3>
+              <p className="text-xs text-muted-foreground mb-4">Todos os clientes que enviarem este formulário serão identificados automaticamente com esta origem.</p>
+              <div className="space-y-2">
+                <Label>Origem dos clientes</Label>
+                <Select value={leadSource} onValueChange={setLeadSource}>
+                  <SelectTrigger><SelectValue placeholder="Selecione a origem" /></SelectTrigger>
+                  <SelectContent>
+                    {FORM_LEAD_SOURCES.map((source) => <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Use este link no canal selecionado. Os novos leads entrarão no CRM com essa origem.</p>
+              </div>
+            </Card>
 
             <Card className="p-5">
               <h3 className="font-heading font-semibold mb-1 flex items-center gap-2"><Workflow className="w-4 h-4 text-brand-600" />Destino do lead</h3>

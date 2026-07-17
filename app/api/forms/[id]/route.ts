@@ -77,6 +77,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
           logoUrl: data.logoUrl ?? null,
           successMessage: data.successMessage || existing.successMessage,
           disqualificationSettings: data.disqualificationSettings == null ? Prisma.JsonNull : (data.disqualificationSettings as Prisma.InputJsonValue),
+          leadSource: data.leadSource || existing.leadSource || 'formulario',
           isActive: data.isActive ?? existing.isActive,
           pipelineId: newPipelineId,
           initialStageId: newStageId,
@@ -104,7 +105,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
     await logAudit({
       tenantId: session.tenantId, userId: session.userId,
       entityType: 'form', entityId: ctx.params.id, action: 'form.updated',
-      metadata: { pipelineId: newPipelineId, initialStageId: newStageId },
+      metadata: { pipelineId: newPipelineId, initialStageId: newStageId, leadSource: data.leadSource || existing.leadSource || 'formulario' },
     });
 
     return NextResponse.json({ ok: true });

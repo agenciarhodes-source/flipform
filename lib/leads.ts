@@ -10,6 +10,30 @@ export const MANUAL_LEAD_SOURCES = [
 
 export const MANUAL_LEAD_SOURCE_VALUES = MANUAL_LEAD_SOURCES.map((source) => source.value);
 
+
+export const FORM_LEAD_SOURCES = [
+  { value: 'formulario', label: 'Formulário — sem origem específica' },
+  { value: 'paid_traffic', label: 'Tráfego pago' },
+  { value: 'meta_ads', label: 'Meta Ads' },
+  { value: 'facebook_ads', label: 'Facebook Ads' },
+  { value: 'instagram_ads', label: 'Instagram Ads' },
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'tiktok_ads', label: 'TikTok Ads' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'instagram_direct', label: 'Direct do Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'facebook_messenger', label: 'Messenger do Facebook' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'google_business_profile', label: 'Google Meu Negócio' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'referral', label: 'Indicação' },
+  { value: 'own_prospecting', label: 'Captação própria' },
+  { value: 'other', label: 'Outro canal' },
+] as const;
+
+export const FORM_LEAD_SOURCE_VALUES = FORM_LEAD_SOURCES.map((source) => source.value);
+export type FormLeadSource = (typeof FORM_LEAD_SOURCES)[number]['value'];
+
 const LEAD_SOURCE_LABELS: Record<string, string> = {
   formulario: 'Formulário',
   form: 'Formulário',
@@ -21,6 +45,18 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
   instagram: 'Instagram',
   visit: 'Visita',
   call_center: 'Call center',
+  paid_traffic: 'Tráfego pago',
+  meta_ads: 'Meta Ads',
+  facebook_ads: 'Facebook Ads',
+  instagram_ads: 'Instagram Ads',
+  google_ads: 'Google Ads',
+  tiktok_ads: 'TikTok Ads',
+  instagram_direct: 'Direct do Instagram',
+  facebook_messenger: 'Messenger do Facebook',
+  tiktok: 'TikTok',
+  google_business_profile: 'Google Meu Negócio',
+  whatsapp: 'WhatsApp',
+  other: 'Outro canal',
 };
 
 export function formatLeadSource(source?: string | null): string {
