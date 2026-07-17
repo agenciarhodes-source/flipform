@@ -123,7 +123,12 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
 
   const deleteLead = async () => {
     if (!confirm('Excluir este lead?')) return;
-    await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+    const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast.error(data.error || 'Não foi possível excluir o lead.');
+      return;
+    }
     toast.success('Lead excluído');
     onChange();
     onClose();
@@ -158,7 +163,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 {(lead.state || lead.city) && <span>{formatLeadLocation(lead.city, lead.state)}</span>}
               </div>
             </div>
-            <Button variant="ghost" size="icon" onClick={deleteLead} title="Excluir lead"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+            {lead.canDelete && <Button variant="ghost" size="icon" onClick={deleteLead} title="Excluir lead"><Trash2 className="w-4 h-4 text-destructive" /></Button>}
           </div>
         </DialogHeader>
 

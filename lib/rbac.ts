@@ -164,6 +164,15 @@ export function canMoveLead(role: string, lead: { assignedTo: string | null }, u
   return false;
 }
 
+/**
+ * Lead deletion is intentionally never scoped to the assignee or creator.
+ * In particular, an Atendente/Vendedor must not delete a lead under any
+ * circumstance, even when it is assigned to or was created by that user.
+ */
+export function canDeleteLead(role: string): boolean {
+  return role !== 'agent' && can(role, 'LEADS_DELETE');
+}
+
 export function assertPermission(session: { role?: string | null } | null | undefined, permission: PermissionKey): void {
   if (!hasPermission(session, permission)) throw new Error('FORBIDDEN');
 }

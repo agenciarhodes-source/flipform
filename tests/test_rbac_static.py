@@ -45,6 +45,21 @@ def test_agent_scope_is_enforced_for_lead_queries_and_access():
     assert "? ['name', 'email', 'phone', 'temperature']" in lead_detail
 
 
+def test_agent_cannot_delete_leads_in_the_ui_or_api():
+    rbac = read('lib/rbac.ts')
+    assert "LEADS_DELETE: ['owner', 'admin']" in rbac
+    assert "export function canDeleteLead(role: string): boolean" in rbac
+    assert "return role !== 'agent' && can(role, 'LEADS_DELETE');" in rbac
+
+    lead_detail = read('app/api/leads/[id]/route.ts')
+    assert "canDelete: canDeleteLead(session.role)" in lead_detail
+    assert "if (!canDeleteLead(session.role))" in lead_detail
+    assert "Atendente/Vendedor não pode excluir leads." in lead_detail
+
+    modal = read('components/lead-detail-modal.tsx')
+    assert '{lead.canDelete && <Button' in modal
+
+
 def test_viewer_and_export_permissions_are_readonly():
     rbac = read('lib/rbac.ts')
     assert "LEADS_VIEW_ALL: ['owner', 'admin', 'manager', 'viewer']" in rbac
