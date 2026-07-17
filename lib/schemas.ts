@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MANUAL_LEAD_SOURCE_VALUES } from './leads';
+import { FORM_LEAD_SOURCE_VALUES, MANUAL_LEAD_SOURCE_VALUES } from './leads';
 import { isValidBrazilCity, isValidBrazilState, normalizeBrazilCity, normalizeBrazilState } from './brazil-locations';
 
 export const registerSchema = z.object({
@@ -67,6 +67,7 @@ export const formCreateSchema = z.object({
     buttonText: z.string().optional(),
     redirectUrl: z.string().optional().nullable(),
   }).optional().nullable(),
+  leadSource: z.string().refine((source) => FORM_LEAD_SOURCE_VALUES.includes(source as typeof FORM_LEAD_SOURCE_VALUES[number]), 'Selecione uma origem válida para os leads deste formulário.').default('formulario'),
   pipelineId: z.string().optional(),
   initialStageId: z.string().optional(),
   isActive: z.boolean().optional(),

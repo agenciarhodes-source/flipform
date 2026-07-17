@@ -144,6 +144,12 @@ const steps: Step[] = [
   { label: 'tenant_users.unique', sql: `CREATE UNIQUE INDEX IF NOT EXISTS tenant_users_tenant_id_user_id_key ON tenant_users(tenant_id, user_id)` },
 
   { label: 'forms.disqualification_settings', sql: `ALTER TABLE public.forms ADD COLUMN IF NOT EXISTS disqualification_settings JSONB` },
+  { label: 'forms.lead_source', sql: `ALTER TABLE public.forms ADD COLUMN IF NOT EXISTS lead_source TEXT` },
+  { label: 'forms.lead_source.backfill', sql: `UPDATE public.forms SET lead_source = 'formulario' WHERE lead_source IS NULL OR btrim(lead_source) = ''` },
+  { label: 'forms.lead_source.default', sql: `ALTER TABLE public.forms ALTER COLUMN lead_source SET DEFAULT 'formulario'` },
+  { label: 'forms.lead_source.not_null', sql: `ALTER TABLE public.forms ALTER COLUMN lead_source SET NOT NULL` },
+  { label: 'forms.tenant_lead_source.index', sql: `CREATE INDEX IF NOT EXISTS forms_tenant_id_lead_source_idx ON public.forms(tenant_id, lead_source)` },
+  { label: 'leads.tenant_source.index', sql: `CREATE INDEX IF NOT EXISTS leads_tenant_id_source_idx ON public.leads(tenant_id, source)` },
   { label: 'forms.drop.slug.constraint', sql: `ALTER TABLE forms DROP CONSTRAINT IF EXISTS forms_slug_key` },
   { label: 'forms.drop.slug.index.lower', sql: `DROP INDEX IF EXISTS forms_slug_key` },
   { label: 'forms.drop.slug.index.quoted', sql: `DROP INDEX IF EXISTS "forms_slug_key"` },

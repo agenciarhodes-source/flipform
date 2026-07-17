@@ -12,6 +12,7 @@ import {
   Users, Trophy, TrendingUp, AlertCircle, Clock, Target, FileSpreadsheet, Filter, Loader2, Inbox,
   ListChecks, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
+import { formatLeadSource } from '@/lib/leads';
 
 const COLORS = ['#2563EB', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316'];
 
@@ -220,7 +221,7 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
               <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas as origens</SelectItem>
-                {options?.sources.map((s) => <SelectItem key={s.value} value={s.value}>{s.value} ({s.count})</SelectItem>)}
+                {options?.sources.map((s) => <SelectItem key={s.value} value={s.value}>{formatLeadSource(s.value)} ({s.count})</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

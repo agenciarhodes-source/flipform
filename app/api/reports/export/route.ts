@@ -1,3 +1,4 @@
+import { formatLeadSource } from '@/lib/leads';
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import { prisma } from '@/lib/prisma';
@@ -86,7 +87,7 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     });
 
     if (format === 'csv') {
-      const rows = leads.map((l) => ({ id: l.id, nome: l.name, email: l.email || '', telefone: l.phone || '', origem: l.source, formulario: l.form?.name || 'Lead manual', pipeline: l.pipeline?.name || '', etapa: l.stage?.name || '', status: statusMap[l.status] || l.status }));
+      const rows = leads.map((l) => ({ id: l.id, nome: l.name, email: l.email || '', telefone: l.phone || '', origem: formatLeadSource(l.source), formulario: l.form?.name || 'Lead manual', pipeline: l.pipeline?.name || '', etapa: l.stage?.name || '', status: statusMap[l.status] || l.status }));
       const csv = toCSV(rows, Object.keys(rows[0] || { id: '' }).map((key) => ({ key, label: key })));
       return new NextResponse(csv, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="flipform-relatorio-${dateKey(ctx.from)}_a_${dateKey(ctx.to)}.csv"`, 'Cache-Control': 'no-store' } });
     }
@@ -145,7 +146,7 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     leads.forEach((l) => {
       const location = extractLeadLocation(l as any); const summary = summarizePurchases(l.purchases); const count = summary.purchaseCount || ((l.saleValueCents || 0) > 0 ? 1 : 0); const close = closingDate(l);
       const lastPurchase = summary.lastPurchaseAt ? new Date(summary.lastPurchaseAt) : ((l.saleValueCents || 0) > 0 ? l.saleValueUpdatedAt : null); const pending = l.tasks.filter((t) => t.status === 'pending').length; const overdue = l.tasks.filter((t) => t.status === 'pending' && t.dueDate && t.dueDate < now).length;
-      const row = leadsWs.addRow([l.id, emptyTo(l.name, 'Não informado'), l.email || '', l.phone || '', location.state || '', location.city || '', l.source || '', l.form?.name || 'Lead manual', l.pipeline?.name || '', l.stage?.name || '', statusMap[l.status] || l.status, tempMap[l.temperature] || l.temperature, l.assignedUser?.name || 'Sem responsável', l.assignedUser?.email || '', l.createdAt, l.history[0]?.createdAt || null, close, formatDuration(l.createdAt, close), money(getLeadRevenueSource(l).amountCents), count, customerType(count), lastPurchase, l.lostReason || '', l._count.tasks, pending, overdue, l.updatedAt]);
+      const row = leadsWs.addRow([l.id, emptyTo(l.name, 'Não informado'), l.email || '', l.phone || '', location.state || '', location.city || '', formatLeadSource(l.source), l.form?.name || 'Lead manual', l.pipeline?.name || '', l.stage?.name || '', statusMap[l.status] || l.status, tempMap[l.temperature] || l.temperature, l.assignedUser?.name || 'Sem responsável', l.assignedUser?.email || '', l.createdAt, l.history[0]?.createdAt || null, close, formatDuration(l.createdAt, close), money(getLeadRevenueSource(l).amountCents), count, customerType(count), lastPurchase, l.lostReason || '', l._count.tasks, pending, overdue, l.updatedAt]);
       [15,16,17,22,27].forEach((c) => { row.getCell(c).numFmt = dateTimeFmt; }); row.getCell(19).numFmt = currencyFmt;
       if (l.status === 'won') row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
       if (l.status === 'lost') row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };

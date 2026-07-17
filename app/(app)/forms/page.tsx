@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Copy, Plus, ExternalLink, Edit, Trash2, Workflow, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
+import { formatLeadSource } from '@/lib/leads';
 
 export default function FormsPage() {
   const [forms, setForms] = useState<any[]>([]);
@@ -111,6 +112,7 @@ export default function FormsPage() {
                   </div>
                 )}
 
+                <div className="text-xs text-muted-foreground mb-3">Origem: <span className="font-medium text-foreground">{formatLeadSource(f.leadSource || 'formulario')}</span></div>
                 <div className="flex gap-4 text-xs text-muted-foreground mb-4">
                   <span>{f._count.fields} campos</span>
                   <span>{f._count.leads} leads</span>

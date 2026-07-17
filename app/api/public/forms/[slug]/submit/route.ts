@@ -72,6 +72,9 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       return NextResponse.json({ error: 'Este formulário está temporariamente indisponível (etapa inicial arquivada).' }, { status: 410 });
     }
 
+    // Fonte comercial é determinada exclusivamente pela configuração persistida do formulário.
+    const leadSource = form.leadSource?.trim() || 'formulario';
+
     type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; validationRules?: unknown; [key: string]: unknown };
     const fieldsById = new Map<string, FieldRow>((form.fields as FieldRow[]).map((f) => [f.id, f]));
 
@@ -205,7 +208,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           name,
           email,
           phone,
-          source: 'formulario',
+          source: leadSource,
           status: 'open',
           temperature: 'warm',
           assignedTo: rotation.assignedTo,
@@ -230,12 +233,12 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'form', entityId: form.id, action: 'form.submitted',
-      metadata: { leadId: lead.id, source: 'public_form', slug },
+      metadata: { leadId: lead.id, source: 'public_form', leadSource, slug },
     });
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'lead', entityId: lead.id, action: 'lead.created',
-      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: 'formulario', assignedTo: lead.assignedTo, assignmentReason: assignmentResult.reason },
+      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: leadSource, assignedTo: lead.assignedTo, assignmentReason: assignmentResult.reason },
     });
     if (lead.assignedTo) {
       await logAudit({
