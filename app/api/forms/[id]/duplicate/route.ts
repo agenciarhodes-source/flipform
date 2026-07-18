@@ -36,6 +36,7 @@ export const POST = withPermission('FORMS_CREATE', async (_req, session, ctx: { 
   if (pipeline.isArchived || stage.isArchived) warnings.push(ARCHIVED_WARNING);
 
   const duplicateName = await generateDuplicateFormName(session.tenantId, sourceForm.name);
+  const copiedFieldsCount = sourceForm.fields.length;
   let duplicatedForm: Awaited<ReturnType<typeof prisma.form.create>> | null = null;
 
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -104,7 +105,7 @@ export const POST = withPermission('FORMS_CREATE', async (_req, session, ctx: { 
 
   if (!duplicatedForm) return NextResponse.json({ error: 'Não foi possível gerar um slug único para a cópia.' }, { status: 409 });
 
-  await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'form', entityId: duplicatedForm.id, action: 'form.duplicated', metadata: { sourceFormId: sourceForm.id, sourceFormName: sourceForm.name, newFormId: duplicatedForm.id, newFormName: duplicatedForm.name, newSlug: duplicatedForm.slug, copiedFields: duplicatedForm.fields.length, isActive: false } });
+  await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'form', entityId: duplicatedForm.id, action: 'form.duplicated', metadata: { sourceFormId: sourceForm.id, sourceFormName: sourceForm.name, newFormId: duplicatedForm.id, newFormName: duplicatedForm.name, newSlug: duplicatedForm.slug, copiedFields: copiedFieldsCount, isActive: false } });
 
   return NextResponse.json({ ok: true, form: duplicatedForm, warning: warnings[0] ?? null }, { status: 201 });
 });
