@@ -1,11 +1,12 @@
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { can } from '@/lib/rbac';
 import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { cleanOptions, requiresOptions, validateChoiceOptions } from '@/lib/form-field-validation';
-import { slugify } from '@/lib/utils';
+import { generateUniqueFormSlug } from '@/lib/forms/generate-unique-form-slug';
 import { getConfiguredAppDomain } from '@/lib/custom-form-domains';
 import { buildPublicFormUrlState } from '@/lib/forms/public-form-url';
 
@@ -39,6 +40,7 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
         customDomainUrl: urlState.customUrl,
         canEdit: session.role === 'owner' || session.role === 'admin',
         canDelete: session.role === 'owner',
+        canDuplicate: can(session.role, 'FORMS_CREATE'),
         customDomainStatus: primaryDomain ? {
           status: primaryDomain.status,
           verificationStatus: primaryDomain.verificationStatus,
@@ -98,13 +100,7 @@ export const POST = withPermission('FORMS_CREATE', async (req, session) => {
       if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
-    // Slug único por tenant
-    let slug = slugify(data.name);
-    let attempt = 0;
-    while (await prisma.form.findFirst({ where: { tenantId: session.tenantId, slug } })) {
-      attempt++;
-      slug = `${slugify(data.name)}-${attempt}`;
-    }
+    const slug = await generateUniqueFormSlug({ tenantId: session.tenantId, name: data.name });
 
     const form = await prisma.form.create({
       data: {

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Copy, Plus, ExternalLink, Edit, Trash2, Workflow, AlertTriangle } from 'lucide-react';
+import { Copy, CopyPlus, Plus, ExternalLink, Edit, Trash2, Workflow, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/utils';
 import { formatLeadSource } from '@/lib/leads';
@@ -15,6 +15,7 @@ export default function FormsPage() {
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [filterPipeline, setFilterPipeline] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
 
   const load = () => {
     const qs = filterPipeline && filterPipeline !== 'all' ? `?pipelineId=${filterPipeline}` : '';
@@ -32,6 +33,24 @@ export default function FormsPage() {
   const copyLink = (url: string) => {
     navigator.clipboard.writeText(url);
     toast.success('Link copiado!');
+  };
+
+  const duplicateForm = async (form: any) => {
+    const confirmed = window.confirm(`Duplicar o formulário “${form.name}”?`);
+    if (!confirmed || duplicatingId) return;
+    setDuplicatingId(form.id);
+    try {
+      const res = await fetch(`/api/forms/${form.id}/duplicate`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível duplicar o formulário.');
+      toast.success(`Formulário “${data.form.name}” duplicado com sucesso.`);
+      if (data.warning) toast.warning(data.warning);
+      load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível duplicar o formulário.');
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const deleteForm = async (id: string) => {
@@ -148,6 +167,11 @@ export default function FormsPage() {
                     <Copy className="w-3 h-3 mr-1.5" />Link
                   </Button>
                   <Link href={f.publicUrl || `/f/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
+                  {f.canDuplicate && (
+                    <Button size="sm" variant="outline" title="Duplicar formulário" aria-label={`Duplicar formulário ${f.name}`} onClick={() => duplicateForm(f)} disabled={duplicatingId === f.id}>
+                      {duplicatingId === f.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CopyPlus className="w-3 h-3" />}
+                    </Button>
+                  )}
                   {f.canEdit && <Link href={`/forms/${f.id}/edit`}><Button size="sm" variant="outline"><Edit className="w-3 h-3" /></Button></Link>}
                   {f.canDelete && <Button size="sm" variant="outline" onClick={() => deleteForm(f.id)}><Trash2 className="w-3 h-3 text-destructive" /></Button>}
                 </div>
