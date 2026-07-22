@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,6 +12,16 @@ def test_dashboard_api_uses_aggregated_metrics_and_tenant_session_scope():
     assert "dashboardQuerySchema.safeParse" in route
     assert "tenantId: params.tenantId" in metrics
     assert "Object.fromEntries(searchParams.entries())" in route
+
+
+def test_dashboard_lead_selects_include_commercial_entry_and_system_creation_dates():
+    metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
+    lead_selects = re.findall(r"db\.lead\.findMany\(\{\n      where: (?:currentWhere|previousWhere),(.*?)\n    \}\)", metrics, re.DOTALL)
+    assert len(lead_selects) == 2
+    for select in lead_selects:
+        assert "enteredAt: true" in select
+        assert "createdAt: true" in select
+    assert "orderBy: [{ enteredAt: 'asc' }, { createdAt: 'asc' }]" in lead_selects[0]
 
 
 def test_dashboard_metrics_include_dynamic_funnel_projection_and_profiles():
