@@ -491,15 +491,15 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     db.lead.findMany({
       where: currentWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, enteredAt: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ enteredAt: 'asc' }, { createdAt: 'asc' }],
     }),
     db.lead.findMany({
       where: previousWhere,
       select: {
-        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, createdAt: true,
+        id: true, formId: true, pipelineId: true, stageId: true, assignedTo: true, status: true, temperature: true, source: true, saleValueCents: true, state: true, city: true, enteredAt: true, createdAt: true,
         answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
       },
     }),
