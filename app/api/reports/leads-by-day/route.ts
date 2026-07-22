@@ -13,8 +13,8 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
 
   const leads = await prisma.lead.findMany({
     where: ctx.leadsWhere,
-    select: { createdAt: true, status: true },
-    orderBy: { createdAt: 'asc' },
+    select: { enteredAt: true, status: true },
+    orderBy: { enteredAt: 'asc' },
   });
 
   const buckets: Record<string, { date: string; total: number; ganhos: number; perdidos: number }> = {};
@@ -25,7 +25,7 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     buckets[key] = { date: key, total: 0, ganhos: 0, perdidos: 0 };
   }
   for (const l of leads) {
-    const key = l.createdAt.toISOString().slice(0, 10);
+    const key = l.enteredAt.toISOString().slice(0, 10);
     if (!buckets[key]) buckets[key] = { date: key, total: 0, ganhos: 0, perdidos: 0 };
     buckets[key].total += 1;
     if (l.status === 'won') buckets[key].ganhos += 1;

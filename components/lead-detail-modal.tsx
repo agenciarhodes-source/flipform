@@ -205,7 +205,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><div className="text-muted-foreground">Origem</div><div className="font-medium capitalize">{lead.source}</div></div>
               <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{isFinalStage ? 'Ganho' : lead.status}</div></div>
-              <div><div className="text-muted-foreground">Criado em</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
+              <div><div className="text-muted-foreground">Data de entrada</div><div className="font-medium">{formatDateTime(lead.enteredAt)}</div></div>
+              <div><div className="text-muted-foreground">Cadastrado no sistema</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
               <div><div className="text-muted-foreground">Última atualização</div><div className="font-medium">{formatDateTime(lead.updatedAt)}</div></div>
               <div className="col-span-2"><div className="text-muted-foreground mb-2">Responsável</div>{lead.activeAgents?.length ? <Select value={lead.assignedTo || 'none'} onValueChange={updateAssignee}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem responsável</SelectItem>{lead.activeAgents.map((agent: any) => <SelectItem key={agent.userId} value={agent.userId}>{agent.name} — {agent.email}</SelectItem>)}</SelectContent></Select> : <div className="font-medium">{lead.assignedUser?.name || 'Sem responsável'}</div>}</div>
             </div>

@@ -10,12 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { MANUAL_LEAD_SOURCES } from '@/lib/leads';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
+import { todayDateOnly } from '@/lib/date-only';
 
 type Stage = { id: string; name: string; orderIndex: number; isArchived?: boolean };
 type Pipeline = { id: string; name: string; isArchived?: boolean; stages: Stage[] };
 type User = { userId: string; name: string; role: string; status: string };
 
-const emptyForm = { name: '', phone: '', email: '', source: '', pipelineId: '', stageId: '', assignedTo: 'none', temperature: 'cold', saleValue: '', notes: '', state: '', city: '' };
+const initialForm = () => ({ name: '', phone: '', email: '', source: '', pipelineId: '', stageId: '', assignedTo: 'none', temperature: 'cold', saleValue: '', notes: '', state: '', city: '', entryDate: todayDateOnly() });
 
 function digits(value: string) { return value.replace(/\D/g, ''); }
 function cents(value: string) {
@@ -24,7 +25,7 @@ function cents(value: string) {
 }
 
 export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelineId, defaultStageId, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; pipelines: Pipeline[]; defaultPipelineId?: string | null; defaultStageId?: string | null; onCreated: (lead: any) => void }) {
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(initialForm);
   const [users, setUsers] = useState<User[]>([]);
   const [saving, setSaving] = useState(false);
   const [duplicate, setDuplicate] = useState<any>(null);
@@ -38,7 +39,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
     const pipelineId = defaultPipelineId || (activePipelines.length === 1 ? activePipelines[0].id : activePipelines[0]?.id || '');
     const pipeline = activePipelines.find((p) => p.id === pipelineId) || activePipelines[0];
     const stageId = defaultStageId || pipeline?.stages?.filter((s) => !s.isArchived).sort((a, b) => a.orderIndex - b.orderIndex)[0]?.id || '';
-    setForm({ ...emptyForm, pipelineId: pipeline?.id || '', stageId });
+    setForm({ ...initialForm(), pipelineId: pipeline?.id || '', stageId });
     setDuplicate(null);
     fetch('/api/users').then((r) => r.ok ? r.json() : { users: [] }).then((d) => setUsers(d.users || [])).catch(() => setUsers([]));
   }, [open, defaultPipelineId, defaultStageId, activePipelines]);
@@ -57,7 +58,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         body: JSON.stringify({
           name: form.name, phone: form.phone, email: form.email, source: form.source,
           pipelineId: form.pipelineId, stageId: form.stageId, assignedTo: form.assignedTo === 'none' ? null : form.assignedTo,
-          temperature: form.temperature, saleValueCents: cents(form.saleValue), notes: form.notes, state: form.state || null, city: form.city || null, forceCreate,
+          temperature: form.temperature, saleValueCents: cents(form.saleValue), notes: form.notes, state: form.state || null, city: form.city || null, entryDate: form.entryDate, forceCreate,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -78,6 +79,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5"><Label>Nome *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div className="space-y-1.5"><Label>Origem do lead *</Label><Select value={form.source} onValueChange={(source) => setForm({ ...form, source })}><SelectTrigger><SelectValue placeholder="Selecione a origem" /></SelectTrigger><SelectContent>{MANUAL_LEAD_SOURCES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label>Data de entrada do lead *</Label><Input type="date" value={form.entryDate} max={todayDateOnly()} onChange={(e) => setForm({ ...form, entryDate: e.target.value })} required /></div>
         <div className="space-y-1.5"><Label>Telefone</Label><Input placeholder="+55 (00) 9 0000-0000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
         <div className="space-y-1.5"><Label>E-mail</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
         <div className="space-y-1.5"><Label>Pipeline *</Label><Select value={form.pipelineId} onValueChange={(pipelineId) => setForm({ ...form, pipelineId })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{activePipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>

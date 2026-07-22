@@ -87,12 +87,12 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     });
 
     if (format === 'csv') {
-      const rows = leads.map((l) => ({ id: l.id, nome: l.name, email: l.email || '', telefone: l.phone || '', origem: formatLeadSource(l.source), formulario: l.form?.name || 'Lead manual', pipeline: l.pipeline?.name || '', etapa: l.stage?.name || '', status: statusMap[l.status] || l.status }));
+      const rows = leads.map((l) => ({ id: l.id, nome: l.name, email: l.email || '', telefone: l.phone || '', origem: formatLeadSource(l.source), data_entrada: l.enteredAt.toISOString(), cadastrado_no_sistema: l.createdAt.toISOString(), formulario: l.form?.name || 'Lead manual', pipeline: l.pipeline?.name || '', etapa: l.stage?.name || '', status: statusMap[l.status] || l.status }));
       const csv = toCSV(rows, Object.keys(rows[0] || { id: '' }).map((key) => ({ key, label: key })));
       return new NextResponse(csv, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="flipform-relatorio-${dateKey(ctx.from)}_a_${dateKey(ctx.to)}.csv"`, 'Cache-Control': 'no-store' } });
     }
 
-    const { createdAt: _leadCreatedAt, ...purchaseLeadWhere } = ctx.leadsWhere;
+    const { enteredAt: _leadEnteredAt, ...purchaseLeadWhere } = ctx.leadsWhere;
     const purchases = await prisma.leadPurchase.findMany({
       where: { tenantId: ctx.tenantId, purchaseDate: { gte: ctx.from, lte: ctx.to }, lead: purchaseLeadWhere },
       include: { lead: { include: { form: { select: { name: true } }, assignedUser: { select: { name: true, email: true } }, answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } } } } },
@@ -125,9 +125,9 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     const taskPending = leads.flatMap((l) => l.tasks).filter((t) => t.status === 'pending').length;
     const taskOverdue = leads.flatMap((l) => l.tasks).filter((t) => t.status === 'pending' && t.dueDate && t.dueDate < now).length;
     const taskDone = leads.flatMap((l) => l.tasks).filter((t) => t.status === 'completed' && t.completedAt && t.completedAt >= ctx.from && t.completedAt <= ctx.to).length;
-    const firstMoveHours = leads.flatMap((l) => { const first = l.history.find((h) => h.fromStageId)?.createdAt; return first ? [(first.getTime() - l.createdAt.getTime()) / 3600000] : []; });
+    const firstMoveHours = leads.flatMap((l) => { const first = l.history.find((h) => h.fromStageId)?.createdAt; return first ? [(first.getTime() - l.enteredAt.getTime()) / 3600000] : []; });
     const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-    const cycle = leads.filter((l) => l.status === 'won' || l.status === 'lost').map((l) => (l.updatedAt.getTime() - l.createdAt.getTime()) / 3600000);
+    const cycle = leads.filter((l) => l.status === 'won' || l.status === 'lost').map((l) => (l.updatedAt.getTime() - l.enteredAt.getTime()) / 3600000);
 
     resumo.mergeCells('A1:F1'); resumo.getCell('A1').value = 'Relatório Comercial FlipForm'; resumo.getCell('A1').font = { bold: true, size: 18, color: { argb: 'FF0F172A' } };
     resumo.addRows([[], ['Empresa', tenant?.name || 'Não informado', 'Período analisado', `${dateKey(ctx.from)} a ${dateKey(ctx.to)}`, 'Gerado em', now], ['Usuário', `${user?.name || session.userId} (${user?.email || ''})`, 'Pipeline selecionado', ctx.filters.pipelineId || 'Todos', 'Formulário selecionado', ctx.filters.formId || 'Todos'], ['Origem selecionada', ctx.filters.source || 'Todas', 'Vendedor selecionado', ctx.filters.assignedTo || 'Todos', '', ''], []]);
@@ -141,13 +141,13 @@ export const GET = withPermission('REPORTS_EXPORT', async (req, session) => {
     if (purchases.length >= PURCHASE_EXPORT_LIMIT) resumo.addRow(['Aviso', `A exportação de compras foi limitada aos primeiros ${PURCHASE_EXPORT_LIMIT} registros.`]);
     resumo.eachRow((row) => row.eachCell((cell) => { cell.border = { top: LIGHT_BORDER, left: LIGHT_BORDER, bottom: LIGHT_BORDER, right: LIGHT_BORDER }; }));
 
-    const leadHeaders = ['ID do lead','Nome do cliente','E-mail','Telefone','Estado','Cidade','Origem','Formulário','Pipeline','Etapa atual','Status','Temperatura','Vendedor responsável','E-mail do vendedor','Data de entrada','Data da primeira ação','Data de fechamento','Tempo até fechamento','Valor total vendido','Quantidade de compras','Tipo de cliente','Data da última compra','Motivo de perda','Tarefas totais','Tarefas pendentes','Tarefas vencidas','Última atualização'];
+    const leadHeaders = ['ID do lead','Nome do cliente','E-mail','Telefone','Estado','Cidade','Origem','Formulário','Pipeline','Etapa atual','Status','Temperatura','Vendedor responsável','E-mail do vendedor','Data de entrada','Cadastrado no sistema','Data da primeira ação','Data de fechamento','Tempo até fechamento','Valor total vendido','Quantidade de compras','Tipo de cliente','Data da última compra','Motivo de perda','Tarefas totais','Tarefas pendentes','Tarefas vencidas','Última atualização'];
     leadsWs.addRow(leadHeaders);
     leads.forEach((l) => {
       const location = extractLeadLocation(l as any); const summary = summarizePurchases(l.purchases); const count = summary.purchaseCount || ((l.saleValueCents || 0) > 0 ? 1 : 0); const close = closingDate(l);
       const lastPurchase = summary.lastPurchaseAt ? new Date(summary.lastPurchaseAt) : ((l.saleValueCents || 0) > 0 ? l.saleValueUpdatedAt : null); const pending = l.tasks.filter((t) => t.status === 'pending').length; const overdue = l.tasks.filter((t) => t.status === 'pending' && t.dueDate && t.dueDate < now).length;
-      const row = leadsWs.addRow([l.id, emptyTo(l.name, 'Não informado'), l.email || '', l.phone || '', location.state || '', location.city || '', formatLeadSource(l.source), l.form?.name || 'Lead manual', l.pipeline?.name || '', l.stage?.name || '', statusMap[l.status] || l.status, tempMap[l.temperature] || l.temperature, l.assignedUser?.name || 'Sem responsável', l.assignedUser?.email || '', l.createdAt, l.history[0]?.createdAt || null, close, formatDuration(l.createdAt, close), money(getLeadRevenueSource(l).amountCents), count, customerType(count), lastPurchase, l.lostReason || '', l._count.tasks, pending, overdue, l.updatedAt]);
-      [15,16,17,22,27].forEach((c) => { row.getCell(c).numFmt = dateTimeFmt; }); row.getCell(19).numFmt = currencyFmt;
+      const row = leadsWs.addRow([l.id, emptyTo(l.name, 'Não informado'), l.email || '', l.phone || '', location.state || '', location.city || '', formatLeadSource(l.source), l.form?.name || 'Lead manual', l.pipeline?.name || '', l.stage?.name || '', statusMap[l.status] || l.status, tempMap[l.temperature] || l.temperature, l.assignedUser?.name || 'Sem responsável', l.assignedUser?.email || '', l.enteredAt, l.createdAt, l.history[0]?.createdAt || null, close, formatDuration(l.enteredAt, close), money(getLeadRevenueSource(l).amountCents), count, customerType(count), lastPurchase, l.lostReason || '', l._count.tasks, pending, overdue, l.updatedAt]);
+      [15,16,17,18,23,28].forEach((c) => { row.getCell(c).numFmt = dateTimeFmt; }); row.getCell(20).numFmt = currencyFmt;
       if (l.status === 'won') row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
       if (l.status === 'lost') row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
       if (l.status === 'open') row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };

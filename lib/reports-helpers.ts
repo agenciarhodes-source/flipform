@@ -48,7 +48,7 @@ export function buildReportContext(
 
   const leadsWhere: any = {
     tenantId: session.tenantId,
-    createdAt: { gte: from, lte: to },
+    enteredAt: { gte: from, lte: to },
   };
 
   if (filters.pipelineId) leadsWhere.pipelineId = filters.pipelineId;
