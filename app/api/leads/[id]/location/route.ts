@@ -17,6 +17,9 @@ export const PATCH = withAuth(async (req, session, ctx: { params: { id: string }
 
   const state = parsed.data.state ? normalizeBrazilState(parsed.data.state) : null;
   const city = state && parsed.data.city ? normalizeBrazilCity(state, parsed.data.city) : null;
+  if (parsed.data.state && !state) return NextResponse.json({ error: 'Estado inválido.' }, { status: 400 });
+  if (parsed.data.city && !state) return NextResponse.json({ error: 'Selecione um estado para a cidade informada.' }, { status: 400 });
+  if (parsed.data.city && !city) return NextResponse.json({ error: 'Cidade inválida para o estado selecionado.' }, { status: 400 });
   const updated = await prisma.lead.update({ where: { id: lead.id }, data: { state, city }, select: { id: true, state: true, city: true, updatedAt: true } });
   await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: lead.id, action: 'lead.location_updated', metadata: { state, city } });
   return NextResponse.json({ ok: true, lead: updated });

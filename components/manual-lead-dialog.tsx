@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { MANUAL_LEAD_SOURCES } from '@/lib/leads';
-import { getBrazilStates, getCitiesByState } from '@/lib/brazil-locations';
+import { CityCombobox } from '@/components/city-combobox';
+import { getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
 
 type Stage = { id: string; name: string; orderIndex: number; isArchived?: boolean };
 type Pipeline = { id: string; name: string; isArchived?: boolean; stages: Stage[] };
@@ -84,8 +85,8 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         <div className="space-y-1.5"><Label>Responsável</Label><Select value={form.assignedTo} onValueChange={(assignedTo) => setForm({ ...form, assignedTo })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem responsável</SelectItem>{users.filter((u) => u.status === 'active').map((u) => <SelectItem key={u.userId} value={u.userId}>{u.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Temperatura</Label><Select value={form.temperature} onValueChange={(temperature) => setForm({ ...form, temperature })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cold">Frio</SelectItem><SelectItem value="warm">Morno</SelectItem><SelectItem value="hot">Quente</SelectItem></SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Valor vendido</Label><Input placeholder="R$ 0,00" value={form.saleValue} onChange={(e) => setForm({ ...form, saleValue: e.target.value })} /></div>
-        <div className="space-y-1.5"><Label>Estado</Label><Select value={form.state || 'none'} onValueChange={(state) => setForm({ ...form, state: state === 'none' ? '' : state, city: '' })}><SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger><SelectContent><SelectItem value="none">Sem estado</SelectItem>{getBrazilStates().map((s) => <SelectItem key={s.uf} value={s.uf}>{s.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-1.5"><Label>Cidade</Label><Select value={form.city || 'none'} disabled={!form.state} onValueChange={(city) => setForm({ ...form, city: city === 'none' ? '' : city })}><SelectTrigger><SelectValue placeholder="Selecione a cidade" /></SelectTrigger><SelectContent><SelectItem value="none">Sem cidade</SelectItem>{getCitiesByState(form.state).map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label>Estado</Label><Select value={form.state || 'none'} onValueChange={(nextState) => { const state = nextState === 'none' ? '' : nextState; setForm((current) => ({ ...current, state, city: state && normalizeBrazilCity(state, current.city) ? current.city : '' })); }}><SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger><SelectContent><SelectItem value="none">Sem estado</SelectItem>{getBrazilStates().map((s) => <SelectItem key={s.uf} value={s.uf}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-1.5"><Label>Cidade</Label><CityCombobox state={form.state} value={form.city} onValueChange={(city) => setForm((current) => ({ ...current, city }))} allowEmpty /></div>
         <div className="space-y-1.5 sm:col-span-2"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
       </div>
       <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="button" onClick={() => submit(false)} disabled={saving}>{saving ? 'Salvando...' : 'Salvar lead'}</Button></DialogFooter>

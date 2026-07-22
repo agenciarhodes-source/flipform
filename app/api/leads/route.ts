@@ -60,6 +60,9 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     if (duplicate && !body.forceCreate) return NextResponse.json({ error: 'Já existe um lead com este contato.', duplicate }, { status: 409 });
     const state = parsed.data.state ? normalizeBrazilState(parsed.data.state) : null;
     const city = state && parsed.data.city ? normalizeBrazilCity(state, parsed.data.city) : null;
+    if (parsed.data.state && !state) return NextResponse.json({ error: 'Estado inválido.' }, { status: 400 });
+    if (parsed.data.city && !state) return NextResponse.json({ error: 'Selecione um estado para a cidade informada.' }, { status: 400 });
+    if (parsed.data.city && !city) return NextResponse.json({ error: 'Cidade inválida para o estado selecionado.' }, { status: 400 });
 
     const lead = await prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({

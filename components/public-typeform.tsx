@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
-import { getBrazilStateName, getBrazilStates, getCitiesByState, normalizeLocationText } from '@/lib/brazil-locations';
+import { CityCombobox } from '@/components/city-combobox';
+import { getBrazilStateName, getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
 import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 interface PublicField {
@@ -325,17 +326,12 @@ function normalizeAnswerForSubmit(field: PublicField, value: any) {
 function CityStateField({ value, onChange }: { value: any; onChange: (v: any) => void }) {
   const state = value?.state || '';
   const city = value?.city || '';
-  const [search, setSearch] = useState('');
-  const cities = getCitiesByState(state).filter((name) => normalizeLocationText(name).includes(normalizeLocationText(search)));
   return (
     <div className="grid gap-3">
-      <label className="space-y-1.5"><span className="text-sm font-medium">Estado</span><select className="w-full rounded-md border bg-white px-3 py-2 text-base" value={state} onChange={(e) => { setSearch(''); onChange({ state: e.target.value, stateName: getBrazilStateName(e.target.value), city: '' }); }}>
+      <label className="space-y-1.5"><span className="text-sm font-medium">Estado</span><select className="w-full rounded-md border bg-white px-3 py-2 text-base" value={state} onChange={(e) => { const nextState = e.target.value; onChange({ state: nextState, stateName: getBrazilStateName(nextState), city: normalizeBrazilCity(nextState, city) || '' }); }}>
         <option value="">Selecione o estado</option>{getBrazilStates().map((s) => <option key={s.uf} value={s.uf}>{s.name}</option>)}
       </select></label>
-      <label className="space-y-1.5"><span className="text-sm font-medium">Cidade</span><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cidade" disabled={!state} />
-      <select className="w-full rounded-md border bg-white px-3 py-2 text-base" value={city} disabled={!state} onChange={(e) => onChange({ state, stateName: getBrazilStateName(state), city: e.target.value })}>
-        <option value="">Selecione a cidade</option>{cities.map((name) => <option key={name} value={name}>{name}</option>)}
-      </select></label>
+      <div className="space-y-1.5"><span className="text-sm font-medium">Cidade</span><CityCombobox state={state} value={city} onValueChange={(nextCity) => onChange({ state, stateName: getBrazilStateName(state), city: nextCity })} /></div>
     </div>
   );
 }
