@@ -369,7 +369,7 @@ export async function calculateAverageTimeToClose(db: Db, params: ExecutiveMetri
   if (finalStages.size === 0) return null;
   const leads = await db.lead.findMany({
     where: { ...leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate }) },
-    select: { id: true, pipelineId: true, stageId: true, status: true, createdAt: true, updatedAt: true },
+    select: { id: true, pipelineId: true, stageId: true, status: true, enteredAt: true, updatedAt: true },
   });
   if (leads.length === 0) return null;
   const finalLeadIds = leads.filter((lead) => finalStages.get(lead.pipelineId) === lead.stageId || lead.status === ('won' as LeadStatus)).map((lead) => lead.id);
@@ -384,7 +384,7 @@ export async function calculateAverageTimeToClose(db: Db, params: ExecutiveMetri
   const durations = leads.flatMap((lead) => {
     if (!finalLeadIds.includes(lead.id)) return [];
     const closedAt = firstCloseByLead.get(lead.id) || (finalStages.get(lead.pipelineId) === lead.stageId ? lead.updatedAt : null);
-    return closedAt ? [Math.max(0, Math.round((closedAt.getTime() - lead.createdAt.getTime()) / 1000))] : [];
+    return closedAt ? [Math.max(0, Math.round((closedAt.getTime() - lead.enteredAt.getTime()) / 1000))] : [];
   });
   return durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null;
 }
@@ -457,7 +457,7 @@ function leadScope(params: { tenantId: string; pipelineId?: string; formId?: str
     ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
     ...(params.formId ? { formId: params.formId } : {}),
     ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
-    ...(params.startDate && params.endDate ? { createdAt: { gte: params.startDate, lte: params.endDate } } : {}),
+    ...(params.startDate && params.endDate ? { enteredAt: { gte: params.startDate, lte: params.endDate } } : {}),
   } satisfies Prisma.LeadWhereInput;
 }
 
@@ -557,7 +557,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     byDayMap.set(d.toISOString().slice(0, 10), 0);
   }
   for (const lead of filteredLeads) {
-    const key = lead.createdAt.toISOString().slice(0, 10);
+    const key = lead.enteredAt.toISOString().slice(0, 10);
     byDayMap.set(key, (byDayMap.get(key) || 0) + 1);
   }
   let cumulative = 0;

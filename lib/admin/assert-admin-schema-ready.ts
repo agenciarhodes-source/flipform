@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 
-type ColumnInfo = { column_name: string; data_type: string; udt_name: string; is_nullable: string };
+type ColumnInfo = { column_name: string; data_type: string; udt_name: string; is_nullable: string; column_default: string | null };
 type IndexInfo = { tablename: string; indexname: string; indexdef: string };
 type EnumInfo = { enum_name: string; enum_value: string };
 
@@ -44,7 +44,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   plans: ['id', 'name', 'slug', 'description', 'price', 'billing_cycle', 'max_users', 'max_forms', 'max_leads_per_month', 'max_pipelines', 'can_use_reports', 'can_export_csv', 'can_use_custom_branding', 'can_use_meta_pixel', 'can_use_webhooks', 'can_use_tasks', 'is_active', 'created_at', 'updated_at'],
   payments: ['id', 'tenant_id', 'subscription_id', 'provider', 'provider_payment_id', 'status', 'value', 'due_date', 'paid_at', 'invoice_url', 'bank_slip_url', 'pix_qr_code', 'billing_type', 'raw_payload', 'created_at', 'updated_at'],
   forms: ['id', 'tenant_id', 'name', 'public_title', 'public_description', 'slug', 'primary_color', 'bg_color', 'button_color', 'text_color', 'theme', 'logo_url', 'cover_image_url', 'success_message', 'disqualification_settings', 'lead_source', 'pipeline_id', 'initial_stage_id', 'is_active', 'created_at', 'updated_at'],
-  leads: ['sale_value_cents', 'sale_currency', 'sale_value_updated_at', 'sale_value_updated_by', 'state', 'city'],
+  leads: ['sale_value_cents', 'sale_currency', 'sale_value_updated_at', 'sale_value_updated_by', 'state', 'city', 'entered_at'],
   tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'whatsapp_funnel_enabled', 'created_at', 'updated_at'],
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
   tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
@@ -74,7 +74,7 @@ async function tableNames() {
 
 async function columnsFor(tableName: string) {
   const rows = (await prisma.$queryRawUnsafe(
-    `select column_name, data_type, udt_name, is_nullable
+    `select column_name, data_type, udt_name, is_nullable, column_default
      from information_schema.columns
      where table_schema = 'public' and table_name = $1`,
     tableName,
@@ -225,7 +225,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'forms', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
   `;
 
   type IdxRow = IndexInfo;
@@ -249,6 +249,8 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasFormsTenantCreatedAt = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_created_at_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'created_at'));
   const hasFormsTenantPipeline = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_pipeline_id_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'pipeline_id'));
   const hasFormsTenantIsActive = typedIndexes.some((idx) => idx.indexname === 'forms_tenant_id_is_active_idx' && idx.tablename === 'forms' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'is_active'));
+  const enteredAt = columnMaps.get('leads')?.get('entered_at');
+  const hasLeadsTenantEnteredAt = typedIndexes.some((idx) => idx.indexname === 'leads_tenant_id_entered_at_idx' && idx.tablename === 'leads' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'entered_at'));
   const hasTenantIntegrationTenantUnique = typedIndexes.some((idx) => idx.tablename === 'tenant_integration_settings' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id'));
   const hasTenantIntegrationTenant = typedIndexes.some((idx) => idx.indexname === 'tenant_integration_settings_tenant_id_idx' && idx.tablename === 'tenant_integration_settings' && indexHasColumn(idx.indexdef, 'tenant_id'));
   const hasKanbanTrackingTenant = typedIndexes.some((idx) => idx.indexname === 'kanban_stage_tracking_events_tenant_id_idx' && idx.tablename === 'kanban_stage_tracking_events' && indexHasColumn(idx.indexdef, 'tenant_id'));
@@ -317,6 +319,9 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   add(checks, { label: 'index.forms.tenant_id_created_at', ok: hasFormsTenantCreatedAt, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_created_at_idx ON forms(tenant_id, created_at);', runtimeEssential: false });
   add(checks, { label: 'index.forms.tenant_id_pipeline_id', ok: hasFormsTenantPipeline, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_pipeline_id_idx ON forms(tenant_id, pipeline_id);', runtimeEssential: false });
   add(checks, { label: 'index.forms.tenant_id_is_active', ok: hasFormsTenantIsActive, suggestion: 'CREATE INDEX IF NOT EXISTS forms_tenant_id_is_active_idx ON forms(tenant_id, is_active);', runtimeEssential: false });
+  add(checks, { label: 'column.leads.entered_at.not_null', ok: enteredAt?.is_nullable === 'NO', suggestion: 'ALTER TABLE leads ALTER COLUMN entered_at SET NOT NULL;', runtimeEssential: false });
+  add(checks, { label: 'column.leads.entered_at.default', ok: /current_timestamp|now\(\)/i.test(enteredAt?.column_default || ''), suggestion: 'ALTER TABLE leads ALTER COLUMN entered_at SET DEFAULT CURRENT_TIMESTAMP;', runtimeEssential: false });
+  add(checks, { label: 'index.leads.tenant_id_entered_at', ok: hasLeadsTenantEnteredAt, suggestion: 'CREATE INDEX IF NOT EXISTS leads_tenant_id_entered_at_idx ON leads(tenant_id, entered_at);', runtimeEssential: false });
 
   add(checks, { label: 'index.tenant_integration_settings.tenant_id_unique', ok: hasTenantIntegrationTenantUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_key ON tenant_integration_settings(tenant_id);', runtimeEssential: false });
   add(checks, { label: 'index.tenant_integration_settings.tenant_id', ok: hasTenantIntegrationTenant, suggestion: 'CREATE INDEX IF NOT EXISTS tenant_integration_settings_tenant_id_idx ON tenant_integration_settings(tenant_id);', runtimeEssential: false });

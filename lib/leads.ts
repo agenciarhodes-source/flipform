@@ -1,18 +1,4 @@
-export const MANUAL_LEAD_SOURCES = [
-  { value: 'referral', label: 'Indicação' },
-  { value: 'own_prospecting', label: 'Captação própria' },
-  { value: 'google', label: 'Google' },
-  { value: 'facebook', label: 'Facebook' },
-  { value: 'instagram', label: 'Instagram' },
-  { value: 'visit', label: 'Visita' },
-  { value: 'call_center', label: 'Call center' },
-] as const;
-
-export const MANUAL_LEAD_SOURCE_VALUES = MANUAL_LEAD_SOURCES.map((source) => source.value);
-
-
-export const FORM_LEAD_SOURCES = [
-  { value: 'formulario', label: 'Formulário — sem origem específica' },
+export const EXTERNAL_LEAD_SOURCES = [
   { value: 'paid_traffic', label: 'Tráfego pago' },
   { value: 'meta_ads', label: 'Meta Ads' },
   { value: 'facebook_ads', label: 'Facebook Ads' },
@@ -20,21 +6,36 @@ export const FORM_LEAD_SOURCES = [
   { value: 'google_ads', label: 'Google Ads' },
   { value: 'tiktok_ads', label: 'TikTok Ads' },
   { value: 'instagram', label: 'Instagram' },
-  { value: 'instagram_direct', label: 'Direct do Instagram' },
+  { value: 'instagram_direct', label: 'Direct Message do Instagram' },
   { value: 'facebook', label: 'Facebook' },
   { value: 'facebook_messenger', label: 'Messenger do Facebook' },
   { value: 'tiktok', label: 'TikTok' },
+  { value: 'google', label: 'Google' },
   { value: 'google_business_profile', label: 'Google Meu Negócio' },
-  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'site', label: 'Site' },
+  { value: 'customer_service', label: 'Atendimento' },
   { value: 'referral', label: 'Indicação' },
   { value: 'own_prospecting', label: 'Captação própria' },
+  { value: 'visit', label: 'Visita' },
+  { value: 'call_center', label: 'Call center' },
+  { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'other', label: 'Outro canal' },
+] as const;
+export const MANUAL_LEAD_SOURCES = EXTERNAL_LEAD_SOURCES;
+
+export const MANUAL_LEAD_SOURCE_VALUES = MANUAL_LEAD_SOURCES.map((source) => source.value);
+
+
+export const FORM_LEAD_SOURCES = [
+  { value: 'formulario', label: 'Formulário — sem origem específica' },
+  ...EXTERNAL_LEAD_SOURCES,
 ] as const;
 
 export const FORM_LEAD_SOURCE_VALUES = FORM_LEAD_SOURCES.map((source) => source.value);
 export type FormLeadSource = (typeof FORM_LEAD_SOURCES)[number]['value'];
 
 const LEAD_SOURCE_LABELS: Record<string, string> = {
+  ...Object.fromEntries(FORM_LEAD_SOURCES.map(({ value, label }) => [value, label])),
   formulario: 'Formulário',
   form: 'Formulário',
   public_form: 'Formulário',
@@ -51,12 +52,6 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
   instagram_ads: 'Instagram Ads',
   google_ads: 'Google Ads',
   tiktok_ads: 'TikTok Ads',
-  instagram_direct: 'Direct do Instagram',
-  facebook_messenger: 'Messenger do Facebook',
-  tiktok: 'TikTok',
-  google_business_profile: 'Google Meu Negócio',
-  whatsapp: 'WhatsApp',
-  other: 'Outro canal',
 };
 
 export function formatLeadSource(source?: string | null): string {

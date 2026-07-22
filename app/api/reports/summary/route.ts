@@ -38,13 +38,13 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
       where,
       select: {
         id: true,
-        createdAt: true,
+        enteredAt: true,
         history: { where: { fromStageId: { not: null } }, orderBy: { createdAt: 'asc' }, take: 1, select: { createdAt: true } },
       },
     }),
     prisma.lead.findMany({
       where: { ...where, status: { in: ['won', 'lost'] } },
-      select: { id: true, createdAt: true, updatedAt: true },
+      select: { id: true, enteredAt: true, updatedAt: true },
     }),
     prisma.task.count({
       where: { tenantId: ctx.tenantId, status: 'pending', lead: { tenantId: ctx.tenantId, AND: [where] } },
@@ -62,15 +62,15 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   let firstMoveCount = 0;
   for (const l of leadsWithFirstMove) {
     if (l.history.length > 0) {
-      totalFirstMoveMs += l.history[0].createdAt.getTime() - l.createdAt.getTime();
+      totalFirstMoveMs += l.history[0].createdAt.getTime() - l.enteredAt.getTime();
       firstMoveCount++;
     }
   }
   const avgFirstMoveHours = firstMoveCount > 0 ? +(totalFirstMoveMs / firstMoveCount / 3600000).toFixed(1) : 0;
 
-  // Tempo médio no funil (criação → conclusão won/lost)
+  // Tempo médio no funil (entrada comercial → conclusão won/lost)
   let totalCycleMs = 0;
-  for (const l of leadsConcluded) totalCycleMs += l.updatedAt.getTime() - l.createdAt.getTime();
+  for (const l of leadsConcluded) totalCycleMs += l.updatedAt.getTime() - l.enteredAt.getTime();
   const avgCycleHours = leadsConcluded.length > 0 ? +(totalCycleMs / leadsConcluded.length / 3600000).toFixed(1) : 0;
 
   const conversionRate = total > 0 ? Math.round((ganhos / total) * 100) : 0;

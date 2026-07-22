@@ -5,6 +5,7 @@ import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
+import { dateOnlyToDate } from '@/lib/date-only';
 
 export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -36,6 +37,7 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
 
     const email = normalizeEmail(parsed.data.email);
+    const enteredAt = parsed.data.entryDate ? dateOnlyToDate(parsed.data.entryDate) : new Date();
     const phone = normalizeBrazilianPhone(parsed.data.phone);
     if (!email && !phone) return NextResponse.json({ error: 'Informe telefone ou e-mail.' }, { status: 400 });
     if (email && !/^\S+@\S+\.\S+$/.test(email)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
@@ -83,6 +85,7 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
           saleValueCents: parsed.data.saleValueCents ?? null,
           saleValueUpdatedAt: parsed.data.saleValueCents != null ? new Date() : null,
           saleValueUpdatedBy: parsed.data.saleValueCents != null ? session.userId : null,
+          enteredAt,
         },
         include: { assignedUser: { select: { id: true, name: true } }, stage: true },
       });

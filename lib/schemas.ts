@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FORM_LEAD_SOURCE_VALUES, MANUAL_LEAD_SOURCE_VALUES } from './leads';
 import { isValidBrazilCity, isValidBrazilState, normalizeBrazilCity, normalizeBrazilState } from './brazil-locations';
+import { isFutureDateOnly, isValidDateOnly } from './date-only';
 
 export const registerSchema = z.object({
   companyName: z.string().min(2, 'Nome da empresa muito curto'),
@@ -87,6 +88,7 @@ export const leadCreateSchema = z.object({
   state: z.string().length(2, 'Estado inválido.').optional().nullable(),
   city: z.string().min(1).max(100).optional().nullable(),
   notes: z.string().optional().nullable(),
+  entryDate: z.string().optional().refine((value) => !value || isValidDateOnly(value), 'Data de entrada inválida.').refine((value) => !value || !isFutureDateOnly(value), 'A data de entrada não pode estar no futuro.'),
 }).superRefine((value, ctx) => {
   const state = value.state ? normalizeBrazilState(value.state) : null;
   if (value.state && !state) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['state'], message: 'Estado inválido.' });

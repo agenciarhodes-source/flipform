@@ -300,6 +300,7 @@ model Lead {
   saleCurrency String          @default("BRL") @map("sale_currency")
   saleValueUpdatedAt DateTime? @map("sale_value_updated_at")
   saleValueUpdatedBy String?   @map("sale_value_updated_by")
+  enteredAt   DateTime        @default(now()) @map("entered_at")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
 
@@ -319,6 +320,7 @@ model Lead {
   @@index([tenantId, pipelineId])
   @@index([tenantId, stageId])
   @@index([tenantId, createdAt])
+  @@index([tenantId, enteredAt])
   @@index([tenantId, status])
   @@index([tenantId, assignedTo])
   @@index([tenantId, source])
