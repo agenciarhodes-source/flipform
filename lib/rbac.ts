@@ -61,6 +61,7 @@ export const PERMISSIONS = {
   LEADS_EDIT_ALL: ['owner', 'admin', 'manager'],
   LEADS_EDIT_OWN: ['agent'],
   LEADS_DELETE: ['owner', 'admin'],
+  LEADS_CONTACT_WHATSAPP: ['owner', 'admin', 'manager', 'agent'],
   KANBAN_VIEW_ALL: ['owner', 'admin', 'manager', 'viewer'],
   KANBAN_VIEW_OWN: ['agent'],
   KANBAN_MOVE_ALL: ['owner', 'admin', 'manager'],

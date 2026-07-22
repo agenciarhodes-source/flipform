@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission, canDeleteLead, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
+import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
@@ -34,7 +35,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     orderBy: { createdAt: 'asc' },
     select: { id: true, userId: true, metadata: true, createdAt: true },
   });
-  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role) } });
+  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {

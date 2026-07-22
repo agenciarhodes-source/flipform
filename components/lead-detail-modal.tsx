@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
-import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil } from 'lucide-react';
+import { buildWhatsAppUrl } from '@/lib/whatsapp-link';
+import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
 import { getBrazilStates, getCitiesByState, formatLeadLocation } from '@/lib/brazil-locations';
 
@@ -145,18 +146,38 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     );
   }
 
+  const whatsappUrl = buildWhatsAppUrl(lead.phone);
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
         <DialogHeader className="p-6 pb-3 border-b">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <DialogTitle className="font-heading text-xl flex items-center gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="font-heading text-xl flex flex-wrap items-center gap-2">
                 {lead.name}
                 <Badge style={{ backgroundColor: lead.stage.color }} className="text-white border-0">{lead.stage.name}</Badge>
                 {isFinalStage && <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Fechamento</Badge>}
+                {lead.canContactWhatsApp && whatsappUrl && (
+                  <Button
+                    asChild
+                    size="icon"
+                    variant="outline"
+                    title="Conversar pelo WhatsApp"
+                    className="h-8 w-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                  >
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Conversar com ${lead.name} pelo WhatsApp`}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </a>
+                  </Button>
+                )}
               </DialogTitle>
-              <div className="flex gap-3 text-xs text-muted-foreground mt-2">
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-2">
                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
                 {lead.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
                 {lead.assignedUser && <span className="flex items-center gap-1"><User className="w-3 h-3" />{lead.assignedUser.name}</span>}
