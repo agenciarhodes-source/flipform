@@ -31,16 +31,11 @@ def test_lead_sale_value_readiness_checks_are_present():
     assert 'leads.sale_value_cents ausente. Rode migration ou repair schema.' in readiness
 
 
-def test_lead_and_dashboard_null_sale_value_fallbacks_are_present():
-    leads_route = (ROOT / "app/api/leads/route.ts").read_text()
-    sale_value_route = (ROOT / "app/api/leads/[id]/sale-value/route.ts").read_text()
+def test_dashboard_does_not_use_legacy_sale_values_as_revenue():
     metrics = (ROOT / "lib/dashboard-metrics.ts").read_text()
-    assert "prisma.lead.findMany" in leads_route
-    assert "saleValueCents: z.number().int().min(0).nullable()" in sale_value_route
-    assert "const previousValueCents = lead.saleValueCents ?? null" in sale_value_route
-    assert "return result._sum.saleValueCents || 0" in metrics
-    assert "saleValueCents: { gt: 0 }" in metrics
-
+    assert "fallbackRevenueCents" not in metrics
+    assert "const revenueByDayMap = new Map(byDayMap);" not in metrics
+    assert "const revenueByDayMap = new Map<string, number>();" in metrics
 
 def test_brl_helpers_support_format_parse_and_negative_validation():
     helper = (ROOT / "lib/currency-brl.ts").read_text()
@@ -51,27 +46,18 @@ def test_brl_helpers_support_format_parse_and_negative_validation():
     assert 'Math.round(decimalValue * 100)' in helper
 
 
-def test_sale_value_api_enforces_auth_permission_tenant_scope_and_audit():
+def test_legacy_sale_value_endpoint_creates_an_explicit_purchase_with_rbac():
     route = (ROOT / "app/api/leads/[id]/sale-value/route.ts").read_text()
     assert 'withAuth' in route
     assert 'tenantId: session.tenantId' in route
     assert 'canEditLead(session.role, lead, session.userId)' in route
-    assert 'saleValueCents: newValueCents' in route
-    assert "saleCurrency: 'BRL'" in route
-    assert 'saleValueUpdatedAt: new Date()' in route
-    assert 'saleValueUpdatedBy: session.userId' in route
-    assert "action: 'lead.sale_value_updated'" in route
-    assert 'previousValueCents' in route and 'newValueCents' in route
+    assert 'prisma.leadPurchase.create' in route
+    assert 'createdBy: session.userId' in route
+    assert "action: 'lead.purchase_created'" in route
 
-
-def test_lead_detail_has_commercial_block_and_explicit_save():
+def test_lead_detail_registers_sales_in_the_financial_tab():
     modal = (ROOT / "components/lead-detail-modal.tsx").read_text()
-    assert 'Comercial' in modal
-    assert 'Valor vendido' in modal
-    assert 'Informe o valor vendido para contabilizar na receita do Dashboard.' in modal
-    assert 'Este valor só entra como receita quando o lead estiver na etapa final do funil.' in modal
-    assert 'Este valor já está sendo contabilizado na receita.' in modal
-    assert 'Salvar valor' in modal
-    assert 'Valor vendido atualizado.' in modal
-    assert 'Não foi possível salvar o valor vendido.' in modal
-    assert '/sale-value' in modal
+    assert '+ Adicionar compra' in modal
+    assert 'Registrar venda' in modal
+    assert '/purchases' in modal
+    assert '/sale-value' not in modal

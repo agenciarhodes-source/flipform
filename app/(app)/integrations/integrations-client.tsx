@@ -219,7 +219,7 @@ export function IntegrationsClient() {
         <input className="border rounded p-2" placeholder="Label Google / nome externo" value={form.conversionLabel||''} onChange={e=>setForm({...form, conversionLabel:e.target.value})} />
         <div className="space-y-1">
           <input className="w-full border rounded p-2" type="number" step="0.01" placeholder={isMetaPurchase ? 'Ex: 1.00' : 'Valor opcional'} aria-label={isMetaPurchase ? 'Valor da compra' : 'Valor opcional'} value={form.conversionValue||''} onChange={e=>setForm({...form, conversionValue:e.target.value})} />
-          <p className="text-xs text-muted-foreground">{isMetaPurchase ? 'Valor da compra · Obrigatório para Purchase' : 'Valor opcional'}</p>
+          <p className="text-xs text-muted-foreground">{isMetaPurchase ? 'O valor será obtido da venda registrada manualmente' : 'Valor opcional'}</p>
         </div>
         <label className="flex items-center gap-2 text-sm border rounded p-2"><input type="checkbox" checked={!!form.enabled} onChange={e=>setForm({...form, enabled:e.target.checked})} /> Ativo</label>
       </div>

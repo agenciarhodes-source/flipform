@@ -45,14 +45,6 @@ export const kanbanEventSchema = z.object({
   conversionValue: z.coerce.number().nonnegative().optional().nullable(),
   currency: z.string().trim().length(3).default('BRL'),
   enabled: z.boolean().default(true),
-}).superRefine((data, ctx) => {
-  if (data.provider === 'meta' && data.eventName === 'Purchase' && (!data.conversionValue || data.conversionValue <= 0)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['conversionValue'],
-      message: 'Informe um valor de conversão para eventos Purchase.',
-    });
-  }
 });
 
 export type TrackingDispatchContext = {
@@ -182,6 +174,20 @@ async function dispatchMapping(mapping: any, settings: any, context: TrackingDis
     eventId,
     source: context.source,
   };
+
+  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase') {
+    const purchase = context.leadId ? await prisma.leadPurchase.findFirst({
+      where: { tenantId: context.tenantId, leadId: context.leadId, amountCents: { gt: 0 } },
+      orderBy: [{ purchaseDate: 'desc' }, { createdAt: 'desc' }],
+      select: { amountCents: true },
+    }) : null;
+    if (!purchase) {
+      await logTrackingEvent({ ...base, status: 'skipped', reason: 'Meta Purchase não enviado: venda sem valor monetário registrado.' });
+      return { provider: mapping.provider, eventName, status: 'skipped', eventId };
+    }
+    // The explicit purchase is the only source for Meta Purchase value.
+    mapping = { ...mapping, conversionValue: purchase.amountCents / 100, currency: 'BRL' };
+  }
 
   const skip = await shouldSkipDuplicate({ tenantId: context.tenantId, leadId: context.leadId, toStageId: context.toStageId || mapping.stageId, provider: mapping.provider, eventName });
   if (skip) {

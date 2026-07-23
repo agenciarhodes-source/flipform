@@ -4,7 +4,7 @@ import test from 'node:test';
 import { buildCustomData, kanbanEventSchema } from '../lib/tracking';
 import { formatMetaCapiError } from '../lib/tracking/meta-capi';
 
-test('impede salvar Meta Purchase sem value', () => {
+test('permite configurar Meta Purchase sem value fixo', () => {
   const parsed = kanbanEventSchema.safeParse({
     pipelineId: 'pipe_1',
     stageId: 'stage_1',
@@ -14,8 +14,7 @@ test('impede salvar Meta Purchase sem value', () => {
     enabled: true,
   });
 
-  assert.equal(parsed.success, false);
-  assert.equal(parsed.error.errors[0]?.message, 'Informe um valor de conversão para eventos Purchase.');
+  assert.equal(parsed.success, true);
 });
 
 test('permite Meta Purchase com value maior que zero', () => {

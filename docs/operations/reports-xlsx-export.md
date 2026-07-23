@@ -39,10 +39,10 @@ A data de fechamento é calculada pela primeira movimentação do lead para a et
 Para evitar duplicidade:
 
 1. Se o lead tiver registros em `lead_purchases`, a receita é a soma de `amountCents` das compras.
-2. Se não tiver compras, usa `saleValueCents` legado como fallback.
-3. Nunca soma `lead_purchases` e `saleValueCents` no mesmo lead.
+2. Se não tiver compras, a receita é R$ 0,00.
+3. `saleValueCents` legado não é somado nem usado como fallback.
 
-A quantidade de compras usa `purchases.length`; se não houver compras e existir `saleValueCents`, exporta `1` como fallback legado.
+A quantidade de compras usa exclusivamente `purchases.length`.
 
 ## Limites
 
