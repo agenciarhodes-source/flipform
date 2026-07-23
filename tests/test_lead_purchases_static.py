@@ -21,11 +21,11 @@ def test_purchase_api_validates_tenant_and_amount():
     assert 'canEditLead' in route
     assert 'Compra registrada com sucesso.' in route
 
-def test_dashboard_financial_metrics_use_purchases_and_fallback():
+def test_dashboard_financial_metrics_use_only_explicit_purchases():
     metrics = read('lib/dashboard-metrics.ts')
     assert 'leadPurchase.findMany' in metrics
     assert 'purchaseDate: { gte: params.startDate, lte: params.endDate }' in metrics
-    assert 'purchases: { none: {} }' in metrics
+    assert 'fallbackRevenueCents' not in metrics
     assert 'firstPurchaseRevenue' in metrics
     assert 'repurchaseRate' in metrics
 
@@ -70,7 +70,7 @@ def test_dashboard_financial_metrics_handle_missing_lead_purchases_table():
     assert 'isLeadPurchasesMissingError' in metrics
     assert 'lead_purchases table missing' in metrics
     assert 'return emptyFinancialWindowMetrics();' in metrics
-    assert 'purchases: { none: {} }' in metrics
+    assert 'fallbackRevenueCents' not in metrics
 
 def test_repair_production_schema_npm_alias_is_documented():
     package = read('package.json')

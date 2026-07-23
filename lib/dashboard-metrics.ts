@@ -178,7 +178,7 @@ async function getPurchasesForWindow(db: Db, params: ExecutiveMetricParams) {
         ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
       },
     },
-    include: { lead: { select: { id: true } } },
+    include: { lead: { select: { id: true, assignedTo: true } } },
     orderBy: [{ purchaseDate: 'asc' }, { createdAt: 'asc' }],
   });
 }
@@ -219,30 +219,16 @@ async function calculateFinancialMetricsForWindow(db: Db, params: ExecutiveMetri
   const recurringCustomers = leadIds.filter((id) => (countByLead.get(id) || 0) > 1).length;
   const historicalLtvCents = leadIds.reduce((sum: number, id: string) => sum + (totalByLead.get(id) || 0), 0);
 
-  const fallbackLeads = await db.lead.findMany({
-    where: {
-      tenantId: params.tenantId,
-      ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
-      ...(params.formId ? { formId: params.formId } : {}),
-      ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
-      saleValueCents: { gt: 0 },
-      saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate },
-      purchases: { none: {} },
-    },
-    select: { id: true, saleValueCents: true },
-  });
-  const fallbackRevenueCents = fallbackLeads.reduce((sum, lead) => sum + (lead.saleValueCents || 0), 0);
-
   return {
-    revenueCents: revenueCents + fallbackRevenueCents,
-    firstPurchaseRevenueCents: firstPurchaseRevenueCents + fallbackRevenueCents,
+    revenueCents,
+    firstPurchaseRevenueCents,
     recurringRevenueCents,
-    purchases: purchases.length + fallbackLeads.length,
-    buyingCustomers: new Set([...leadIds, ...fallbackLeads.map((lead) => lead.id)]).size,
+    purchases: purchases.length,
+    buyingCustomers: leadIds.length,
     recurringCustomers,
-    repurchaseRate: leadIds.length || fallbackLeads.length ? Math.round((recurringCustomers / (leadIds.length + fallbackLeads.length)) * 1000) / 10 : 0,
-    averageTicketCents: purchases.length + fallbackLeads.length ? Math.round((revenueCents + fallbackRevenueCents) / (purchases.length + fallbackLeads.length)) : 0,
-    averageLtvCents: leadIds.length + fallbackLeads.length ? Math.round((historicalLtvCents + fallbackRevenueCents) / (leadIds.length + fallbackLeads.length)) : 0,
+    repurchaseRate: leadIds.length ? Math.round((recurringCustomers / leadIds.length) * 1000) / 10 : 0,
+    averageTicketCents: purchases.length ? Math.round(revenueCents / purchases.length) : 0,
+    averageLtvCents: leadIds.length ? Math.round(historicalLtvCents / leadIds.length) : 0,
   };
 }
 
@@ -313,42 +299,13 @@ function isQualifiedLead(lead: { pipelineId: string; stageId: string; status: Le
 }
 
 async function calculateRevenueForWindow(db: Db, params: ExecutiveMetricParams) {
-  const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
-  const finalStageIds = Array.from(finalStages.values());
-  if (finalStageIds.length === 0) return 0;
-
-  const closeHistories = await db.leadStageHistory.findMany({
-    where: {
-      toStageId: { in: finalStageIds },
-      createdAt: { gte: params.startDate, lte: params.endDate },
-      lead: {
-        tenantId: params.tenantId,
-        ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
-        ...(params.formId ? { formId: params.formId } : {}),
-        ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
-      },
-    },
-    select: { leadId: true },
-    distinct: ['leadId'],
-  });
-  const closedByHistoryIds = closeHistories.map((history) => history.leadId);
-
-  const closedLeadWhere = {
-    tenantId: params.tenantId,
-    ...(params.pipelineId ? { pipelineId: params.pipelineId } : {}),
-    ...(params.formId ? { formId: params.formId } : {}),
-    ...(params.assignedTo ? { assignedTo: params.assignedTo } : {}),
-    saleValueCents: { gt: 0 },
-    OR: [
-      ...(closedByHistoryIds.length ? [{ id: { in: closedByHistoryIds } }] : []),
-      // Fallback para bases sem histórico confiável: leads já finais cujo valor foi atualizado no período.
-      { stageId: { in: finalStageIds }, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } } as Prisma.LeadWhereInput,
-      { status: 'won' as LeadStatus, saleValueUpdatedAt: { gte: params.startDate, lte: params.endDate } } as Prisma.LeadWhereInput,
-    ],
-  } as Prisma.LeadWhereInput;
-
-  const result = await (db.lead as any).aggregate({ where: closedLeadWhere, _sum: { saleValueCents: true } });
-  return result._sum.saleValueCents || 0;
+  try {
+    const purchases = await getPurchasesForWindow(db, params);
+    return purchases.reduce((sum: number, purchase: any) => sum + purchase.amountCents, 0);
+  } catch (error) {
+    if (isLeadPurchasesMissingError(error)) return 0;
+    throw error;
+  }
 }
 
 export async function calculateRevenue(db: Db, current: ExecutiveMetricParams, previous: ExecutiveMetricParams) {
@@ -607,13 +564,18 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const byState = Array.from(byStateMap.entries()).map(([state, leads]) => ({ state, label: getBrazilStateName(state) || BRAZIL_STATES[state], leads })).sort((a, b) => b.leads - a.leads);
   const byCity = Array.from(byCityMap.values()).filter((row) => !selectedState || row.state === selectedState).sort((a, b) => b.leads - a.leads).slice(0, 12);
 
-  const revenueByDayMap = new Map(byDayMap);
+  // Revenue deliberately starts at zero for every day. Lead counts never become money.
+  const revenueByDayMap = new Map<string, number>();
+  for (let i = 0; i < period.totalDays; i++) {
+    const d = new Date(period.startDate.getTime() + i * DAY_MS);
+    revenueByDayMap.set(d.toISOString().slice(0, 10), 0);
+  }
   const periodPurchases = await getPurchasesForWindow(db, { tenantId, pipelineId, formId, assignedTo: agentScope, startDate: period.startDate, endDate: period.endDate });
   for (const purchase of periodPurchases as any[]) {
     const key = purchase.purchaseDate.toISOString().slice(0, 10);
     revenueByDayMap.set(key, (revenueByDayMap.get(key) || 0) + purchase.amountCents);
   }
-  const revenueByDay = Array.from(revenueByDayMap.entries()).map(([date, amountCents]) => ({ date, label: formatChartDateBR(date), amountCents }));
+  const revenueByDay = Array.from(revenueByDayMap.entries()).map(([date, revenueCents]) => ({ date, label: formatChartDateBR(date), revenueCents }));
 
 
   const formLeadCounts = new Map<string, { total: number; final: number; qualified: number; lastLeadAt: Date | null }>();
@@ -625,6 +587,16 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     if (isQualifiedLead(lead, finalStagesByPipeline, stageOrderByPipeline)) current.qualified += 1;
     if (!current.lastLeadAt || lead.createdAt > current.lastLeadAt) current.lastLeadAt = lead.createdAt;
     formLeadCounts.set(lead.formId, current);
+  }
+
+  const revenueByAssignee = new Map<string, { revenueCents: number; purchases: number }>();
+  for (const purchase of periodPurchases as any[]) {
+    const assignedTo = purchase.lead?.assignedTo;
+    if (!assignedTo) continue;
+    const current = revenueByAssignee.get(assignedTo) || { revenueCents: 0, purchases: 0 };
+    current.revenueCents += purchase.amountCents;
+    current.purchases += 1;
+    revenueByAssignee.set(assignedTo, current);
   }
 
   return {
@@ -664,7 +636,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       return { id: form.id, name: form.name, slug: form.slug, totalLeads: counts.total, conversionRate: percent(counts.final, counts.total), qualificationRate: percent(counts.qualified, counts.total), lastLeadAt: counts.lastLeadAt?.toISOString() || null, publicUrl: `/f/${form.slug}`, editUrl: `/forms/${form.id}` };
     }),
     sources: sources.map((row) => ({ source: formatLeadSource(row.source), count: row._count, percentage: percent(row._count, baseLeads.length) })).sort((a, b) => b.count - a.count),
-    teamPerformance: role === 'agent' ? [] : (agents as any[]).map((a) => { const sellerLeads = filteredLeads.filter((lead) => (lead as any).assignedTo === a.userId); const won = sellerLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)); const revenueCents = won.reduce((sum, lead) => sum + ((lead as any).saleValueCents || 0), 0); return { userId: a.userId, name: a.user.name, email: a.user.email, leadsReceived: sellerLeads.length, inProgress: sellerLeads.filter((lead) => lead.status !== ('lost' as LeadStatus) && !isClosedLead(lead, finalStagesByPipeline)).length, won: won.length, revenueCents, conversionRate: percent(won.length, sellerLeads.length), averageTicketCents: won.length ? Math.round(revenueCents / won.length) : 0, averageCloseTimeHours: null }; }),
+    teamPerformance: role === 'agent' ? [] : (agents as any[]).map((a) => { const sellerLeads = filteredLeads.filter((lead) => (lead as any).assignedTo === a.userId); const won = sellerLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)); const sales = revenueByAssignee.get(a.userId) || { revenueCents: 0, purchases: 0 }; return { userId: a.userId, name: a.user.name, email: a.user.email, leadsReceived: sellerLeads.length, inProgress: sellerLeads.filter((lead) => lead.status !== ('lost' as LeadStatus) && !isClosedLead(lead, finalStagesByPipeline)).length, won: won.length, revenueCents: sales.revenueCents, conversionRate: percent(won.length, sellerLeads.length), averageTicketCents: sales.purchases ? Math.round(sales.revenueCents / sales.purchases) : 0, averageCloseTimeHours: null }; }),
     tasks: { pending: tasks[0], overdue: tasks[1], completedToday: tasks[2], mine: tasks[3], recommendations: [tasks[1] > 0 ? `${tasks[1]} tarefas vencidas` : null, (tempCounts.get('hot') || 0) > 0 ? `${tempCounts.get('hot')} leads quentes para priorizar` : null].filter(Boolean) },
   };
 }

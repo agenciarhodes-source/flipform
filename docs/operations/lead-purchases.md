@@ -4,7 +4,7 @@ O histórico financeiro do cliente agora fica em `lead_purchases`: cada lead pod
 
 ## Valor vendido legado vs compras
 
-Os campos legados do lead (`saleValueCents`, `saleCurrency`, `saleValueUpdatedAt`, `saleValueUpdatedBy`) continuam existindo para compatibilidade. A fonte principal de receita é `lead_purchases`. Quando um lead ainda não tem nenhuma compra registrada, o Dashboard pode usar `saleValueCents > 0` como fallback de receita inicial, sem somar os dois para o mesmo lead.
+Os campos legados do lead (`saleValueCents`, `saleCurrency`, `saleValueUpdatedAt`, `saleValueUpdatedBy`) continuam existindo para compatibilidade. A fonte oficial da receita do Dashboard é exclusivamente `lead_purchases`. Sem compra registrada, a receita é R$ 0,00; `saleValueCents` permanece apenas como compatibilidade e não é usado como fallback.
 
 ## Receita no Dashboard
 
@@ -16,7 +16,7 @@ No Dashboard, selecione `Personalizado` e informe data inicial e data final. A A
 
 ## Meta/CAPI
 
-Registrar compras recorrentes não dispara automaticamente evento Meta Purchase neste PR. Eventos de conversão existentes no Kanban continuam inalterados.
+Meta Purchase só é enviado quando existir uma venda manual com valor positivo; a CAPI usa esse valor real e ignora eventos de fechamento sem compra.
 
 ## Produção / Neon
 

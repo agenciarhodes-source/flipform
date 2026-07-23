@@ -27,11 +27,18 @@ export function summarizePurchases(purchases: { amountCents: number; purchaseDat
   };
 }
 
-export function getLeadRevenueSource(lead: { purchases?: { amountCents: number }[]; saleValueCents?: number | null }) {
-  const purchases = lead.purchases || [];
-  if (purchases.length > 0) return { source: 'purchases' as const, amountCents: purchases.reduce((sum, purchase) => sum + purchase.amountCents, 0) };
-  if ((lead.saleValueCents || 0) > 0) return { source: 'saleValueCents' as const, amountCents: lead.saleValueCents || 0 };
-  return { source: 'none' as const, amountCents: 0 };
+/** Official commercial revenue: only explicit LeadPurchase records count. */
+export function getExplicitLeadRevenueCents(lead: { purchases?: { amountCents: number }[] }): number {
+  return (lead.purchases || []).reduce((sum, purchase) => sum + (purchase.amountCents > 0 ? purchase.amountCents : 0), 0);
+}
+
+/**
+ * Compatibility alias retained for exports. Legacy saleValueCents is deliberately
+ * excluded so it cannot create revenue without an explicit purchase record.
+ */
+export function getLeadRevenueSource(lead: { purchases?: { amountCents: number }[] }) {
+  const amountCents = getExplicitLeadRevenueCents(lead);
+  return { source: amountCents > 0 ? 'purchases' as const : 'none' as const, amountCents };
 }
 
 export function purchaseAuditMessage(amountCents: number, action: 'registered' | 'removed') {

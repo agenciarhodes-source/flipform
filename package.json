@@ -37,7 +37,9 @@
     "leads:mark-final-stage-won": "tsx scripts/mark-final-stage-leads-won.ts",
     "users:repair-direct-access": "tsx scripts/repair-direct-user-access.ts",
     "data:update-brazil-cities": "node scripts/update-brazil-cities.mjs",
-    "test:cities": "node --test tests/brazil-cities-catalog.test.mjs"
+    "test:cities": "node --test tests/brazil-cities-catalog.test.mjs",
+    "revenue:diagnose": "tsx scripts/diagnose-suspicious-revenue.ts --dry-run",
+    "revenue:repair": "tsx scripts/repair-suspicious-revenue.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

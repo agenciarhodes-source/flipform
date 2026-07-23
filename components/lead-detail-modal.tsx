@@ -21,8 +21,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [noteContent, setNoteContent] = useState('');
-  const [saleValueInput, setSaleValueInput] = useState('');
-  const [savingSaleValue, setSavingSaleValue] = useState(false);
   const [purchases, setPurchases] = useState<any[]>([]);
   const [purchaseSummary, setPurchaseSummary] = useState<any>(null);
   const [purchaseForm, setPurchaseForm] = useState({ amount: '', purchaseDate: new Date().toISOString().slice(0, 10), orderNumber: '', paymentMethod: '', notes: '' });
@@ -34,7 +32,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     setLoading(true);
     const res = await fetch(`/api/leads/${leadId}`).then((r) => r.json());
     setLead(res.lead);
-    setSaleValueInput(formatCurrencyBRLFromCents(res.lead?.saleValueCents ?? null));
     setLocationForm({ state: normalizeBrazilState(res.lead?.state || '') || res.lead?.state || '', city: res.lead?.city || '' });
     try { const purchasesRes = await fetch(`/api/leads/${leadId}/purchases`).then((r) => r.json()); setPurchases(purchasesRes.purchases || []); setPurchaseSummary(purchasesRes.summary || null); } catch { toast.error('Não foi possível carregar as compras deste lead.'); }
     setLoading(false);
@@ -62,26 +59,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     toast.success('Temperatura atualizada');
     load(); onChange();
   };
-
-  const saveSaleValue = async () => {
-    try {
-      const saleValueCents = saleValueInput.trim() ? parseBRLToCents(saleValueInput) : null;
-      setSavingSaleValue(true);
-      const res = await fetch(`/api/leads/${leadId}/sale-value`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ saleValueCents }) });
-      if (!res.ok) throw new Error('save_failed');
-      const data = await res.json();
-      setLead((current: any) => ({ ...current, ...data.lead }));
-      setSaleValueInput(formatCurrencyBRLFromCents(data.lead.saleValueCents ?? null));
-      toast.success('Valor vendido atualizado.');
-      await load();
-      onChange();
-    } catch {
-      toast.error('Não foi possível salvar o valor vendido.');
-    } finally {
-      setSavingSaleValue(false);
-    }
-  };
-
 
   const saveLocation = async () => {
     try {
@@ -219,31 +196,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div><div className="text-sm font-medium mb-2">Cidade</div><CityCombobox state={locationForm.state} value={locationForm.city} onValueChange={(city) => setLocationForm((current) => ({ ...current, city }))} allowEmpty /></div>
               </div>
               <Button size="sm" onClick={saveLocation} disabled={savingLocation}>{savingLocation ? 'Salvando...' : 'Salvar localização'}</Button>
-            </section>
-
-            <section className="space-y-3 rounded-xl border bg-emerald-50/40 p-4 ring-1 ring-emerald-100">
-              <div>
-                <h3 className="font-heading text-sm font-semibold">Comercial</h3>
-                <p className="text-xs text-muted-foreground">Informe o valor vendido para contabilizar na receita do Dashboard.</p>
-              </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Valor vendido</span>
-                <input
-                  className="w-full rounded-md border bg-white px-3 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500"
-                  inputMode="decimal"
-                  placeholder="R$ 0,00"
-                  value={saleValueInput}
-                  onChange={(event) => setSaleValueInput(event.target.value)}
-                  onBlur={() => { try { setSaleValueInput(formatCurrencyBRLFromCents(parseBRLToCents(saleValueInput))); } catch {} }}
-                />
-              </label>
-              <p className={`rounded-lg px-3 py-2 text-xs ${isFinalStage ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-                {isFinalStage ? 'Este valor já está sendo contabilizado na receita.' : 'Este valor só entra como receita quando o lead estiver na etapa final do funil.'}
-              </p>
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">{lead.saleValueUpdatedAt ? `Atualizado em ${formatDateTime(lead.saleValueUpdatedAt)}` : 'Nenhum valor salvo ainda.'}</div>
-                <Button size="sm" onClick={saveSaleValue} disabled={savingSaleValue}>{savingSaleValue ? 'Salvando...' : 'Salvar valor'}</Button>
-              </div>
             </section>
 
             <section className="rounded-xl border bg-white p-4">
