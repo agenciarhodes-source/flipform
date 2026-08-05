@@ -1,0 +1,59 @@
+name: Sync package-lock once
+
+on:
+  push:
+    branches:
+      - fix/sync-package-lock-main
+    paths:
+      - .github/workflows/sync-package-lock-once.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-package-lock-once
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/sync-package-lock-main
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Use repository npm version
+        run: npm install --global npm@10.9.2
+
+      - name: Synchronize package-lock
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Validate clean install
+        run: npm ci --ignore-scripts
+
+      - name: Remove temporary workflow
+        run: rm .github/workflows/sync-package-lock-once.yml
+
+      - name: Commit synchronized lockfile
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json .github/workflows/sync-package-lock-once.yml
+          if git diff --cached --quiet; then
+            echo "No lockfile changes were generated."
+            exit 1
+          fi
+          git commit -m "fix: synchronize package-lock with package.json"
+          git push origin HEAD:fix/sync-package-lock-main
