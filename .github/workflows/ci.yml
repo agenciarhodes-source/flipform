@@ -133,8 +133,13 @@ jobs:
       - name: Prisma generate
         run: npx prisma generate
 
-      - name: Apply database migrations
-        run: npx prisma migrate deploy
+      # The repository contains legacy repair migrations that assume a pre-existing
+      # production schema, so migrate deploy cannot bootstrap a brand-new database.
+      # Smoke tests use an isolated disposable PostgreSQL database and materialize
+      # the current Prisma schema directly. Production migrations remain reviewed
+      # and applied separately against Neon.
+      - name: Prepare ephemeral database schema
+        run: npx prisma db push --skip-generate
 
       - name: Build
         run: npm run build
