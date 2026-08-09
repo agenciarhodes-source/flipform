@@ -237,6 +237,25 @@ const steps: Step[] = [
 
 
   {
+    label: 'platform_meta_settings.create',
+    sql: `CREATE TABLE IF NOT EXISTS platform_meta_settings (
+      id TEXT PRIMARY KEY,
+      app_id TEXT,
+      app_secret_encrypted TEXT,
+      default_pixel_enabled BOOLEAN NOT NULL DEFAULT true,
+      default_capi_enabled BOOLEAN NOT NULL DEFAULT true,
+      default_advanced_matching_enabled BOOLEAN NOT NULL DEFAULT true,
+      default_attribution_enabled BOOLEAN NOT NULL DEFAULT true,
+      default_qualified_lead_enabled BOOLEAN NOT NULL DEFAULT true,
+      default_purchase_enabled BOOLEAN NOT NULL DEFAULT true,
+      updated_by_id TEXT,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`,
+  },
+  { label: 'platform_meta_settings.updated_by.index', sql: `CREATE INDEX IF NOT EXISTS platform_meta_settings_updated_by_id_idx ON platform_meta_settings(updated_by_id)` },
+
+  {
     label: 'tenant_integration_settings.create',
     sql: `CREATE TABLE IF NOT EXISTS tenant_integration_settings (
       id TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),

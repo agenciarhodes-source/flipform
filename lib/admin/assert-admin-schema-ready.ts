@@ -32,7 +32,7 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains', 'lead_purchases', 'lead_assignment_rotations', 'lead_assignment_rotation_members', 'lead_attributions'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'platform_meta_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains', 'lead_purchases', 'lead_assignment_rotations', 'lead_assignment_rotation_members', 'lead_attributions'];
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -46,6 +46,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   forms: ['id', 'tenant_id', 'name', 'public_title', 'public_description', 'slug', 'primary_color', 'bg_color', 'button_color', 'text_color', 'theme', 'logo_url', 'cover_image_url', 'success_message', 'disqualification_settings', 'lead_source', 'pipeline_id', 'initial_stage_id', 'is_active', 'created_at', 'updated_at'],
   leads: ['sale_value_cents', 'sale_currency', 'sale_value_updated_at', 'sale_value_updated_by', 'state', 'city', 'entered_at'],
   tenant_integration_settings: ['id', 'tenant_id', 'meta_pixel_enabled', 'meta_pixel_id', 'meta_access_token_encrypted', 'meta_test_event_code', 'gtm_enabled', 'gtm_container_id', 'ga4_enabled', 'ga4_measurement_id', 'ga4_api_secret_encrypted', 'google_ads_enabled', 'google_ads_id', 'google_ads_label', 'whatsapp_funnel_enabled', 'created_at', 'updated_at'],
+  platform_meta_settings: ['id', 'app_id', 'app_secret_encrypted', 'default_pixel_enabled', 'default_capi_enabled', 'default_advanced_matching_enabled', 'default_attribution_enabled', 'default_qualified_lead_enabled', 'default_purchase_enabled', 'updated_by_id', 'created_at', 'updated_at'],
   kanban_stage_tracking_events: ['id', 'tenant_id', 'pipeline_id', 'stage_id', 'provider', 'event_name', 'custom_event_name', 'conversion_label', 'conversion_value', 'currency', 'metadata', 'enabled', 'created_at', 'updated_at'],
   tracking_event_logs: ['id', 'tenant_id', 'lead_id', 'pipeline_id', 'from_stage_id', 'to_stage_id', 'provider', 'event_name', 'status', 'reason', 'triggered_by_id', 'event_id', 'conversation_id', 'message_id', 'trigger_rule_id', 'message_direction', 'source', 'created_at'],
   whatsapp_event_triggers: ['id', 'tenant_id', 'name', 'order_index', 'trigger_phrase', 'match_type', 'provider', 'event_name', 'custom_event_name', 'conversion_value', 'currency', 'pipeline_id', 'stage_id', 'once_per_lead', 'require_exact_match', 'enabled', 'last_triggered_at', 'created_at', 'updated_at'],

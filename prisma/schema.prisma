@@ -167,6 +167,7 @@ model User {
   tenantStatusChanges TenantStatusHistory[] @relation("StatusChanger")
   allowedInvites      AllowedUser[]         @relation("AllowedUserInviter")
   leadAssignmentRotationMemberships LeadAssignmentRotationMember[]
+  platformMetaSettingsUpdates PlatformMetaSettings[] @relation("PlatformMetaSettingsUpdatedBy")
 
   @@map("users")
 }
@@ -744,6 +745,26 @@ model TenantIntegrationSettings {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_integration_settings")
+}
+
+model PlatformMetaSettings {
+  id                             String   @id
+  appId                          String?  @map("app_id")
+  appSecretEncrypted             String?  @map("app_secret_encrypted")
+  defaultPixelEnabled            Boolean  @default(true) @map("default_pixel_enabled")
+  defaultCapiEnabled             Boolean  @default(true) @map("default_capi_enabled")
+  defaultAdvancedMatchingEnabled Boolean  @default(true) @map("default_advanced_matching_enabled")
+  defaultAttributionEnabled      Boolean  @default(true) @map("default_attribution_enabled")
+  defaultQualifiedLeadEnabled    Boolean  @default(true) @map("default_qualified_lead_enabled")
+  defaultPurchaseEnabled         Boolean  @default(true) @map("default_purchase_enabled")
+  updatedById                    String?  @map("updated_by_id")
+  createdAt                      DateTime @default(now()) @map("created_at")
+  updatedAt                      DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("PlatformMetaSettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([updatedById])
+  @@map("platform_meta_settings")
 }
 
 model KanbanStageTrackingEvent {
