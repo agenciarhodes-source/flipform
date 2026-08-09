@@ -7,6 +7,7 @@ import { dispatchFormSubmissionTracking } from '@/lib/tracking';
 import { normalizeHostname } from '@/lib/host-routing';
 import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { assignLeadByRotation } from '@/lib/lead-assignment';
+import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 
 /**
@@ -228,6 +229,39 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       });
       return created;
     });
+
+    // Attribution is deliberately outside the critical lead transaction. A missing table or
+    // transient metadata failure must not roll back a valid lead, answers, or initial history.
+    try {
+      const publicAttribution = parsed.data.attribution;
+      const { fbc, fbp } = parseAttributionCookies(req.headers.get('cookie'));
+      const requestIp = getClientIp(req);
+      await prisma.leadAttribution.create({
+        data: {
+          tenantId: form.tenantId,
+          leadId: lead.id,
+          utmSource: publicAttribution?.utmSource ?? null,
+          utmMedium: publicAttribution?.utmMedium ?? null,
+          utmCampaign: publicAttribution?.utmCampaign ?? null,
+          utmContent: publicAttribution?.utmContent ?? null,
+          utmTerm: publicAttribution?.utmTerm ?? null,
+          fbclid: publicAttribution?.fbclid ?? null,
+          fbc,
+          fbp,
+          gclid: publicAttribution?.gclid ?? null,
+          landingPage: publicAttribution?.landingPage ?? null,
+          referrer: publicAttribution?.referrer ?? null,
+          clientIp: requestIp === 'unknown' ? null : normalizeAttributionString(requestIp, ATTRIBUTION_LIMITS.serverValue),
+          clientUserAgent: normalizeAttributionString(req.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
+        },
+      });
+    } catch (attributionError) {
+      console.error('lead attribution persistence failed', {
+        tenantId: form.tenantId,
+        leadId: lead.id,
+        error: attributionError instanceof Error ? attributionError.name : 'UnknownError',
+      });
+    }
 
     // Audit logs (fora da transaction para não bloquear retorno em caso de falha de log)
     await logAudit({

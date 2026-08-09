@@ -32,7 +32,7 @@ export class AdminSchemaNotReadyError extends Error {
   }
 }
 
-const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains', 'lead_purchases', 'lead_assignment_rotations', 'lead_assignment_rotation_members'];
+const REQUIRED_TABLES = ['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'audit_logs', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains', 'lead_purchases', 'lead_assignment_rotations', 'lead_assignment_rotation_members', 'lead_attributions'];
 const RUNTIME_REQUIRED_TABLES = new Set(['users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions']);
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
@@ -53,6 +53,7 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   lead_purchases: ['id', 'tenant_id', 'lead_id', 'amount_cents', 'currency', 'purchase_date', 'order_number', 'payment_method', 'notes', 'created_by', 'updated_by', 'created_at', 'updated_at'],
   lead_assignment_rotations: ['id', 'tenant_id', 'form_id', 'is_enabled', 'strategy', 'last_assigned_to', 'current_index', 'created_at', 'updated_at'],
   lead_assignment_rotation_members: ['id', 'rotation_id', 'user_id', 'order_index', 'is_active', 'created_at', 'updated_at'],
+  lead_attributions: ['id', 'tenant_id', 'lead_id', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'fbc', 'fbp', 'gclid', 'landing_page', 'referrer', 'client_ip', 'client_user_agent', 'captured_at', 'created_at', 'updated_at'],
 };
 
 function add(checks: AdminSchemaCheck[], check: AdminSchemaCheck) {
@@ -225,7 +226,7 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
     select tablename, indexname, indexdef
     from pg_indexes
     where schemaname = 'public'
-      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains')
+      and tablename in ('users', 'tenants', 'tenant_users', 'allowed_users', 'plans', 'subscriptions', 'payments', 'forms', 'leads', 'tenant_integration_settings', 'kanban_stage_tracking_events', 'tracking_event_logs', 'whatsapp_event_triggers', 'custom_form_domains', 'lead_attributions')
   `;
 
   type IdxRow = IndexInfo;
@@ -274,6 +275,10 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
   const hasCustomFormDomainsOnePrimaryUnique = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && idx.indexdef.toLowerCase().includes('unique') && idx.indexdef.toLowerCase().includes('where') && indexHasColumn(idx.indexdef, 'tenant_id') && idx.indexdef.toLowerCase().includes('is_primary'));
   const hasCustomFormDomainsStatus = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'status'));
   const hasCustomFormDomainsVerificationStatus = typedIndexes.some((idx) => idx.tablename === 'custom_form_domains' && indexHasColumn(idx.indexdef, 'verification_status'));
+  const hasLeadAttributionLeadUnique = typedIndexes.some((idx) => idx.tablename === 'lead_attributions' && idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'lead_id'));
+  const hasLeadAttributionTenantSource = typedIndexes.some((idx) => idx.tablename === 'lead_attributions' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'utm_source'));
+  const hasLeadAttributionTenantCampaign = typedIndexes.some((idx) => idx.tablename === 'lead_attributions' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'utm_campaign'));
+  const hasLeadAttributionTenantCapturedAt = typedIndexes.some((idx) => idx.tablename === 'lead_attributions' && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'captured_at'));
 
   const invitedBy = columnMaps.get('allowed_users')?.get('invited_by') as ColumnInfo | undefined;
   add(checks, {
@@ -487,6 +492,11 @@ export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[
       add(checks, { label: `plan.${slug}.active`, ok: false, detail: 'plans.slug/is_active unavailable', suggestion: 'Aplique a migration de reparo dos planos.', runtimeEssential: false });
     }
   }
+
+  add(checks, { label: 'index.lead_attributions.lead_id_unique', ok: hasLeadAttributionLeadUnique, suggestion: 'CREATE UNIQUE INDEX IF NOT EXISTS lead_attributions_lead_id_key ON lead_attributions(lead_id);', runtimeEssential: false });
+  add(checks, { label: 'index.lead_attributions.tenant_id_utm_source', ok: hasLeadAttributionTenantSource, suggestion: 'CREATE INDEX IF NOT EXISTS lead_attributions_tenant_id_utm_source_idx ON lead_attributions(tenant_id, utm_source);', runtimeEssential: false });
+  add(checks, { label: 'index.lead_attributions.tenant_id_utm_campaign', ok: hasLeadAttributionTenantCampaign, suggestion: 'CREATE INDEX IF NOT EXISTS lead_attributions_tenant_id_utm_campaign_idx ON lead_attributions(tenant_id, utm_campaign);', runtimeEssential: false });
+  add(checks, { label: 'index.lead_attributions.tenant_id_captured_at', ok: hasLeadAttributionTenantCapturedAt, suggestion: 'CREATE INDEX IF NOT EXISTS lead_attributions_tenant_id_captured_at_idx ON lead_attributions(tenant_id, captured_at);', runtimeEssential: false });
 
   return checks;
 }

@@ -111,6 +111,7 @@ model Tenant {
   customFormDomains    CustomFormDomain[]
   leadPurchases        LeadPurchase[]
   leadAssignmentRotations LeadAssignmentRotation[]
+  leadAttributions      LeadAttribution[]
 
   @@map("tenants")
 }
@@ -314,6 +315,7 @@ model Lead {
   notes        Note[]
   tasks        Task[]
   purchases    LeadPurchase[]
+  attribution  LeadAttribution?
 
   @@index([tenantId])
   @@index([stageId])
@@ -328,6 +330,37 @@ model Lead {
   @@index([tenantId, city])
   @@index([tenantId, state, city])
   @@map("leads")
+}
+
+model LeadAttribution {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  leadId          String   @unique @map("lead_id")
+  utmSource       String?  @map("utm_source")
+  utmMedium       String?  @map("utm_medium")
+  utmCampaign     String?  @map("utm_campaign")
+  utmContent      String?  @map("utm_content")
+  utmTerm         String?  @map("utm_term")
+  fbclid          String?
+  fbc             String?
+  fbp             String?
+  gclid           String?
+  landingPage     String?  @map("landing_page")
+  referrer        String?
+  clientIp        String?  @map("client_ip")
+  clientUserAgent String?  @map("client_user_agent")
+  capturedAt      DateTime @default(now()) @map("captured_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, utmSource])
+  @@index([tenantId, utmCampaign])
+  @@index([tenantId, capturedAt])
+  @@map("lead_attributions")
 }
 
 model LeadAssignmentRotation {
