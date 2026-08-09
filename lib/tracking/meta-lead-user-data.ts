@@ -1,4 +1,5 @@
 import 'server-only';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import type { MetaCapiPayload } from './meta-capi';
 
@@ -23,7 +24,7 @@ type MetaLeadRecord = BasicLead & {
 
 type LeadReader = {
   lead: {
-    findFirst(args: any): Promise<MetaLeadRecord | null>;
+    findFirst(args: unknown): Promise<MetaLeadRecord | null>;
   };
 };
 
@@ -55,8 +56,7 @@ export async function getMetaLeadUserData(params: {
     return { user: { ...params.fallbackLead, ...names }, landingPage: null };
   }
 
-  const db: LeadReader = params.db ?? prisma;
-  const lead = await db.lead.findFirst({
+  const query = {
     where: { id: params.leadId, tenantId: params.tenantId },
     select: {
       id: true,
@@ -69,7 +69,13 @@ export async function getMetaLeadUserData(params: {
         select: { fbc: true, fbp: true, clientIp: true, clientUserAgent: true, landingPage: true },
       },
     },
-  });
+  } satisfies Prisma.LeadFindFirstArgs;
+
+  // Keep the production Prisma client on its native generic type. The small injectable
+  // reader exists only for isolated tests and must not narrow PrismaClient itself.
+  const lead: MetaLeadRecord | null = params.db
+    ? await params.db.lead.findFirst(query)
+    : await prisma.lead.findFirst(query);
 
   // A scoped miss must not fall back to caller data: the id may belong to another tenant.
   if (!lead) return { user: {}, landingPage: null };
