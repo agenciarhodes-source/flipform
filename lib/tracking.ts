@@ -57,7 +57,25 @@ export type TrackingDispatchContext = {
   triggeredById?: string | null;
   source: 'public_form' | 'kanban' | 'test';
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
+  /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
+  metaLeadEventId?: string | null;
 };
+
+export function resolveTrackingEventId(
+  mapping: { provider?: string; eventName?: string; customEventName?: string | null },
+  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId'>,
+) {
+  if (
+    mapping.provider === 'meta'
+    && mapping.eventName === 'Lead'
+    && !mapping.customEventName
+    && context.source === 'public_form'
+    && context.metaLeadEventId
+  ) {
+    return context.metaLeadEventId;
+  }
+  return crypto.randomUUID();
+}
 
 export function serializeIntegrationSettings(settings: any) {
   if (!settings) return null;
@@ -162,7 +180,7 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
 
 async function dispatchMapping(mapping: any, settings: any, context: TrackingDispatchContext, metaLeadData: MetaLeadUserData) {
   const eventName = mapping.customEventName || mapping.eventName;
-  const eventId = crypto.randomUUID();
+  const eventId = resolveTrackingEventId(mapping, context);
   const base = {
     tenantId: context.tenantId,
     leadId: context.leadId || null,

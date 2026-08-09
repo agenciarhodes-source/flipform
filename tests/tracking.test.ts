@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildCustomData, kanbanEventSchema } from '../lib/tracking';
+import { buildCustomData, kanbanEventSchema, resolveTrackingEventId } from '../lib/tracking';
+import { fireMetaLeadPixel } from '../lib/tracking/meta-pixel-client';
 import { buildUserData, formatMetaCapiError, hashMetaValue, normalizeMetaCity, normalizeMetaEmail, normalizeMetaPhone } from '../lib/tracking/meta-capi';
 import { buildMetaExternalId, getMetaLeadUserData, splitLeadName } from '../lib/tracking/meta-lead-user-data';
 
@@ -130,6 +131,49 @@ test('Meta Lead continua funcionando sem value', () => {
   assert.equal(parsed.success, true);
   assert.equal('value' in customData, false);
   assert.equal(customData.currency, 'BRL');
+});
+
+test('Meta Lead público usa o event ID do servidor e outros eventos recebem IDs próprios', () => {
+  const sharedId = 'server-owned-lead-event-id';
+  const context = { source: 'public_form' as const, metaLeadEventId: sharedId };
+
+  assert.equal(resolveTrackingEventId({ provider: 'meta', eventName: 'Lead' }, context), sharedId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'QualifiedLead' }, context), sharedId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Purchase' }, context), sharedId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'google_ads', eventName: 'Lead' }, context), sharedId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Lead' }, { source: 'kanban', metaLeadEventId: sharedId }), sharedId);
+});
+
+test('Meta Pixel dispara Standard Event Lead com o mesmo eventID, sem PII', () => {
+  const calls: unknown[][] = [];
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  Object.assign(globalThis, {
+    window: { fbq: (...args: unknown[]) => calls.push(args) },
+    document: {},
+  });
+  try {
+    assert.equal(fireMetaLeadPixel({ pixelId: '123456789', eventId: 'server-event-123' }), true);
+    assert.deepEqual(calls, [
+      ['init', '123456789'],
+      ['track', 'Lead', {}, { eventID: 'server-event-123' }],
+    ]);
+    assert.equal(JSON.stringify(calls).includes('email'), false);
+  } finally {
+    Object.assign(globalThis, { window: previousWindow, document: previousDocument });
+  }
+});
+
+test('Meta Pixel rejeita configuração inválida e falha de browser é best-effort', () => {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  Object.assign(globalThis, { window: {}, document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => { throw new Error('blocked'); } } } });
+  try {
+    assert.equal(fireMetaLeadPixel({ pixelId: 'pixel-do-request', eventId: 'event' }), false);
+    assert.equal(fireMetaLeadPixel({ pixelId: '987654321', eventId: 'event' }), false);
+  } finally {
+    Object.assign(globalThis, { window: previousWindow, document: previousDocument });
+  }
 });
 
 test('erro da Meta é formatado com detalhes sem token', () => {
