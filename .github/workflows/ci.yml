@@ -31,16 +31,16 @@ jobs:
       ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
       ASAAS_API_KEY: test-placeholder
       ASAAS_WEBHOOK_TOKEN: test-placeholder
-      DATABASE_URL: file:./ci.db
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -96,17 +96,17 @@ jobs:
       ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
       ASAAS_API_KEY: test-placeholder
       ASAAS_WEBHOOK_TOKEN: test-placeholder
-      DATABASE_URL: file:./ci.db
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
       SMOKE_BASE_URL: http://localhost:3000
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
