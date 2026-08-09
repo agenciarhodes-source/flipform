@@ -25,4 +25,42 @@ Valores nulos, vazios, `undefined` e arrays vazios são omitidos. Eventos Kanban
 - Falhas da Meta continuam registradas como `failed` sem desfazer a submissão ou a operação do CRM.
 - A Graph API permanece em `v19.0`; atualizar a versão exige validação separada contra a documentação vigente.
 - Este incremento não exige migration Neon e não altera dados existentes.
-- Pixel browser, deduplicação por `event_id`, outbox, filas e retries permanecem fora de escopo.
+- Outbox, filas e retries permanecem fora de escopo.
+
+## Browser Event
+
+Depois que a API confirma a criação de um Lead qualificado, o formulário carrega o Meta Pixel sob demanda e envia somente o Standard Event `Lead`. Não há `PageView` nem envio manual de PII pelo navegador.
+
+## Server Event
+
+A mesma submissão envia o evento `Lead` pela CAPI. A falha da CAPI é registrada no `TrackingEventLog`, mas não desfaz o Lead nem transforma a resposta pública em erro.
+
+## Deduplication
+
+As versões browser e server usam o mesmo nome (`Lead`) e o mesmo identificador: `eventID` no Pixel e `event_id` na CAPI. Outros eventos, incluindo `QualifiedLead` e `Purchase`, recebem IDs novos e independentes.
+
+## Event ID owner
+
+O servidor cria um UUID somente depois da criação bem-sucedida do Lead. O browser não fornece nem escolhe esse valor.
+
+## Pixel ID
+
+O Pixel ID é configuração pública, numérica e validada. Ele é obtido exclusivamente das configurações do tenant ao qual o formulário resolvido pertence; valores do request público são ignorados.
+
+## Access Token
+
+O Access Token e o Test Event Code continuam sendo segredos server-only. A consulta destinada à resposta pública seleciona explicitamente apenas `metaPixelEnabled` e `metaPixelId`, e a resposta expõe somente `pixelId` e `eventId`.
+
+## Failure behavior
+
+O Pixel é best-effort: bloqueio do script, ad blocker ou falha de `fbq` não afetam a tela de sucesso. Uma configuração parcial com Pixel habilitado e ID válido ainda pode disparar o browser event mesmo que a CAPI esteja sem token; detalhes da configuração não são exibidos ao visitante.
+
+## Custom Domains
+
+O helper usa a URL atual do formulário e não depende de um hostname FlipForm. Assim, `/f/[slug]`, `/custom-domain/[slug]` e a resolução por domínio próprio compartilham o mesmo fluxo.
+
+## Preview
+
+O preview do builder não executa o callback de submissão e, portanto, não cria Lead, não chama CAPI, não carrega o Pixel e não dispara `fbq`.
+
+Este PR não requer migration Neon.

@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-reac
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStateName, getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
 import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
+import type { PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
 
 interface PublicField {
   id: string;
@@ -30,7 +31,7 @@ interface Props {
     disqualificationSettings?: { title?: string; message?: string; buttonText?: string; redirectUrl?: string | null } | null;
     fields: PublicField[];
   };
-  onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<any>;
+  onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<PublicFormSubmitResponse | { ok: true; qualified: false }>;
   previewMode?: boolean;
 }
 
@@ -115,7 +116,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
       setSubmitting(true);
       try {
         const result = await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: normalizeAnswerForSubmit(f, answers[f.id]) })));
-        if ((result as any)?.qualified === false) setDisqualified(true); else setDone(true);
+        if (result.qualified === false) setDisqualified(true); else setDone(true);
       } catch (e: any) {
         setError(e?.message || 'Erro ao enviar. Tente novamente.');
         submitGuard.current = false;

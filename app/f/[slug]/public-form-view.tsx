@@ -1,6 +1,7 @@
 'use client';
 import { PublicTypeform } from '@/components/public-typeform';
 import { buildPublicAttribution } from '@/lib/attribution';
+import { fireMetaLeadPixel, type PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
 
 export function PublicFormView({ form }: { form: any }) {
   const submit = async (answers: any) => {
@@ -25,7 +26,11 @@ export function PublicFormView({ form }: { form: any }) {
       } catch {}
       throw new Error(msg);
     }
-    return res.json();
+    const result: PublicFormSubmitResponse = await res.json();
+    if (result.tracking?.meta) {
+      fireMetaLeadPixel(result.tracking.meta);
+    }
+    return result;
   };
   return <div className="min-h-screen"><PublicTypeform form={form} onSubmit={submit} /></div>;
 }
