@@ -17,8 +17,9 @@ def test_public_response_uses_tenant_settings_and_exposes_no_meta_secret():
     assert "parsed.data.tenantId" not in ROUTE
 
 
-def test_pixel_runs_only_after_successful_submit_and_has_no_hostname_dependency():
+def test_pixel_runs_only_after_successful_qualified_submit_and_has_no_hostname_dependency():
     assert VIEW.index("if (!res.ok)") < VIEW.rindex("fireMetaLeadPixel")
+    assert "result.qualified === true && result.tracking?.meta" in VIEW
     assert "app.flipform.com.br" not in PIXEL
     assert "'track', 'Lead', {}, { eventID: eventId }" in PIXEL
     assert "PageView" not in PIXEL
