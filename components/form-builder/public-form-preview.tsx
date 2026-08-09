@@ -9,7 +9,12 @@ export function PublicFormPreview({ publicTitle, publicDescription, primaryColor
         <div className="h-[80vh]">
           <PublicTypeform
             form={{ publicTitle, publicDescription, primaryColor, successMessage, disqualificationSettings, fields: fields.map((f: any, i: number) => ({ ...f, id: f.id || `tmp-${i}` })) }}
-            onSubmit={async () => { /* preview only */ }}
+            onSubmit={async () => ({
+              ok: true,
+              leadId: 'preview',
+              successMessage,
+              qualified: true,
+            })}
             previewMode
           />
         </div>
