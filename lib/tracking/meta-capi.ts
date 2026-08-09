@@ -9,29 +9,70 @@ export type MetaCapiPayload = {
   actionSource?: 'website' | 'system_generated';
   eventSourceUrl?: string | null;
   testEventCode?: string | null;
-  user?: { email?: string | null; phone?: string | null };
+  user?: {
+    email?: string | null;
+    phone?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    city?: string | null;
+    state?: string | null;
+    externalId?: string | null;
+    fbc?: string | null;
+    fbp?: string | null;
+    clientIpAddress?: string | null;
+    clientUserAgent?: string | null;
+  };
   customData?: Record<string, unknown>;
 };
 
-function normalize(value: string): string {
-  return value.trim().toLowerCase();
+export function normalizeMetaText(value: string): string {
+  return value.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function normalizePhone(value: string): string {
+export function normalizeMetaPhone(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-function sha256(value: string): string {
+export function normalizeMetaEmail(value: string): string {
+  const normalized = normalizeMetaText(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : '';
+}
+
+export function normalizeMetaCity(value: string): string {
+  return normalizeMetaText(value).replace(/[^a-z0-9]/g, '');
+}
+
+export function hashMetaValue(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-function buildUserData(user: MetaCapiPayload['user']) {
-  const data: Record<string, string[]> = {};
-  if (user?.email) data.em = [sha256(normalize(user.email))];
-  if (user?.phone) {
-    const phone = normalizePhone(user.phone);
-    if (phone) data.ph = [sha256(phone)];
-  }
+export type MetaUserData = Partial<Record<'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'external_id', string[]>> &
+  Partial<Record<'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent', string>>;
+
+function addHashed(data: MetaUserData, key: 'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'external_id', value: string | null | undefined, normalizer = normalizeMetaText) {
+  if (!value) return;
+  const normalized = normalizer(value);
+  if (normalized) data[key] = [hashMetaValue(normalized)];
+}
+
+function addPlain(data: MetaUserData, key: 'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent', value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (normalized) data[key] = normalized;
+}
+
+export function buildUserData(user: MetaCapiPayload['user']): MetaUserData {
+  const data: MetaUserData = {};
+  addHashed(data, 'em', user?.email, normalizeMetaEmail);
+  addHashed(data, 'ph', user?.phone, normalizeMetaPhone);
+  addHashed(data, 'fn', user?.firstName);
+  addHashed(data, 'ln', user?.lastName);
+  addHashed(data, 'ct', user?.city, normalizeMetaCity);
+  addHashed(data, 'st', user?.state);
+  addHashed(data, 'external_id', user?.externalId, (value) => value.trim());
+  addPlain(data, 'fbc', user?.fbc);
+  addPlain(data, 'fbp', user?.fbp);
+  addPlain(data, 'client_ip_address', user?.clientIpAddress);
+  addPlain(data, 'client_user_agent', user?.clientUserAgent);
   return data;
 }
 
