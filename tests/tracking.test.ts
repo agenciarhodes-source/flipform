@@ -2,7 +2,80 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { buildCustomData, kanbanEventSchema } from '../lib/tracking';
-import { formatMetaCapiError } from '../lib/tracking/meta-capi';
+import { buildUserData, formatMetaCapiError, hashMetaValue, normalizeMetaCity, normalizeMetaEmail, normalizeMetaPhone } from '../lib/tracking/meta-capi';
+import { buildMetaExternalId, getMetaLeadUserData, splitLeadName } from '../lib/tracking/meta-lead-user-data';
+
+test('normaliza e separa os identificadores hashed da Meta deterministicamente', () => {
+  assert.equal(normalizeMetaEmail('  MARIA@Example.COM '), 'maria@example.com');
+  assert.equal(normalizeMetaEmail('invalido'), '');
+  assert.equal(normalizeMetaPhone('+55 (86) 99999-1234'), '5586999991234');
+  assert.equal(normalizeMetaCity(' São Luís '), 'saoluis');
+  assert.deepEqual(splitLeadName('Diego'), { firstName: 'Diego', lastName: null });
+  assert.deepEqual(splitLeadName(' Maria Clara de Sousa '), { firstName: 'Maria', lastName: 'Clara de Sousa' });
+  assert.deepEqual(splitLeadName('  '), { firstName: null, lastName: null });
+
+  const externalId = buildMetaExternalId('tenant-a', 'lead-1');
+  const data = buildUserData({
+    email: '  MARIA@Example.COM ', phone: '+55 (86) 99999-1234', firstName: 'Maria',
+    lastName: 'Clara Sousa', city: 'São Luís', state: 'PI', externalId,
+  });
+  assert.deepEqual(data.em, [hashMetaValue('maria@example.com')]);
+  assert.deepEqual(data.ph, [hashMetaValue('5586999991234')]);
+  assert.deepEqual(data.fn, [hashMetaValue('maria')]);
+  assert.deepEqual(data.ln, [hashMetaValue('clara sousa')]);
+  assert.deepEqual(data.ct, [hashMetaValue('saoluis')]);
+  assert.deepEqual(data.st, [hashMetaValue('pi')]);
+  assert.deepEqual(data.external_id, [hashMetaValue('tenant-a:lead-1')]);
+  assert.deepEqual(buildUserData({ city: 'São Luís' }), buildUserData({ city: 'São Luís' }));
+});
+
+test('mantém attribution sem hash e omite todos os campos ausentes ou vazios', () => {
+  const data = buildUserData({
+    email: 'invalid', phone: '---', firstName: ' ', fbc: ' fb.1.click ', fbp: 'fb.1.browser',
+    clientIpAddress: '203.0.113.7', clientUserAgent: 'Browser/1.0',
+  });
+  assert.deepEqual(data, {
+    fbc: 'fb.1.click', fbp: 'fb.1.browser', client_ip_address: '203.0.113.7', client_user_agent: 'Browser/1.0',
+  });
+  assert.deepEqual(buildUserData(undefined), {});
+  assert.equal(Object.values(data).some((value) => Array.isArray(value) && value.length === 0), false);
+});
+
+test('carrega Lead e attribution com tenant isolation em uma única consulta', async () => {
+  let received: any;
+  const db = { lead: { findFirst: async (args: unknown) => {
+    received = args;
+    return {
+      id: 'lead-1', name: 'Maria Clara Sousa', email: 'maria@example.com', phone: '5586999991234',
+      city: 'Teresina', state: 'PI', attribution: {
+        fbc: 'fbc-value', fbp: 'fbp-value', clientIp: '203.0.113.7', clientUserAgent: 'Browser/1', landingPage: 'https://cliente.example/form',
+      },
+    };
+  } } };
+  const result = await getMetaLeadUserData({ tenantId: 'tenant-a', leadId: 'lead-1', db });
+  assert.deepEqual(received.where, { id: 'lead-1', tenantId: 'tenant-a' });
+  assert.equal(result.user.externalId, 'tenant-a:lead-1');
+  assert.equal(result.user.firstName, 'Maria');
+  assert.equal(result.user.lastName, 'Clara Sousa');
+  assert.equal(result.user.fbc, 'fbc-value');
+  assert.equal(result.landingPage, 'https://cliente.example/form');
+});
+
+test('não usa fallback em tentativa cross-tenant e aceita Lead antigo sem attribution', async () => {
+  const missDb = { lead: { findFirst: async () => null } };
+  const miss = await getMetaLeadUserData({ tenantId: 'tenant-b', leadId: 'lead-a', fallbackLead: { email: 'leak@example.com' }, db: missDb });
+  assert.deepEqual(miss, { user: {}, landingPage: null });
+
+  const oldDb = { lead: { findFirst: async () => ({
+    id: 'old-lead', name: 'Diego', email: 'diego@example.com', phone: '5511999999999', city: null, state: null, attribution: null,
+  }) } };
+  const oldLead = await getMetaLeadUserData({ tenantId: 'tenant-a', leadId: 'old-lead', db: oldDb });
+  assert.equal(oldLead.user.email, 'diego@example.com');
+  assert.equal(oldLead.user.phone, '5511999999999');
+  assert.equal(oldLead.user.firstName, 'Diego');
+  assert.equal(oldLead.user.fbc, undefined);
+  assert.equal(oldLead.landingPage, null);
+});
 
 test('permite configurar Meta Purchase sem value fixo', () => {
   const parsed = kanbanEventSchema.safeParse({

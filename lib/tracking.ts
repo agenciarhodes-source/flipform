@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
 import { decryptIntegrationSecret, encryptIntegrationSecret, looksMaskedSecret, maskSecretFromEncrypted } from './tracking/crypto';
 import { sendMetaCapiEvent } from './tracking/meta-capi';
+import { getMetaLeadUserData, type MetaLeadUserData } from './tracking/meta-lead-user-data';
 
 export const trackingProviders = ['meta', 'gtm', 'ga4', 'google_ads'] as const;
 export const funnelEventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'] as const;
@@ -159,7 +160,7 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
   return data;
 }
 
-async function dispatchMapping(mapping: any, settings: any, context: TrackingDispatchContext) {
+async function dispatchMapping(mapping: any, settings: any, context: TrackingDispatchContext, metaLeadData: MetaLeadUserData) {
   const eventName = mapping.customEventName || mapping.eventName;
   const eventId = crypto.randomUUID();
   const base = {
@@ -212,7 +213,8 @@ async function dispatchMapping(mapping: any, settings: any, context: TrackingDis
         eventId,
         actionSource: context.source === 'public_form' ? 'website' : 'system_generated',
         testEventCode: settings.metaTestEventCode,
-        user: { email: context.lead?.email, phone: context.lead?.phone },
+        eventSourceUrl: context.source === 'public_form' ? metaLeadData.landingPage : undefined,
+        user: metaLeadData.user,
         customData: buildCustomData(mapping, context.source),
       });
       if (!result.ok) throw new Error(result.reason || 'Falha ao enviar evento Meta');
@@ -255,14 +257,27 @@ async function dispatchMapping(mapping: any, settings: any, context: TrackingDis
   }
 }
 
+async function resolveMetaLeadData(context: TrackingDispatchContext, mappings: any[]): Promise<MetaLeadUserData> {
+  if (!mappings.some((mapping) => mapping.provider === 'meta')) {
+    return { user: {}, landingPage: null };
+  }
+  try {
+    return await getMetaLeadUserData({ tenantId: context.tenantId, leadId: context.leadId, fallbackLead: context.lead });
+  } catch {
+    // Enrichment is best-effort: a metadata lookup must not block a CRM operation.
+    return getMetaLeadUserData({ tenantId: context.tenantId, fallbackLead: context.lead });
+  }
+}
+
 export async function dispatchKanbanStageTracking(context: TrackingDispatchContext) {
   if (!context.toStageId) return [];
   const settings = await getTrackingConfig(context.tenantId);
   const mappings = await prisma.kanbanStageTrackingEvent.findMany({
     where: { tenantId: context.tenantId, stageId: context.toStageId, enabled: true },
   });
+  const metaLeadData = await resolveMetaLeadData(context, mappings);
   const results = [];
-  for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, context));
+  for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, context, metaLeadData));
   return results;
 }
 
@@ -286,8 +301,9 @@ export async function dispatchFormSubmissionTracking(context: TrackingDispatchCo
     const key = `${mapping.provider}:${mapping.stageId}:${mapping.customEventName || mapping.eventName}`;
     return all.findIndex((item) => `${item.provider}:${item.stageId}:${item.customEventName || item.eventName}` === key) === index;
   });
+  const metaLeadData = await resolveMetaLeadData(context, deduped);
   const results = [];
-  for (const mapping of deduped) results.push(await dispatchMapping(mapping, settings, context));
+  for (const mapping of deduped) results.push(await dispatchMapping(mapping, settings, context, metaLeadData));
   return results;
 }
 
