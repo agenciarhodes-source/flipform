@@ -105,6 +105,21 @@ export const leadLocationSchema = z.object({
   if (value.state && value.city && !isValidBrazilCity(value.state, value.city)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'Cidade inválida para o estado selecionado.' });
 });
 
+const nullableTrimmedAttributionString = (max: number) =>
+  z.string().trim().max(max).transform((value) => value || null).nullable().optional().transform((value) => value ?? null);
+
+export const publicAttributionSchema = z.object({
+  utmSource: nullableTrimmedAttributionString(255),
+  utmMedium: nullableTrimmedAttributionString(255),
+  utmCampaign: nullableTrimmedAttributionString(255),
+  utmContent: nullableTrimmedAttributionString(255),
+  utmTerm: nullableTrimmedAttributionString(255),
+  fbclid: nullableTrimmedAttributionString(1024),
+  gclid: nullableTrimmedAttributionString(1024),
+  landingPage: nullableTrimmedAttributionString(2048),
+  referrer: nullableTrimmedAttributionString(2048),
+}).strict();
+
 export const publicSubmitSchema = z.object({
   answers: z
     .array(
@@ -124,7 +139,8 @@ export const publicSubmitSchema = z.object({
         })),
     )
     .default([]),
-});
+  attribution: publicAttributionSchema.optional(),
+}).strict();
 
 
 export const changePasswordSchema = z.object({

@@ -1,5 +1,6 @@
 'use client';
 import { PublicTypeform } from '@/components/public-typeform';
+import { buildPublicAttribution } from '@/lib/attribution';
 
 export function PublicFormView({ form }: { form: any }) {
   const submit = async (answers: any) => {
@@ -8,7 +9,10 @@ export function PublicFormView({ form }: { form: any }) {
       res = await fetch(`/api/public/forms/${form.slug}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({
+          answers,
+          attribution: buildPublicAttribution(window.location.href, document.referrer),
+        }),
       });
     } catch {
       throw new Error('Falha de rede. Verifique sua conexão e tente novamente.');
