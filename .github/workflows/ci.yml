@@ -62,6 +62,14 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Run Python test suite
+        run: python -m pytest tests -q
+
+      - name: Run tracking unit tests
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/tracking.test.ts
+
       - name: Validate environment schema
         run: npm run env:check
 
