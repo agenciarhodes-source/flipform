@@ -82,6 +82,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flipform_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d flipform_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     env:
       NODE_ENV: test
       JWT_SECRET_CURRENT: staging-local-secret
@@ -116,6 +132,9 @@ jobs:
 
       - name: Prisma generate
         run: npx prisma generate
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
 
       - name: Build
         run: npm run build
