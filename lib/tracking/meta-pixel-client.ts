@@ -65,10 +65,21 @@ export function fireMetaLeadPixel(input: { pixelId: string; eventId: string }): 
   }
 }
 
-export type PublicFormSubmitResponse = {
-  ok: true;
-  leadId: string;
-  successMessage: string;
-  qualified: true;
-  tracking?: { meta: { pixelId: string; eventId: string } };
-};
+export type PublicFormSubmitResponse =
+  | {
+      ok: true;
+      leadId: string;
+      successMessage: string;
+      qualified: true;
+      tracking?: { meta: { pixelId: string; eventId: string } };
+    }
+  | {
+      ok: true;
+      qualified: false;
+      disqualification?: {
+        title?: string;
+        message?: string;
+        buttonText?: string;
+        redirectUrl?: string | null;
+      } | null;
+    };
