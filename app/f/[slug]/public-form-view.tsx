@@ -27,7 +27,7 @@ export function PublicFormView({ form }: { form: any }) {
       throw new Error(msg);
     }
     const result: PublicFormSubmitResponse = await res.json();
-    if (result.tracking?.meta) {
+    if (result.qualified === true && result.tracking?.meta) {
       fireMetaLeadPixel(result.tracking.meta);
     }
     return result;
