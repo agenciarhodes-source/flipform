@@ -20,6 +20,8 @@ export function IntegrationsClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [connectingMeta, setConnectingMeta] = useState(false);
+  const [metaConnection, setMetaConnection] = useState<any>({ platformAvailable: false, status: null, grantedScopes: [] });
   const [showMetaToken, setShowMetaToken] = useState(false);
   const [form, setForm] = useState<any>({ provider: 'meta', eventName: 'Lead', enabled: true, currency: 'BRL' });
 
@@ -48,15 +50,17 @@ export function IntegrationsClient() {
   async function load() {
     setLoading(true);
     try {
-      const [s, e, l] = await Promise.all([
+      const [s, e, l, m] = await Promise.all([
         fetch('/api/integrations').then(r=>r.json()),
         fetch('/api/integrations/events').then(r=>r.json()),
         fetch('/api/integrations/event-logs').then(r=>r.json()),
+        fetch('/api/integrations/meta/connection').then(r=>r.json()),
       ]);
       if (s.settings) setSettings(normalizeIntegrationSettings(s.settings));
       setEvents(e.events || []);
       setPipelines(e.pipelines || []);
       setLogs(l.logs || []);
+      setMetaConnection(m);
       const firstPipeline = e.pipelines?.[0];
       const firstStage = firstPipeline?.stages?.[0];
       setForm((prev: any) => ({ ...prev, pipelineId: prev.pipelineId || firstPipeline?.id || '', stageId: prev.stageId || firstStage?.id || '' }));
@@ -67,6 +71,28 @@ export function IntegrationsClient() {
     }
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get('meta');
+    if (result === 'authorized') toast.success('Conta Meta autorizada com sucesso.');
+    if (result === 'cancelled') toast.error('A autorização foi cancelada.');
+    if (result === 'permissions') toast.error('Algumas permissões necessárias não foram autorizadas.');
+    if (result === 'error') toast.error('Não foi possível concluir a autorização Meta.');
+  }, []);
+
+  async function connectMeta() {
+    setConnectingMeta(true);
+    try {
+      const response = await fetch('/api/integrations/meta/connect', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível iniciar a autorização Meta.');
+      const url = new URL(data.authorizationUrl);
+      if (url.protocol !== 'https:' || url.hostname !== 'www.facebook.com') throw new Error('Destino de autorização inválido.');
+      window.location.assign(url.toString());
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível iniciar a autorização Meta.');
+      setConnectingMeta(false);
+    }
+  }
 
   const selectedPipeline = useMemo(() => pipelines.find((p) => p.id === form.pipelineId), [pipelines, form.pipelineId]);
   const isMetaPurchase = form.provider === 'meta' && form.eventName === 'Purchase';
@@ -143,7 +169,14 @@ export function IntegrationsClient() {
 
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
-        <div><h2 className="font-semibold text-lg">Meta Ads</h2><p className="text-sm text-muted-foreground">Conecte seu Pixel e Token da API de Conversões para enviar eventos qualificados para o Meta.</p></div>
+        <div><h2 className="font-semibold text-lg">Meta</h2><p className="text-sm text-muted-foreground">Integração universal</p></div>
+        <div className="rounded-lg border bg-slate-50 p-4 space-y-2">
+          <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Estado da autorização</span><span className="rounded-full border bg-white px-2 py-1 text-xs">{{ authorized: 'Autorizado', expired: 'Expirado', error: 'Erro', revoked: 'Não conectado' }[metaConnection.status as string] || 'Não conectado'}</span></div>
+          {metaConnection.metaUserName && <p className="text-sm">Conta: {metaConnection.metaUserName}</p>}
+          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Conta Meta autorizada. A seleção da empresa, conta de anúncios e fonte de dados será habilitada na próxima etapa.</p>}
+          {metaConnection.platformAvailable ? <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status ? 'Autorizar novamente' : 'Conectar com a Meta'}</button> : <p className="text-sm text-amber-700">A conexão Meta da plataforma ainda não está disponível.</p>}
+        </div>
+        <div className="border-t pt-4"><h3 className="font-medium">Configuração manual — legado</h3><p className="text-xs text-muted-foreground">Estes dados continuam ativos para Pixel e Conversions API atuais.</p></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!settings.metaPixelEnabled} onChange={e=>setSettings({...settings, metaPixelEnabled:e.target.checked})} /> Ativar integração Meta</label>
         <input className="w-full border rounded p-2" placeholder="Meta Pixel ID" value={settings.metaPixelId||''} onChange={e=>setSettings({...settings, metaPixelId:e.target.value})} />
         <div className="space-y-2">

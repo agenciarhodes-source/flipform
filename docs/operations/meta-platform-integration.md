@@ -8,9 +8,37 @@ O FlipForm utiliza um único Meta App oficial da plataforma para atender vários
 
 Somente usuários com `globalRole === "platform_admin"` acessam a configuração em `/admin/integrations` e na API administrativa. O App ID e os presets são globais.
 
+## Platform Meta App
+
+O Meta App é criado e aprovado externamente uma única vez pela equipe FlipForm. App ID e App Secret são configurados pelo Super Admin; o código não cria Apps nem presume aprovação.
+
+## OAuth flow
+
+Owners e admins iniciam `POST /api/integrations/meta/connect`. O servidor usa Graph API `v26.0`, monta a URL oficial e a callback fixa. A callback troca o authorization code server-side, valida `/me` e permissões e redireciona somente para `/integrations`.
+
+## Tenant authorization
+
+Cada tenant autoriza sua própria identidade Meta. `TenantMetaConnection` guarda a autorização e quem a realizou, sem limitar o banco a uma única conexão futura por tenant. Reautorizações da mesma identidade atualizam o registro; outra autorização ativa anterior é revogada logicamente.
+
+## State / CSRF protection
+
+O state usa nonce aleatório de 32 bytes e cookie autenticado por HMAC, HttpOnly, SameSite Lax, Secure em produção e TTL de dez minutos. O payload vincula tenant, usuário e expiração à sessão. O cookie é removido no callback e não existe return URL arbitrária.
+
+## Token encryption
+
+Access tokens são trocados e usados apenas server-side, protegidos por `encryptIntegrationSecret`, e nunca aparecem em DTOs, URLs, logs ou no React. Chamadas Graph autenticadas usam `appsecret_proof` e timeout explícito.
+
+## Required permissions
+
+Os scopes server-side são `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Uma autorização incompleta recebe estado `error`, não `authorized`.
+
+## Access review requirement
+
+Usuários autorizados do App podem testar em desenvolvimento. Tenants externos exigirão Advanced Access/App Review aplicável da Meta; não há tokens manuais, Graph API Explorer ou atalhos para aprovação.
+
 ## Tenant configuration
 
-A autorização self-service de cada tenant será implementada futuramente. Esta fundação não executa OAuth, descoberta de ativos ou chamadas à Graph API.
+A configuração global pertence à plataforma, enquanto tokens OAuth pertencem ao tenant e são sempre consultados pelo `tenantId` da sessão. A API de status expõe apenas disponibilidade, estado, nome informativo, datas e scopes concedidos.
 
 ## Secret storage
 
@@ -27,6 +55,14 @@ Pixel, Conversions API, Advanced Matching, Attribution, QualifiedLead e Purchase
 ## Legacy compatibility
 
 `TenantIntegrationSettings` continua operacional temporariamente para Pixel ID, Access Token e Test Event Code de cada tenant. Não há backfill nem alteração desses dados neste trabalho.
+
+## Current limitations
+
+Ainda não há descoberta ou seleção de Business, Ad Account, Pixel/Dataset, renovação completa do token ou revogação remota. A CAPI e o Pixel do navegador continuam usando exclusivamente `TenantIntegrationSettings` legado.
+
+## Next step: Asset Discovery
+
+O próximo trabalho descobrirá ativos autorizados e permitirá selecionar Business, conta de anúncios e fonte de dados, sem ativar automaticamente a CAPI universal.
 
 ## Próximos passos
 
