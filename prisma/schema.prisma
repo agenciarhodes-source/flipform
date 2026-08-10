@@ -760,6 +760,7 @@ model PlatformMetaSettings {
   id                             String   @id
   appId                          String?  @map("app_id")
   appSecretEncrypted             String?  @map("app_secret_encrypted")
+  businessLoginConfigId          String?  @map("business_login_config_id")
   defaultPixelEnabled            Boolean  @default(true) @map("default_pixel_enabled")
   defaultCapiEnabled             Boolean  @default(true) @map("default_capi_enabled")
   defaultAdvancedMatchingEnabled Boolean  @default(true) @map("default_advanced_matching_enabled")

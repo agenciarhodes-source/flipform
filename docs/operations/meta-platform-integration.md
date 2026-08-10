@@ -69,3 +69,11 @@ O próximo trabalho descobrirá ativos autorizados e permitirá selecionar Busin
 1. OAuth / Business Login.
 2. `TenantMetaConnection` e descoberta de ativos.
 3. Migração gradual do Pixel e CAPI para a conexão universal.
+
+## Facebook Login for Business
+
+O `Business Login Configuration ID` é uma configuração única do Meta App do FlipForm em `PlatformMetaSettings`. Ele é cadastrado somente pelo Platform Admin, não é secreto e nunca pode ser escolhido ou sobrescrito por um tenant. A base Meta (App ID e App Secret) e a prontidão do Business Login (base mais Configuration ID) são status distintos e não afirmam que App Review ou Advanced Access foram aprovados.
+
+O início do OAuth exige a configuração empresarial completa e inclui `config_id` exclusivamente a partir da configuração global server-side. Sem ela, a plataforma retorna uma indisponibilidade segura, sem fallback silencioso para OAuth baseado em scopes. `META_PLATFORM_REQUIRED_SCOPES` continua representando as permissões exigidas pelo produto e é validada após a autorização.
+
+`TenantMetaConnection` permanece tenant-scoped e armazena somente a autorização individual de cada cliente. Nenhum App ID, App Secret, Configuration ID ou Redirect URI é configurado pelo tenant. O próximo passo é Asset Discovery de Businesses, Ad Accounts e Pixels/Datasets; este trabalho não implementa descoberta nem seleção de ativos.

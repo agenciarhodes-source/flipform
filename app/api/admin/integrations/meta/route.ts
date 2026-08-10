@@ -6,6 +6,7 @@ import { getPlatformMetaSettingsForAdmin, updatePlatformMetaSettings } from '@/l
 const schema = z.object({
   appId: z.string().trim().max(128),
   appSecret: z.string().trim().min(1).max(512).optional(),
+  businessLoginConfigId: z.string().trim().max(128),
   defaultPixelEnabled: z.boolean(),
   defaultCapiEnabled: z.boolean(),
   defaultAdvancedMatchingEnabled: z.boolean(),

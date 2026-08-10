@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
-import { isPlatformMetaAvailable } from '@/lib/meta/platform-settings';
+import { isPlatformMetaBusinessLoginAvailable } from '@/lib/meta/platform-settings';
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
   const [platformAvailable, connection] = await Promise.all([
-    isPlatformMetaAvailable(),
+    isPlatformMetaBusinessLoginAvailable(),
     prisma.tenantMetaConnection.findFirst({ where: { tenantId: session.tenantId }, orderBy: { connectedAt: 'desc' }, select: { status: true, metaUserName: true, connectedAt: true, tokenExpiresAt: true, grantedScopes: true } }),
   ]);
   let status = connection?.status ?? null;

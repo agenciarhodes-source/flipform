@@ -8,6 +8,7 @@ export const META_OAUTH_CALLBACK_PATH = '/api/integrations/meta/callback';
 export type PlatformMetaSettingsInput = {
   appId: string;
   appSecret?: string;
+  businessLoginConfigId: string;
   defaultPixelEnabled: boolean;
   defaultCapiEnabled: boolean;
   defaultAdvancedMatchingEnabled: boolean;
@@ -30,8 +31,10 @@ export function getMetaOAuthRedirectUri() {
 function toAdminDto(settings: any | null) {
   const encrypted = settings?.appSecretEncrypted || null;
   const appId = settings?.appId || null;
+  const businessLoginConfigId = settings?.businessLoginConfigId || null;
   return {
     appId,
+    businessLoginConfigId,
     appSecretConfigured: Boolean(encrypted),
     appSecretMasked: maskSecretFromEncrypted(encrypted),
     redirectUri: getMetaOAuthRedirectUri(),
@@ -44,6 +47,8 @@ function toAdminDto(settings: any | null) {
       defaultQualifiedLeadEnabled: settings.defaultQualifiedLeadEnabled,
       defaultPurchaseEnabled: settings.defaultPurchaseEnabled,
     } : {}),
+    baseConfigured: Boolean(appId && encrypted),
+    businessLoginConfigured: Boolean(appId && encrypted && businessLoginConfigId),
     configured: Boolean(appId && encrypted),
     updatedAt: settings?.updatedAt || null,
     updatedBy: settings?.updatedBy || null,
@@ -58,16 +63,24 @@ export async function getPlatformMetaSettingsForAdmin() {
   return toAdminDto(settings);
 }
 
-export async function isPlatformMetaAvailable() {
+export async function isPlatformMetaBaseAvailable() {
   const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true } });
   return Boolean(settings?.appId && settings.appSecretEncrypted);
 }
 
+export async function isPlatformMetaBusinessLoginAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true, businessLoginConfigId: true } });
+  return Boolean(settings?.appId && settings.appSecretEncrypted && settings.businessLoginConfigId);
+}
+
+/** @deprecated Prefer the explicitly named base/business readiness helpers. */
+export const isPlatformMetaAvailable = isPlatformMetaBaseAvailable;
+
 export async function getPlatformMetaOAuthCredentials() {
-  const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true } });
+  const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true, businessLoginConfigId: true } });
   const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
   if (!settings?.appId || !appSecret) return null;
-  return { appId: settings.appId, appSecret };
+  return { appId: settings.appId, appSecret, businessLoginConfigId: settings.businessLoginConfigId };
 }
 
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {

@@ -14,12 +14,17 @@ test('OAuth state binds nonce, tenant, user and expiration', async () => {
   assert.equal(verifyMetaOAuthState(undefined, created.state, 'tenant-a', 'user-a'), false);
 });
 
-test('authorization URL uses only fixed server-side scopes and host', async () => {
+test('authorization URL uses the server-side Business Login configuration', async () => {
   const { buildMetaAuthorizationUrl, META_PLATFORM_REQUIRED_SCOPES } = await import('../lib/meta/oauth');
-  const url = new URL(buildMetaAuthorizationUrl('app-1', 'https://app.example/api/integrations/meta/callback', 'nonce'));
+  const url = new URL(buildMetaAuthorizationUrl({ appId: 'app-1', redirectUri: 'https://app.example/api/integrations/meta/callback', state: 'nonce', businessLoginConfigId: 'platform-config' }));
   assert.equal(url.hostname, 'www.facebook.com');
   assert.equal(url.pathname, '/v26.0/dialog/oauth');
-  assert.deepEqual(url.searchParams.get('scope')?.split(','), [...META_PLATFORM_REQUIRED_SCOPES]);
+  assert.equal(url.searchParams.get('config_id'), 'platform-config');
+  assert.equal(url.searchParams.get('client_id'), 'app-1');
+  assert.equal(url.searchParams.get('state'), 'nonce');
+  assert.equal(url.searchParams.get('redirect_uri'), 'https://app.example/api/integrations/meta/callback');
+  assert.equal(url.searchParams.has('scope'), false);
+  assert.deepEqual([...META_PLATFORM_REQUIRED_SCOPES], ['ads_read', 'ads_management', 'business_management']);
   assert.equal(url.searchParams.has('pages_messaging'), false);
 });
 
