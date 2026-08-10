@@ -1,6 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
-import { encryptIntegrationSecret, looksMaskedSecret, maskSecretFromEncrypted } from '@/lib/tracking/crypto';
+import { decryptIntegrationSecret, encryptIntegrationSecret, looksMaskedSecret, maskSecretFromEncrypted } from '@/lib/tracking/crypto';
 
 export const PLATFORM_META_SETTINGS_ID = 'meta';
 export const META_OAUTH_CALLBACK_PATH = '/api/integrations/meta/callback';
@@ -56,6 +56,18 @@ export async function getPlatformMetaSettingsForAdmin() {
     include: { updatedBy: { select: { id: true, name: true, email: true } } },
   });
   return toAdminDto(settings);
+}
+
+export async function isPlatformMetaAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true } });
+  return Boolean(settings?.appId && settings.appSecretEncrypted);
+}
+
+export async function getPlatformMetaOAuthCredentials() {
+  const settings = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appId: true, appSecretEncrypted: true } });
+  const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
+  if (!settings?.appId || !appSecret) return null;
+  return { appId: settings.appId, appSecret };
 }
 
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {

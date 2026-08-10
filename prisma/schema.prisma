@@ -75,6 +75,13 @@ enum TaskPriority {
   high
 }
 
+enum TenantMetaConnectionStatus {
+  authorized
+  revoked
+  expired
+  error
+}
+
 model Tenant {
   id            String       @id @default(uuid())
   name          String
@@ -112,6 +119,7 @@ model Tenant {
   leadPurchases        LeadPurchase[]
   leadAssignmentRotations LeadAssignmentRotation[]
   leadAttributions      LeadAttribution[]
+  metaConnections       TenantMetaConnection[]
 
   @@map("tenants")
 }
@@ -168,6 +176,7 @@ model User {
   allowedInvites      AllowedUser[]         @relation("AllowedUserInviter")
   leadAssignmentRotationMemberships LeadAssignmentRotationMember[]
   platformMetaSettingsUpdates PlatformMetaSettings[] @relation("PlatformMetaSettingsUpdatedBy")
+  metaConnectionsConnected TenantMetaConnection[] @relation("TenantMetaConnectionConnectedBy")
 
   @@map("users")
 }
@@ -765,6 +774,32 @@ model PlatformMetaSettings {
 
   @@index([updatedById])
   @@map("platform_meta_settings")
+}
+
+model TenantMetaConnection {
+  id                   String                     @id @default(cuid())
+  tenantId             String                     @map("tenant_id")
+  status               TenantMetaConnectionStatus
+  metaUserId           String                     @map("meta_user_id")
+  metaUserName         String?                    @map("meta_user_name")
+  accessTokenEncrypted String                     @map("access_token_encrypted")
+  tokenExpiresAt       DateTime?                  @map("token_expires_at")
+  grantedScopes        String[]                   @default([]) @map("granted_scopes")
+  connectedById        String?                    @map("connected_by_id")
+  connectedAt          DateTime                   @default(now()) @map("connected_at")
+  lastValidatedAt      DateTime?                  @map("last_validated_at")
+  revokedAt            DateTime?                  @map("revoked_at")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedBy User?  @relation("TenantMetaConnectionConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, metaUserId])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([connectedById])
+  @@map("tenant_meta_connections")
 }
 
 model KanbanStageTrackingEvent {
