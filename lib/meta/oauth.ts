@@ -7,9 +7,9 @@ const OAUTH_HOST = 'www.facebook.com';
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
 
-export function buildMetaAuthorizationUrl(appId: string, redirectUri: string, state: string) {
+export function buildMetaAuthorizationUrl(input: { appId: string; redirectUri: string; state: string; businessLoginConfigId: string }) {
   const url = new URL(`https://${OAUTH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/dialog/oauth`);
-  url.search = new URLSearchParams({ client_id: appId, redirect_uri: redirectUri, state, scope: META_PLATFORM_REQUIRED_SCOPES.join(','), response_type: 'code' }).toString();
+  url.search = new URLSearchParams({ client_id: input.appId, redirect_uri: input.redirectUri, state: input.state, config_id: input.businessLoginConfigId, response_type: 'code' }).toString();
   if (url.protocol !== 'https:' || url.hostname !== OAUTH_HOST) throw new Error('Invalid Meta authorization host');
   return url.toString();
 }

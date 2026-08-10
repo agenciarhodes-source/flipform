@@ -9,9 +9,9 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req, session) => 
   const rl = rateLimit({ key: `meta-oauth-connect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const credentials = await getPlatformMetaOAuthCredentials();
-  if (!credentials) return NextResponse.json({ error: 'Conexão Meta ainda não foi habilitada pela plataforma.' }, { status: 503 });
+  if (!credentials?.businessLoginConfigId) return NextResponse.json({ error: 'A conexão empresarial da Meta ainda não foi configurada pela plataforma.' }, { status: 503 });
   const oauthState = createMetaOAuthState(session.tenantId, session.userId);
-  const authorizationUrl = buildMetaAuthorizationUrl(credentials.appId, getMetaOAuthRedirectUri(), oauthState.state);
+  const authorizationUrl = buildMetaAuthorizationUrl({ appId: credentials.appId, redirectUri: getMetaOAuthRedirectUri(), state: oauthState.state, businessLoginConfigId: credentials.businessLoginConfigId });
   const response = NextResponse.json({ authorizationUrl });
   response.cookies.set(META_OAUTH_STATE_COOKIE, oauthState.cookie, {
     httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax',
