@@ -3,6 +3,7 @@ import crypto from 'crypto';
 
 export const META_PLATFORM_GRAPH_API_VERSION = 'v26.0';
 export const META_PLATFORM_REQUIRED_SCOPES = ['ads_read', 'ads_management', 'business_management'] as const;
+export const META_BUSINESS_LOGIN_TOKEN_TYPES = ['USER', 'SYSTEM_USER'] as const;
 const OAUTH_HOST = 'www.facebook.com';
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
@@ -39,15 +40,34 @@ export async function exchangeMetaAuthorizationCode(input: { appId: string; appS
   return { accessToken: data.access_token as string, expiresIn: typeof data.expires_in === 'number' ? data.expires_in : null };
 }
 
-export async function validateMetaAuthorization(accessToken: string, appSecret: string) {
-  const proof = createAppSecretProof(accessToken, appSecret);
-  const identityUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/me`);
-  identityUrl.search = new URLSearchParams({ fields: 'id,name', access_token: accessToken, appsecret_proof: proof }).toString();
-  const permissionsUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/me/permissions`);
-  permissionsUrl.search = new URLSearchParams({ access_token: accessToken, appsecret_proof: proof }).toString();
-  const [identity, permissions] = await Promise.all([metaJson(identityUrl, 'identity_validation'), metaJson(permissionsUrl, 'scope_validation')]);
-  if (typeof identity.id !== 'string' || !identity.id) throw new Error('Meta identity_validation failed');
-  const grantedScopes = Array.isArray(permissions.data) ? permissions.data.filter((p: any) => p?.status === 'granted' && typeof p.permission === 'string').map((p: any) => p.permission) : [];
+export async function validateMetaAuthorization(input: { accessToken: string; appId: string; appSecret: string }) {
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/debug_token`);
+  // Meta documents app_id|app_secret as an App Access Token. It remains server-side.
+  url.search = new URLSearchParams({ input_token: input.accessToken, access_token: `${input.appId}|${input.appSecret}` }).toString();
+  const inspected = await metaJson(url, 'token_inspection');
+  const debuggedToken = inspected?.data;
+  if (!debuggedToken || debuggedToken.is_valid !== true) throw new Error('Meta token_inspection invalid token');
+  if (String(debuggedToken.app_id ?? '') !== input.appId) throw new Error('Meta token_inspection app mismatch');
+  if (debuggedToken.type != null && !META_BUSINESS_LOGIN_TOKEN_TYPES.includes(debuggedToken.type)) {
+    throw new Error('Meta token_inspection unsupported token type');
+  }
+  if (typeof debuggedToken.user_id !== 'string' || !debuggedToken.user_id) {
+    throw new Error('Meta token_inspection missing principal');
+  }
+  const grantedScopes: string[] = Array.isArray(debuggedToken.scopes)
+    ? [...new Set<string>(debuggedToken.scopes.filter((scope: unknown): scope is string => typeof scope === 'string'))]
+    : [];
   const missingScopes = META_PLATFORM_REQUIRED_SCOPES.filter(scope => !grantedScopes.includes(scope));
-  return { metaUserId: identity.id as string, metaUserName: typeof identity.name === 'string' ? identity.name : null, grantedScopes, missingScopes };
+  const expiresAtSeconds = debuggedToken.expires_at;
+  const tokenExpiresAt = typeof expiresAtSeconds === 'number' && Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0
+    ? new Date(expiresAtSeconds * 1000)
+    : null;
+  return {
+    metaUserId: debuggedToken.user_id as string,
+    metaUserName: null,
+    tokenType: typeof debuggedToken.type === 'string' ? debuggedToken.type : null,
+    grantedScopes,
+    missingScopes,
+    tokenExpiresAt,
+  };
 }

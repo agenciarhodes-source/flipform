@@ -27,7 +27,7 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
     const credentials = await getPlatformMetaOAuthCredentials();
     if (!credentials) return clearState(redirect('error'));
     const token = await exchangeMetaAuthorizationCode({ ...credentials, redirectUri: getMetaOAuthRedirectUri(), code });
-    const validation = await validateMetaAuthorization(token.accessToken, credentials.appSecret);
+    const validation = await validateMetaAuthorization({ accessToken: token.accessToken, appId: credentials.appId, appSecret: credentials.appSecret });
     const now = new Date();
     const status = validation.missingScopes.length ? 'error' : 'authorized';
     const encrypted = encryptIntegrationSecret(token.accessToken);
@@ -38,8 +38,8 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
       });
       await tx.tenantMetaConnection.upsert({
         where: { tenantId_metaUserId: { tenantId: session.tenantId, metaUserId: validation.metaUserId } },
-        create: { tenantId: session.tenantId, status, metaUserId: validation.metaUserId, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: token.expiresIn ? new Date(now.getTime() + token.expiresIn * 1000) : null, connectedById: session.userId, connectedAt: now, lastValidatedAt: now },
-        update: { status, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: token.expiresIn ? new Date(now.getTime() + token.expiresIn * 1000) : null, connectedById: session.userId, connectedAt: now, lastValidatedAt: now, revokedAt: null },
+        create: { tenantId: session.tenantId, status, metaUserId: validation.metaUserId, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: validation.tokenExpiresAt, connectedById: session.userId, connectedAt: now, lastValidatedAt: now },
+        update: { status, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: validation.tokenExpiresAt, connectedById: session.userId, connectedAt: now, lastValidatedAt: now, revokedAt: null },
       });
     });
     return clearState(redirect(status === 'authorized' ? 'authorized' : 'permissions'));
