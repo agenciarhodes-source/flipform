@@ -14,7 +14,7 @@ O Meta App é criado e aprovado externamente uma única vez pela equipe FlipForm
 
 ## OAuth flow
 
-Owners e admins iniciam `POST /api/integrations/meta/connect`. O servidor usa Graph API `v26.0`, monta a URL oficial e a callback fixa. A callback troca o authorization code server-side, valida `/me` e permissões e redireciona somente para `/integrations`.
+Owners e admins iniciam `POST /api/integrations/meta/connect`. O servidor usa Graph API `v26.0`, monta a URL oficial e a callback fixa. A callback troca o authorization code server-side, inspeciona o token com `debug_token` autenticado pelo App da plataforma e redireciona somente para `/integrations`.
 
 ## Tenant authorization
 
@@ -31,6 +31,10 @@ Access tokens são trocados e usados apenas server-side, protegidos por `encrypt
 ## Required permissions
 
 Os scopes server-side são `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Uma autorização incompleta recebe estado `error`, não `authorized`.
+
+## Business Login real
+
+A configuração externa do Facebook Login for Business do FlipForm usa **System User Access Token**, incluindo a opção permanente/sem expiração, e concede acesso a Ad Accounts e Pixels. A inspeção vincula o token ao App ID da plataforma, aceita os tipos compatíveis `USER` e `SYSTEM_USER`, obtém o principal de `user_id` e usa exclusivamente `expires_at` validado como fonte de expiração; sua ausência representa um token permanente (`null`). Nenhum ID real, token ou secret é documentado.
 
 ## Access review requirement
 

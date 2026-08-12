@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { TestContext } from 'node:test';
 
 process.env.JWT_SECRET_CURRENT = 'meta-oauth-test-secret';
 
@@ -34,14 +35,111 @@ test('token exchange rejects a successful response without a token', async (t) =
   await assert.rejects(exchangeMetaAuthorizationCode({ appId: 'id', appSecret: 'secret', redirectUri: 'https://app.example/callback', code: 'code' }), /missing token/);
 });
 
-test('token validation reports scopes actually granted', async (t) => {
-  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
-    const url = String(input);
-    if (url.includes('/me/permissions')) return new Response(JSON.stringify({ data: [{ permission: 'ads_read', status: 'granted' }] }));
-    return new Response(JSON.stringify({ id: 'meta-user', name: 'Meta User' }));
-  });
+const completeInspection = (overrides: Record<string, unknown> = {}) => ({
+  data: {
+    is_valid: true,
+    app_id: 'app-id',
+    type: 'SYSTEM_USER',
+    user_id: 'system-user-id',
+    scopes: ['ads_read', 'ads_management', 'business_management'],
+    ...overrides,
+  },
+});
+
+async function inspectWith(t: TestContext, payload: unknown) {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(payload)));
   const { validateMetaAuthorization } = await import('../lib/meta/oauth');
-  const result = await validateMetaAuthorization('plaintext-test-token', 'secret');
-  assert.deepEqual(result.grantedScopes, ['ads_read']);
-  assert.deepEqual(result.missingScopes.sort(), ['ads_management', 'business_management']);
+  return validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
+}
+
+test('validates a system-user token with the platform App Access Token', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    assert.equal(url.pathname, '/v26.0/debug_token');
+    assert.equal(url.searchParams.get('input_token'), 'plaintext-test-token');
+    assert.equal(url.searchParams.get('access_token'), 'app-id|app-secret');
+    return new Response(JSON.stringify(completeInspection()));
+  });
+  const { validateMetaAuthorization, META_BUSINESS_LOGIN_TOKEN_TYPES } = await import('../lib/meta/oauth');
+  const result = await validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
+  assert.equal(result.metaUserId, 'system-user-id');
+  assert.equal(result.metaUserName, null);
+  assert.equal(result.tokenType, 'SYSTEM_USER');
+  assert.deepEqual(result.missingScopes, []);
+  assert.deepEqual([...META_BUSINESS_LOGIN_TOKEN_TYPES], ['USER', 'SYSTEM_USER']);
+});
+
+test('reports a missing ads_management scope as a permissions failure', async (t) => {
+  const result = await inspectWith(t, completeInspection({ scopes: ['ads_read', 'business_management'] }));
+  assert.deepEqual(result.missingScopes, ['ads_management']);
+});
+
+test('rejects a valid token issued to another app', async (t) => {
+  await assert.rejects(inspectWith(t, completeInspection({ app_id: 'other-app' })), /app mismatch/);
+});
+
+test('rejects an invalid token', async (t) => {
+  await assert.rejects(inspectWith(t, completeInspection({ is_valid: false })), /invalid token/);
+});
+
+test('rejects an inspection without a principal id', async (t) => {
+  await assert.rejects(inspectWith(t, completeInspection({ user_id: undefined })), /missing principal/);
+});
+
+test('accepts compatible USER tokens', async (t) => {
+  const user = await inspectWith(t, completeInspection({ type: 'USER' }));
+  assert.equal(user.tokenType, 'USER');
+});
+
+test('rejects unknown token types', async (t) => {
+  await assert.rejects(inspectWith(t, completeInspection({ type: 'PAGE' })), /unsupported token type/);
+});
+
+test('keeps permanent tokens without an invented expiration', async (t) => {
+  const result = await inspectWith(t, completeInspection());
+  assert.equal(result.tokenExpiresAt, null);
+});
+
+test('uses the inspected Unix expiration for expiring tokens', async (t) => {
+  const result = await inspectWith(t, completeInspection({ expires_at: 1_800_000_000 }));
+  assert.equal(result.tokenExpiresAt?.toISOString(), '2027-01-15T08:00:00.000Z');
+});
+
+test('turns a Meta timeout into a safe error', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new DOMException('token leaked', 'TimeoutError'); });
+  const { validateMetaAuthorization } = await import('../lib/meta/oauth');
+  await assert.rejects(
+    validateMetaAuthorization({ accessToken: 'secret-token', appId: 'app-id', appSecret: 'app-secret' }),
+    (error: Error) => error.message === 'Meta token_inspection unavailable' && !error.message.includes('secret'),
+  );
+});
+
+test('sanitizes Meta HTTP errors and log payloads', async (t) => {
+  const logged: unknown[][] = [];
+  t.mock.method(console, 'error', (...args: unknown[]) => { logged.push(args); });
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    error: { message: 'secret-token app-secret', code: 190, type: 'OAuthException' },
+  }), { status: 500 }));
+  const { validateMetaAuthorization } = await import('../lib/meta/oauth');
+  await assert.rejects(
+    validateMetaAuthorization({ accessToken: 'secret-token', appId: 'app-id', appSecret: 'app-secret' }),
+    (error: Error) => error.message === 'Meta token_inspection failed',
+  );
+  const serializedLogs = JSON.stringify(logged);
+  assert.equal(serializedLogs.includes('secret-token'), false);
+  assert.equal(serializedLogs.includes('app-secret'), false);
+  assert.match(serializedLogs, /190/);
+  assert.match(serializedLogs, /OAuthException/);
+});
+
+test('turns a Meta 4xx response into the same safe error', async (t) => {
+  t.mock.method(console, 'error', () => undefined);
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    error: { message: 'sensitive upstream detail', code: 190, type: 'OAuthException' },
+  }), { status: 400 }));
+  const { validateMetaAuthorization } = await import('../lib/meta/oauth');
+  await assert.rejects(
+    validateMetaAuthorization({ accessToken: 'secret-token', appId: 'app-id', appSecret: 'app-secret' }),
+    (error: Error) => error.message === 'Meta token_inspection failed' && !error.message.includes('sensitive'),
+  );
 });
