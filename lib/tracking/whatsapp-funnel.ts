@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { decryptIntegrationSecret } from '@/lib/tracking/crypto';
+import { resolveMetaRuntimeConfig } from '@/lib/meta/runtime';
 import { sendMetaCapiEvent } from '@/lib/tracking/meta-capi';
 import { logTrackingEvent, toPrismaDecimal } from '@/lib/tracking';
 
@@ -74,6 +74,7 @@ export async function processWhatsAppFunnelMessage(event: WhatsAppMessageEvent) 
   const eventName = matched.eventName === 'CustomEvent' ? matched.customEventName : matched.eventName;
   if (!eventName) return { status: 'skipped', reason: 'missing_event_name' };
 
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: event.tenantId, legacySettings: settings });
   const eventId = randomUUID();
   const base = {
     tenantId: event.tenantId,
@@ -97,19 +98,22 @@ export async function processWhatsAppFunnelMessage(event: WhatsAppMessageEvent) 
 
   await logTrackingEvent({ ...base, status: 'pending' });
   try {
-    if (!settings.metaPixelEnabled || !settings.metaPixelId || !settings.metaAccessTokenEncrypted) {
-      await logTrackingEvent({ ...base, status: 'skipped', reason: 'Meta desativado ou sem Pixel/Token configurado' });
+    if (!metaRuntime.capiEnabled) {
+      await logTrackingEvent({ ...base, status: 'skipped', reason: `Meta CAPI desativado (${metaRuntime.source})` });
+      return { status: 'skipped', reason: 'meta_capi_disabled', triggerId: matched.id, eventId };
+    }
+    if (!metaRuntime.pixelId) {
+      await logTrackingEvent({ ...base, status: 'skipped', reason: `Meta sem Pixel/Dataset utilizável (${metaRuntime.source})` });
       return { status: 'skipped', reason: 'meta_not_configured', triggerId: matched.id, eventId };
     }
-    const accessToken = decryptIntegrationSecret(settings.metaAccessTokenEncrypted);
-    if (!accessToken) throw new Error('Token Meta indisponível para descriptografia');
+    if (!metaRuntime.accessToken) throw new Error(`Token Meta indisponível para envio CAPI (${metaRuntime.source})`);
     const result = await sendMetaCapiEvent({
-      pixelId: settings.metaPixelId,
-      accessToken,
+      pixelId: metaRuntime.pixelId,
+      accessToken: metaRuntime.accessToken,
       eventName,
       eventId,
       actionSource: 'system_generated',
-      testEventCode: settings.metaTestEventCode,
+      testEventCode: metaRuntime.testEventCode,
       user: { email: event.email, phone: event.phone },
       customData: {
         currency: matched.currency || 'BRL',
