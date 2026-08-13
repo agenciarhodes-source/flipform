@@ -13,22 +13,48 @@ type MetaGranularScope = {
   target_ids?: unknown;
 };
 
+type ParsedMetaGranularScopes = {
+  names: string[];
+  targetCounts: Record<string, number>;
+};
+
 function normalizeScope(scope: unknown): string | null {
   if (typeof scope !== 'string') return null;
   const normalized = scope.trim();
   return normalized || null;
 }
 
-export function getEffectiveGrantedScopes(scopes: unknown, granularScopes: unknown): string[] {
-  const topLevelScopes = Array.isArray(scopes) ? scopes : [];
-  const granularScopeNames = Array.isArray(granularScopes)
-    ? granularScopes.map((entry: unknown) => {
-      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
-      return normalizeScope((entry as MetaGranularScope).scope);
-    })
-    : [];
+function getNormalizedScopes(scopes: unknown): string[] {
+  if (!Array.isArray(scopes)) return [];
+  return scopes.map(normalizeScope).filter((scope): scope is string => scope !== null);
+}
 
-  return [...new Set([...topLevelScopes.map(normalizeScope), ...granularScopeNames].filter((scope): scope is string => scope !== null))];
+export function parseMetaGranularScopes(granularScopes: unknown): ParsedMetaGranularScopes {
+  if (!Array.isArray(granularScopes)) return { names: [], targetCounts: {} };
+
+  const names: string[] = [];
+  const targetCounts: Record<string, number> = {};
+  for (const entry of granularScopes) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const granularScope = entry as MetaGranularScope;
+    const scope = normalizeScope(granularScope.scope);
+    // target_ids is optional, but when supplied it must have the documented
+    // container shape. Only string identifiers count toward diagnostics.
+    if (!scope || (granularScope.target_ids !== undefined && !Array.isArray(granularScope.target_ids))) continue;
+    const targets = Array.isArray(granularScope.target_ids)
+      ? granularScope.target_ids.filter((targetId): targetId is string => typeof targetId === 'string')
+      : [];
+    names.push(scope);
+    targetCounts[scope] = (targetCounts[scope] ?? 0) + targets.length;
+  }
+  return { names, targetCounts };
+}
+
+export function getEffectiveGrantedScopes(scopes: unknown, granularScopes: unknown): string[] {
+  const topLevelScopes = getNormalizedScopes(scopes);
+  const granularScopeNames = parseMetaGranularScopes(granularScopes).names;
+
+  return [...new Set([...topLevelScopes, ...granularScopeNames])];
 }
 
 export function buildMetaAuthorizationUrl(input: { appId: string; redirectUri: string; state: string; businessLoginConfigId: string }) {
@@ -80,7 +106,9 @@ export async function validateMetaAuthorization(input: { accessToken: string; ap
   // Business Login may report asset-bound permissions only in granular_scopes.
   // target_ids describe those assets; they are not permission names and are never
   // promoted to scopes or persisted by this authorization step.
-  const effectiveGrantedScopes = getEffectiveGrantedScopes(debuggedToken.scopes, debuggedToken.granular_scopes);
+  const topLevelScopes = [...new Set(getNormalizedScopes(debuggedToken.scopes))];
+  const granularScopes = parseMetaGranularScopes(debuggedToken.granular_scopes);
+  const effectiveGrantedScopes = getEffectiveGrantedScopes(topLevelScopes, debuggedToken.granular_scopes);
   const missingScopes = META_PLATFORM_REQUIRED_SCOPES.filter(scope => !effectiveGrantedScopes.includes(scope));
   const expiresAtSeconds = debuggedToken.expires_at;
   const tokenExpiresAt = typeof expiresAtSeconds === 'number' && Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0
@@ -93,5 +121,14 @@ export async function validateMetaAuthorization(input: { accessToken: string; ap
     grantedScopes: effectiveGrantedScopes,
     missingScopes,
     tokenExpiresAt,
+    diagnostics: {
+      tokenType: typeof debuggedToken.type === 'string' ? debuggedToken.type : null,
+      topLevelScopes,
+      granularScopeNames: [...new Set(granularScopes.names)],
+      effectiveScopes: effectiveGrantedScopes,
+      missingScopes,
+      granularTargetCounts: granularScopes.targetCounts,
+      hasExpiration: tokenExpiresAt !== null,
+    },
   };
 }

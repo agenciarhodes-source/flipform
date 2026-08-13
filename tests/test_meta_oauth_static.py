@@ -12,6 +12,11 @@ def test_meta_oauth_routes_and_security_invariants():
     assert "withPermission('INTEGRATIONS_EDIT'" in callback
     assert "withPermission('INTEGRATIONS_VIEW'" in connection
     assert "encryptIntegrationSecret(token.accessToken)" in callback
+    assert "grantedScopes: validation.grantedScopes" in callback
+    assert "const status = validation.missingScopes.length ? 'error' : 'authorized'" in callback
+    assert "redirect(status === 'authorized' ? 'authorized' : 'permissions')" in callback
+    assert "granularTargetCounts: validation.diagnostics.granularTargetCounts" in callback
+    assert "token.accessToken" not in callback.split("console.info(", 1)[1]
     assert "accessTokenEncrypted" in schema
     assert "@@unique([tenantId, metaUserId])" in schema
     assert "onDelete: SetNull" in schema
