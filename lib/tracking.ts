@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from './prisma';
-import { decryptIntegrationSecret, encryptIntegrationSecret, looksMaskedSecret, maskSecretFromEncrypted } from './tracking/crypto';
+import { encryptIntegrationSecret, looksMaskedSecret, maskSecretFromEncrypted } from './tracking/crypto';
 import { sendMetaCapiEvent } from './tracking/meta-capi';
 import { getMetaLeadUserData, type MetaLeadUserData } from './tracking/meta-lead-user-data';
+import { resolveMetaRuntimeConfig, type MetaRuntimeConfig } from './meta/runtime';
 
 export const trackingProviders = ['meta', 'gtm', 'ga4', 'google_ads'] as const;
 export const funnelEventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'] as const;
@@ -178,7 +179,7 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
   return data;
 }
 
-async function dispatchMapping(mapping: any, settings: any, context: TrackingDispatchContext, metaLeadData: MetaLeadUserData) {
+async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRuntimeConfig, context: TrackingDispatchContext, metaLeadData: MetaLeadUserData) {
   const eventName = mapping.customEventName || mapping.eventName;
   const eventId = resolveTrackingEventId(mapping, context);
   const base = {
@@ -218,19 +219,22 @@ async function dispatchMapping(mapping: any, settings: any, context: TrackingDis
 
   try {
     if (mapping.provider === 'meta') {
-      if (!settings?.metaPixelEnabled || !settings.metaPixelId || !settings.metaAccessTokenEncrypted) {
-        await logTrackingEvent({ ...base, status: 'skipped', reason: 'Meta desativado ou sem Pixel/Token configurado' });
+      if (!metaRuntime.capiEnabled) {
+        await logTrackingEvent({ ...base, status: 'skipped', reason: `Meta CAPI desativado (${metaRuntime.source})` });
         return { provider: mapping.provider, eventName, status: 'skipped', eventId };
       }
-      const token = decryptIntegrationSecret(settings.metaAccessTokenEncrypted);
-      if (!token) throw new Error('Token Meta indisponível para descriptografia');
+      if (!metaRuntime.pixelId) {
+        await logTrackingEvent({ ...base, status: 'skipped', reason: `Meta sem Pixel/Dataset utilizável (${metaRuntime.source})` });
+        return { provider: mapping.provider, eventName, status: 'skipped', eventId };
+      }
+      if (!metaRuntime.accessToken) throw new Error(`Token Meta indisponível para envio CAPI (${metaRuntime.source})`);
       const result = await sendMetaCapiEvent({
-        pixelId: settings.metaPixelId,
-        accessToken: token,
+        pixelId: metaRuntime.pixelId,
+        accessToken: metaRuntime.accessToken,
         eventName,
         eventId,
         actionSource: context.source === 'public_form' ? 'website' : 'system_generated',
-        testEventCode: settings.metaTestEventCode,
+        testEventCode: metaRuntime.testEventCode,
         eventSourceUrl: context.source === 'public_form' ? metaLeadData.landingPage : undefined,
         user: metaLeadData.user,
         customData: buildCustomData(mapping, context.source),
@@ -293,21 +297,23 @@ export async function dispatchKanbanStageTracking(context: TrackingDispatchConte
   const mappings = await prisma.kanbanStageTrackingEvent.findMany({
     where: { tenantId: context.tenantId, stageId: context.toStageId, enabled: true },
   });
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: context.tenantId, legacySettings: settings });
   const metaLeadData = await resolveMetaLeadData(context, mappings);
   const results = [];
-  for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, context, metaLeadData));
+  for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData));
   return results;
 }
 
 export async function dispatchFormSubmissionTracking(context: TrackingDispatchContext) {
   if (!context.toStageId) return [];
   const settings = await getTrackingConfig(context.tenantId);
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: context.tenantId, legacySettings: settings });
   const mappings = await prisma.kanbanStageTrackingEvent.findMany({
     where: { tenantId: context.tenantId, stageId: context.toStageId, enabled: true },
   });
 
   const syntheticMappings: any[] = [];
-  if (settings?.metaPixelEnabled) {
+  if (metaRuntime.pixelEnabled || metaRuntime.capiEnabled) {
     syntheticMappings.push({ provider: 'meta', eventName: 'Lead', customEventName: null, pipelineId: context.pipelineId, stageId: context.toStageId, currency: 'BRL' });
   }
   if (settings?.googleAdsEnabled) {
@@ -321,7 +327,7 @@ export async function dispatchFormSubmissionTracking(context: TrackingDispatchCo
   });
   const metaLeadData = await resolveMetaLeadData(context, deduped);
   const results = [];
-  for (const mapping of deduped) results.push(await dispatchMapping(mapping, settings, context, metaLeadData));
+  for (const mapping of deduped) results.push(await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData));
   return results;
 }
 
