@@ -32,23 +32,29 @@ Access tokens são trocados e usados apenas server-side, protegidos por `encrypt
 
 Os scopes de produto continuam sendo `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Para tokens `USER`, a autorização exige que todos os scopes estejam presentes na união normalizada de `data.scopes` e `data.granular_scopes` retornada por `debug_token`.
 
-No fluxo real de Facebook Login for Business com `SYSTEM_USER`, a Meta pode retornar um token válido sem repetir os escopos de Marketing API em `debug_token`. Nesse caso o FlipForm não inventa permissões. O `grantedScopes` continua armazenando somente o que a Meta efetivamente reportou, enquanto o gate de autorização passa a provar acesso real aos ativos selecionados.
+A integração universal de Marketing API do FlipForm usa `USER` como baseline operacional enquanto o Meta App não possui todos os requisitos externos necessários para operar `SYSTEM_USER` sobre ativos de clientes. A Meta exige permissões de Marketing API e, para gerenciar contas de anúncios de terceiros, Advanced Access aplicável.
+
+## Long-lived USER token
+
+Depois do Business Login retornar um token `USER` válido, o callback faz uma troca server-side com `grant_type=fb_exchange_token`. O token novo é novamente inspecionado com `debug_token`; somente o token long-lived revalidado é criptografado e persistido em `TenantMetaConnection`.
+
+O token curto inicial nunca é salvo quando a extensão foi concluída. A expiração persistida continua vindo de `debug_token.expires_at`; o FlipForm não inventa uma data de expiração.
 
 ## System User asset validation
 
-Para `SYSTEM_USER`, depois de validar `is_valid`, `app_id`, tipo do token e `user_id`, o servidor trata o próprio token como o principal autenticado e consulta `/me/adaccounts` com o token somente no header Authorization e `appsecret_proof`. Não usa `debug_token.user_id` como nó `SystemUser`, porque o fluxo real de Business Login pode retornar `GraphMethodException` ao tentar `/{system-user-id}/assigned_ad_accounts`.
+O código mantém compatibilidade com `SYSTEM_USER` para uma fase posterior. Nos testes reais anteriores do Business Login, a Meta retornou um `SYSTEM_USER` válido, porém somente com `public_profile`; chamadas de Marketing API para contas de anúncios retornaram erro de permissão. Por isso esse modo não é o baseline atual da integração universal.
 
-A conexão só pode ser autorizada quando existe pelo menos uma conta de anúncios acessível ao principal autenticado e pelo menos um Pixel acessível via `/act_{account_id}/adspixels`.
-
-A validação não persiste Business ID, Ad Account ID ou Pixel ID neste estágio e não registra esses IDs em logs. A observabilidade contém apenas método de validação, contagens de contas/Pixels e scopes efetivamente reportados. Falta de conta acessível ou Pixel mantém a conexão em `error`.
+Quando o App tiver os requisitos externos necessários, o caminho `SYSTEM_USER` poderá ser revalidado com acesso real aos ativos. O FlipForm não sintetiza `ads_read`, `ads_management` ou `business_management` quando a Meta não os concede.
 
 ## Business Login real
 
-A configuração externa do Facebook Login for Business do FlipForm usa **System User Access Token**, incluindo a opção permanente/sem expiração, e concede acesso a Ad Accounts e Pixels. A inspeção vincula o token ao App ID da plataforma, aceita os tipos compatíveis `USER` e `SYSTEM_USER`, obtém o principal de `user_id` e usa exclusivamente `expires_at` validado como fonte de expiração; sua ausência representa um token permanente (`null`). Nenhum ID real, token ou secret é documentado.
+A configuração externa recomendada do Facebook Login for Business do FlipForm deve usar **Token de acesso do usuário (USER)** e incluir Ad Accounts, Pixels e as permissões `ads_read`, `ads_management` e `business_management`. O `Business Login Configuration ID` dessa configuração é salvo globalmente em `PlatformMetaSettings`.
+
+A inspeção vincula o token ao App ID da plataforma, obtém o principal de `user_id` e valida os scopes concedidos. Nenhum ID real, token ou secret é documentado.
 
 ## Access review requirement
 
-Usuários autorizados do App podem testar em desenvolvimento. Tenants externos exigirão Advanced Access/App Review aplicável da Meta; não há tokens manuais, Graph API Explorer ou atalhos para aprovação.
+Usuários autorizados do App podem testar em desenvolvimento. Para tenants externos, a Meta exige o nível de acesso aplicável às permissões utilizadas; para contas de anúncios de terceiros, `ads_read` e/ou `ads_management` precisam de Advanced Access conforme o uso. Business verification/App Review continuam requisitos externos da plataforma e não são contornados pelo código.
 
 ## Tenant configuration
 
@@ -72,17 +78,18 @@ Pixel, Conversions API, Advanced Matching, Attribution, QualifiedLead e Purchase
 
 ## Current limitations
 
-A validação confirma que o `SYSTEM_USER` possui conta de anúncios e Pixel acessíveis, mas ainda não persiste a seleção estruturada de Business, Ad Account ou Pixel/Dataset. A CAPI e o Pixel do navegador continuam usando exclusivamente `TenantIntegrationSettings` legado.
+A conexão OAuth ainda não persiste a seleção estruturada de Business, Ad Account ou Pixel/Dataset. A CAPI e o Pixel do navegador continuam usando exclusivamente `TenantIntegrationSettings` legado até o PR de Asset Discovery e migração gradual.
 
 ## Next step: Asset Discovery
 
-O próximo trabalho persistirá de forma tenant-scoped os ativos autorizados/selecionados pelo Business Login para que a conexão universal possa substituir gradualmente a configuração manual legada.
+Depois da autorização USER real ficar verde, o próximo trabalho persistirá de forma tenant-scoped os ativos autorizados/selecionados pelo Business Login para que a conexão universal possa substituir gradualmente a configuração manual legada.
 
 ## Próximos passos
 
-1. OAuth / Business Login.
+1. OAuth / Business Login com USER token long-lived.
 2. `TenantMetaConnection` e descoberta/persistência de ativos.
 3. Migração gradual do Pixel e CAPI para a conexão universal.
+4. App Review / Advanced Access para tenants externos conforme as permissões usadas.
 
 ## Facebook Login for Business
 

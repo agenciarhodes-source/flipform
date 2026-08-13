@@ -76,7 +76,7 @@ jobs:
       - name: Run Meta OAuth unit tests
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/meta-oauth.test.ts
+        run: npx tsx --test tests/meta-oauth.test.ts tests/meta-user-token.test.ts
 
       - name: Validate environment schema
         run: npm run env:check
