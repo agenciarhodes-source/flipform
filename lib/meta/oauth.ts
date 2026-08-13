@@ -107,13 +107,16 @@ async function metaJson(url: URL, operation: string, accessToken?: string) {
   return data;
 }
 
-export async function validateMetaSystemUserAssetAccess(input: { accessToken: string; appSecret: string; systemUserId: string }): Promise<SystemUserAssetAccess> {
+export async function validateMetaSystemUserAssetAccess(input: { accessToken: string; appSecret: string }): Promise<SystemUserAssetAccess> {
   const appSecretProof = createAppSecretProof(input.accessToken, input.appSecret);
-  const assignedAccountsUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${encodeURIComponent(input.systemUserId)}/assigned_ad_accounts`);
-  assignedAccountsUrl.search = new URLSearchParams({ fields: 'id,account_id', limit: String(SYSTEM_USER_ACCOUNT_LIMIT), appsecret_proof: appSecretProof }).toString();
-  const assignedAccounts = await metaJson(assignedAccountsUrl, 'system_user_assigned_ad_accounts', input.accessToken);
-  const assignedAccountData: unknown[] = Array.isArray(assignedAccounts?.data) ? assignedAccounts.data : [];
-  const graphAccountIds = [...new Set(assignedAccountData.map(getGraphAdAccountId).filter((id): id is string => id !== null))];
+  // Business Login SYSTEM_USER tokens represent the authenticated principal directly.
+  // Query its accessible ad accounts through /me instead of addressing debug_token.user_id
+  // as a SystemUser node; the latter can return GraphMethodException for these tokens.
+  const accessibleAccountsUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/me/adaccounts`);
+  accessibleAccountsUrl.search = new URLSearchParams({ fields: 'id,account_id', limit: String(SYSTEM_USER_ACCOUNT_LIMIT), appsecret_proof: appSecretProof }).toString();
+  const accessibleAccounts = await metaJson(accessibleAccountsUrl, 'system_user_accessible_ad_accounts', input.accessToken);
+  const accessibleAccountData: unknown[] = Array.isArray(accessibleAccounts?.data) ? accessibleAccounts.data : [];
+  const graphAccountIds = [...new Set(accessibleAccountData.map(getGraphAdAccountId).filter((id): id is string => id !== null))];
 
   let accountsChecked = 0;
   let pixelCount = 0;
@@ -162,7 +165,7 @@ export async function validateMetaAuthorization(input: { accessToken: string; ap
   const effectiveGrantedScopes = getEffectiveGrantedScopes(topLevelScopes, debuggedToken.granular_scopes);
   const missingScopes = META_PLATFORM_REQUIRED_SCOPES.filter(scope => !effectiveGrantedScopes.includes(scope));
   const systemUserAssetAccess = tokenType === 'SYSTEM_USER'
-    ? await validateMetaSystemUserAssetAccess({ accessToken: input.accessToken, appSecret: input.appSecret, systemUserId: debuggedToken.user_id })
+    ? await validateMetaSystemUserAssetAccess({ accessToken: input.accessToken, appSecret: input.appSecret })
     : null;
   const authorizationSatisfied = tokenType === 'SYSTEM_USER'
     ? systemUserAssetAccess?.authorized === true
