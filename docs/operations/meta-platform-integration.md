@@ -36,9 +36,11 @@ No fluxo real de Facebook Login for Business com `SYSTEM_USER`, a Meta pode reto
 
 ## System User asset validation
 
-Para `SYSTEM_USER`, depois de validar `is_valid`, `app_id`, tipo do token e `user_id`, o servidor consulta `/{system-user-id}/assigned_ad_accounts` com o token somente no header Authorization e `appsecret_proof`. A conexão só pode ser autorizada quando existe pelo menos uma conta de anúncios atribuída e pelo menos um Pixel acessível via `/act_{account_id}/adspixels`.
+Para `SYSTEM_USER`, depois de validar `is_valid`, `app_id`, tipo do token e `user_id`, o servidor trata o próprio token como o principal autenticado e consulta `/me/adaccounts` com o token somente no header Authorization e `appsecret_proof`. Não usa `debug_token.user_id` como nó `SystemUser`, porque o fluxo real de Business Login pode retornar `GraphMethodException` ao tentar `/{system-user-id}/assigned_ad_accounts`.
 
-A validação não persiste Business ID, Ad Account ID ou Pixel ID neste estágio e não registra esses IDs em logs. A observabilidade contém apenas método de validação, contagens de contas/Pixels e scopes efetivamente reportados. Falta de conta atribuída ou Pixel mantém a conexão em `error`.
+A conexão só pode ser autorizada quando existe pelo menos uma conta de anúncios acessível ao principal autenticado e pelo menos um Pixel acessível via `/act_{account_id}/adspixels`.
+
+A validação não persiste Business ID, Ad Account ID ou Pixel ID neste estágio e não registra esses IDs em logs. A observabilidade contém apenas método de validação, contagens de contas/Pixels e scopes efetivamente reportados. Falta de conta acessível ou Pixel mantém a conexão em `error`.
 
 ## Business Login real
 
