@@ -19,7 +19,8 @@ def test_meta_oauth_routes_and_security_invariants():
     assert "authorizationMethod: validation.diagnostics.authorizationMethod" in callback
     assert "systemUserAssetAccess: validation.diagnostics.systemUserAssetAccess" in callback
     assert "token.accessToken" not in callback.split("console.info(", 1)[1]
-    assert "assigned_ad_accounts" in oauth
+    assert "/me/adaccounts" in oauth
+    assert "assigned_ad_accounts" not in oauth
     assert "/adspixels" in oauth
     assert "Authorization: `Bearer ${accessToken}`" in oauth
     assert "appsecret_proof" in oauth
