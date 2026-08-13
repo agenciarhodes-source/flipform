@@ -4,13 +4,12 @@ import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { dispatchFormSubmissionTracking } from '@/lib/tracking';
+import { resolveMetaRuntimeConfig, toPublicMetaPixelConfig } from '@/lib/meta/runtime';
 import { normalizeHostname } from '@/lib/host-routing';
 import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
-
-const META_PIXEL_ID_PATTERN = /^[0-9]{5,30}$/;
 
 /**
  * Public form submit endpoint.
@@ -235,21 +234,16 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     // Created only after the Lead exists. It is the server-owned deduplication key
     // for the browser and CAPI versions of this exact Lead action.
     const metaLeadEventId = crypto.randomUUID();
-    const publicMetaSettings = await prisma.tenantIntegrationSettings.findUnique({
-      where: { tenantId: form.tenantId },
-      select: { metaPixelEnabled: true, metaPixelId: true },
-    }).catch((settingsError) => {
-      console.error('public Meta Pixel settings lookup failed', {
+    let publicMetaTracking: { pixelId: string; eventId: string } | undefined;
+    try {
+      const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: form.tenantId });
+      publicMetaTracking = toPublicMetaPixelConfig(metaRuntime, metaLeadEventId);
+    } catch (settingsError) {
+      console.error('public Meta Pixel runtime lookup failed', {
         tenantId: form.tenantId,
         error: settingsError instanceof Error ? settingsError.name : 'UnknownError',
       });
-      return null;
-    });
-    const publicMetaTracking = publicMetaSettings?.metaPixelEnabled
-      && publicMetaSettings.metaPixelId
-      && META_PIXEL_ID_PATTERN.test(publicMetaSettings.metaPixelId)
-      ? { pixelId: publicMetaSettings.metaPixelId, eventId: metaLeadEventId }
-      : undefined;
+    }
 
     // Attribution is deliberately outside the critical lead transaction. A missing table or
     // transient metadata failure must not roll back a valid lead, answers, or initial history.
