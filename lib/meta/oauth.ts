@@ -112,7 +112,8 @@ export async function validateMetaSystemUserAssetAccess(input: { accessToken: st
   const assignedAccountsUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${encodeURIComponent(input.systemUserId)}/assigned_ad_accounts`);
   assignedAccountsUrl.search = new URLSearchParams({ fields: 'id,account_id', limit: String(SYSTEM_USER_ACCOUNT_LIMIT), appsecret_proof: appSecretProof }).toString();
   const assignedAccounts = await metaJson(assignedAccountsUrl, 'system_user_assigned_ad_accounts', input.accessToken);
-  const graphAccountIds = [...new Set((Array.isArray(assignedAccounts?.data) ? assignedAccounts.data : []).map(getGraphAdAccountId).filter((id): id is string => id !== null))];
+  const assignedAccountData: unknown[] = Array.isArray(assignedAccounts?.data) ? assignedAccounts.data : [];
+  const graphAccountIds = [...new Set(assignedAccountData.map(getGraphAdAccountId).filter((id): id is string => id !== null))];
 
   let accountsChecked = 0;
   let pixelCount = 0;
