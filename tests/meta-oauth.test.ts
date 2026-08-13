@@ -52,7 +52,7 @@ async function inspectWith(t: TestContext, payload: unknown) {
   return validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
 }
 
-test('authorizes a SYSTEM_USER by real assigned ad account and pixel access even when debug_token only reports public_profile', async (t) => {
+test('authorizes a SYSTEM_USER by real accessible ad account and pixel access even when debug_token only reports public_profile', async (t) => {
   const sensitiveAccountId = 'act_123456789';
   const sensitivePixelId = '987654321';
   const paths: string[] = [];
@@ -67,7 +67,7 @@ test('authorizes a SYSTEM_USER by real assigned ad account and pixel access even
     assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer plaintext-test-token');
     assert.ok(url.searchParams.get('appsecret_proof'));
     assert.equal(url.searchParams.has('access_token'), false);
-    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') {
+    if (url.pathname === '/v26.0/me/adaccounts') {
       assert.equal(url.searchParams.get('fields'), 'id,account_id');
       return new Response(JSON.stringify({ data: [{ id: sensitiveAccountId, account_id: '123456789' }] }));
     }
@@ -88,15 +88,15 @@ test('authorizes a SYSTEM_USER by real assigned ad account and pixel access even
   assert.deepEqual(result.diagnostics.systemUserAssetAccess, { authorized: true, adAccountCount: 1, accountsChecked: 1, pixelCount: 1 });
   assert.equal(JSON.stringify(result).includes(sensitiveAccountId), false);
   assert.equal(JSON.stringify(result).includes(sensitivePixelId), false);
-  assert.deepEqual(paths, ['/v26.0/debug_token', '/v26.0/system-user-id/assigned_ad_accounts', `/v26.0/${sensitiveAccountId}/adspixels`]);
+  assert.deepEqual(paths, ['/v26.0/debug_token', '/v26.0/me/adaccounts', `/v26.0/${sensitiveAccountId}/adspixels`]);
   assert.deepEqual([...META_BUSINESS_LOGIN_TOKEN_TYPES], ['USER', 'SYSTEM_USER']);
 });
 
-test('does not authorize a SYSTEM_USER without an assigned ad account', async (t) => {
+test('does not authorize a SYSTEM_USER without an accessible ad account', async (t) => {
   t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
     const url = new URL(String(input));
     if (url.pathname === '/v26.0/debug_token') return new Response(JSON.stringify(completeInspection({ type: 'SYSTEM_USER', user_id: 'system-user-id', scopes: ['public_profile'] })));
-    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') return new Response(JSON.stringify({ data: [] }));
+    if (url.pathname === '/v26.0/me/adaccounts') return new Response(JSON.stringify({ data: [] }));
     throw new Error(`Unexpected Meta test path: ${url.pathname}`);
   });
   const { validateMetaAuthorization } = await import('../lib/meta/oauth');
@@ -105,11 +105,11 @@ test('does not authorize a SYSTEM_USER without an assigned ad account', async (t
   assert.deepEqual(result.diagnostics.systemUserAssetAccess, { authorized: false, adAccountCount: 0, accountsChecked: 0, pixelCount: 0 });
 });
 
-test('does not authorize a SYSTEM_USER whose assigned ad account exposes no pixel', async (t) => {
+test('does not authorize a SYSTEM_USER whose accessible ad account exposes no pixel', async (t) => {
   t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
     const url = new URL(String(input));
     if (url.pathname === '/v26.0/debug_token') return new Response(JSON.stringify(completeInspection({ type: 'SYSTEM_USER', user_id: 'system-user-id', scopes: ['public_profile'] })));
-    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') return new Response(JSON.stringify({ data: [{ id: 'act_123', account_id: '123' }] }));
+    if (url.pathname === '/v26.0/me/adaccounts') return new Response(JSON.stringify({ data: [{ id: 'act_123', account_id: '123' }] }));
     if (url.pathname === '/v26.0/act_123/adspixels') return new Response(JSON.stringify({ data: [] }));
     throw new Error(`Unexpected Meta test path: ${url.pathname}`);
   });
