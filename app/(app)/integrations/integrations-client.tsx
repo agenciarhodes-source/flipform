@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 import { getFinalTrackingLogs } from '@/lib/tracking/logs';
+import { MetaAssetSelector } from './meta-asset-selector';
 
 const providers = [
   { value: 'meta', label: 'Meta' },
@@ -173,9 +174,10 @@ export function IntegrationsClient() {
         <div className="rounded-lg border bg-slate-50 p-4 space-y-2">
           <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Estado da autorização</span><span className="rounded-full border bg-white px-2 py-1 text-xs">{{ authorized: 'Autorizado', expired: 'Expirado', error: 'Erro', revoked: 'Não conectado' }[metaConnection.status as string] || 'Não conectado'}</span></div>
           {metaConnection.metaUserName && <p className="text-sm">Conta: {metaConnection.metaUserName}</p>}
-          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Conta Meta autorizada. A seleção da empresa, conta de anúncios e fonte de dados será habilitada na próxima etapa.</p>}
+          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Conta Meta autorizada. Selecione abaixo os ativos que o FlipForm deve usar.</p>}
           {metaConnection.platformAvailable ? <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status ? 'Autorizar novamente' : 'Conectar com a Meta'}</button> : <p className="text-sm text-amber-700">A integração Meta ainda está sendo configurada pela plataforma.</p>}
         </div>
+        <MetaAssetSelector connection={metaConnection} onSaved={load} />
         <div className="border-t pt-4"><h3 className="font-medium">Configuração manual — legado</h3><p className="text-xs text-muted-foreground">Estes dados continuam ativos para Pixel e Conversions API atuais.</p></div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!settings.metaPixelEnabled} onChange={e=>setSettings({...settings, metaPixelEnabled:e.target.checked})} /> Ativar integração Meta</label>
         <input className="w-full border rounded p-2" placeholder="Meta Pixel ID" value={settings.metaPixelId||''} onChange={e=>setSettings({...settings, metaPixelId:e.target.value})} />
