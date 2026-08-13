@@ -74,6 +74,57 @@ test('reports a missing ads_management scope as a permissions failure', async (t
   assert.deepEqual(result.missingScopes, ['ads_management']);
 });
 
+test('accepts required permissions reported through granular scopes', async (t) => {
+  const result = await inspectWith(t, completeInspection({
+    scopes: ['public_profile'],
+    granular_scopes: [
+      { scope: 'ads_read', target_ids: ['act-1'] },
+      { scope: 'ads_management', target_ids: ['act-1'] },
+      { scope: 'business_management', target_ids: ['business-1'] },
+    ],
+  }));
+  assert.deepEqual(result.grantedScopes, ['public_profile', 'ads_read', 'ads_management', 'business_management']);
+  assert.deepEqual(result.missingScopes, []);
+});
+
+test('normalizes and deduplicates the effective union of regular and granular scopes', async (t) => {
+  const result = await inspectWith(t, completeInspection({
+    scopes: [' ads_read ', 'ads_management', 'ads_read', '', 42],
+    granular_scopes: [
+      { scope: ' business_management ', target_ids: ['business-1'] },
+      { scope: 'ads_management', target_ids: 'malformed-but-irrelevant' },
+      { scope: '' },
+      { scope: 42 },
+      null,
+      'ads_read',
+    ],
+  }));
+  assert.deepEqual(result.grantedScopes, ['ads_read', 'ads_management', 'business_management']);
+  assert.deepEqual(result.missingScopes, []);
+});
+
+test('does not infer permissions from granular target ids or malformed entries', async (t) => {
+  const result = await inspectWith(t, completeInspection({
+    scopes: ['public_profile'],
+    granular_scopes: [
+      { target_ids: ['ads_read', 'ads_management', 'business_management'] },
+      { scope: { name: 'ads_read' } },
+      ['business_management'],
+    ],
+  }));
+  assert.deepEqual(result.grantedScopes, ['public_profile']);
+  assert.deepEqual(result.missingScopes, ['ads_read', 'ads_management', 'business_management']);
+});
+
+test('treats a malformed granular_scopes container as granting no additional permissions', async (t) => {
+  const result = await inspectWith(t, completeInspection({
+    scopes: ['ads_read', 'ads_management'],
+    granular_scopes: { scope: 'business_management' },
+  }));
+  assert.deepEqual(result.grantedScopes, ['ads_read', 'ads_management']);
+  assert.deepEqual(result.missingScopes, ['business_management']);
+});
+
 test('rejects a valid token issued to another app', async (t) => {
   await assert.rejects(inspectWith(t, completeInspection({ app_id: 'other-app' })), /app mismatch/);
 });

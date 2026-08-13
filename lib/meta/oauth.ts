@@ -8,6 +8,29 @@ const OAUTH_HOST = 'www.facebook.com';
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
 
+type MetaGranularScope = {
+  scope?: unknown;
+  target_ids?: unknown;
+};
+
+function normalizeScope(scope: unknown): string | null {
+  if (typeof scope !== 'string') return null;
+  const normalized = scope.trim();
+  return normalized || null;
+}
+
+export function getEffectiveGrantedScopes(scopes: unknown, granularScopes: unknown): string[] {
+  const topLevelScopes = Array.isArray(scopes) ? scopes : [];
+  const granularScopeNames = Array.isArray(granularScopes)
+    ? granularScopes.map((entry: unknown) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+      return normalizeScope((entry as MetaGranularScope).scope);
+    })
+    : [];
+
+  return [...new Set([...topLevelScopes.map(normalizeScope), ...granularScopeNames].filter((scope): scope is string => scope !== null))];
+}
+
 export function buildMetaAuthorizationUrl(input: { appId: string; redirectUri: string; state: string; businessLoginConfigId: string }) {
   const url = new URL(`https://${OAUTH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/dialog/oauth`);
   url.search = new URLSearchParams({ client_id: input.appId, redirect_uri: input.redirectUri, state: input.state, config_id: input.businessLoginConfigId, response_type: 'code' }).toString();
@@ -54,10 +77,11 @@ export async function validateMetaAuthorization(input: { accessToken: string; ap
   if (typeof debuggedToken.user_id !== 'string' || !debuggedToken.user_id) {
     throw new Error('Meta token_inspection missing principal');
   }
-  const grantedScopes: string[] = Array.isArray(debuggedToken.scopes)
-    ? [...new Set<string>(debuggedToken.scopes.filter((scope: unknown): scope is string => typeof scope === 'string'))]
-    : [];
-  const missingScopes = META_PLATFORM_REQUIRED_SCOPES.filter(scope => !grantedScopes.includes(scope));
+  // Business Login may report asset-bound permissions only in granular_scopes.
+  // target_ids describe those assets; they are not permission names and are never
+  // promoted to scopes or persisted by this authorization step.
+  const effectiveGrantedScopes = getEffectiveGrantedScopes(debuggedToken.scopes, debuggedToken.granular_scopes);
+  const missingScopes = META_PLATFORM_REQUIRED_SCOPES.filter(scope => !effectiveGrantedScopes.includes(scope));
   const expiresAtSeconds = debuggedToken.expires_at;
   const tokenExpiresAt = typeof expiresAtSeconds === 'number' && Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0
     ? new Date(expiresAtSeconds * 1000)
@@ -66,7 +90,7 @@ export async function validateMetaAuthorization(input: { accessToken: string; ap
     metaUserId: debuggedToken.user_id as string,
     metaUserName: null,
     tokenType: typeof debuggedToken.type === 'string' ? debuggedToken.type : null,
-    grantedScopes,
+    grantedScopes: effectiveGrantedScopes,
     missingScopes,
     tokenExpiresAt,
   };
