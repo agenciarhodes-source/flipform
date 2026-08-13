@@ -39,8 +39,8 @@ const completeInspection = (overrides: Record<string, unknown> = {}) => ({
   data: {
     is_valid: true,
     app_id: 'app-id',
-    type: 'SYSTEM_USER',
-    user_id: 'system-user-id',
+    type: 'USER',
+    user_id: 'meta-user-id',
     scopes: ['ads_read', 'ads_management', 'business_management'],
     ...overrides,
   },
@@ -52,29 +52,81 @@ async function inspectWith(t: TestContext, payload: unknown) {
   return validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
 }
 
-test('validates a system-user token with the platform App Access Token', async (t) => {
-  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+test('authorizes a SYSTEM_USER by real assigned ad account and pixel access even when debug_token only reports public_profile', async (t) => {
+  const sensitiveAccountId = 'act_123456789';
+  const sensitivePixelId = '987654321';
+  const paths: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
-    assert.equal(url.pathname, '/v26.0/debug_token');
-    assert.equal(url.searchParams.get('input_token'), 'plaintext-test-token');
-    assert.equal(url.searchParams.get('access_token'), 'app-id|app-secret');
-    return new Response(JSON.stringify(completeInspection()));
+    paths.push(url.pathname);
+    if (url.pathname === '/v26.0/debug_token') {
+      assert.equal(url.searchParams.get('input_token'), 'plaintext-test-token');
+      assert.equal(url.searchParams.get('access_token'), 'app-id|app-secret');
+      return new Response(JSON.stringify(completeInspection({ type: 'SYSTEM_USER', user_id: 'system-user-id', scopes: ['public_profile'] })));
+    }
+    assert.equal(new Headers(init?.headers).get('Authorization'), 'Bearer plaintext-test-token');
+    assert.ok(url.searchParams.get('appsecret_proof'));
+    assert.equal(url.searchParams.has('access_token'), false);
+    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') {
+      assert.equal(url.searchParams.get('fields'), 'id,account_id');
+      return new Response(JSON.stringify({ data: [{ id: sensitiveAccountId, account_id: '123456789' }] }));
+    }
+    if (url.pathname === `/v26.0/${sensitiveAccountId}/adspixels`) {
+      assert.equal(url.searchParams.get('fields'), 'id');
+      return new Response(JSON.stringify({ data: [{ id: sensitivePixelId }] }));
+    }
+    throw new Error(`Unexpected Meta test path: ${url.pathname}`);
   });
   const { validateMetaAuthorization, META_BUSINESS_LOGIN_TOKEN_TYPES } = await import('../lib/meta/oauth');
   const result = await validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
   assert.equal(result.metaUserId, 'system-user-id');
-  assert.equal(result.metaUserName, null);
   assert.equal(result.tokenType, 'SYSTEM_USER');
-  assert.deepEqual(result.missingScopes, []);
+  assert.equal(result.authorizationSatisfied, true);
+  assert.equal(result.authorizationMethod, 'system_user_asset_access');
+  assert.deepEqual(result.grantedScopes, ['public_profile']);
+  assert.deepEqual(result.missingScopes, ['ads_read', 'ads_management', 'business_management']);
+  assert.deepEqual(result.diagnostics.systemUserAssetAccess, { authorized: true, adAccountCount: 1, accountsChecked: 1, pixelCount: 1 });
+  assert.equal(JSON.stringify(result).includes(sensitiveAccountId), false);
+  assert.equal(JSON.stringify(result).includes(sensitivePixelId), false);
+  assert.deepEqual(paths, ['/v26.0/debug_token', '/v26.0/system-user-id/assigned_ad_accounts', `/v26.0/${sensitiveAccountId}/adspixels`]);
   assert.deepEqual([...META_BUSINESS_LOGIN_TOKEN_TYPES], ['USER', 'SYSTEM_USER']);
 });
 
-test('reports a missing ads_management scope as a permissions failure', async (t) => {
-  const result = await inspectWith(t, completeInspection({ scopes: ['ads_read', 'business_management'] }));
-  assert.deepEqual(result.missingScopes, ['ads_management']);
+test('does not authorize a SYSTEM_USER without an assigned ad account', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/v26.0/debug_token') return new Response(JSON.stringify(completeInspection({ type: 'SYSTEM_USER', user_id: 'system-user-id', scopes: ['public_profile'] })));
+    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') return new Response(JSON.stringify({ data: [] }));
+    throw new Error(`Unexpected Meta test path: ${url.pathname}`);
+  });
+  const { validateMetaAuthorization } = await import('../lib/meta/oauth');
+  const result = await validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
+  assert.equal(result.authorizationSatisfied, false);
+  assert.deepEqual(result.diagnostics.systemUserAssetAccess, { authorized: false, adAccountCount: 0, accountsChecked: 0, pixelCount: 0 });
 });
 
-test('accepts required permissions reported through granular scopes', async (t) => {
+test('does not authorize a SYSTEM_USER whose assigned ad account exposes no pixel', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    if (url.pathname === '/v26.0/debug_token') return new Response(JSON.stringify(completeInspection({ type: 'SYSTEM_USER', user_id: 'system-user-id', scopes: ['public_profile'] })));
+    if (url.pathname === '/v26.0/system-user-id/assigned_ad_accounts') return new Response(JSON.stringify({ data: [{ id: 'act_123', account_id: '123' }] }));
+    if (url.pathname === '/v26.0/act_123/adspixels') return new Response(JSON.stringify({ data: [] }));
+    throw new Error(`Unexpected Meta test path: ${url.pathname}`);
+  });
+  const { validateMetaAuthorization } = await import('../lib/meta/oauth');
+  const result = await validateMetaAuthorization({ accessToken: 'plaintext-test-token', appId: 'app-id', appSecret: 'app-secret' });
+  assert.equal(result.authorizationSatisfied, false);
+  assert.deepEqual(result.diagnostics.systemUserAssetAccess, { authorized: false, adAccountCount: 1, accountsChecked: 1, pixelCount: 0 });
+});
+
+test('reports a missing ads_management scope as a USER permissions failure', async (t) => {
+  const result = await inspectWith(t, completeInspection({ scopes: ['ads_read', 'business_management'] }));
+  assert.deepEqual(result.missingScopes, ['ads_management']);
+  assert.equal(result.authorizationSatisfied, false);
+  assert.equal(result.authorizationMethod, 'scope_validation');
+});
+
+test('accepts required USER permissions reported through granular scopes', async (t) => {
   const result = await inspectWith(t, completeInspection({
     scopes: ['public_profile'],
     granular_scopes: [
@@ -85,6 +137,7 @@ test('accepts required permissions reported through granular scopes', async (t) 
   }));
   assert.deepEqual(result.grantedScopes, ['public_profile', 'ads_read', 'ads_management', 'business_management']);
   assert.deepEqual(result.missingScopes, []);
+  assert.equal(result.authorizationSatisfied, true);
 });
 
 test('normalizes and deduplicates the effective union of regular and granular scopes', async (t) => {
@@ -123,11 +176,7 @@ test('reports only target counts in safe granular diagnostics', async (t) => {
     ],
   }));
   assert.deepEqual(result.grantedScopes, ['public_profile', 'ads_read', 'ads_management', 'business_management']);
-  assert.deepEqual(result.diagnostics.granularTargetCounts, {
-    ads_read: 1,
-    ads_management: 1,
-    business_management: 0,
-  });
+  assert.deepEqual(result.diagnostics.granularTargetCounts, { ads_read: 1, ads_management: 1, business_management: 0 });
   assert.equal(JSON.stringify(result).includes(targetId), false);
 });
 
@@ -166,7 +215,7 @@ test('rejects an inspection without a principal id', async (t) => {
 });
 
 test('accepts compatible USER tokens', async (t) => {
-  const user = await inspectWith(t, completeInspection({ type: 'USER' }));
+  const user = await inspectWith(t, completeInspection());
   assert.equal(user.tokenType, 'USER');
 });
 
@@ -196,9 +245,7 @@ test('turns a Meta timeout into a safe error', async (t) => {
 test('sanitizes Meta HTTP errors and log payloads', async (t) => {
   const logged: unknown[][] = [];
   t.mock.method(console, 'error', (...args: unknown[]) => { logged.push(args); });
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
-    error: { message: 'secret-token app-secret', code: 190, type: 'OAuthException' },
-  }), { status: 500 }));
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: { message: 'secret-token app-secret', code: 190, type: 'OAuthException' } }), { status: 500 }));
   const { validateMetaAuthorization } = await import('../lib/meta/oauth');
   await assert.rejects(
     validateMetaAuthorization({ accessToken: 'secret-token', appId: 'app-id', appSecret: 'app-secret' }),
@@ -213,9 +260,7 @@ test('sanitizes Meta HTTP errors and log payloads', async (t) => {
 
 test('turns a Meta 4xx response into the same safe error', async (t) => {
   t.mock.method(console, 'error', () => undefined);
-  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
-    error: { message: 'sensitive upstream detail', code: 190, type: 'OAuthException' },
-  }), { status: 400 }));
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ error: { message: 'sensitive upstream detail', code: 190, type: 'OAuthException' } }), { status: 400 }));
   const { validateMetaAuthorization } = await import('../lib/meta/oauth');
   await assert.rejects(
     validateMetaAuthorization({ accessToken: 'secret-token', appId: 'app-id', appSecret: 'app-secret' }),

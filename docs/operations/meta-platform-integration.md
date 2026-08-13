@@ -26,11 +26,19 @@ O state usa nonce aleatório de 32 bytes e cookie autenticado por HMAC, HttpOnly
 
 ## Token encryption
 
-Access tokens são trocados e usados apenas server-side, protegidos por `encryptIntegrationSecret`, e nunca aparecem em DTOs, URLs, logs ou no React. Chamadas Graph autenticadas usam `appsecret_proof` e timeout explícito.
+Access tokens são trocados e usados apenas server-side, protegidos por `encryptIntegrationSecret`, e nunca aparecem em DTOs, URLs, logs ou no React. Chamadas Graph autenticadas usam Bearer token server-side, `appsecret_proof` quando aplicável e timeout explícito.
 
 ## Required permissions
 
-Os scopes server-side são `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Na inspeção oficial por `debug_token`, a lista efetivamente concedida é a união normalizada e sem duplicatas entre `data.scopes` e os nomes `scope` válidos de `data.granular_scopes`. Entradas malformadas são ignoradas defensivamente, inclusive quando `target_ids`, se presente, não é um array. Os IDs nunca são interpretados como permissões nem persistidos nesta etapa; o diagnóstico sanitizado registra somente a quantidade de targets por scope. Uma autorização incompleta recebe estado `error`, não `authorized`.
+Os scopes de produto continuam sendo `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Para tokens `USER`, a autorização exige que todos os scopes estejam presentes na união normalizada de `data.scopes` e `data.granular_scopes` retornada por `debug_token`.
+
+No fluxo real de Facebook Login for Business com `SYSTEM_USER`, a Meta pode retornar um token válido sem repetir os escopos de Marketing API em `debug_token`. Nesse caso o FlipForm não inventa permissões. O `grantedScopes` continua armazenando somente o que a Meta efetivamente reportou, enquanto o gate de autorização passa a provar acesso real aos ativos selecionados.
+
+## System User asset validation
+
+Para `SYSTEM_USER`, depois de validar `is_valid`, `app_id`, tipo do token e `user_id`, o servidor consulta `/{system-user-id}/assigned_ad_accounts` com o token somente no header Authorization e `appsecret_proof`. A conexão só pode ser autorizada quando existe pelo menos uma conta de anúncios atribuída e pelo menos um Pixel acessível via `/act_{account_id}/adspixels`.
+
+A validação não persiste Business ID, Ad Account ID ou Pixel ID neste estágio e não registra esses IDs em logs. A observabilidade contém apenas método de validação, contagens de contas/Pixels e scopes efetivamente reportados. Falta de conta atribuída ou Pixel mantém a conexão em `error`.
 
 ## Business Login real
 
@@ -62,22 +70,22 @@ Pixel, Conversions API, Advanced Matching, Attribution, QualifiedLead e Purchase
 
 ## Current limitations
 
-Ainda não há descoberta ou seleção de Business, Ad Account, Pixel/Dataset, renovação completa do token ou revogação remota. A CAPI e o Pixel do navegador continuam usando exclusivamente `TenantIntegrationSettings` legado.
+A validação confirma que o `SYSTEM_USER` possui conta de anúncios e Pixel acessíveis, mas ainda não persiste a seleção estruturada de Business, Ad Account ou Pixel/Dataset. A CAPI e o Pixel do navegador continuam usando exclusivamente `TenantIntegrationSettings` legado.
 
 ## Next step: Asset Discovery
 
-O próximo trabalho descobrirá ativos autorizados e permitirá selecionar Business, conta de anúncios e fonte de dados, sem ativar automaticamente a CAPI universal.
+O próximo trabalho persistirá de forma tenant-scoped os ativos autorizados/selecionados pelo Business Login para que a conexão universal possa substituir gradualmente a configuração manual legada.
 
 ## Próximos passos
 
 1. OAuth / Business Login.
-2. `TenantMetaConnection` e descoberta de ativos.
+2. `TenantMetaConnection` e descoberta/persistência de ativos.
 3. Migração gradual do Pixel e CAPI para a conexão universal.
 
 ## Facebook Login for Business
 
 O `Business Login Configuration ID` é uma configuração única do Meta App do FlipForm em `PlatformMetaSettings`. Ele é cadastrado somente pelo Platform Admin, não é secreto e nunca pode ser escolhido ou sobrescrito por um tenant. A base Meta (App ID e App Secret) e a prontidão do Business Login (base mais Configuration ID) são status distintos e não afirmam que App Review ou Advanced Access foram aprovados.
 
-O início do OAuth exige a configuração empresarial completa e inclui `config_id` exclusivamente a partir da configuração global server-side. Sem ela, a plataforma retorna uma indisponibilidade segura, sem fallback silencioso para OAuth baseado em scopes. `META_PLATFORM_REQUIRED_SCOPES` continua representando as permissões exigidas pelo produto e é validada após a autorização.
+O início do OAuth exige a configuração empresarial completa e inclui `config_id` exclusivamente a partir da configuração global server-side. Sem ela, a plataforma retorna uma indisponibilidade segura, sem fallback silencioso para OAuth baseado em scopes.
 
-`TenantMetaConnection` permanece tenant-scoped e armazena somente a autorização individual de cada cliente. Nenhum App ID, App Secret, Configuration ID ou Redirect URI é configurado pelo tenant. O próximo passo é Asset Discovery de Businesses, Ad Accounts e Pixels/Datasets; este trabalho não implementa descoberta nem seleção de ativos.
+`TenantMetaConnection` permanece tenant-scoped e armazena somente a autorização individual de cada cliente. Nenhum App ID, App Secret, Configuration ID ou Redirect URI é configurado pelo tenant.

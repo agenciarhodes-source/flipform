@@ -29,15 +29,18 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
     const token = await exchangeMetaAuthorizationCode({ ...credentials, redirectUri: getMetaOAuthRedirectUri(), code });
     const validation = await validateMetaAuthorization({ accessToken: token.accessToken, appId: credentials.appId, appSecret: credentials.appSecret });
     const now = new Date();
-    const status = validation.missingScopes.length ? 'error' : 'authorized';
+    const status = validation.authorizationSatisfied ? 'authorized' : 'error';
     const encrypted = encryptIntegrationSecret(token.accessToken);
     console.info('Meta Business Login validation completed', {
       tenantId: session.tenantId,
       tokenType: validation.diagnostics.tokenType,
+      authorizationMethod: validation.diagnostics.authorizationMethod,
+      authorizationSatisfied: validation.authorizationSatisfied,
       effectiveScopeCount: validation.diagnostics.effectiveScopes.length,
       missingScopes: validation.diagnostics.missingScopes,
       granularScopeNames: validation.diagnostics.granularScopeNames,
       granularTargetCounts: validation.diagnostics.granularTargetCounts,
+      systemUserAssetAccess: validation.diagnostics.systemUserAssetAccess,
       hasExpiration: validation.diagnostics.hasExpiration,
     });
     await prisma.$transaction(async tx => {
