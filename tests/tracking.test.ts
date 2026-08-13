@@ -5,6 +5,10 @@ import { buildCustomData, kanbanEventSchema, resolveTrackingEventId } from '../l
 import { fireMetaLeadPixel } from '../lib/tracking/meta-pixel-client';
 import { buildUserData, formatMetaCapiError, hashMetaValue, normalizeMetaCity, normalizeMetaEmail, normalizeMetaPhone } from '../lib/tracking/meta-capi';
 import { buildMetaExternalId, getMetaLeadUserData, splitLeadName } from '../lib/tracking/meta-lead-user-data';
+import { encryptIntegrationSecret } from '../lib/tracking/crypto';
+import { resolveMetaRuntimeConfig, toPublicMetaPixelConfig } from '../lib/meta/runtime';
+
+process.env.INTEGRATION_SECRET_KEY ||= 'tracking-tests-integration-secret-key';
 
 test('normaliza e separa os identificadores hashed da Meta deterministicamente', () => {
   assert.equal(normalizeMetaEmail('  MARIA@Example.COM '), 'maria@example.com');
@@ -204,4 +208,108 @@ test('UI usa apenas status final por eventId e preserva motivo do failed', () =>
   assert.equal(logs.length, 1);
   assert.equal(logs[0].status, 'failed');
   assert.equal(logs[0].reason, 'Meta CAPI: Invalid parameter | code: 100');
+});
+
+test('runtime Meta universal vence o legado e respeita os presets globais', async () => {
+  const encrypted = encryptIntegrationSecret('universal-token-value');
+  const db = {
+    platformMetaSettings: { findUnique: async () => ({ defaultPixelEnabled: true, defaultCapiEnabled: false }) },
+    tenantMetaConnection: { findFirst: async () => ({
+      accessTokenEncrypted: encrypted,
+      tokenExpiresAt: new Date('2026-09-01T00:00:00.000Z'),
+      metaPixelId: '31706231338960605',
+    }) },
+    tenantIntegrationSettings: { findUnique: async () => null },
+  } as any;
+
+  const runtime = await resolveMetaRuntimeConfig({
+    tenantId: 'tenant-a',
+    db,
+    now: new Date('2026-08-13T12:00:00.000Z'),
+    legacySettings: {
+      metaPixelEnabled: true,
+      metaPixelId: '123456789',
+      metaAccessTokenEncrypted: encryptIntegrationSecret('legacy-token-value'),
+      metaTestEventCode: 'TEST123',
+    },
+  });
+
+  assert.equal(runtime.source, 'universal');
+  assert.equal(runtime.pixelId, '31706231338960605');
+  assert.equal(runtime.accessToken, 'universal-token-value');
+  assert.equal(runtime.pixelEnabled, true);
+  assert.equal(runtime.capiEnabled, false);
+  assert.equal(runtime.testEventCode, null);
+  assert.deepEqual(toPublicMetaPixelConfig(runtime, 'evt-1'), { pixelId: '31706231338960605', eventId: 'evt-1' });
+});
+
+test('runtime Meta expirado cai no legado durante a transição', async () => {
+  const db = {
+    platformMetaSettings: { findUnique: async () => ({ defaultPixelEnabled: true, defaultCapiEnabled: true }) },
+    tenantMetaConnection: { findFirst: async () => ({
+      accessTokenEncrypted: encryptIntegrationSecret('expired-universal-token'),
+      tokenExpiresAt: new Date('2026-08-01T00:00:00.000Z'),
+      metaPixelId: '31706231338960605',
+    }) },
+    tenantIntegrationSettings: { findUnique: async () => null },
+  } as any;
+
+  const runtime = await resolveMetaRuntimeConfig({
+    tenantId: 'tenant-a',
+    db,
+    now: new Date('2026-08-13T12:00:00.000Z'),
+    legacySettings: {
+      metaPixelEnabled: true,
+      metaPixelId: '123456789',
+      metaAccessTokenEncrypted: encryptIntegrationSecret('legacy-token-value'),
+      metaTestEventCode: 'TEST123',
+    },
+  });
+
+  assert.equal(runtime.source, 'legacy');
+  assert.equal(runtime.pixelId, '123456789');
+  assert.equal(runtime.accessToken, 'legacy-token-value');
+  assert.equal(runtime.testEventCode, 'TEST123');
+});
+
+test('runtime Meta universal não mistura legado quando a descriptografia falha', async () => {
+  const db = {
+    platformMetaSettings: { findUnique: async () => ({ defaultPixelEnabled: true, defaultCapiEnabled: true }) },
+    tenantMetaConnection: { findFirst: async () => ({
+      accessTokenEncrypted: 'ffenc:v1:invalid',
+      tokenExpiresAt: null,
+      metaPixelId: '31706231338960605',
+    }) },
+    tenantIntegrationSettings: { findUnique: async () => null },
+  } as any;
+
+  const runtime = await resolveMetaRuntimeConfig({
+    tenantId: 'tenant-a',
+    db,
+    legacySettings: {
+      metaPixelEnabled: true,
+      metaPixelId: '123456789',
+      metaAccessTokenEncrypted: encryptIntegrationSecret('legacy-token-value'),
+      metaTestEventCode: 'TEST123',
+    },
+  });
+
+  assert.equal(runtime.source, 'universal');
+  assert.equal(runtime.pixelId, '31706231338960605');
+  assert.equal(runtime.accessToken, null);
+  assert.equal(runtime.capiEnabled, true);
+});
+
+test('configuração pública do Pixel nunca carrega token', () => {
+  const publicConfig = toPublicMetaPixelConfig({
+    source: 'universal',
+    pixelId: '31706231338960605',
+    accessToken: 'server-only-token',
+    pixelEnabled: true,
+    capiEnabled: true,
+    testEventCode: null,
+  }, 'evt-public');
+
+  assert.deepEqual(publicConfig, { pixelId: '31706231338960605', eventId: 'evt-public' });
+  assert.equal(JSON.stringify(publicConfig).includes('server-only-token'), false);
 });
