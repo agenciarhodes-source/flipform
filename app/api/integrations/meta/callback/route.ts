@@ -3,7 +3,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
-import { exchangeMetaAuthorizationCode, validateMetaAuthorization } from '@/lib/meta/oauth';
+import { exchangeMetaAuthorizationCode, exchangeMetaUserAccessTokenForLongLived, validateMetaAuthorization } from '@/lib/meta/oauth';
 import { getMetaOAuthRedirectUri, getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
 import { META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, verifyMetaOAuthState } from '@/lib/meta/oauth-state';
 
@@ -26,16 +26,32 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
   try {
     const credentials = await getPlatformMetaOAuthCredentials();
     if (!credentials) return clearState(redirect('error'));
-    const token = await exchangeMetaAuthorizationCode({ ...credentials, redirectUri: getMetaOAuthRedirectUri(), code });
-    const validation = await validateMetaAuthorization({ accessToken: token.accessToken, appId: credentials.appId, appSecret: credentials.appSecret });
+
+    const exchanged = await exchangeMetaAuthorizationCode({ ...credentials, redirectUri: getMetaOAuthRedirectUri(), code });
+    let accessToken = exchanged.accessToken;
+    let validation = await validateMetaAuthorization({ accessToken, appId: credentials.appId, appSecret: credentials.appSecret });
+    let userTokenExtended = false;
+
+    if (validation.tokenType === 'USER') {
+      const longLived = await exchangeMetaUserAccessTokenForLongLived({
+        appId: credentials.appId,
+        appSecret: credentials.appSecret,
+        accessToken,
+      });
+      accessToken = longLived.accessToken;
+      validation = await validateMetaAuthorization({ accessToken, appId: credentials.appId, appSecret: credentials.appSecret });
+      userTokenExtended = true;
+    }
+
     const now = new Date();
     const status = validation.authorizationSatisfied ? 'authorized' : 'error';
-    const encrypted = encryptIntegrationSecret(token.accessToken);
+    const encrypted = encryptIntegrationSecret(accessToken);
     console.info('Meta Business Login validation completed', {
       tenantId: session.tenantId,
       tokenType: validation.diagnostics.tokenType,
       authorizationMethod: validation.diagnostics.authorizationMethod,
       authorizationSatisfied: validation.authorizationSatisfied,
+      userTokenExtended,
       effectiveScopeCount: validation.diagnostics.effectiveScopes.length,
       missingScopes: validation.diagnostics.missingScopes,
       granularScopeNames: validation.diagnostics.granularScopeNames,
