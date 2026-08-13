@@ -31,6 +31,15 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
     const now = new Date();
     const status = validation.missingScopes.length ? 'error' : 'authorized';
     const encrypted = encryptIntegrationSecret(token.accessToken);
+    console.info('Meta Business Login validation completed', {
+      tenantId: session.tenantId,
+      tokenType: validation.diagnostics.tokenType,
+      effectiveScopeCount: validation.diagnostics.effectiveScopes.length,
+      missingScopes: validation.diagnostics.missingScopes,
+      granularScopeNames: validation.diagnostics.granularScopeNames,
+      granularTargetCounts: validation.diagnostics.granularTargetCounts,
+      hasExpiration: validation.diagnostics.hasExpiration,
+    });
     await prisma.$transaction(async tx => {
       await tx.tenantMetaConnection.updateMany({
         where: { tenantId: session.tenantId, status: 'authorized', metaUserId: { not: validation.metaUserId } },

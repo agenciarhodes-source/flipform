@@ -92,7 +92,7 @@ test('normalizes and deduplicates the effective union of regular and granular sc
     scopes: [' ads_read ', 'ads_management', 'ads_read', '', 42],
     granular_scopes: [
       { scope: ' business_management ', target_ids: ['business-1'] },
-      { scope: 'ads_management', target_ids: 'malformed-but-irrelevant' },
+      { scope: 'ads_management', target_ids: 'malformed' },
       { scope: '' },
       { scope: 42 },
       null,
@@ -101,6 +101,34 @@ test('normalizes and deduplicates the effective union of regular and granular sc
   }));
   assert.deepEqual(result.grantedScopes, ['ads_read', 'ads_management', 'business_management']);
   assert.deepEqual(result.missingScopes, []);
+});
+
+test('ignores a granular entry whose target_ids container is malformed', async (t) => {
+  const result = await inspectWith(t, completeInspection({
+    scopes: ['ads_read', 'business_management'],
+    granular_scopes: [{ scope: 'ads_management', target_ids: 'not-an-array' }],
+  }));
+  assert.deepEqual(result.grantedScopes, ['ads_read', 'business_management']);
+  assert.deepEqual(result.missingScopes, ['ads_management']);
+});
+
+test('reports only target counts in safe granular diagnostics', async (t) => {
+  const targetId = 'sensitive-real-target-id';
+  const result = await inspectWith(t, completeInspection({
+    scopes: ['public_profile'],
+    granular_scopes: [
+      { scope: 'ads_read', target_ids: [targetId, 42] },
+      { scope: 'ads_management', target_ids: [targetId] },
+      { scope: 'business_management' },
+    ],
+  }));
+  assert.deepEqual(result.grantedScopes, ['public_profile', 'ads_read', 'ads_management', 'business_management']);
+  assert.deepEqual(result.diagnostics.granularTargetCounts, {
+    ads_read: 1,
+    ads_management: 1,
+    business_management: 0,
+  });
+  assert.equal(JSON.stringify(result).includes(targetId), false);
 });
 
 test('does not infer permissions from granular target ids or malformed entries', async (t) => {

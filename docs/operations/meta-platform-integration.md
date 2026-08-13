@@ -30,7 +30,7 @@ Access tokens são trocados e usados apenas server-side, protegidos por `encrypt
 
 ## Required permissions
 
-Os scopes server-side são `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Na inspeção oficial por `debug_token`, a lista efetivamente concedida é a união normalizada e sem duplicatas entre `data.scopes` e os nomes `scope` válidos de `data.granular_scopes`. Entradas malformadas são ignoradas defensivamente, e `target_ids` nunca são interpretados como permissões nem persistidos nesta etapa. Uma autorização incompleta recebe estado `error`, não `authorized`.
+Os scopes server-side são `ads_read`, `ads_management` e `business_management`. Scopes enviados pelo navegador são ignorados. Na inspeção oficial por `debug_token`, a lista efetivamente concedida é a união normalizada e sem duplicatas entre `data.scopes` e os nomes `scope` válidos de `data.granular_scopes`. Entradas malformadas são ignoradas defensivamente, inclusive quando `target_ids`, se presente, não é um array. Os IDs nunca são interpretados como permissões nem persistidos nesta etapa; o diagnóstico sanitizado registra somente a quantidade de targets por scope. Uma autorização incompleta recebe estado `error`, não `authorized`.
 
 ## Business Login real
 
