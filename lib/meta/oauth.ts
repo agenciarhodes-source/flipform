@@ -145,6 +145,24 @@ export async function exchangeMetaAuthorizationCode(input: { appId: string; appS
   return { accessToken: data.access_token as string, expiresIn: typeof data.expires_in === 'number' ? data.expires_in : null };
 }
 
+export async function exchangeMetaUserAccessTokenForLongLived(input: { appId: string; appSecret: string; accessToken: string }) {
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/oauth/access_token`);
+  url.search = new URLSearchParams({
+    grant_type: 'fb_exchange_token',
+    client_id: input.appId,
+    client_secret: input.appSecret,
+    fb_exchange_token: input.accessToken,
+  }).toString();
+  const data = await metaJson(url, 'long_lived_user_token_exchange');
+  if (typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('Meta long_lived_user_token_exchange missing token');
+  }
+  return {
+    accessToken: data.access_token as string,
+    expiresIn: typeof data.expires_in === 'number' && Number.isFinite(data.expires_in) ? data.expires_in : null,
+  };
+}
+
 export async function validateMetaAuthorization(input: { accessToken: string; appId: string; appSecret: string }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/debug_token`);
   url.search = new URLSearchParams({ input_token: input.accessToken, access_token: `${input.appId}|${input.appSecret}` }).toString();
