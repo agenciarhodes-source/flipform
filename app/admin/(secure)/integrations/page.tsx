@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
 
 type Settings = {
   appId: string | null; appSecretConfigured: boolean; appSecretMasked: string | null; businessLoginConfigId: string | null; redirectUri: string; configured: boolean; baseConfigured: boolean; businessLoginConfigured: boolean;
@@ -53,5 +54,7 @@ export default function AdminIntegrationsPage() {
       {message && <p className="text-sm" role="status">{message}</p>}
       <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar configuração'}</Button>
     </Card>}
+
+    <TenantMetaBindingManager />
   </div>;
 }
