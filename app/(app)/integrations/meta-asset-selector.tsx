@@ -19,14 +19,11 @@ type MetaConnection = {
 type Option = { id: string; name: string; accountId?: string };
 
 export function MetaAssetSelector({ connection, onSaved }: { connection: MetaConnection; onSaved: () => Promise<void> | void }) {
-  const [businesses, setBusinesses] = useState<Option[]>([]);
   const [adAccounts, setAdAccounts] = useState<Option[]>([]);
   const [pixels, setPixels] = useState<Option[]>([]);
-  const [businessId, setBusinessId] = useState('');
   const [adAccountId, setAdAccountId] = useState('');
   const [pixelId, setPixelId] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingPixels, setLoadingPixels] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -37,39 +34,15 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
     return data;
   }
 
-  async function loadAccounts(nextBusinessId: string, preferredAccountId = '') {
-    if (!nextBusinessId) {
-      setAdAccounts([]);
+  async function loadPixels(nextAdAccountId: string, preferredPixelId = '') {
+    if (!nextAdAccountId) {
       setPixels([]);
-      return;
-    }
-    setLoadingAccounts(true);
-    try {
-      const data = await request(`/api/integrations/meta/assets?resource=ad_accounts&businessId=${encodeURIComponent(nextBusinessId)}`);
-      const items: Option[] = data.adAccounts || [];
-      setAdAccounts(items);
-      const accountToUse = preferredAccountId && items.some(item => item.id === preferredAccountId)
-        ? preferredAccountId
-        : items.length === 1 ? items[0].id : '';
-      setAdAccountId(accountToUse);
-      if (accountToUse) await loadPixels(nextBusinessId, accountToUse, connection.assetSelection?.pixelId || '');
-      else {
-        setPixelId('');
-        setPixels([]);
-      }
-    } finally {
-      setLoadingAccounts(false);
-    }
-  }
-
-  async function loadPixels(nextBusinessId: string, nextAdAccountId: string, preferredPixelId = '') {
-    if (!nextBusinessId || !nextAdAccountId) {
-      setPixels([]);
+      setPixelId('');
       return;
     }
     setLoadingPixels(true);
     try {
-      const data = await request(`/api/integrations/meta/assets?resource=pixels&businessId=${encodeURIComponent(nextBusinessId)}&adAccountId=${encodeURIComponent(nextAdAccountId)}`);
+      const data = await request(`/api/integrations/meta/assets?resource=pixels&adAccountId=${encodeURIComponent(nextAdAccountId)}`);
       const items: Option[] = data.pixels || [];
       setPixels(items);
       const pixelToUse = preferredPixelId && items.some(item => item.id === preferredPixelId)
@@ -87,16 +60,16 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
     setLoading(true);
     (async () => {
       try {
-        const data = await request('/api/integrations/meta/assets?resource=businesses');
+        const data = await request('/api/integrations/meta/assets?resource=ad_accounts');
         if (!active) return;
-        const items: Option[] = data.businesses || [];
-        setBusinesses(items);
-        const savedBusinessId = connection.assetSelection?.businessId || '';
-        const nextBusinessId = savedBusinessId && items.some(item => item.id === savedBusinessId)
-          ? savedBusinessId
+        const items: Option[] = data.adAccounts || [];
+        setAdAccounts(items);
+        const savedAdAccountId = connection.assetSelection?.adAccountId || '';
+        const nextAdAccountId = savedAdAccountId && items.some(item => item.id === savedAdAccountId)
+          ? savedAdAccountId
           : items.length === 1 ? items[0].id : '';
-        setBusinessId(nextBusinessId);
-        if (nextBusinessId) await loadAccounts(nextBusinessId, connection.assetSelection?.adAccountId || '');
+        setAdAccountId(nextAdAccountId);
+        if (nextAdAccountId) await loadPixels(nextAdAccountId, connection.assetSelection?.pixelId || '');
       } catch (error: any) {
         if (active) toast.error(error.message || 'Não foi possível carregar os ativos da Meta.');
       } finally {
@@ -105,13 +78,13 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
     })();
     return () => { active = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection.status, connection.assetSelection?.businessId, connection.assetSelection?.adAccountId, connection.assetSelection?.pixelId]);
+  }, [connection.status, connection.assetSelection?.adAccountId, connection.assetSelection?.pixelId]);
 
   if (connection.status !== 'authorized') return null;
 
   async function saveSelection() {
-    if (!businessId || !adAccountId || !pixelId) {
-      toast.error('Selecione empresa, conta de anúncios e Pixel / Dataset.');
+    if (!adAccountId || !pixelId) {
+      toast.error('Selecione a conta de anúncios e o Pixel / Dataset.');
       return;
     }
     setSaving(true);
@@ -119,9 +92,9 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
       await request('/api/integrations/meta/assets', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessId, adAccountId, pixelId }),
+        body: JSON.stringify({ adAccountId, pixelId }),
       });
-      toast.success('Ativos Meta validados e salvos.');
+      toast.success('Conta de anúncios e Pixel validados e salvos.');
       await onSaved();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível salvar os ativos Meta.');
@@ -134,45 +107,25 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
     <div className="flex items-start justify-between gap-3">
       <div>
         <h3 className="text-sm font-semibold">Ativos da conexão</h3>
-        <p className="text-xs text-muted-foreground">Escolha a empresa, conta de anúncios e Pixel / Dataset que o FlipForm usará nesta conexão.</p>
+        <p className="text-xs text-muted-foreground">Escolha apenas a conta de anúncios e o Pixel / Dataset deste cliente. O FlipForm cuida da estrutura empresarial da Meta nos bastidores.</p>
       </div>
       {connection.assetSelection?.pixelId && <span className="rounded-full border bg-emerald-50 px-2 py-1 text-xs text-emerald-700">Selecionado</span>}
     </div>
-
-    <label className="block space-y-1 text-sm">
-      <span>Empresa</span>
-      <select
-        className="w-full border rounded p-2 bg-white disabled:opacity-60"
-        value={businessId}
-        disabled={loading}
-        onChange={async event => {
-          const next = event.target.value;
-          setBusinessId(next);
-          setAdAccountId('');
-          setPixelId('');
-          setPixels([]);
-          try { await loadAccounts(next); } catch (error: any) { toast.error(error.message || 'Falha ao carregar contas de anúncios.'); }
-        }}
-      >
-        <option value="">{loading ? 'Carregando empresas...' : 'Selecione uma empresa'}</option>
-        {businesses.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-    </label>
 
     <label className="block space-y-1 text-sm">
       <span>Conta de anúncios</span>
       <select
         className="w-full border rounded p-2 bg-white disabled:opacity-60"
         value={adAccountId}
-        disabled={!businessId || loadingAccounts}
+        disabled={loading}
         onChange={async event => {
           const next = event.target.value;
           setAdAccountId(next);
           setPixelId('');
-          try { await loadPixels(businessId, next); } catch (error: any) { toast.error(error.message || 'Falha ao carregar Pixels / Datasets.'); }
+          try { await loadPixels(next); } catch (error: any) { toast.error(error.message || 'Falha ao carregar Pixels / Datasets.'); }
         }}
       >
-        <option value="">{loadingAccounts ? 'Carregando contas...' : 'Selecione uma conta de anúncios'}</option>
+        <option value="">{loading ? 'Carregando contas...' : 'Selecione uma conta de anúncios'}</option>
         {adAccounts.map(item => <option key={item.id} value={item.id}>{item.name} · {item.accountId || item.id}</option>)}
       </select>
     </label>
@@ -185,9 +138,11 @@ export function MetaAssetSelector({ connection, onSaved }: { connection: MetaCon
       </select>
     </label>
 
-    {connection.assetSelection?.businessName && <p className="text-xs text-muted-foreground">Atual: {connection.assetSelection.businessName} · {connection.assetSelection.adAccountName || connection.assetSelection.adAccountId} · {connection.assetSelection.pixelName || connection.assetSelection.pixelId}</p>}
+    {connection.assetSelection?.adAccountId && <p className="text-xs text-muted-foreground">Atual: {connection.assetSelection.adAccountName || connection.assetSelection.adAccountId} · {connection.assetSelection.pixelName || connection.assetSelection.pixelId}</p>}
 
-    <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" disabled={saving || loading || !businessId || !adAccountId || !pixelId} onClick={saveSelection}>
+    {adAccounts.length === 0 && !loading && <p className="text-xs text-amber-700">Nenhuma conta de anúncios foi encontrada para a conta Meta conectada. Use “Trocar conta Meta” acima e autorize uma identidade que tenha acesso aos anúncios deste cliente.</p>}
+
+    <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" disabled={saving || loading || !adAccountId || !pixelId} onClick={saveSelection}>
       {saving ? 'Validando e salvando...' : connection.assetSelection?.pixelId ? 'Atualizar ativos' : 'Salvar ativos Meta'}
     </button>
   </div>;
