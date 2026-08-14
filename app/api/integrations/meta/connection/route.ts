@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { isPlatformMetaBusinessLoginAvailable } from '@/lib/meta/platform-settings';
+import { getClientIp, rateLimit } from '@/lib/rate-limit';
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
   const [platformAvailable, connection] = await Promise.all([
@@ -11,6 +12,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
       orderBy: { connectedAt: 'desc' },
       select: {
         status: true,
+        metaUserId: true,
         metaUserName: true,
         connectedAt: true,
         tokenExpiresAt: true,
@@ -30,11 +32,12 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
   return NextResponse.json({
     platformAvailable,
     status,
+    metaUserId: connection?.metaUserId ?? null,
     metaUserName: connection?.metaUserName ?? null,
     connectedAt: connection?.connectedAt ?? null,
     tokenExpiresAt: connection?.tokenExpiresAt ?? null,
     grantedScopes: connection?.grantedScopes ?? [],
-    assetSelection: connection?.metaBusinessId && connection.metaAdAccountId && connection.metaPixelId ? {
+    assetSelection: connection?.metaAdAccountId && connection.metaPixelId ? {
       businessId: connection.metaBusinessId,
       businessName: connection.metaBusinessName,
       adAccountId: connection.metaAdAccountId,
@@ -44,4 +47,16 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
       selectedAt: connection.assetsSelectedAt,
     } : null,
   });
+});
+
+export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
+  const rl = rateLimit({ key: `meta-connection-disconnect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
+  if (!rl.allowed) return NextResponse.json({ error: 'Muitas alterações na conexão Meta. Tente novamente em instantes.' }, { status: 429 });
+
+  const now = new Date();
+  const result = await prisma.tenantMetaConnection.updateMany({
+    where: { tenantId: session.tenantId, status: 'authorized' },
+    data: { status: 'revoked', revokedAt: now },
+  });
+  return NextResponse.json({ disconnected: result.count > 0 });
 });
