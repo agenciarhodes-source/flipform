@@ -12,7 +12,6 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
       orderBy: { connectedAt: 'desc' },
       select: {
         status: true,
-        metaUserId: true,
         metaUserName: true,
         connectedAt: true,
         tokenExpiresAt: true,
@@ -32,7 +31,6 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
   return NextResponse.json({
     platformAvailable,
     status,
-    metaUserId: connection?.metaUserId ?? null,
     metaUserName: connection?.metaUserName ?? null,
     connectedAt: connection?.connectedAt ?? null,
     tokenExpiresAt: connection?.tokenExpiresAt ?? null,
