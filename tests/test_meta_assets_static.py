@@ -58,7 +58,8 @@ def test_integration_ui_is_ad_account_first_and_business_is_not_required():
 def test_connection_status_accepts_ad_account_and_pixel_without_business():
     route = (ROOT / "app/api/integrations/meta/connection/route.ts").read_text()
     assert "connection?.metaAdAccountId && connection.metaPixelId" in route
-    assert "metaUserId: connection?.metaUserId" in route
+    assert "metaUserId:" not in route
+    assert "metaUserName: connection?.metaUserName" in route
     assert "export const DELETE = withPermission('INTEGRATIONS_EDIT'" in route
     assert "status: 'revoked'" in route
     assert ".delete" not in route.lower()
