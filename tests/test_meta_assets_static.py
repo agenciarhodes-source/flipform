@@ -25,10 +25,24 @@ def test_platform_admin_route_is_the_only_asset_discovery_and_binding_surface():
     assert "decryptIntegrationSecret" in route
     assert "tenantId: parsed.data.tenantId" in route
     assert "META_ASSETS_BOUND_BY_PLATFORM_ADMIN" in route
-    assert "logPlatformAudit" in route
+    assert "prisma.$transaction" in route
+    assert "tx.tenantMetaConnection.updateMany" in route
+    assert "tx.auditLog.create" in route
+    assert "logPlatformAudit" not in route
     assert "path: 'me/adaccounts'" in helper
     assert "Meta ad account is not authorized for this user" in helper
     assert "Meta pixel is not authorized for this ad account" in helper
+
+
+def test_admin_binding_and_security_audit_are_atomic():
+    route = (ROOT / "app/api/admin/integrations/meta/tenant-assets/route.ts").read_text()
+    transaction_start = route.index("await prisma.$transaction(async (tx) =>")
+    transaction_end = route.index("    });\n\n    return NextResponse.json", transaction_start)
+    transaction = route[transaction_start:transaction_end]
+    assert "tx.tenantMetaConnection.updateMany" in transaction
+    assert "if (updated.count !== 1) throw new MetaBindingChangedError()" in transaction
+    assert "tx.auditLog.create" in transaction
+    assert "META_ASSETS_BOUND_BY_PLATFORM_ADMIN" in transaction
 
 
 def test_tenant_ui_never_enumerates_meta_accounts_or_pixels():
@@ -52,6 +66,21 @@ def test_platform_admin_ui_can_bind_one_account_and_pixel_to_a_tenant():
     assert "Pixel / Dataset do tenant" in manager
     assert "Vincular ativos ao tenant" in manager
     assert "accessToken" not in manager
+
+
+def test_platform_admin_ui_discards_stale_tenant_and_account_responses():
+    manager = (ROOT / "app/admin/(secure)/integrations/tenant-meta-binding-manager.tsx").read_text()
+    assert "useRef" in manager
+    assert "tenantEpochRef" in manager
+    assert "activeTenantRef" in manager
+    assert "accountsRequestRef" in manager
+    assert "pixelsRequestRef" in manager
+    assert "activeAdAccountRef" in manager
+    assert "activeTenantRef.current !== nextTenantId" in manager
+    assert "activeTenantRef.current !== requestedTenantId" in manager
+    assert "activeAdAccountRef.current !== nextAdAccountId" in manager
+    assert "accountsRequestRef.current !== requestId" in manager
+    assert "pixelsRequestRef.current !== requestId" in manager
 
 
 def test_meta_asset_selection_fields_are_nullable_and_migration_is_additive_only():
