@@ -4,9 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { exchangeMetaAuthorizationCode, exchangeMetaUserAccessTokenForLongLived, validateMetaAuthorization } from '@/lib/meta/oauth';
+import { META_ADS_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import { getMetaUserProfile } from '@/lib/meta/profile';
 import { getMetaOAuthRedirectUri, getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
-import { META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, verifyMetaOAuthState } from '@/lib/meta/oauth-state';
+import { META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, verifyMetaOAuthStateForPurpose } from '@/lib/meta/oauth-state';
 
 function redirect(result: 'authorized' | 'cancelled' | 'permissions' | 'error') {
   return NextResponse.redirect(new URL(`/integrations?meta=${result}`, getMetaOAuthRedirectUri()));
@@ -19,7 +20,13 @@ function clearState(response: NextResponse) {
 export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
   const rl = rateLimit({ key: `meta-oauth-callback:${session.tenantId}:${getClientIp(req)}`, limit: 20, windowMs: 10 * 60_000 });
   if (!rl.allowed) return clearState(redirect('error'));
-  const stateValid = verifyMetaOAuthState(req.cookies.get(META_OAUTH_STATE_COOKIE)?.value, req.nextUrl.searchParams.get('state'), session.tenantId, session.userId);
+  const stateValid = verifyMetaOAuthStateForPurpose(
+    req.cookies.get(META_OAUTH_STATE_COOKIE)?.value,
+    req.nextUrl.searchParams.get('state'),
+    session.tenantId,
+    session.userId,
+    META_ADS_ONBOARDING_PURPOSE,
+  );
   if (!stateValid) return clearState(redirect('error'));
   if (req.nextUrl.searchParams.has('error')) return clearState(redirect(req.nextUrl.searchParams.get('error') === 'access_denied' ? 'cancelled' : 'error'));
   const code = req.nextUrl.searchParams.get('code');
@@ -54,6 +61,7 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
     const encrypted = encryptIntegrationSecret(accessToken);
     console.info('Meta Business Login validation completed', {
       tenantId: session.tenantId,
+      onboardingPurpose: META_ADS_ONBOARDING_PURPOSE,
       tokenType: validation.diagnostics.tokenType,
       authorizationMethod: validation.diagnostics.authorizationMethod,
       authorizationSatisfied: validation.authorizationSatisfied,
@@ -107,7 +115,7 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
     });
     return clearState(redirect(status === 'authorized' ? 'authorized' : 'permissions'));
   } catch (error) {
-    console.error('Meta OAuth callback failed', { tenantId: session.tenantId, operation: 'callback', errorType: error instanceof Error ? error.name : 'unknown' });
+    console.error('Meta OAuth callback failed', { tenantId: session.tenantId, onboardingPurpose: META_ADS_ONBOARDING_PURPOSE, operation: 'callback', errorType: error instanceof Error ? error.name : 'unknown' });
     return clearState(redirect('error'));
   }
 });
