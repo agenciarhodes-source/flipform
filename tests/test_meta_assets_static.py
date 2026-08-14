@@ -68,6 +68,45 @@ def test_platform_admin_ui_can_bind_one_account_and_pixel_to_a_tenant():
     assert "accessToken" not in manager
 
 
+def test_platform_admin_can_start_managed_authorization_for_tenant():
+    route = (ROOT / "app/api/admin/integrations/meta/tenant-connect/route.ts").read_text()
+    manager = (ROOT / "app/admin/(secure)/integrations/tenant-meta-binding-manager.tsx").read_text()
+    assert "withPlatformAdmin" in route
+    assert "createPlatformManagedMetaOAuthStateForPurpose" in route
+    assert "tenantId" in route
+    assert "accessToken" not in route
+    assert "/api/admin/integrations/meta/tenant-connect" in manager
+    assert "Autorizar com conta da plataforma" in manager
+    assert "Reautorizar com conta da plataforma" in manager
+
+
+def test_platform_managed_oauth_callback_is_bound_to_admin_and_target_tenant():
+    callback = (ROOT / "app/api/integrations/meta/callback/route.ts").read_text()
+    state = (ROOT / "lib/meta/oauth-state.ts").read_text()
+    assert "readMetaOAuthStateForPurpose" in callback
+    assert "authorizationMode === 'platform_managed'" in callback
+    assert "session.globalRole !== 'platform_admin'" in callback
+    assert "const targetTenantId = statePayload.tenantId" in callback
+    assert "META_PLATFORM_AUTHORIZATION_CONNECTED" in callback
+    assert "META_CLIENT_AUTHORIZATION_CONNECTED" in callback
+    assert "authorizationMode" in state
+    assert "createPlatformManagedMetaOAuthStateForPurpose" in state
+    assert "platform_managed" in state
+    assert "client_authorized" in state
+
+
+def test_platform_managed_connection_is_read_only_for_tenant():
+    route = (ROOT / "app/api/integrations/meta/connection/route.ts").read_text()
+    ui = (ROOT / "app/(app)/integrations/integrations-client.tsx").read_text()
+    assert "managedByPlatform" in route
+    assert "tenantCanManageAuthorization" in route
+    assert "META_CONNECTION_PLATFORM_MANAGED" in route
+    assert "status: 403" in route
+    assert "metaConnection.managedByPlatform" in ui
+    assert "gerenciada pelo administrador do FlipForm" in ui
+    assert "lista completa de contas" in ui
+
+
 def test_platform_admin_ui_discards_stale_tenant_and_account_responses():
     manager = (ROOT / "app/admin/(secure)/integrations/tenant-meta-binding-manager.tsx").read_text()
     assert "useRef" in manager
@@ -126,10 +165,11 @@ def test_reauthorization_clears_only_meta_asset_selection_for_safety():
     assert "DELETE FROM" not in callback.upper()
 
 
-def test_ui_keeps_meta_identity_connection_actions_without_asset_discovery():
+def test_ui_keeps_client_authorized_connection_actions_without_asset_discovery():
     parent = (ROOT / "app/(app)/integrations/integrations-client.tsx").read_text()
     assert "Identidade Meta conectada neste tenant" in parent
     assert "Trocar conta Meta" in parent
     assert "Desconectar" in parent
     assert "method: 'DELETE'" in parent
     assert "<MetaAssetSelector connection={metaConnection} onSaved={load} />" in parent
+    assert "!metaConnection.managedByPlatform" in parent
