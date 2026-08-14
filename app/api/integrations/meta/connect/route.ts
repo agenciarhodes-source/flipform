@@ -3,14 +3,22 @@ import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { getMetaOAuthRedirectUri, getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
 import { buildMetaAuthorizationUrl } from '@/lib/meta/oauth';
-import { createMetaOAuthState, META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
+import { META_ADS_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
+import { createMetaOAuthStateForPurpose, META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
   const rl = rateLimit({ key: `meta-oauth-connect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const credentials = await getPlatformMetaOAuthCredentials();
   if (!credentials?.businessLoginConfigId) return NextResponse.json({ error: 'A conexão empresarial da Meta ainda não foi configurada pela plataforma.' }, { status: 503 });
-  const oauthState = createMetaOAuthState(session.tenantId, session.userId);
+
+  // This endpoint is intentionally Ads/Pixel only. WhatsApp and Instagram
+  // receive separate official onboarding routes and token lifecycles.
+  const oauthState = createMetaOAuthStateForPurpose(
+    session.tenantId,
+    session.userId,
+    META_ADS_ONBOARDING_PURPOSE,
+  );
   const authorizationUrl = buildMetaAuthorizationUrl({ appId: credentials.appId, redirectUri: getMetaOAuthRedirectUri(), state: oauthState.state, businessLoginConfigId: credentials.businessLoginConfigId });
   const response = NextResponse.json({ authorizationUrl });
   response.cookies.set(META_OAUTH_STATE_COOKIE, oauthState.cookie, {
