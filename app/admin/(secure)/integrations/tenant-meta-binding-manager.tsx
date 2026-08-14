@@ -33,6 +33,7 @@ export function TenantMetaBindingManager() {
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingPixels, setLoadingPixels] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [connectingPlatform, setConnectingPlatform] = useState(false);
 
   // SECURITY: broad Meta discovery is platform-admin only, but an admin can
   // switch tenants while requests are still in flight. These refs make every
@@ -52,8 +53,22 @@ export function TenantMetaBindingManager() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedTenantId = params.get('metaTenant') || '';
+    const result = params.get('meta');
+    if (result === 'authorized') toast.success('Autorização Meta gerenciada pela plataforma concluída.');
+    if (result === 'cancelled') toast.error('A autorização Meta foi cancelada.');
+    if (result === 'permissions') toast.error('A conta Meta não concedeu todos os acessos necessários.');
+    if (result === 'error') toast.error('Não foi possível concluir a autorização Meta.');
+
     request('/api/admin/tenants')
-      .then(data => setTenants((data.tenants || []).map((tenant: any) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug }))))
+      .then(data => {
+        const items = (data.tenants || []).map((tenant: any) => ({ id: tenant.id, name: tenant.name, slug: tenant.slug }));
+        setTenants(items);
+        if (requestedTenantId && items.some((tenant: TenantOption) => tenant.id === requestedTenantId)) {
+          void loadConnection(requestedTenantId);
+        }
+      })
       .catch(error => toast.error(error.message || 'Não foi possível carregar os tenants.'));
   }, []);
 
@@ -97,6 +112,32 @@ export function TenantMetaBindingManager() {
     } finally {
       if (tenantEpochRef.current === tenantEpoch && activeTenantRef.current === nextTenantId) {
         setLoadingConnection(false);
+      }
+    }
+  }
+
+  async function connectPlatformManaged() {
+    const requestedTenantId = tenantId;
+    if (!requestedTenantId) {
+      toast.error('Selecione primeiro o tenant.');
+      return;
+    }
+
+    setConnectingPlatform(true);
+    try {
+      const data = await request('/api/admin/integrations/meta/tenant-connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId: requestedTenantId }),
+      });
+      if (activeTenantRef.current !== requestedTenantId) return;
+      const url = new URL(data.authorizationUrl);
+      if (url.protocol !== 'https:' || url.hostname !== 'www.facebook.com') throw new Error('Destino de autorização inválido.');
+      window.location.assign(url.toString());
+    } catch (error: any) {
+      if (activeTenantRef.current === requestedTenantId) {
+        toast.error(error.message || 'Não foi possível iniciar a autorização Meta gerenciada.');
+        setConnectingPlatform(false);
       }
     }
   }
@@ -254,7 +295,11 @@ export function TenantMetaBindingManager() {
 
     {loadingConnection && <p className="text-sm text-muted-foreground">Carregando conexão Meta...</p>}
 
-    {tenantId && !loadingConnection && !connection && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Este tenant ainda não possui uma autorização Meta ativa. A autorização precisa existir antes da vinculação de ativos.</div>}
+    {tenantId && !loadingConnection && !connection && <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <p>Este tenant ainda não possui uma autorização Meta ativa.</p>
+      <p className="text-xs">Se o cliente possui uma conta Meta própria, ele pode autorizar pelo painel dele. Se a agência administra os anúncios e o cliente não possui Facebook próprio, faça a autorização gerenciada por aqui.</p>
+      <Button type="button" onClick={connectPlatformManaged} disabled={connectingPlatform}>{connectingPlatform ? 'Abrindo Meta...' : 'Autorizar com conta da plataforma'}</Button>
+    </div>}
 
     {connection && <>
       <div className="grid gap-3 md:grid-cols-2">
@@ -262,7 +307,10 @@ export function TenantMetaBindingManager() {
         <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Vínculo atual</p><p className="text-sm font-medium">{connection.assetSelection ? `${connection.assetSelection.adAccountName || connection.assetSelection.adAccountId} · ${connection.assetSelection.pixelName || connection.assetSelection.pixelId}` : 'Nenhum ativo vinculado'}</p></div>
       </div>
 
-      <div><Button type="button" variant="outline" onClick={loadAccounts} disabled={loadingAccounts}>{loadingAccounts ? 'Consultando contas...' : 'Carregar contas acessíveis — somente Admin'}</Button></div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={connectPlatformManaged} disabled={connectingPlatform}>{connectingPlatform ? 'Abrindo Meta...' : 'Reautorizar com conta da plataforma'}</Button>
+        <Button type="button" variant="outline" onClick={loadAccounts} disabled={loadingAccounts}>{loadingAccounts ? 'Consultando contas...' : 'Carregar contas acessíveis — somente Admin'}</Button>
+      </div>
 
       {adAccounts.length > 0 && <div className="space-y-2">
         <label className="text-sm font-medium" htmlFor="meta-ad-account">Conta de anúncios do tenant</label>
@@ -280,7 +328,7 @@ export function TenantMetaBindingManager() {
         </select>
       </div>}
 
-      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">A conta selecionada será revalidada no backend contra a autorização Meta deste tenant antes de ser salva. O token nunca é enviado ao navegador.</div>
+      <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">A conta selecionada será revalidada no backend contra a autorização Meta deste tenant antes de ser salva. O token nunca é enviado ao navegador e a lista ampla nunca é exposta ao tenant.</div>
 
       <Button type="button" onClick={saveBinding} disabled={saving || !adAccountId || !pixelId}>{saving ? 'Validando e vinculando...' : 'Vincular ativos ao tenant'}</Button>
     </>}
