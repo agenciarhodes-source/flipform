@@ -3,15 +3,55 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_meta_asset_route_is_tenant_scoped_and_permission_guarded():
+def test_tenant_meta_asset_route_denies_discovery_and_binding():
     route = (ROOT / "app/api/integrations/meta/assets/route.ts").read_text()
     assert "withPermission('INTEGRATIONS_VIEW'" in route
     assert "withPermission('INTEGRATIONS_EDIT'" in route
-    assert "session.tenantId" in route
+    assert "META_ASSET_BINDING_ADMIN_ONLY" in route
+    assert "status: 403" in route
+    assert "listMetaAccessibleAdAccounts" not in route
+    assert "listMetaAdAccountPixels" not in route
+    assert "decryptIntegrationSecret" not in route
+    assert "accessTokenEncrypted" not in route
+
+
+def test_platform_admin_route_is_the_only_asset_discovery_and_binding_surface():
+    route = (ROOT / "app/api/admin/integrations/meta/tenant-assets/route.ts").read_text()
+    helper = (ROOT / "lib/meta/assets.ts").read_text()
+    assert "withPlatformAdmin" in route
+    assert "listMetaAccessibleAdAccounts" in route
+    assert "listMetaAdAccountPixels" in route
+    assert "validateMetaAdAccountPixelSelection" in route
     assert "decryptIntegrationSecret" in route
-    assert "tenantId: session.tenantId" in route
-    assert ".strict()" in route
-    assert "accessTokenEncrypted" not in route.split("return NextResponse.json({\n      selection:", 1)[-1]
+    assert "tenantId: parsed.data.tenantId" in route
+    assert "META_ASSETS_BOUND_BY_PLATFORM_ADMIN" in route
+    assert "logPlatformAudit" in route
+    assert "path: 'me/adaccounts'" in helper
+    assert "Meta ad account is not authorized for this user" in helper
+    assert "Meta pixel is not authorized for this ad account" in helper
+
+
+def test_tenant_ui_never_enumerates_meta_accounts_or_pixels():
+    selector = (ROOT / "app/(app)/integrations/meta-asset-selector.tsx").read_text()
+    assert "Ativos Meta vinculados" in selector
+    assert "administrador da plataforma" in selector
+    assert "nunca recebe a lista completa" in selector
+    assert "fetch(" not in selector
+    assert "resource=ad_accounts" not in selector
+    assert "resource=pixels" not in selector
+    assert "<select" not in selector
+
+
+def test_platform_admin_ui_can_bind_one_account_and_pixel_to_a_tenant():
+    page = (ROOT / "app/admin/(secure)/integrations/page.tsx").read_text()
+    manager = (ROOT / "app/admin/(secure)/integrations/tenant-meta-binding-manager.tsx").read_text()
+    assert "TenantMetaBindingManager" in page
+    assert "/api/admin/integrations/meta/tenant-assets" in manager
+    assert "Carregar contas acessíveis — somente Admin" in manager
+    assert "Conta de anúncios do tenant" in manager
+    assert "Pixel / Dataset do tenant" in manager
+    assert "Vincular ativos ao tenant" in manager
+    assert "accessToken" not in manager
 
 
 def test_meta_asset_selection_fields_are_nullable_and_migration_is_additive_only():
@@ -28,31 +68,6 @@ def test_meta_asset_selection_fields_are_nullable_and_migration_is_additive_only
     assert "ADD COLUMN" in migration
     for destructive in (" DELETE ", " DROP ", " TRUNCATE ", " UPDATE ", " INSERT "):
         assert destructive not in f" {migration} "
-
-
-def test_meta_assets_are_revalidated_directly_from_connected_identity_before_persistence():
-    route = (ROOT / "app/api/integrations/meta/assets/route.ts").read_text()
-    helper = (ROOT / "lib/meta/assets.ts").read_text()
-    assert "validateMetaAdAccountPixelSelection" in route
-    assert "listMetaAccessibleAdAccounts" in route
-    assert "path: 'me/adaccounts'" in helper
-    assert "listMetaAdAccountPixels" in helper
-    assert "Meta ad account is not authorized for this user" in helper
-    assert "Meta pixel is not authorized for this ad account" in helper
-    assert "businessId: numericIdSchema.optional()" in route
-
-
-def test_integration_ui_is_ad_account_first_and_business_is_not_required():
-    parent = (ROOT / "app/(app)/integrations/integrations-client.tsx").read_text()
-    selector = (ROOT / "app/(app)/integrations/meta-asset-selector.tsx").read_text()
-    assert "<MetaAssetSelector connection={metaConnection} onSaved={load} />" in parent
-    assert "connection.status !== 'authorized'" in selector
-    assert "resource=ad_accounts" in selector
-    assert "resource=pixels&adAccountId=" in selector
-    assert "body: JSON.stringify({ adAccountId, pixelId })" in selector
-    assert "Conta de anúncios" in selector
-    assert "Pixel / Dataset" in selector
-    assert "<span>Empresa</span>" not in selector
 
 
 def test_connection_status_accepts_ad_account_and_pixel_without_business():
@@ -82,10 +97,10 @@ def test_reauthorization_clears_only_meta_asset_selection_for_safety():
     assert "DELETE FROM" not in callback.upper()
 
 
-def test_ui_exposes_meta_identity_switch_and_disconnect_actions():
+def test_ui_keeps_meta_identity_connection_actions_without_asset_discovery():
     parent = (ROOT / "app/(app)/integrations/integrations-client.tsx").read_text()
     assert "Identidade Meta conectada neste tenant" in parent
     assert "Trocar conta Meta" in parent
     assert "Desconectar" in parent
     assert "method: 'DELETE'" in parent
-    assert "Não é necessário usar o Gerenciador de Negócios da Pollo" in parent
+    assert "<MetaAssetSelector connection={metaConnection} onSaved={load} />" in parent
