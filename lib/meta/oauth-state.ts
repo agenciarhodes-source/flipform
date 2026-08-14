@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import {
   META_ADS_ONBOARDING_PURPOSE,
   type MetaOnboardingPurpose,
-} from '@/lib/meta/onboarding';
+} from './onboarding';
 
 export const META_OAUTH_STATE_COOKIE = 'flipform_meta_oauth_state';
 export const META_OAUTH_STATE_TTL_SECONDS = 10 * 60;
