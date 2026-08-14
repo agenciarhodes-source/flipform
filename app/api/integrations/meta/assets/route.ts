@@ -6,17 +6,17 @@ import { decryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
 import {
+  listMetaAccessibleAdAccounts,
   listMetaAdAccountPixels,
-  listMetaBusinessAdAccounts,
   listMetaBusinesses,
-  validateMetaAssetSelection,
+  validateMetaAdAccountPixelSelection,
 } from '@/lib/meta/assets';
 
 const resourceSchema = z.enum(['businesses', 'ad_accounts', 'pixels']);
 const numericIdSchema = z.string().trim().regex(/^\d{1,64}$/);
 const adAccountIdSchema = z.string().trim().regex(/^(?:act_)?\d{1,64}$/);
 const selectionSchema = z.object({
-  businessId: numericIdSchema,
+  businessId: numericIdSchema.optional(),
   adAccountId: adAccountIdSchema,
   pixelId: numericIdSchema,
 }).strict();
@@ -47,16 +47,11 @@ async function getMetaContext(tenantId: string): Promise<MetaContext | null> {
   return { connection, accessToken, appSecret: credentials.appSecret };
 }
 
-async function getAuthorizedBusiness(context: MetaContext, businessId: string) {
-  const businesses = await listMetaBusinesses({ accessToken: context.accessToken, appSecret: context.appSecret });
-  return businesses.find(item => item.id === businessId) ?? null;
-}
-
 export const GET = withPermission('INTEGRATIONS_VIEW', async (req: NextRequest, session) => {
   const rl = rateLimit({ key: `meta-assets-read:${session.tenantId}:${getClientIp(req)}`, limit: 60, windowMs: 10 * 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: 'Muitas consultas de ativos Meta. Tente novamente em instantes.' }, { status: 429 });
 
-  const parsedResource = resourceSchema.safeParse(req.nextUrl.searchParams.get('resource') || 'businesses');
+  const parsedResource = resourceSchema.safeParse(req.nextUrl.searchParams.get('resource') || 'ad_accounts');
   if (!parsedResource.success) return NextResponse.json({ error: 'Recurso Meta inválido.' }, { status: 400 });
 
   const context = await getMetaContext(session.tenantId);
@@ -68,30 +63,24 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (req: NextRequest, 
       return NextResponse.json({ businesses });
     }
 
-    const businessParsed = numericIdSchema.safeParse(req.nextUrl.searchParams.get('businessId'));
-    if (!businessParsed.success) return NextResponse.json({ error: 'Empresa Meta inválida.' }, { status: 400 });
-    const business = await getAuthorizedBusiness(context, businessParsed.data);
-    if (!business) return NextResponse.json({ error: 'Esta empresa não foi autorizada para esta conexão.' }, { status: 403 });
-
-    const adAccounts = await listMetaBusinessAdAccounts({
+    const adAccounts = await listMetaAccessibleAdAccounts({
       accessToken: context.accessToken,
       appSecret: context.appSecret,
-      businessId: business.id,
     });
-    if (parsedResource.data === 'ad_accounts') return NextResponse.json({ business, adAccounts });
+    if (parsedResource.data === 'ad_accounts') return NextResponse.json({ adAccounts });
 
     const adAccountParsed = adAccountIdSchema.safeParse(req.nextUrl.searchParams.get('adAccountId'));
     if (!adAccountParsed.success) return NextResponse.json({ error: 'Conta de anúncios Meta inválida.' }, { status: 400 });
     const normalizedAccountId = adAccountParsed.data.startsWith('act_') ? adAccountParsed.data : `act_${adAccountParsed.data}`;
     const adAccount = adAccounts.find(item => item.id === normalizedAccountId);
-    if (!adAccount) return NextResponse.json({ error: 'Esta conta de anúncios não pertence aos ativos autorizados da empresa.' }, { status: 403 });
+    if (!adAccount) return NextResponse.json({ error: 'Esta conta de anúncios não está acessível pela conta Meta conectada.' }, { status: 403 });
 
     const pixels = await listMetaAdAccountPixels({
       accessToken: context.accessToken,
       appSecret: context.appSecret,
       adAccountId: adAccount.id,
     });
-    return NextResponse.json({ business, adAccount, pixels });
+    return NextResponse.json({ adAccount, pixels });
   } catch (error) {
     console.error('Meta asset discovery failed', {
       tenantId: session.tenantId,
@@ -119,17 +108,18 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
   if (!context) return NextResponse.json({ error: 'Autorize novamente a conta Meta antes de selecionar ativos.' }, { status: 409 });
 
   try {
-    const selection = await validateMetaAssetSelection({
+    const selection = await validateMetaAdAccountPixelSelection({
       accessToken: context.accessToken,
       appSecret: context.appSecret,
-      ...parsed.data,
+      adAccountId: parsed.data.adAccountId,
+      pixelId: parsed.data.pixelId,
     });
     const now = new Date();
     const updated = await prisma.tenantMetaConnection.updateMany({
       where: { id: context.connection.id, tenantId: session.tenantId, status: 'authorized' },
       data: {
-        metaBusinessId: selection.business.id,
-        metaBusinessName: selection.business.name,
+        metaBusinessId: null,
+        metaBusinessName: null,
         metaAdAccountId: selection.adAccount.id,
         metaAdAccountName: selection.adAccount.name,
         metaPixelId: selection.pixel.id,
@@ -142,8 +132,8 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
 
     return NextResponse.json({
       selection: {
-        businessId: selection.business.id,
-        businessName: selection.business.name,
+        businessId: null,
+        businessName: null,
         adAccountId: selection.adAccount.id,
         adAccountName: selection.adAccount.name,
         pixelId: selection.pixel.id,
