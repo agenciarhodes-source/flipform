@@ -10,7 +10,6 @@ import {
   listMetaAdAccountPixels,
   validateMetaAdAccountPixelSelection,
 } from '@/lib/meta/assets';
-import { logPlatformAudit } from '@/lib/platform-audit';
 
 const tenantIdSchema = z.string().trim().uuid();
 const resourceSchema = z.enum(['connection', 'ad_accounts', 'pixels']);
@@ -21,6 +20,13 @@ const bindingSchema = z.object({
   adAccountId: adAccountIdSchema,
   pixelId: numericIdSchema,
 }).strict();
+
+class MetaBindingChangedError extends Error {
+  constructor() {
+    super('META_BINDING_CONNECTION_CHANGED');
+    this.name = 'MetaBindingChangedError';
+  }
+}
 
 type ConnectionRecord = {
   id: string;
@@ -159,33 +165,41 @@ export const PUT = withPlatformAdmin(async (req: NextRequest, session) => {
       pixelId: parsed.data.pixelId,
     });
     const now = new Date();
-    const updated = await prisma.tenantMetaConnection.updateMany({
-      where: { id: context.connection.id, tenantId: parsed.data.tenantId, status: 'authorized' },
-      data: {
-        metaBusinessId: null,
-        metaBusinessName: null,
-        metaAdAccountId: selection.adAccount.id,
-        metaAdAccountName: selection.adAccount.name,
-        metaPixelId: selection.pixel.id,
-        metaPixelName: selection.pixel.name,
-        assetsSelectedAt: now,
-        lastValidatedAt: now,
-      },
-    });
-    if (updated.count !== 1) return NextResponse.json({ error: 'A conexão Meta mudou durante a vinculação. Recarregue a página.' }, { status: 409 });
 
-    await logPlatformAudit({
-      tenantId: parsed.data.tenantId,
-      userId: session.userId,
-      entityType: 'tenant_meta_connection',
-      entityId: context.connection.id,
-      action: 'META_ASSETS_BOUND_BY_PLATFORM_ADMIN',
-      metadata: {
-        adAccountId: selection.adAccount.id,
-        adAccountName: selection.adAccount.name,
-        pixelId: selection.pixel.id,
-        pixelName: selection.pixel.name,
-      },
+    // SECURITY: the binding and its platform audit entry are one atomic write.
+    // If the audit insert fails, Prisma rolls back the binding instead of
+    // leaving an unaudited cross-tenant security-sensitive change behind.
+    await prisma.$transaction(async (tx) => {
+      const updated = await tx.tenantMetaConnection.updateMany({
+        where: { id: context.connection.id, tenantId: parsed.data.tenantId, status: 'authorized' },
+        data: {
+          metaBusinessId: null,
+          metaBusinessName: null,
+          metaAdAccountId: selection.adAccount.id,
+          metaAdAccountName: selection.adAccount.name,
+          metaPixelId: selection.pixel.id,
+          metaPixelName: selection.pixel.name,
+          assetsSelectedAt: now,
+          lastValidatedAt: now,
+        },
+      });
+      if (updated.count !== 1) throw new MetaBindingChangedError();
+
+      await tx.auditLog.create({
+        data: {
+          tenantId: parsed.data.tenantId,
+          userId: session.userId,
+          entityType: 'tenant_meta_connection',
+          entityId: context.connection.id,
+          action: 'META_ASSETS_BOUND_BY_PLATFORM_ADMIN',
+          metadata: {
+            adAccountId: selection.adAccount.id,
+            adAccountName: selection.adAccount.name,
+            pixelId: selection.pixel.id,
+            pixelName: selection.pixel.name,
+          } as any,
+        },
+      });
     });
 
     return NextResponse.json({
@@ -199,6 +213,10 @@ export const PUT = withPlatformAdmin(async (req: NextRequest, session) => {
       },
     });
   } catch (error) {
+    if (error instanceof MetaBindingChangedError) {
+      return NextResponse.json({ error: 'A conexão Meta mudou durante a vinculação. Recarregue a página.' }, { status: 409 });
+    }
+
     console.error('Admin Meta tenant asset binding failed', {
       tenantId: parsed.data.tenantId,
       operation: 'validate_and_bind',
