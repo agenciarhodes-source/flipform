@@ -66,6 +66,35 @@ test('signed OAuth state cannot be replayed across Meta onboarding purposes', as
   );
 });
 
+test('platform managed Ads state keeps target tenant and management mode signed', async () => {
+  const { META_ADS_ONBOARDING_PURPOSE } = await import('../lib/meta/onboarding');
+  const {
+    createPlatformManagedMetaOAuthStateForPurpose,
+    readMetaOAuthStateForPurpose,
+  } = await import('../lib/meta/oauth-state');
+
+  const created = createPlatformManagedMetaOAuthStateForPurpose(
+    'tenant-managed',
+    'platform-admin',
+    META_ADS_ONBOARDING_PURPOSE,
+    1_000,
+  );
+  const payload = readMetaOAuthStateForPurpose(
+    created.cookie,
+    created.state,
+    'platform-admin',
+    META_ADS_ONBOARDING_PURPOSE,
+    2_000,
+  );
+
+  assert.equal(payload?.tenantId, 'tenant-managed');
+  assert.equal(payload?.authorizationMode, 'platform_managed');
+  assert.equal(
+    readMetaOAuthStateForPurpose(created.cookie, created.state, 'different-user', META_ADS_ONBOARDING_PURPOSE, 2_000),
+    null,
+  );
+});
+
 test('legacy Meta OAuth state helpers remain Ads-only wrappers', async () => {
   const {
     createMetaOAuthState,
