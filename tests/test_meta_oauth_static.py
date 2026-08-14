@@ -10,17 +10,22 @@ def test_meta_oauth_routes_and_security_invariants():
     oauth = (ROOT / "lib/meta/oauth.ts").read_text()
     schema = (ROOT / "prisma/schema.prisma").read_text()
     assert "withPermission('INTEGRATIONS_EDIT'" in connect
-    assert "withPermission('INTEGRATIONS_EDIT'" in callback
+    assert "withAuth" in callback
+    assert "can(session.role, 'INTEGRATIONS_EDIT')" in callback
+    assert "session.globalRole !== 'platform_admin'" in callback
+    assert "const targetTenantId = statePayload.tenantId" in callback
     assert "withPermission('INTEGRATIONS_VIEW'" in connection
     assert "exchangeMetaUserAccessTokenForLongLived" in callback
     assert "validation.tokenType === 'USER'" in callback
     assert "encryptIntegrationSecret(accessToken)" in callback
     assert "grantedScopes: validation.grantedScopes" in callback
     assert "const status = validation.authorizationSatisfied ? 'authorized' : 'error'" in callback
-    assert "redirect(status === 'authorized' ? 'authorized' : 'permissions')" in callback
+    assert "status === 'authorized' ? 'authorized' : 'permissions'" in callback
     assert "authorizationMethod: validation.diagnostics.authorizationMethod" in callback
     assert "systemUserAssetAccess: validation.diagnostics.systemUserAssetAccess" in callback
     assert "userTokenExtended" in callback
+    assert "META_PLATFORM_AUTHORIZATION_CONNECTED" in callback
+    assert "META_CLIENT_AUTHORIZATION_CONNECTED" in callback
     log_payload = callback.split("console.info(", 1)[1].split("});", 1)[0]
     assert "accessToken" not in log_payload
     assert "/me/adaccounts" in oauth

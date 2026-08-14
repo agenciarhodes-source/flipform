@@ -194,16 +194,18 @@ export function IntegrationsClient() {
           <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Estado da autorização</span><span className="rounded-full border bg-white px-2 py-1 text-xs">{{ authorized: 'Autorizado', expired: 'Expirado', error: 'Erro', revoked: 'Não conectado' }[metaConnection.status as string] || 'Não conectado'}</span></div>
           {metaConnection.status === 'authorized' && <>
             <div className="rounded-md border bg-white p-3">
-              <p className="text-xs text-muted-foreground">Identidade Meta conectada neste tenant</p>
-              <p className="text-sm font-medium">{metaIdentityLabel || 'Conta Meta autorizada'}</p>
+              <p className="text-xs text-muted-foreground">{metaConnection.managedByPlatform ? 'Autorização Meta gerenciada pelo FlipForm' : 'Identidade Meta conectada neste tenant'}</p>
+              <p className="text-sm font-medium">{metaIdentityLabel || (metaConnection.managedByPlatform ? 'Gerenciado pela plataforma' : 'Conta Meta autorizada')}</p>
             </div>
-            <p className="text-xs text-muted-foreground">Escolha abaixo a conta de anúncios e o Pixel / Dataset deste cliente. Não é necessário usar o Gerenciador de Negócios da Pollo.</p>
+            <p className="text-xs text-muted-foreground">Os ativos vinculados a este tenant aparecem abaixo. A lista completa de contas acessíveis à identidade autorizadora nunca é disponibilizada neste painel.</p>
           </>}
-          {metaConnection.platformAvailable ? <div className="flex flex-wrap gap-2">
+          {metaConnection.managedByPlatform ? (
+            <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">Esta integração é gerenciada pelo administrador do FlipForm. Conta de anúncios, Pixel/Dataset, reautorização e desconexão só podem ser alterados no Admin da plataforma.</div>
+          ) : metaConnection.platformAvailable ? <div className="flex flex-wrap gap-2">
             <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta || disconnectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status === 'authorized' ? 'Trocar conta Meta' : 'Conectar com a Meta'}</button>
             {metaConnection.status === 'authorized' && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnectMeta} disabled={connectingMeta || disconnectingMeta}>{disconnectingMeta ? 'Desconectando...' : 'Desconectar'}</button>}
           </div> : <p className="text-sm text-amber-700">A integração Meta ainda está sendo configurada pela plataforma.</p>}
-          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Ao trocar a conta, entre na Meta com a identidade que possui acesso aos anúncios deste cliente. A seleção de ativos atual será resetada por segurança após a nova autorização.</p>}
+          {metaConnection.status === 'authorized' && !metaConnection.managedByPlatform && <p className="text-xs text-muted-foreground">Ao trocar a conta, entre na Meta com a identidade que possui acesso aos anúncios deste cliente. A seleção de ativos atual será resetada por segurança após a nova autorização.</p>}
         </div>
         <MetaAssetSelector connection={metaConnection} onSaved={load} />
         <div className="border-t pt-4"><h3 className="font-medium">Configuração manual — legado</h3><p className="text-xs text-muted-foreground">Estes dados continuam ativos para Pixel e Conversions API atuais.</p></div>
