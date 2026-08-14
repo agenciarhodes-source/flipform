@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { exchangeMetaAuthorizationCode, exchangeMetaUserAccessTokenForLongLived, validateMetaAuthorization } from '@/lib/meta/oauth';
+import { getMetaUserProfile } from '@/lib/meta/profile';
 import { getMetaOAuthRedirectUri, getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
 import { META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, verifyMetaOAuthState } from '@/lib/meta/oauth-state';
 
@@ -43,6 +44,11 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
       userTokenExtended = true;
     }
 
+    const profile = validation.tokenType === 'USER'
+      ? await getMetaUserProfile({ accessToken, appSecret: credentials.appSecret })
+      : null;
+    const metaUserName = profile?.id === validation.metaUserId ? profile.name : validation.metaUserName;
+
     const now = new Date();
     const status = validation.authorizationSatisfied ? 'authorized' : 'error';
     const encrypted = encryptIntegrationSecret(accessToken);
@@ -58,6 +64,7 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
       granularTargetCounts: validation.diagnostics.granularTargetCounts,
       systemUserAssetAccess: validation.diagnostics.systemUserAssetAccess,
       hasExpiration: validation.diagnostics.hasExpiration,
+      hasProfileName: Boolean(metaUserName),
     });
     await prisma.$transaction(async tx => {
       await tx.tenantMetaConnection.updateMany({
@@ -66,8 +73,36 @@ export const GET = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, 
       });
       await tx.tenantMetaConnection.upsert({
         where: { tenantId_metaUserId: { tenantId: session.tenantId, metaUserId: validation.metaUserId } },
-        create: { tenantId: session.tenantId, status, metaUserId: validation.metaUserId, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: validation.tokenExpiresAt, connectedById: session.userId, connectedAt: now, lastValidatedAt: now },
-        update: { status, metaUserName: validation.metaUserName, accessTokenEncrypted: encrypted, grantedScopes: validation.grantedScopes, tokenExpiresAt: validation.tokenExpiresAt, connectedById: session.userId, connectedAt: now, lastValidatedAt: now, revokedAt: null },
+        create: {
+          tenantId: session.tenantId,
+          status,
+          metaUserId: validation.metaUserId,
+          metaUserName,
+          accessTokenEncrypted: encrypted,
+          grantedScopes: validation.grantedScopes,
+          tokenExpiresAt: validation.tokenExpiresAt,
+          connectedById: session.userId,
+          connectedAt: now,
+          lastValidatedAt: now,
+        },
+        update: {
+          status,
+          metaUserName,
+          accessTokenEncrypted: encrypted,
+          grantedScopes: validation.grantedScopes,
+          tokenExpiresAt: validation.tokenExpiresAt,
+          connectedById: session.userId,
+          connectedAt: now,
+          lastValidatedAt: now,
+          revokedAt: null,
+          metaBusinessId: null,
+          metaBusinessName: null,
+          metaAdAccountId: null,
+          metaAdAccountName: null,
+          metaPixelId: null,
+          metaPixelName: null,
+          assetsSelectedAt: null,
+        },
       });
     });
     return clearState(redirect(status === 'authorized' ? 'authorized' : 'permissions'));

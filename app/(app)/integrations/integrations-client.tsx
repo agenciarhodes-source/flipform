@@ -22,6 +22,7 @@ export function IntegrationsClient() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const [disconnectingMeta, setDisconnectingMeta] = useState(false);
   const [metaConnection, setMetaConnection] = useState<any>({ platformAvailable: false, status: null, grantedScopes: [] });
   const [showMetaToken, setShowMetaToken] = useState(false);
   const [form, setForm] = useState<any>({ provider: 'meta', eventName: 'Lead', enabled: true, currency: 'BRL' });
@@ -95,9 +96,27 @@ export function IntegrationsClient() {
     }
   }
 
+  async function disconnectMeta() {
+    if (!confirm('Desconectar a conta Meta deste tenant? O histórico será preservado, mas o runtime universal deixará de usar esta autorização.')) return;
+    setDisconnectingMeta(true);
+    try {
+      const response = await fetch('/api/integrations/meta/connection', { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível desconectar a conta Meta.');
+      toast.success('Conta Meta desconectada deste tenant.');
+      await load();
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível desconectar a conta Meta.');
+    } finally {
+      setDisconnectingMeta(false);
+    }
+  }
+
   const selectedPipeline = useMemo(() => pipelines.find((p) => p.id === form.pipelineId), [pipelines, form.pipelineId]);
   const isMetaPurchase = form.provider === 'meta' && form.eventName === 'Purchase';
   const visibleLogs = useMemo(() => getFinalTrackingLogs(logs), [logs]);
+  const metaIdentityLabel = metaConnection.metaUserName
+    || (metaConnection.metaUserId ? `ID ${String(metaConnection.metaUserId).slice(-6)}` : null);
 
   async function saveSettings() {
     setSaving(true);
@@ -170,12 +189,21 @@ export function IntegrationsClient() {
 
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
-        <div><h2 className="font-semibold text-lg">Meta</h2><p className="text-sm text-muted-foreground">Integração universal</p></div>
-        <div className="rounded-lg border bg-slate-50 p-4 space-y-2">
+        <div><h2 className="font-semibold text-lg">Meta</h2><p className="text-sm text-muted-foreground">Integração universal do FlipForm</p></div>
+        <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Estado da autorização</span><span className="rounded-full border bg-white px-2 py-1 text-xs">{{ authorized: 'Autorizado', expired: 'Expirado', error: 'Erro', revoked: 'Não conectado' }[metaConnection.status as string] || 'Não conectado'}</span></div>
-          {metaConnection.metaUserName && <p className="text-sm">Conta: {metaConnection.metaUserName}</p>}
-          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Conta Meta autorizada. Selecione abaixo os ativos que o FlipForm deve usar.</p>}
-          {metaConnection.platformAvailable ? <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status ? 'Autorizar novamente' : 'Conectar com a Meta'}</button> : <p className="text-sm text-amber-700">A integração Meta ainda está sendo configurada pela plataforma.</p>}
+          {metaConnection.status === 'authorized' && <>
+            <div className="rounded-md border bg-white p-3">
+              <p className="text-xs text-muted-foreground">Identidade Meta conectada neste tenant</p>
+              <p className="text-sm font-medium">{metaIdentityLabel || 'Conta Meta autorizada'}</p>
+            </div>
+            <p className="text-xs text-muted-foreground">Escolha abaixo a conta de anúncios e o Pixel / Dataset deste cliente. Não é necessário usar o Gerenciador de Negócios da Pollo.</p>
+          </>}
+          {metaConnection.platformAvailable ? <div className="flex flex-wrap gap-2">
+            <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta || disconnectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status === 'authorized' ? 'Trocar conta Meta' : 'Conectar com a Meta'}</button>
+            {metaConnection.status === 'authorized' && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnectMeta} disabled={connectingMeta || disconnectingMeta}>{disconnectingMeta ? 'Desconectando...' : 'Desconectar'}</button>}
+          </div> : <p className="text-sm text-amber-700">A integração Meta ainda está sendo configurada pela plataforma.</p>}
+          {metaConnection.status === 'authorized' && <p className="text-xs text-muted-foreground">Ao trocar a conta, entre na Meta com a identidade que possui acesso aos anúncios deste cliente. A seleção de ativos atual será resetada por segurança após a nova autorização.</p>}
         </div>
         <MetaAssetSelector connection={metaConnection} onSaved={load} />
         <div className="border-t pt-4"><h3 className="font-medium">Configuração manual — legado</h3><p className="text-xs text-muted-foreground">Estes dados continuam ativos para Pixel e Conversions API atuais.</p></div>
@@ -262,7 +290,6 @@ export function IntegrationsClient() {
       <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Pipeline</th><th className="p-2 text-left">Etapa</th><th className="p-2 text-left">Provedor</th><th className="p-2 text-left">Evento</th><th className="p-2 text-left">Label/Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{events.map(ev=>{ const p=pipelines.find(x=>x.id===ev.pipelineId); const st=p?.stages?.find((s:any)=>s.id===ev.stageId); return <tr key={ev.id} className="border-t"><td className="p-2">{p?.name || ev.pipelineId}</td><td className="p-2">{st?.name || ev.stageId}</td><td className="p-2">{providers.find(p=>p.value===ev.provider)?.label || ev.provider}</td><td className="p-2">{ev.customEventName || ev.eventName}</td><td className="p-2">{ev.conversionLabel || '-'} {ev.conversionValue ? `· R$ ${ev.conversionValue}` : ''}</td><td className="p-2">{ev.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>toggleEvent(ev)}>{ev.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteEvent(ev.id)}>Excluir</button></td></tr>})}{events.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={7}>Nenhum evento configurado.</td></tr>}</tbody></table></div>
     </div>
 
-
     <div className="rounded-xl border bg-white p-5 space-y-3 shadow-sm">
       <div>
         <h2 className="font-semibold text-lg">Funil WhatsApp</h2>
@@ -270,7 +297,6 @@ export function IntegrationsClient() {
       </div>
       <Link className="inline-flex w-fit px-4 py-2 rounded border text-sm hover:bg-muted" href="/whatsapp-funnel">Acessar Funil WhatsApp</Link>
     </div>
-
 
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-xl border bg-blue-50 p-5 text-sm text-blue-950"><h2 className="font-semibold mb-2">Como usar</h2><p>Para melhores resultados, configure um evento Purchase na etapa final do seu funil. Use eventos intermediários para treinar suas campanhas com sinais mais qualificados. Eventos falhos não impedem o funcionamento do CRM.</p></div>

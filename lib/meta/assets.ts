@@ -23,7 +23,7 @@ export type MetaPixelAsset = {
 };
 
 export type MetaAssetSelection = {
-  business: MetaBusinessAsset;
+  business: MetaBusinessAsset | null;
   adAccount: MetaAdAccountAsset;
   pixel: MetaPixelAsset;
 };
@@ -112,6 +112,33 @@ async function fetchGraphEdge(input: {
   return results;
 }
 
+function normalizeAdAccountAssets(data: unknown[]): MetaAdAccountAsset[] {
+  const accounts = new Map<string, MetaAdAccountAsset>();
+  for (const entry of data) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const value = entry as { id?: unknown; account_id?: unknown; name?: unknown };
+    const normalized = normalizeAdAccountId(value.id) ?? normalizeAdAccountId(value.account_id);
+    if (!normalized) continue;
+    accounts.set(normalized.id, {
+      id: normalized.id,
+      accountId: normalized.accountId,
+      name: normalizeName(value.name, `Conta ${normalized.accountId}`),
+    });
+  }
+  return [...accounts.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export async function listMetaAccessibleAdAccounts(input: { accessToken: string; appSecret: string }): Promise<MetaAdAccountAsset[]> {
+  const data = await fetchGraphEdge({
+    path: 'me/adaccounts',
+    fields: 'id,account_id,name',
+    operation: 'accessible_ad_accounts',
+    accessToken: input.accessToken,
+    appSecret: input.appSecret,
+  });
+  return normalizeAdAccountAssets(data);
+}
+
 export async function listMetaBusinesses(input: { accessToken: string; appSecret: string }): Promise<MetaBusinessAsset[]> {
   const data = await fetchGraphEdge({
     path: 'me/businesses',
@@ -157,19 +184,7 @@ export async function listMetaBusinessAdAccounts(input: {
     }),
   ]);
 
-  const accounts = new Map<string, MetaAdAccountAsset>();
-  for (const entry of [...owned, ...client]) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-    const value = entry as { id?: unknown; account_id?: unknown; name?: unknown };
-    const normalized = normalizeAdAccountId(value.id) ?? normalizeAdAccountId(value.account_id);
-    if (!normalized) continue;
-    accounts.set(normalized.id, {
-      id: normalized.id,
-      accountId: normalized.accountId,
-      name: normalizeName(value.name, `Conta ${normalized.accountId}`),
-    });
-  }
-  return [...accounts.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  return normalizeAdAccountAssets([...owned, ...client]);
 }
 
 export async function listMetaAdAccountPixels(input: {
@@ -197,6 +212,24 @@ export async function listMetaAdAccountPixels(input: {
     pixels.set(id, { id, name: normalizeName(value.name, `Pixel / Dataset ${id}`) });
   }
   return [...pixels.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+export async function validateMetaAdAccountPixelSelection(input: {
+  accessToken: string;
+  appSecret: string;
+  adAccountId: string;
+  pixelId: string;
+}): Promise<MetaAssetSelection> {
+  const adAccounts = await listMetaAccessibleAdAccounts(input);
+  const normalizedRequestedAccount = normalizeAdAccountId(input.adAccountId);
+  const adAccount = normalizedRequestedAccount ? adAccounts.find(item => item.id === normalizedRequestedAccount.id) : null;
+  if (!adAccount) throw new Error('Meta ad account is not authorized for this user');
+
+  const pixels = await listMetaAdAccountPixels({ ...input, adAccountId: adAccount.id });
+  const pixel = pixels.find(item => item.id === input.pixelId);
+  if (!pixel) throw new Error('Meta pixel is not authorized for this ad account');
+
+  return { business: null, adAccount, pixel };
 }
 
 export async function validateMetaAssetSelection(input: {
