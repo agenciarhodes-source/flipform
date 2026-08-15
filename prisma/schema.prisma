@@ -120,6 +120,7 @@ model Tenant {
   leadAssignmentRotations LeadAssignmentRotation[]
   leadAttributions      LeadAttribution[]
   metaConnections       TenantMetaConnection[]
+  whatsappConnections   TenantWhatsAppConnection[]
 
   @@map("tenants")
 }
@@ -761,6 +762,7 @@ model PlatformMetaSettings {
   appId                          String?  @map("app_id")
   appSecretEncrypted             String?  @map("app_secret_encrypted")
   businessLoginConfigId          String?  @map("business_login_config_id")
+  whatsappEmbeddedSignupConfigId String?  @map("whatsapp_embedded_signup_config_id")
   defaultPixelEnabled            Boolean  @default(true) @map("default_pixel_enabled")
   defaultCapiEnabled             Boolean  @default(true) @map("default_capi_enabled")
   defaultAdvancedMatchingEnabled Boolean  @default(true) @map("default_advanced_matching_enabled")
@@ -808,6 +810,34 @@ model TenantMetaConnection {
   @@index([tenantId, status])
   @@index([connectedById])
   @@map("tenant_meta_connections")
+}
+
+model TenantWhatsAppConnection {
+  id                     String   @id @default(cuid())
+  tenantId               String   @map("tenant_id")
+  status                 String   @default("connected")
+  accessTokenEncrypted   String   @map("access_token_encrypted")
+  tokenExpiresAt         DateTime? @map("token_expires_at")
+  grantedScopes          String[] @default([]) @map("granted_scopes")
+  wabaId                 String   @unique @map("waba_id")
+  wabaName               String?  @map("waba_name")
+  phoneNumberId          String   @unique @map("phone_number_id")
+  displayPhoneNumber     String?  @map("display_phone_number")
+  verifiedName           String?  @map("verified_name")
+  qualityRating          String?  @map("quality_rating")
+  codeVerificationStatus String?  @map("code_verification_status")
+  connectedAt            DateTime @default(now()) @map("connected_at")
+  subscribedAt           DateTime? @map("subscribed_at")
+  lastValidatedAt        DateTime? @map("last_validated_at")
+  revokedAt              DateTime? @map("revoked_at")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("tenant_whatsapp_connections")
 }
 
 model KanbanStageTrackingEvent {
