@@ -113,7 +113,7 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
 
   const phonesUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/phone_numbers`);
   phonesUrl.search = new URLSearchParams({
-    fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status',
+    fields: 'id,display_phone_number,verified_name,quality_rating',
     limit: '100',
     appsecret_proof: proof,
   }).toString();
@@ -128,7 +128,7 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
     displayPhoneNumber: typeof phoneRaw.display_phone_number === 'string' ? phoneRaw.display_phone_number : null,
     verifiedName: typeof phoneRaw.verified_name === 'string' ? phoneRaw.verified_name : null,
     qualityRating: typeof phoneRaw.quality_rating === 'string' ? phoneRaw.quality_rating : null,
-    codeVerificationStatus: typeof phoneRaw.code_verification_status === 'string' ? phoneRaw.code_verification_status : null,
+    codeVerificationStatus: null,
   };
   return {
     waba: { id: input.wabaId, name: typeof waba.name === 'string' ? waba.name : null },
