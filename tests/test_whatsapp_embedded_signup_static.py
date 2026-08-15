@@ -51,6 +51,7 @@ def test_platform_admin_has_dedicated_whatsapp_system_user_config():
     assert 'whatsappBusinessId' in schema
     assert 'whatsappSystemUserId' in schema
     assert 'getPlatformWhatsAppEmbeddedSignupCredentials' in service
+    assert 'getPlatformWhatsAppEmbeddedSignupClientConfig' in service
     assert 'isPlatformWhatsAppEmbeddedSignupAvailable' in service
     assert 'encryptIntegrationSecret(input.whatsappAdminSystemUserAccessToken)' in service
     assert 'encryptIntegrationSecret(input.whatsappSystemUserAccessToken)' in service
@@ -64,7 +65,7 @@ def test_platform_admin_has_dedicated_whatsapp_system_user_config():
     assert 'System User Access Token de runtime' in page
 
 
-def test_signup_config_is_tenant_and_purpose_bound_without_secrets():
+def test_signup_config_is_tenant_and_purpose_bound_without_secret_decryption():
     route = read('app/api/integrations/whatsapp/embedded-signup/config/route.ts')
     state = read('lib/meta/whatsapp-signup-state.ts')
     assert "withPermission('INTEGRATIONS_EDIT'" in route
@@ -75,6 +76,8 @@ def test_signup_config_is_tenant_and_purpose_bound_without_secrets():
     assert 'WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE' in route
     assert "path: WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH" in route
     assert "'/api/integrations/whatsapp'" in state
+    assert 'getPlatformWhatsAppEmbeddedSignupClientConfig' in route
+    assert 'getPlatformWhatsAppEmbeddedSignupCredentials' not in route
     response = route.split('const response = NextResponse.json({', 1)[1].split('});', 1)[0]
     assert 'appSecret' not in response
     assert 'AccessToken' not in response
@@ -100,8 +103,19 @@ def test_completion_uses_ephemeral_signup_token_then_platform_system_user():
     assert 'prisma.$transaction' in route
     assert 'WHATSAPP_EMBEDDED_SIGNUP_CONNECTED' in route
     assert "credentialMode: 'platform_system_user'" in route
-    assert "'whatsapp_business_management'" in helper
-    assert "'whatsapp_business_messaging'" in helper
+    assert 'debugAccessToken: credentials.systemUserAccessToken' in route
+
+    embedded_scopes = helper.split('WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES = [', 1)[1].split('] as const', 1)[0]
+    runtime_scopes = helper.split('WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES = [', 1)[1].split('] as const', 1)[0]
+    assert "'whatsapp_business_management'" in embedded_scopes
+    assert "'whatsapp_business_messaging'" not in embedded_scopes
+    assert "'whatsapp_business_management'" in runtime_scopes
+    assert "'whatsapp_business_messaging'" in runtime_scopes
+    assert 'requiredScopes: WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES' in helper
+    assert 'requiredScopes: WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES' in helper
+    assert "new URLSearchParams({ input_token: input.accessToken })" in helper
+    assert "metaJson(url, 'token_inspection', { accessToken: input.debugAccessToken })" in helper
+    assert "access_token: `${input.appId}|${input.appSecret}`" not in helper
     assert 'managementTargets.includes(input.wabaId)' in helper
     assert '/assigned_users' in helper
     assert "tasks: JSON.stringify(['MANAGE'])" in helper

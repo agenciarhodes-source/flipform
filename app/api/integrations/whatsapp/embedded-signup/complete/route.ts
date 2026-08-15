@@ -65,7 +65,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     }
 
     // The Embedded Signup user token is short-lived onboarding evidence only.
-    // It is validated against the FlipForm app/WABA and is never persisted.
+    // Meta documents /debug_token with a System User Access Token authorizing
+    // the request, so the transient user token is never used as the debugger.
     const exchanged = await exchangeWhatsAppEmbeddedSignupCode({
       appId: credentials.appId,
       appSecret: credentials.appSecret,
@@ -73,8 +74,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     });
     const onboardingValidation = await validateWhatsAppEmbeddedSignupToken({
       accessToken: exchanged.accessToken,
+      debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
-      appSecret: credentials.appSecret,
       wabaId: parsed.data.wabaId,
     });
     const onboardingSelection = await validateWhatsAppWabaPhoneSelection({
@@ -100,7 +101,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
 
     // Meta's Tech Provider flow assigns a platform System User to the customer's WABA.
     // The admin token is used only for this management step; the runtime token is then
-    // proven to access the exact WABA/phone before the tenant binding is saved.
+    // proven to have management + messaging scopes and exact WABA/phone access.
     await ensureSystemUserAssignedToWhatsAppWaba({
       adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
       appSecret: credentials.appSecret,
@@ -110,8 +111,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     });
     const runtimeValidation = await validateWhatsAppSystemUserToken({
       accessToken: credentials.systemUserAccessToken,
+      debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
-      appSecret: credentials.appSecret,
       wabaId: onboardingSelection.waba.id,
     });
     const runtimeSelection = await validateWhatsAppWabaPhoneSelection({

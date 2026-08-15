@@ -3,7 +3,15 @@ import { createAppSecretProof, getEffectiveGrantedScopes, META_PLATFORM_GRAPH_AP
 
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
+
+// The short-lived OAuth user token returned by Embedded Signup is onboarding
+// evidence. Meta's own Debug Token example shows whatsapp_business_management
+// on this token; messaging is enforced on the long-lived System User token.
 export const WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES = [
+  'whatsapp_business_management',
+] as const;
+
+export const WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES = [
   'whatsapp_business_management',
   'whatsapp_business_messaging',
 ] as const;
@@ -60,22 +68,22 @@ export async function exchangeWhatsAppEmbeddedSignupCode(input: { appId: string;
 
 async function validateWhatsAppTokenForWaba(input: {
   accessToken: string;
+  debugAccessToken: string;
   appId: string;
-  appSecret: string;
   wabaId: string;
+  requiredScopes: readonly string[];
 }) {
+  // Meta's Embedded Signup collection authorizes /debug_token with a System
+  // User Access Token and passes the token being inspected only as input_token.
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/debug_token`);
-  url.search = new URLSearchParams({
-    input_token: input.accessToken,
-    access_token: `${input.appId}|${input.appSecret}`,
-  }).toString();
-  const inspected = await metaJson(url, 'token_inspection');
+  url.search = new URLSearchParams({ input_token: input.accessToken }).toString();
+  const inspected = await metaJson(url, 'token_inspection', { accessToken: input.debugAccessToken });
   const token = inspected?.data;
   if (!token || token.is_valid !== true) throw new Error('Meta WhatsApp token invalid');
   if (String(token.app_id ?? '') !== input.appId) throw new Error('Meta WhatsApp token app mismatch');
 
   const grantedScopes = getEffectiveGrantedScopes(token.scopes, token.granular_scopes);
-  const missingScopes = WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES.filter(scope => !grantedScopes.includes(scope));
+  const missingScopes = input.requiredScopes.filter(scope => !grantedScopes.includes(scope));
   if (missingScopes.length > 0) throw new Error('Meta WhatsApp token missing required scopes');
 
   const granularScopes: MetaGranularScope[] = Array.isArray(token.granular_scopes) ? token.granular_scopes : [];
@@ -92,20 +100,26 @@ async function validateWhatsAppTokenForWaba(input: {
 
 export async function validateWhatsAppEmbeddedSignupToken(input: {
   accessToken: string;
+  debugAccessToken: string;
   appId: string;
-  appSecret: string;
   wabaId: string;
 }) {
-  return validateWhatsAppTokenForWaba(input);
+  return validateWhatsAppTokenForWaba({
+    ...input,
+    requiredScopes: WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES,
+  });
 }
 
 export async function validateWhatsAppSystemUserToken(input: {
   accessToken: string;
+  debugAccessToken: string;
   appId: string;
-  appSecret: string;
   wabaId: string;
 }) {
-  return validateWhatsAppTokenForWaba(input);
+  return validateWhatsAppTokenForWaba({
+    ...input,
+    requiredScopes: WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES,
+  });
 }
 
 export async function assignSystemUserToWhatsAppWaba(input: {
