@@ -4,15 +4,16 @@ import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
-import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { getPlatformWhatsAppEmbeddedSignupCredentials } from '@/lib/meta/platform-settings';
 import { META_WHATSAPP_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import { verifyMetaOAuthStateForPurpose } from '@/lib/meta/oauth-state';
 import { WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH } from '@/lib/meta/whatsapp-signup-state';
 import {
+  ensureSystemUserAssignedToWhatsAppWaba,
   exchangeWhatsAppEmbeddedSignupCode,
   subscribeAppToWhatsAppWaba,
   validateWhatsAppEmbeddedSignupToken,
+  validateWhatsAppSystemUserToken,
   validateWhatsAppWabaPhoneSelection,
 } from '@/lib/meta/whatsapp';
 
@@ -63,18 +64,20 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       return clearSignupState(NextResponse.json({ error: 'O WhatsApp Embedded Signup não está configurado pela plataforma.' }, { status: 503 }));
     }
 
+    // The Embedded Signup user token is short-lived onboarding evidence only.
+    // It is validated against the FlipForm app/WABA and is never persisted.
     const exchanged = await exchangeWhatsAppEmbeddedSignupCode({
       appId: credentials.appId,
       appSecret: credentials.appSecret,
       code: parsed.data.code,
     });
-    const validation = await validateWhatsAppEmbeddedSignupToken({
+    const onboardingValidation = await validateWhatsAppEmbeddedSignupToken({
       accessToken: exchanged.accessToken,
       appId: credentials.appId,
       appSecret: credentials.appSecret,
       wabaId: parsed.data.wabaId,
     });
-    const selection = await validateWhatsAppWabaPhoneSelection({
+    const onboardingSelection = await validateWhatsAppWabaPhoneSelection({
       accessToken: exchanged.accessToken,
       appSecret: credentials.appSecret,
       wabaId: parsed.data.wabaId,
@@ -85,8 +88,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       where: {
         tenantId: { not: session.tenantId },
         OR: [
-          { wabaId: selection.waba.id },
-          { phoneNumberId: selection.phone.id },
+          { wabaId: onboardingSelection.waba.id },
+          { phoneNumberId: onboardingSelection.phone.id },
         ],
       },
       select: { id: true },
@@ -95,56 +98,71 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       return clearSignupState(NextResponse.json({ error: 'Este WhatsApp já está vinculado a outra empresa no FlipForm.' }, { status: 409 }));
     }
 
-    await subscribeAppToWhatsAppWaba({
-      accessToken: exchanged.accessToken,
+    // Meta's Tech Provider flow assigns a platform System User to the customer's WABA.
+    // The admin token is used only for this management step; the runtime token is then
+    // proven to access the exact WABA/phone before the tenant binding is saved.
+    await ensureSystemUserAssignedToWhatsAppWaba({
+      adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
       appSecret: credentials.appSecret,
-      wabaId: selection.waba.id,
+      wabaId: onboardingSelection.waba.id,
+      businessId: credentials.businessId,
+      systemUserId: credentials.systemUserId,
+    });
+    const runtimeValidation = await validateWhatsAppSystemUserToken({
+      accessToken: credentials.systemUserAccessToken,
+      appId: credentials.appId,
+      appSecret: credentials.appSecret,
+      wabaId: onboardingSelection.waba.id,
+    });
+    const runtimeSelection = await validateWhatsAppWabaPhoneSelection({
+      accessToken: credentials.systemUserAccessToken,
+      appSecret: credentials.appSecret,
+      wabaId: onboardingSelection.waba.id,
+      phoneNumberId: onboardingSelection.phone.id,
+    });
+    await subscribeAppToWhatsAppWaba({
+      accessToken: credentials.systemUserAccessToken,
+      appSecret: credentials.appSecret,
+      wabaId: runtimeSelection.waba.id,
     });
 
     const now = new Date();
-    const accessTokenEncrypted = encryptIntegrationSecret(exchanged.accessToken);
     const connection = await prisma.$transaction(async tx => {
       await tx.tenantWhatsAppConnection.updateMany({
         where: {
           tenantId: session.tenantId,
           status: 'connected',
-          phoneNumberId: { not: selection.phone.id },
+          phoneNumberId: { not: runtimeSelection.phone.id },
         },
         data: { status: 'revoked', revokedAt: now },
       });
 
       const saved = await tx.tenantWhatsAppConnection.upsert({
-        where: { phoneNumberId: selection.phone.id },
+        where: { phoneNumberId: runtimeSelection.phone.id },
         create: {
           tenantId: session.tenantId,
           status: 'connected',
-          accessTokenEncrypted,
-          tokenExpiresAt: validation.tokenExpiresAt,
-          grantedScopes: validation.grantedScopes,
-          wabaId: selection.waba.id,
-          wabaName: selection.waba.name,
-          phoneNumberId: selection.phone.id,
-          displayPhoneNumber: selection.phone.displayPhoneNumber,
-          verifiedName: selection.phone.verifiedName,
-          qualityRating: selection.phone.qualityRating,
-          codeVerificationStatus: selection.phone.codeVerificationStatus,
+          wabaId: runtimeSelection.waba.id,
+          wabaName: runtimeSelection.waba.name,
+          phoneNumberId: runtimeSelection.phone.id,
+          displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
+          verifiedName: runtimeSelection.phone.verifiedName,
+          qualityRating: runtimeSelection.phone.qualityRating,
           connectedAt: now,
+          systemUserAssignedAt: now,
           subscribedAt: now,
           lastValidatedAt: now,
         },
         update: {
           tenantId: session.tenantId,
           status: 'connected',
-          accessTokenEncrypted,
-          tokenExpiresAt: validation.tokenExpiresAt,
-          grantedScopes: validation.grantedScopes,
-          wabaId: selection.waba.id,
-          wabaName: selection.waba.name,
-          displayPhoneNumber: selection.phone.displayPhoneNumber,
-          verifiedName: selection.phone.verifiedName,
-          qualityRating: selection.phone.qualityRating,
-          codeVerificationStatus: selection.phone.codeVerificationStatus,
+          wabaId: runtimeSelection.waba.id,
+          wabaName: runtimeSelection.waba.name,
+          displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
+          verifiedName: runtimeSelection.phone.verifiedName,
+          qualityRating: runtimeSelection.phone.qualityRating,
           connectedAt: now,
+          systemUserAssignedAt: now,
           subscribedAt: now,
           lastValidatedAt: now,
           revokedAt: null,
@@ -159,11 +177,14 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
           entityId: saved.id,
           action: 'WHATSAPP_EMBEDDED_SIGNUP_CONNECTED',
           metadata: {
-            wabaId: selection.waba.id,
-            wabaName: selection.waba.name,
-            phoneNumberId: selection.phone.id,
-            displayPhoneNumber: selection.phone.displayPhoneNumber,
-            verifiedName: selection.phone.verifiedName,
+            wabaId: runtimeSelection.waba.id,
+            wabaName: runtimeSelection.waba.name,
+            phoneNumberId: runtimeSelection.phone.id,
+            displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
+            verifiedName: runtimeSelection.phone.verifiedName,
+            onboardingScopeCount: onboardingValidation.grantedScopes.length,
+            runtimeScopeCount: runtimeValidation.grantedScopes.length,
+            credentialMode: 'platform_system_user',
           } as any,
         },
       });
@@ -173,9 +194,10 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     console.info('WhatsApp Embedded Signup completed', {
       tenantId: session.tenantId,
       connectionId: connection.id,
+      credentialMode: 'platform_system_user',
       hasDisplayPhoneNumber: Boolean(connection.displayPhoneNumber),
-      tokenHasExpiration: Boolean(connection.tokenExpiresAt),
-      grantedScopeCount: validation.grantedScopes.length,
+      onboardingScopeCount: onboardingValidation.grantedScopes.length,
+      runtimeScopeCount: runtimeValidation.grantedScopes.length,
     });
 
     return clearSignupState(NextResponse.json({
@@ -185,7 +207,6 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
         displayPhoneNumber: connection.displayPhoneNumber,
         verifiedName: connection.verifiedName,
         qualityRating: connection.qualityRating,
-        codeVerificationStatus: connection.codeVerificationStatus,
         connectedAt: connection.connectedAt,
         subscribedAt: connection.subscribedAt,
       },
