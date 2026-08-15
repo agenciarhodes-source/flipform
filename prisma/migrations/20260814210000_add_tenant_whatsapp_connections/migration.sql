@@ -1,23 +1,24 @@
 -- Additive WhatsApp Embedded Signup foundation.
 -- No existing customer records are modified or deleted.
 ALTER TABLE "platform_meta_settings"
-  ADD COLUMN "whatsapp_embedded_signup_config_id" TEXT;
+  ADD COLUMN "whatsapp_embedded_signup_config_id" TEXT,
+  ADD COLUMN "whatsapp_business_id" TEXT,
+  ADD COLUMN "whatsapp_system_user_id" TEXT,
+  ADD COLUMN "whatsapp_admin_system_user_access_token_encrypted" TEXT,
+  ADD COLUMN "whatsapp_system_user_access_token_encrypted" TEXT;
 
 CREATE TABLE "tenant_whatsapp_connections" (
   "id" TEXT NOT NULL,
   "tenant_id" TEXT NOT NULL,
   "status" TEXT NOT NULL DEFAULT 'connected',
-  "access_token_encrypted" TEXT NOT NULL,
-  "token_expires_at" TIMESTAMP(3),
-  "granted_scopes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   "waba_id" TEXT NOT NULL,
   "waba_name" TEXT,
   "phone_number_id" TEXT NOT NULL,
   "display_phone_number" TEXT,
   "verified_name" TEXT,
   "quality_rating" TEXT,
-  "code_verification_status" TEXT,
   "connected_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "system_user_assigned_at" TIMESTAMP(3),
   "subscribed_at" TIMESTAMP(3),
   "last_validated_at" TIMESTAMP(3),
   "revoked_at" TIMESTAMP(3),
