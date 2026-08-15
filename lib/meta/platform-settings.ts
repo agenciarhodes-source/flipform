@@ -9,6 +9,7 @@ export type PlatformMetaSettingsInput = {
   appId: string;
   appSecret?: string;
   businessLoginConfigId: string;
+  whatsappEmbeddedSignupConfigId: string;
   defaultPixelEnabled: boolean;
   defaultCapiEnabled: boolean;
   defaultAdvancedMatchingEnabled: boolean;
@@ -32,9 +33,11 @@ function toAdminDto(settings: any | null) {
   const encrypted = settings?.appSecretEncrypted || null;
   const appId = settings?.appId || null;
   const businessLoginConfigId = settings?.businessLoginConfigId || null;
+  const whatsappEmbeddedSignupConfigId = settings?.whatsappEmbeddedSignupConfigId || null;
   return {
     appId,
     businessLoginConfigId,
+    whatsappEmbeddedSignupConfigId,
     appSecretConfigured: Boolean(encrypted),
     appSecretMasked: maskSecretFromEncrypted(encrypted),
     redirectUri: getMetaOAuthRedirectUri(),
@@ -49,6 +52,7 @@ function toAdminDto(settings: any | null) {
     } : {}),
     baseConfigured: Boolean(appId && encrypted),
     businessLoginConfigured: Boolean(appId && encrypted && businessLoginConfigId),
+    whatsappEmbeddedSignupConfigured: Boolean(appId && encrypted && whatsappEmbeddedSignupConfigId),
     configured: Boolean(appId && encrypted),
     updatedAt: settings?.updatedAt || null,
     updatedBy: settings?.updatedBy || null,
@@ -73,6 +77,14 @@ export async function isPlatformMetaBusinessLoginAvailable() {
   return Boolean(settings?.appId && settings.appSecretEncrypted && settings.businessLoginConfigId);
 }
 
+export async function isPlatformWhatsAppEmbeddedSignupAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: { appId: true, appSecretEncrypted: true, whatsappEmbeddedSignupConfigId: true },
+  });
+  return Boolean(settings?.appId && settings.appSecretEncrypted && settings.whatsappEmbeddedSignupConfigId);
+}
+
 /** @deprecated Prefer the explicitly named base/business readiness helpers. */
 export const isPlatformMetaAvailable = isPlatformMetaBaseAvailable;
 
@@ -81,6 +93,20 @@ export async function getPlatformMetaOAuthCredentials() {
   const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
   if (!settings?.appId || !appSecret) return null;
   return { appId: settings.appId, appSecret, businessLoginConfigId: settings.businessLoginConfigId };
+}
+
+export async function getPlatformWhatsAppEmbeddedSignupCredentials() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: { appId: true, appSecretEncrypted: true, whatsappEmbeddedSignupConfigId: true },
+  });
+  const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
+  if (!settings?.appId || !appSecret || !settings.whatsappEmbeddedSignupConfigId) return null;
+  return {
+    appId: settings.appId,
+    appSecret,
+    configId: settings.whatsappEmbeddedSignupConfigId,
+  };
 }
 
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {
