@@ -15,7 +15,6 @@ type WhatsAppPhone = {
   displayPhoneNumber: string | null;
   verifiedName: string | null;
   qualityRating: string | null;
-  codeVerificationStatus: string | null;
 };
 
 async function metaJson(url: URL, operation: string, input: { accessToken?: string; method?: 'GET' | 'POST' } = {}) {
@@ -56,13 +55,10 @@ export async function exchangeWhatsAppEmbeddedSignupCode(input: { appId: string;
   if (typeof data.access_token !== 'string' || !data.access_token) {
     throw new Error('Meta WhatsApp embedded_signup_token_exchange missing token');
   }
-  return {
-    accessToken: data.access_token as string,
-    expiresIn: typeof data.expires_in === 'number' && Number.isFinite(data.expires_in) ? data.expires_in : null,
-  };
+  return { accessToken: data.access_token as string };
 }
 
-export async function validateWhatsAppEmbeddedSignupToken(input: {
+async function validateWhatsAppTokenForWaba(input: {
   accessToken: string;
   appId: string;
   appSecret: string;
@@ -73,7 +69,7 @@ export async function validateWhatsAppEmbeddedSignupToken(input: {
     input_token: input.accessToken,
     access_token: `${input.appId}|${input.appSecret}`,
   }).toString();
-  const inspected = await metaJson(url, 'embedded_signup_token_inspection');
+  const inspected = await metaJson(url, 'token_inspection');
   const token = inspected?.data;
   if (!token || token.is_valid !== true) throw new Error('Meta WhatsApp token invalid');
   if (String(token.app_id ?? '') !== input.appId) throw new Error('Meta WhatsApp token app mismatch');
@@ -91,12 +87,64 @@ export async function validateWhatsAppEmbeddedSignupToken(input: {
     throw new Error('Meta WhatsApp WABA is outside authorized granular scope');
   }
 
-  const expiresAtSeconds = token.expires_at;
-  const tokenExpiresAt = typeof expiresAtSeconds === 'number' && Number.isFinite(expiresAtSeconds) && expiresAtSeconds > 0
-    ? new Date(expiresAtSeconds * 1000)
-    : null;
+  return { grantedScopes };
+}
 
-  return { grantedScopes, tokenExpiresAt };
+export async function validateWhatsAppEmbeddedSignupToken(input: {
+  accessToken: string;
+  appId: string;
+  appSecret: string;
+  wabaId: string;
+}) {
+  return validateWhatsAppTokenForWaba(input);
+}
+
+export async function validateWhatsAppSystemUserToken(input: {
+  accessToken: string;
+  appId: string;
+  appSecret: string;
+  wabaId: string;
+}) {
+  return validateWhatsAppTokenForWaba(input);
+}
+
+export async function assignSystemUserToWhatsAppWaba(input: {
+  adminSystemUserAccessToken: string;
+  appSecret: string;
+  wabaId: string;
+  systemUserId: string;
+}) {
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/assigned_users`);
+  url.search = new URLSearchParams({
+    user: input.systemUserId,
+    tasks: JSON.stringify(['MANAGE']),
+    appsecret_proof: createAppSecretProof(input.adminSystemUserAccessToken, input.appSecret),
+  }).toString();
+  const data = await metaJson(url, 'assign_system_user_to_waba', {
+    accessToken: input.adminSystemUserAccessToken,
+    method: 'POST',
+  });
+  if (data?.success !== true && data?.success !== 'true') {
+    throw new Error('Meta WhatsApp assign_system_user_to_waba unsuccessful');
+  }
+}
+
+export async function verifySystemUserAssignedToWhatsAppWaba(input: {
+  adminSystemUserAccessToken: string;
+  appSecret: string;
+  wabaId: string;
+  businessId: string;
+  systemUserId: string;
+}) {
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/assigned_users`);
+  url.search = new URLSearchParams({
+    business: input.businessId,
+    appsecret_proof: createAppSecretProof(input.adminSystemUserAccessToken, input.appSecret),
+  }).toString();
+  const data = await metaJson(url, 'verify_system_user_assignment', { accessToken: input.adminSystemUserAccessToken });
+  const assigned = Array.isArray(data?.data)
+    && data.data.some((item: any) => String(item?.id ?? '') === input.systemUserId);
+  if (!assigned) throw new Error('Meta WhatsApp system user assignment not found');
 }
 
 export async function validateWhatsAppWabaPhoneSelection(input: {
@@ -128,7 +176,6 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
     displayPhoneNumber: typeof phoneRaw.display_phone_number === 'string' ? phoneRaw.display_phone_number : null,
     verifiedName: typeof phoneRaw.verified_name === 'string' ? phoneRaw.verified_name : null,
     qualityRating: typeof phoneRaw.quality_rating === 'string' ? phoneRaw.quality_rating : null,
-    codeVerificationStatus: null,
   };
   return {
     waba: { id: input.wabaId, name: typeof waba.name === 'string' ? waba.name : null },
@@ -141,5 +188,4 @@ export async function subscribeAppToWhatsAppWaba(input: { accessToken: string; a
   url.search = new URLSearchParams({ appsecret_proof: createAppSecretProof(input.accessToken, input.appSecret) }).toString();
   const data = await metaJson(url, 'subscribe_waba', { accessToken: input.accessToken, method: 'POST' });
   if (data?.success !== true && data?.success !== 'true') throw new Error('Meta WhatsApp subscribe_waba unsuccessful');
-  return true;
 }
