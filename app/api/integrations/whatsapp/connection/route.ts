@@ -6,17 +6,15 @@ import { isPlatformWhatsAppEmbeddedSignupAvailable } from '@/lib/meta/platform-s
 
 function toSafeConnection(connection: any | null) {
   if (!connection) return null;
-  const expired = Boolean(connection.tokenExpiresAt && connection.tokenExpiresAt <= new Date());
   return {
-    status: expired && connection.status === 'connected' ? 'expired' : connection.status,
+    status: connection.status,
     wabaName: connection.wabaName,
     displayPhoneNumber: connection.displayPhoneNumber,
     verifiedName: connection.verifiedName,
     qualityRating: connection.qualityRating,
-    codeVerificationStatus: connection.codeVerificationStatus,
     connectedAt: connection.connectedAt,
+    systemUserAssignedAt: connection.systemUserAssignedAt,
     subscribedAt: connection.subscribedAt,
-    tokenExpiresAt: connection.tokenExpiresAt,
   };
 }
 
@@ -32,10 +30,9 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
         displayPhoneNumber: true,
         verifiedName: true,
         qualityRating: true,
-        codeVerificationStatus: true,
         connectedAt: true,
+        systemUserAssignedAt: true,
         subscribedAt: true,
-        tokenExpiresAt: true,
       },
     }),
   ]);
