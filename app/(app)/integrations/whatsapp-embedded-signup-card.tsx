@@ -15,10 +15,9 @@ type Connection = {
   displayPhoneNumber?: string | null;
   verifiedName?: string | null;
   qualityRating?: string | null;
-  codeVerificationStatus?: string | null;
   connectedAt?: string | null;
+  systemUserAssignedAt?: string | null;
   subscribedAt?: string | null;
-  tokenExpiresAt?: string | null;
 } | null;
 
 type SignupConfig = {
@@ -229,9 +228,9 @@ export function WhatsAppEmbeddedSignupCard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-lg">WhatsApp Cloud API</h2>
-          <p className="text-sm text-muted-foreground">Conexão oficial via Meta Embedded Signup. As credenciais ficam isoladas por empresa.</p>
+          <p className="text-sm text-muted-foreground">Conexão oficial via Meta Embedded Signup. O WABA e o número ficam vinculados exclusivamente a esta empresa.</p>
         </div>
-        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? 'Conectado' : connection?.status === 'expired' ? 'Expirado' : 'Não conectado'}</span>
+        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? 'Conectado' : 'Não conectado'}</span>
       </div>
 
       {connected && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -248,7 +247,7 @@ export function WhatsAppEmbeddedSignupCard() {
         {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={connect} disabled={connecting || disconnecting}>{connecting ? 'Conectando...' : connected ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}</button>}
         {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
-      <p className="text-xs text-muted-foreground">Este passo cria o vínculo seguro com a Meta. O Inbox e o envio/recebimento de mensagens entram nos próximos módulos.</p>
+      <p className="text-xs text-muted-foreground">As credenciais técnicas permanecem somente no servidor da plataforma. Este passo prepara o vínculo; Inbox e envio/recebimento de mensagens entram nos próximos módulos.</p>
     </div>
   </div>;
 }
