@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
-import { getPlatformWhatsAppEmbeddedSignupCredentials } from '@/lib/meta/platform-settings';
+import { getPlatformWhatsAppEmbeddedSignupClientConfig } from '@/lib/meta/platform-settings';
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { META_WHATSAPP_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import { createMetaOAuthStateForPurpose, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
@@ -15,8 +15,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   });
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  const credentials = await getPlatformWhatsAppEmbeddedSignupCredentials();
-  if (!credentials) {
+  const config = await getPlatformWhatsAppEmbeddedSignupClientConfig();
+  if (!config) {
     return NextResponse.json({ error: 'O WhatsApp Embedded Signup ainda não foi configurado pela plataforma.' }, { status: 503 });
   }
 
@@ -26,8 +26,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     META_WHATSAPP_ONBOARDING_PURPOSE,
   );
   const response = NextResponse.json({
-    appId: credentials.appId,
-    configId: credentials.configId,
+    appId: config.appId,
+    configId: config.configId,
     graphApiVersion: META_PLATFORM_GRAPH_API_VERSION,
     state: signupState.state,
   });
