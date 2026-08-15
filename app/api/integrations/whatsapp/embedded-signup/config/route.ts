@@ -5,9 +5,7 @@ import { getPlatformWhatsAppEmbeddedSignupCredentials } from '@/lib/meta/platfor
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { META_WHATSAPP_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import { createMetaOAuthStateForPurpose, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
-
-export const WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE = 'flipform_whatsapp_embedded_signup_state';
-export const WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH = '/api/integrations/whatsapp';
+import { WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH } from '@/lib/meta/whatsapp-signup-state';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
   const rl = rateLimit({
