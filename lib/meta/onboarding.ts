@@ -21,7 +21,7 @@ export const META_ONBOARDING_CHANNELS = {
     channel: 'whatsapp',
     flow: 'whatsapp_embedded_signup',
     requiredScopes: ['business_management', 'whatsapp_business_management', 'whatsapp_business_messaging'],
-    persistence: 'separate_channel_connection_required',
+    persistence: 'tenant_whatsapp_connections',
   },
   [META_INSTAGRAM_ONBOARDING_PURPOSE]: {
     channel: 'instagram',
