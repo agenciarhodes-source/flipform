@@ -142,9 +142,21 @@ export async function verifySystemUserAssignedToWhatsAppWaba(input: {
     appsecret_proof: createAppSecretProof(input.adminSystemUserAccessToken, input.appSecret),
   }).toString();
   const data = await metaJson(url, 'verify_system_user_assignment', { accessToken: input.adminSystemUserAccessToken });
-  const assigned = Array.isArray(data?.data)
+  return Array.isArray(data?.data)
     && data.data.some((item: any) => String(item?.id ?? '') === input.systemUserId);
-  if (!assigned) throw new Error('Meta WhatsApp system user assignment not found');
+}
+
+export async function ensureSystemUserAssignedToWhatsAppWaba(input: {
+  adminSystemUserAccessToken: string;
+  appSecret: string;
+  wabaId: string;
+  businessId: string;
+  systemUserId: string;
+}) {
+  const assigned = await verifySystemUserAssignedToWhatsAppWaba(input);
+  if (!assigned) await assignSystemUserToWhatsAppWaba(input);
+  const verified = assigned || await verifySystemUserAssignedToWhatsAppWaba(input);
+  if (!verified) throw new Error('Meta WhatsApp system user assignment not found');
 }
 
 export async function validateWhatsAppWabaPhoneSelection(input: {
