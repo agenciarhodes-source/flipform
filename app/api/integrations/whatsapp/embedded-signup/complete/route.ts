@@ -129,46 +129,64 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
 
     const now = new Date();
     const connection = await prisma.$transaction(async tx => {
+      // Serialize all connection replacements for one tenant. Without this lock,
+      // two concurrent signups could both revoke the previous row and then leave
+      // two active bindings. The project already uses this PostgreSQL FOR UPDATE
+      // pattern for lead-assignment serialization.
+      const lockedTenant = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id
+        FROM public.tenants
+        WHERE id = ${session.tenantId}
+        FOR UPDATE
+      `;
+      if (!lockedTenant[0]) throw new Error('WhatsApp tenant not found during binding');
+
+      const previousBinding = await tx.tenantWhatsAppConnection.findFirst({
+        where: { tenantId: session.tenantId },
+        orderBy: { connectedAt: 'desc' },
+        select: { id: true, status: true, wabaId: true, phoneNumberId: true },
+      });
+
+      // A WABA may contain multiple phone numbers. Reuse the historical row for
+      // the same tenant/WABA so selecting another phone does not collide with the
+      // global unique wabaId constraint.
+      const reusableBinding = await tx.tenantWhatsAppConnection.findFirst({
+        where: { tenantId: session.tenantId, wabaId: runtimeSelection.waba.id },
+        select: { id: true },
+      });
+
       await tx.tenantWhatsAppConnection.updateMany({
         where: {
           tenantId: session.tenantId,
           status: 'connected',
-          phoneNumberId: { not: runtimeSelection.phone.id },
+          ...(reusableBinding ? { id: { not: reusableBinding.id } } : {}),
         },
         data: { status: 'revoked', revokedAt: now },
       });
 
-      const saved = await tx.tenantWhatsAppConnection.upsert({
-        where: { phoneNumberId: runtimeSelection.phone.id },
-        create: {
-          tenantId: session.tenantId,
-          status: 'connected',
-          wabaId: runtimeSelection.waba.id,
-          wabaName: runtimeSelection.waba.name,
-          phoneNumberId: runtimeSelection.phone.id,
-          displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
-          verifiedName: runtimeSelection.phone.verifiedName,
-          qualityRating: runtimeSelection.phone.qualityRating,
-          connectedAt: now,
-          systemUserAssignedAt: now,
-          subscribedAt: now,
-          lastValidatedAt: now,
-        },
-        update: {
-          tenantId: session.tenantId,
-          status: 'connected',
-          wabaId: runtimeSelection.waba.id,
-          wabaName: runtimeSelection.waba.name,
-          displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
-          verifiedName: runtimeSelection.phone.verifiedName,
-          qualityRating: runtimeSelection.phone.qualityRating,
-          connectedAt: now,
-          systemUserAssignedAt: now,
-          subscribedAt: now,
-          lastValidatedAt: now,
-          revokedAt: null,
-        },
-      });
+      const connectionData = {
+        status: 'connected',
+        wabaId: runtimeSelection.waba.id,
+        wabaName: runtimeSelection.waba.name,
+        phoneNumberId: runtimeSelection.phone.id,
+        displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
+        verifiedName: runtimeSelection.phone.verifiedName,
+        qualityRating: runtimeSelection.phone.qualityRating,
+        connectedAt: now,
+        systemUserAssignedAt: now,
+        subscribedAt: now,
+        lastValidatedAt: now,
+        revokedAt: null,
+      };
+
+      const saved = reusableBinding
+        ? await tx.tenantWhatsAppConnection.update({
+            where: { id: reusableBinding.id },
+            data: connectionData,
+          })
+        : await tx.tenantWhatsAppConnection.create({
+            data: { tenantId: session.tenantId, ...connectionData },
+          });
 
       await tx.auditLog.create({
         data: {
@@ -183,6 +201,9 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
             phoneNumberId: runtimeSelection.phone.id,
             displayPhoneNumber: runtimeSelection.phone.displayPhoneNumber,
             verifiedName: runtimeSelection.phone.verifiedName,
+            previousWabaId: previousBinding?.wabaId ?? null,
+            previousPhoneNumberId: previousBinding?.phoneNumberId ?? null,
+            previousStatus: previousBinding?.status ?? null,
             onboardingScopeCount: onboardingValidation.grantedScopes.length,
             runtimeScopeCount: runtimeValidation.grantedScopes.length,
             credentialMode: 'platform_system_user',

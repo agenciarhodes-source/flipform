@@ -126,6 +126,23 @@ def test_completion_uses_ephemeral_signup_token_then_platform_system_user():
     assert "method: 'POST'" in helper
 
 
+def test_connection_replacement_is_serialized_and_same_waba_row_is_reused():
+    route = read('app/api/integrations/whatsapp/embedded-signup/complete/route.ts')
+    assert 'tx.$queryRaw' in route
+    assert 'FROM public.tenants' in route
+    assert 'WHERE id = ${session.tenantId}' in route
+    assert 'FOR UPDATE' in route
+    assert 'const reusableBinding = await tx.tenantWhatsAppConnection.findFirst' in route
+    assert 'where: { tenantId: session.tenantId, wabaId: runtimeSelection.waba.id }' in route
+    assert "status: 'connected'" in route
+    assert "...(reusableBinding ? { id: { not: reusableBinding.id } } : {})" in route
+    assert 'reusableBinding\n        ? await tx.tenantWhatsAppConnection.update' in route
+    assert ': await tx.tenantWhatsAppConnection.create' in route
+    assert 'previousWabaId' in route
+    assert 'previousPhoneNumberId' in route
+    assert 'where: { phoneNumberId: runtimeSelection.phone.id }' not in route
+
+
 def test_tenant_connection_status_never_returns_platform_credentials():
     route = read('app/api/integrations/whatsapp/connection/route.ts')
     assert "withPermission('INTEGRATIONS_VIEW'" in route
