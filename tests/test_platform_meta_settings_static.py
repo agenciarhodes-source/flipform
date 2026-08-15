@@ -24,8 +24,12 @@ def test_secret_and_singleton_guards():
     assert "PLATFORM_META_SETTINGS_ID = 'meta'" in service
     assert 'encryptIntegrationSecret(input.appSecret)' in service
     assert 'looksMaskedSecret(input.appSecret)' in service
-    assert 'maskSecretFromEncrypted(encrypted)' in service
+    assert 'appSecretMasked: maskSecretFromEncrypted(appSecretEncrypted)' in service
+    assert 'whatsappAdminSystemUserAccessTokenMasked: maskSecretFromEncrypted(whatsappAdminTokenEncrypted)' in service
+    assert 'whatsappSystemUserAccessTokenMasked: maskSecretFromEncrypted(whatsappRuntimeTokenEncrypted)' in service
     assert 'upsert' in service
     dto = service.split('function toAdminDto', 1)[1].split('export async function', 1)[0]
     assert 'appSecretEncrypted:' not in dto
     assert 'appSecret:' not in dto
+    assert 'whatsappAdminSystemUserAccessTokenEncrypted:' not in dto
+    assert 'whatsappSystemUserAccessTokenEncrypted:' not in dto
