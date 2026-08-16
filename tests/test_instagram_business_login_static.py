@@ -20,9 +20,12 @@ def test_instagram_registry_and_current_scopes_are_isolated_from_ads_and_whatsap
     assert 'whatsapp' not in instagram.lower()
 
 
-def test_instagram_migration_is_additive_and_keeps_tokens_channel_scoped():
+def test_instagram_migration_and_prisma_schema_are_additive_and_aligned():
     migration = read('prisma/migrations/20260816222000_add_tenant_instagram_connections/migration.sql')
+    schema = read('prisma/schema.prisma')
     upper = migration.upper()
+    assert 'ADD COLUMN "INSTAGRAM_APP_ID"' in upper
+    assert 'ADD COLUMN "INSTAGRAM_APP_SECRET_ENCRYPTED"' in upper
     assert 'CREATE TABLE "TENANT_INSTAGRAM_CONNECTIONS"' in upper
     assert '"INSTAGRAM_USER_ID" TEXT NOT NULL' in upper
     assert '"ACCESS_TOKEN_ENCRYPTED" TEXT NOT NULL' in upper
@@ -31,6 +34,38 @@ def test_instagram_migration_is_additive_and_keeps_tokens_channel_scoped():
     assert 'REFERENCES "USERS"("ID")' in upper
     for destructive in ('DROP TABLE', 'DROP COLUMN', 'DELETE FROM', 'TRUNCATE', 'UPDATE "', 'INSERT INTO'):
         assert destructive not in upper
+
+    platform = schema.split('model PlatformMetaSettings {', 1)[1].split('\n}', 1)[0]
+    connection = schema.split('model TenantInstagramConnection {', 1)[1].split('\n}', 1)[0]
+    tenant = schema.split('model Tenant {', 1)[1].split('\n}', 1)[0]
+    user = schema.split('model User {', 1)[1].split('\n}', 1)[0]
+    assert 'instagramAppId' in platform
+    assert 'instagramAppSecretEncrypted' in platform
+    assert '@@map("tenant_instagram_connections")' in connection
+    assert 'instagramUserId' in connection and '@unique' in connection
+    assert 'accessTokenEncrypted' in connection
+    assert 'instagramConnections' in tenant
+    assert 'instagramConnectionsConnected' in user
+
+
+def test_instagram_uses_dedicated_platform_app_credentials():
+    platform = read('lib/meta/instagram-platform.ts')
+    settings = read('lib/meta/platform-settings.ts')
+    route = read('app/api/admin/integrations/meta/route.ts')
+    page = read('app/admin/(secure)/integrations/page.tsx')
+    assert 'instagramAppId: true' in platform
+    assert 'instagramAppSecretEncrypted: true' in platform
+    assert 'decryptIntegrationSecret(settings?.instagramAppSecretEncrypted)' in platform
+    assert 'getPlatformMetaOAuthCredentials' not in platform
+    assert 'instagramAppId: string' in settings
+    assert 'instagramAppSecret?: string' in settings
+    assert 'encryptIntegrationSecret(input.instagramAppSecret)' in settings
+    assert 'instagramAppSecretMasked: maskSecretFromEncrypted(instagramAppSecretEncrypted)' in settings
+    assert 'instagramLoginConfigured' in settings
+    assert 'instagramAppId' in route
+    assert 'instagramAppSecret' in route
+    assert 'Instagram App ID' in page
+    assert 'Instagram App Secret' in page
 
 
 def test_connect_route_uses_signed_tenant_and_purpose_bound_state():
@@ -75,19 +110,27 @@ def test_connection_persistence_serializes_tenant_and_blocks_cross_tenant_asset_
     service = read('lib/meta/instagram-connection.ts')
     assert 'FROM public.tenants' in service
     assert 'FOR UPDATE' in service
-    assert 'instagram_user_id = ${input.instagramUserId}' in service
-    assert 'tenant_id <> ${input.tenantId}' in service
+    assert 'tenantInstagramConnection.findFirst' in service
+    assert 'instagramUserId: input.instagramUserId' in service
+    assert 'tenantId: { not: input.tenantId }' in service
     assert 'INSTAGRAM_ACCOUNT_BOUND_TO_OTHER_TENANT' in service
-    assert "status = 'revoked'" in service
+    assert "status: 'revoked'" in service
     assert "action: 'INSTAGRAM_CONNECTION_CONNECTED'" in service
     assert "action: 'INSTAGRAM_CONNECTION_REVOKED'" in service
-    assert 'access_token_encrypted' in service
-    assert 'accessTokenEncrypted' in service
-    assert '$queryRawUnsafe' not in service
-    assert '$executeRawUnsafe' not in service
+    assert 'accessTokenEncrypted: input.accessTokenEncrypted' in service
     assert 'prisma.lead.' not in service
     assert 'prisma.conversation.' not in service
     assert 'prisma.message.' not in service
+
+
+def test_expired_token_is_not_reported_as_connected():
+    service = read('lib/meta/instagram-connection.ts')
+    ui = read('app/(app)/integrations/instagram-business-login-card.tsx')
+    assert 'connection.tokenExpiresAt.getTime() <= Date.now()' in service
+    assert "status: 'expired'" in service
+    assert "connection?.status === 'expired'" in ui
+    assert 'Token expirado' in ui
+    assert 'Reconecte o Instagram' in ui
 
 
 def test_connection_status_and_ui_never_return_or_store_credentials_in_browser():
