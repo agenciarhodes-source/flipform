@@ -1,5 +1,5 @@
 -- Conversation Core: additive-only foundation for WhatsApp and Instagram messaging.
--- No existing customer data is updated, deleted, truncated, reset, or backfilled.
+-- Existing customer records remain untouched; this migration only creates new messaging structures.
 
 CREATE TABLE "external_contact_identities" (
   "id" TEXT NOT NULL,
