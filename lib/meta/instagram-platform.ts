@@ -1,6 +1,8 @@
 import 'server-only';
 
-import { getPlatformMetaOAuthCredentials, isPlatformMetaBaseAvailable } from './platform-settings';
+import { prisma } from '@/lib/prisma';
+import { decryptIntegrationSecret } from '@/lib/tracking/crypto';
+import { PLATFORM_META_SETTINGS_ID } from './platform-settings';
 
 export const INSTAGRAM_OAUTH_CALLBACK_PATH = '/api/integrations/instagram/callback';
 
@@ -9,15 +11,27 @@ export function getInstagramOAuthRedirectUri() {
   return `${base}${INSTAGRAM_OAUTH_CALLBACK_PATH}`;
 }
 
+async function getInstagramPlatformSettings() {
+  return prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      instagramAppId: true,
+      instagramAppSecretEncrypted: true,
+    },
+  });
+}
+
 export async function isPlatformInstagramLoginAvailable() {
-  return isPlatformMetaBaseAvailable();
+  const settings = await getInstagramPlatformSettings();
+  return Boolean(settings?.instagramAppId && settings.instagramAppSecretEncrypted);
 }
 
 export async function getPlatformInstagramLoginCredentials() {
-  const credentials = await getPlatformMetaOAuthCredentials();
-  if (!credentials) return null;
+  const settings = await getInstagramPlatformSettings();
+  const appSecret = decryptIntegrationSecret(settings?.instagramAppSecretEncrypted);
+  if (!settings?.instagramAppId || !appSecret) return null;
   return {
-    appId: credentials.appId,
-    appSecret: credentials.appSecret,
+    appId: settings.instagramAppId,
+    appSecret,
   };
 }
