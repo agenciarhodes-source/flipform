@@ -7,6 +7,10 @@ export type PlatformWhatsAppWebhookCredentials = {
   appSecret: string;
 };
 
+export type PlatformWhatsAppSendCredentials = {
+  systemUserAccessToken: string;
+};
+
 export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformWhatsAppWebhookCredentials | null> {
   const settings = await prisma.platformMetaSettings.findUnique({
     where: { id: 'meta' },
@@ -16,6 +20,17 @@ export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformW
   const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
   if (!appSecret) return null;
   return { appSecret };
+}
+
+export async function getPlatformWhatsAppSendCredentials(): Promise<PlatformWhatsAppSendCredentials | null> {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: 'meta' },
+    select: { whatsappSystemUserAccessTokenEncrypted: true },
+  });
+
+  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
+  if (!systemUserAccessToken) return null;
+  return { systemUserAccessToken };
 }
 
 export function getWhatsAppWebhookVerifyToken() {

@@ -80,6 +80,12 @@ function normalizedMessageMetadata(input: { entryId: string | null; phoneNumberI
   };
 }
 
+function jsonObject(value: Prisma.JsonValue | null): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 async function resolveConnectedWhatsAppTenant(phoneNumberId: string) {
   const connection = await prisma.tenantWhatsAppConnection.findUnique({
     where: { phoneNumberId },
@@ -93,26 +99,53 @@ export async function applyWhatsAppMessageStatus(input: {
   tenantId: string;
   externalMessageId: string;
   status: string;
+  providerTimestamp?: Date | null;
 }) {
   if (!['sent', 'delivered', 'read', 'failed'].includes(input.status)) return { updated: false, reason: 'unsupported_status' as const };
 
   return prisma.$transaction(async tx => {
-    const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
-      SELECT id, status
+    const locked = await tx.$queryRaw<Array<{
+      id: string;
+      conversation_id: string;
+      status: string;
+      metadata: Prisma.JsonValue | null;
+    }>>`
+      SELECT id, conversation_id, status, metadata
       FROM public.messages
       WHERE tenant_id = ${input.tenantId}
         AND provider = 'meta'
         AND channel = 'whatsapp'
-        AND external_message_id = ${input.externalMessageId}
+        AND (
+          external_message_id = ${input.externalMessageId}
+          OR metadata->>'providerMessageId' = ${input.externalMessageId}
+        )
+      ORDER BY CASE WHEN external_message_id = ${input.externalMessageId} THEN 0 ELSE 1 END
+      LIMIT 1
       FOR UPDATE
     `;
     const message = locked[0];
     if (!message) return { updated: false, reason: 'message_not_found' as const };
 
+    const metadata = jsonObject(message.metadata);
+    const isOutbox = metadata.source === 'flipform_whatsapp_outbox';
+    const statusAt = (input.providerTimestamp || new Date()).toISOString();
+
     if (input.status === 'failed') {
       if (message.status === 'delivered' || message.status === 'read') return { updated: false, reason: 'would_downgrade' as const };
       if (message.status === 'failed') return { updated: false, reason: 'duplicate_status' as const };
-      await tx.message.update({ where: { id: message.id }, data: { status: 'failed' } });
+      await tx.message.update({
+        where: { id: message.id },
+        data: {
+          status: 'failed',
+          ...(isOutbox ? {
+            metadata: {
+              ...metadata,
+              dispatchState: 'failed',
+              providerStatusAt: statusAt,
+            } as Prisma.InputJsonValue,
+          } : {}),
+        },
+      });
       return { updated: true, reason: 'failed' as const };
     }
 
@@ -120,7 +153,37 @@ export async function applyWhatsAppMessageStatus(input: {
     const nextRank = STATUS_RANK[input.status] ?? -1;
     if (message.status !== 'failed' && nextRank <= currentRank) return { updated: false, reason: 'duplicate_or_older_status' as const };
 
-    await tx.message.update({ where: { id: message.id }, data: { status: input.status } });
+    await tx.message.update({
+      where: { id: message.id },
+      data: {
+        status: input.status,
+        ...(isOutbox ? {
+          metadata: {
+            ...metadata,
+            dispatchState: input.status,
+            providerStatusAt: statusAt,
+          } as Prisma.InputJsonValue,
+        } : {}),
+      },
+    });
+
+    const activityAt = input.providerTimestamp || new Date();
+    await tx.conversation.updateMany({
+      where: {
+        id: message.conversation_id,
+        tenantId: input.tenantId,
+        OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: activityAt } }],
+      },
+      data: { lastOutboundAt: activityAt },
+    });
+    await tx.conversation.updateMany({
+      where: {
+        id: message.conversation_id,
+        tenantId: input.tenantId,
+        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: activityAt } }],
+      },
+      data: { lastMessageAt: activityAt },
+    });
     return { updated: true, reason: 'advanced' as const };
   });
 }
@@ -196,6 +259,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           tenantId: connection.tenantId,
           externalMessageId: status.id,
           status: status.status,
+          providerTimestamp: parseProviderTimestamp(status.timestamp),
         });
         if (applied.updated) result.statusesUpdated += 1;
       }
