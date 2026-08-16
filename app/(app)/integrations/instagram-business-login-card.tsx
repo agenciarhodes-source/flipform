@@ -84,6 +84,8 @@ export function InstagramBusinessLoginCard() {
   }
 
   const connected = connection?.status === 'connected';
+  const expired = connection?.status === 'expired';
+  const hasBinding = Boolean(connection);
   return <div className="px-6 pb-6 max-w-7xl">
     <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -91,10 +93,10 @@ export function InstagramBusinessLoginCard() {
           <h2 className="font-semibold text-lg">Instagram Messaging</h2>
           <p className="text-sm text-muted-foreground">Conexão oficial via Business Login for Instagram, isolada por empresa.</p>
         </div>
-        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? 'Conectado' : 'Não conectado'}</span>
+        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? 'Conectado' : expired ? 'Token expirado' : 'Não conectado'}</span>
       </div>
 
-      {connected && <div className="grid gap-3 sm:grid-cols-2">
+      {hasBinding && <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-md border bg-slate-50 p-3">
           <p className="text-xs text-muted-foreground">Conta profissional</p>
           <p className="text-sm font-medium">{connection?.username ? `@${connection.username}` : 'Instagram conectado'}</p>
@@ -105,8 +107,9 @@ export function InstagramBusinessLoginCard() {
         </div>
       </div>}
 
-      {!loading && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A base do aplicativo Meta ainda precisa ser configurada pelo Super Admin do FlipForm.</div>}
-      {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Conecte uma conta profissional Business ou Creator. Este fluxo do Instagram não exige que uma Página do Facebook esteja vinculada à conta profissional.</p>}
+      {expired && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O token desta conta expirou. Reconecte o Instagram para renovar a autorização antes de usar mensagens.</div>}
+      {!loading && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O Instagram App ID e o Instagram App Secret ainda precisam ser configurados pelo Super Admin do FlipForm.</div>}
+      {!loading && platformAvailable && !hasBinding && <p className="text-sm text-muted-foreground">Conecte uma conta profissional Business ou Creator. Este fluxo do Instagram não exige que uma Página do Facebook esteja vinculada à conta profissional.</p>}
 
       <div className="flex flex-wrap gap-2">
         {platformAvailable && <button
@@ -114,8 +117,8 @@ export function InstagramBusinessLoginCard() {
           className="rounded bg-fuchsia-700 px-4 py-2 text-sm text-white disabled:opacity-60"
           onClick={connect}
           disabled={loading || connecting || disconnecting}
-        >{connecting ? 'Abrindo Instagram...' : connected ? 'Reconectar Instagram' : 'Conectar Instagram'}</button>}
-        {connected && <button
+        >{connecting ? 'Abrindo Instagram...' : hasBinding ? 'Reconectar Instagram' : 'Conectar Instagram'}</button>}
+        {hasBinding && <button
           type="button"
           className="rounded border px-4 py-2 text-sm disabled:opacity-60"
           onClick={disconnect}
