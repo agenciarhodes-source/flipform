@@ -36,6 +36,65 @@ function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
+async function advanceIdentityLastSeen(tx: Prisma.TransactionClient, identityId: string, timestamp: Date) {
+  await tx.externalContactIdentity.updateMany({
+    where: {
+      id: identityId,
+      OR: [{ lastSeenAt: null }, { lastSeenAt: { lt: timestamp } }],
+    },
+    data: { lastSeenAt: timestamp },
+  });
+  return tx.externalContactIdentity.findUniqueOrThrow({ where: { id: identityId } });
+}
+
+async function advanceInboundActivity(tx: Prisma.TransactionClient, conversationId: string, timestamp: Date) {
+  await tx.conversation.update({
+    where: { id: conversationId },
+    data: { unreadCount: { increment: 1 } },
+  });
+  await tx.conversation.updateMany({
+    where: {
+      id: conversationId,
+      OR: [{ lastInboundAt: null }, { lastInboundAt: { lt: timestamp } }],
+    },
+    data: { lastInboundAt: timestamp },
+  });
+  await tx.conversation.updateMany({
+    where: {
+      id: conversationId,
+      OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: timestamp } }],
+    },
+    data: { lastMessageAt: timestamp },
+  });
+  await tx.conversation.updateMany({
+    where: {
+      id: conversationId,
+      status: 'resolved',
+      OR: [{ resolvedAt: null }, { resolvedAt: { lt: timestamp } }],
+    },
+    data: { status: 'open', resolvedAt: null },
+  });
+  return tx.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+}
+
+async function advanceOutboundActivity(tx: Prisma.TransactionClient, conversationId: string, timestamp: Date) {
+  await tx.conversation.updateMany({
+    where: {
+      id: conversationId,
+      OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: timestamp } }],
+    },
+    data: { lastOutboundAt: timestamp },
+  });
+  await tx.conversation.updateMany({
+    where: {
+      id: conversationId,
+      OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: timestamp } }],
+    },
+    data: { lastMessageAt: timestamp },
+  });
+  return tx.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+}
+
 export type RecordInboundMessageInput = {
   tenantId: string;
   channel: ConversationChannel;
@@ -120,9 +179,9 @@ export async function recordInboundMessage(rawInput: RecordInboundMessageInput) 
           phone: optional(rawInput.phone),
           email: optional(rawInput.email),
           ...(rawInput.metadata === undefined ? {} : { metadata: rawInput.metadata }),
-          lastSeenAt: timestamp,
         },
       });
+      const updatedIdentity = await advanceIdentityLastSeen(tx, identity.id, timestamp);
 
       const conversation = await tx.conversation.upsert({
         where: {
@@ -161,18 +220,9 @@ export async function recordInboundMessage(rawInput: RecordInboundMessageInput) 
         },
       });
 
-      const updatedConversation = await tx.conversation.update({
-        where: { id: conversation.id },
-        data: {
-          status: conversation.status === 'resolved' ? 'open' : conversation.status,
-          resolvedAt: conversation.status === 'resolved' ? null : conversation.resolvedAt,
-          lastMessageAt: timestamp,
-          lastInboundAt: timestamp,
-          unreadCount: { increment: 1 },
-        },
-      });
+      const updatedConversation = await advanceInboundActivity(tx, conversation.id, timestamp);
 
-      return { identity, conversation: updatedConversation, message, duplicate: false as const };
+      return { identity: updatedIdentity, conversation: updatedConversation, message, duplicate: false as const };
     });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
@@ -246,10 +296,7 @@ export async function recordOutboundMessage(rawInput: RecordOutboundMessageInput
           metadata: rawInput.metadata,
         },
       });
-      const updatedConversation = await tx.conversation.update({
-        where: { id: conversationId },
-        data: { lastMessageAt: timestamp, lastOutboundAt: timestamp },
-      });
+      const updatedConversation = await advanceOutboundActivity(tx, conversationId, timestamp);
       return { conversation: updatedConversation, message, duplicate: false as const };
     });
   } catch (error) {
