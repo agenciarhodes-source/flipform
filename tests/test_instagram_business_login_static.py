@@ -64,7 +64,8 @@ def test_callback_keeps_instagram_token_out_of_ads_connection_and_encrypts_befor
 def test_instagram_professional_account_validation_checks_basic_and_messaging_access():
     helper = read('lib/meta/instagram.ts')
     assert "profileUrl.searchParams.set('fields', 'id,username')" in helper
-    assert '/me/conversations' in helper
+    assert '/conversations' in helper
+    assert "conversationsUrl.searchParams.set('platform', 'instagram')" in helper
     assert "conversationsUrl.searchParams.set('limit', '1')" in helper
     assert "Authorization: `Bearer ${input.accessToken}`" in helper
     assert 'messaging_permission_validation' in helper
@@ -82,6 +83,8 @@ def test_connection_persistence_serializes_tenant_and_blocks_cross_tenant_asset_
     assert "action: 'INSTAGRAM_CONNECTION_REVOKED'" in service
     assert 'access_token_encrypted' in service
     assert 'accessTokenEncrypted' in service
+    assert '$queryRawUnsafe' not in service
+    assert '$executeRawUnsafe' not in service
     assert 'prisma.lead.' not in service
     assert 'prisma.conversation.' not in service
     assert 'prisma.message.' not in service
