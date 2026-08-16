@@ -18,6 +18,7 @@ type Connection = {
   connectedAt?: string | null;
   systemUserAssignedAt?: string | null;
   subscribedAt?: string | null;
+  registeredAt?: string | null;
 } | null;
 
 type SignupConfig = {
@@ -73,6 +74,8 @@ export function WhatsAppEmbeddedSignupCard() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [pin, setPin] = useState('');
 
   const stateRef = useRef<string | null>(null);
   const codeRef = useRef<string | null>(null);
@@ -115,7 +118,8 @@ export function WhatsAppEmbeddedSignupCard() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a conexão do WhatsApp.');
-      toast.success('WhatsApp conectado ao FlipForm.');
+      setPin('');
+      toast.success('WhatsApp conectado ao FlipForm. Agora registre o número para concluir a ativação da Cloud API.');
       await loadConnection();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível concluir a conexão do WhatsApp.');
@@ -166,6 +170,7 @@ export function WhatsAppEmbeddedSignupCard() {
 
   async function connect() {
     setConnecting(true);
+    setPin('');
     stateRef.current = null;
     codeRef.current = null;
     sessionRef.current = null;
@@ -206,6 +211,30 @@ export function WhatsAppEmbeddedSignupCard() {
     }
   }
 
+  async function registerPhone() {
+    if (!/^\d{6}$/.test(pin)) {
+      toast.error('Informe um PIN de 6 dígitos.');
+      return;
+    }
+    setRegistering(true);
+    try {
+      const response = await fetch('/api/integrations/whatsapp/registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o número.');
+      setPin('');
+      toast.success('Número registrado na WhatsApp Cloud API.');
+      await loadConnection();
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível registrar o número.');
+    } finally {
+      setRegistering(false);
+    }
+  }
+
   async function disconnect() {
     if (!confirm('Desconectar o WhatsApp deste tenant? O vínculo será revogado no FlipForm e o histórico será preservado.')) return;
     setDisconnecting(true);
@@ -213,6 +242,7 @@ export function WhatsAppEmbeddedSignupCard() {
       const response = await fetch('/api/integrations/whatsapp/connection', { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível desconectar o WhatsApp.');
+      setPin('');
       toast.success('WhatsApp desconectado do FlipForm.');
       await loadConnection();
     } catch (error: any) {
@@ -223,6 +253,7 @@ export function WhatsAppEmbeddedSignupCard() {
   }
 
   const connected = connection?.status === 'connected';
+  const registered = Boolean(connection?.registeredAt);
   return <div className="px-6 pb-6 max-w-7xl">
     <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -230,7 +261,7 @@ export function WhatsAppEmbeddedSignupCard() {
           <h2 className="font-semibold text-lg">WhatsApp Cloud API</h2>
           <p className="text-sm text-muted-foreground">Conexão oficial via Meta Embedded Signup. O WABA e o número ficam vinculados exclusivamente a esta empresa.</p>
         </div>
-        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? 'Conectado' : 'Não conectado'}</span>
+        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? registered ? 'Ativo' : 'Registro pendente' : 'Não conectado'}</span>
       </div>
 
       {connected && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -243,11 +274,48 @@ export function WhatsAppEmbeddedSignupCard() {
       {!loading && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O Embedded Signup ainda precisa ser configurado pelo Super Admin do FlipForm.</div>}
       {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Conecte a conta oficial de WhatsApp Business desta empresa. O FlipForm validará o WABA e o número diretamente na Meta antes de salvar.</p>}
 
+      {connected && <div className={`rounded-md border p-4 ${registered ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className={`text-sm font-medium ${registered ? 'text-emerald-900' : 'text-amber-900'}`}>Registro do número na Cloud API: {registered ? 'concluído' : 'pendente'}</p>
+            <p className={`mt-1 text-xs ${registered ? 'text-emerald-800' : 'text-amber-800'}`}>
+              {registered
+                ? 'O número está registrado para operação pela Cloud API. Você pode informar outro PIN abaixo apenas se precisar registrar novamente ou atualizar a verificação em duas etapas.'
+                : 'Escolha um PIN de 6 dígitos para a verificação em duas etapas e conclua o registro. Guarde esse PIN em local seguro: o FlipForm não salva o PIN.'}
+            </p>
+          </div>
+          {registered && connection?.registeredAt && <span className="text-[11px] text-emerald-800">Registrado em {new Date(connection.registeredAt).toLocaleString('pt-BR')}</span>}
+        </div>
+        <div className="mt-3 flex max-w-md flex-wrap gap-2">
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            maxLength={6}
+            value={pin}
+            onChange={(event) => setPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="PIN de 6 dígitos"
+            aria-label="PIN de 6 dígitos do WhatsApp"
+            className="min-w-44 flex-1 rounded border bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-600"
+            disabled={registering || connecting || disconnecting || !platformAvailable}
+          />
+          <button
+            type="button"
+            className="rounded bg-emerald-700 px-4 py-2 text-sm text-white disabled:opacity-60"
+            onClick={registerPhone}
+            disabled={registering || connecting || disconnecting || !platformAvailable || pin.length !== 6}
+          >
+            {registering ? 'Registrando...' : registered ? 'Registrar novamente' : 'Registrar número'}
+          </button>
+        </div>
+      </div>}
+
       <div className="flex flex-wrap gap-2">
-        {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={connect} disabled={connecting || disconnecting}>{connecting ? 'Conectando...' : connected ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}</button>}
-        {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
+        {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={connect} disabled={connecting || disconnecting || registering}>{connecting ? 'Conectando...' : connected ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}</button>}
+        {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting || registering}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
-      <p className="text-xs text-muted-foreground">As credenciais técnicas permanecem somente no servidor da plataforma. Este passo prepara o vínculo; Inbox e envio/recebimento de mensagens entram nos próximos módulos.</p>
+      <p className="text-xs text-muted-foreground">As credenciais técnicas permanecem somente no servidor da plataforma. O PIN é enviado à Meta apenas no momento do registro e não é persistido pelo FlipForm. Inbox, webhook e envio usam exclusivamente o vínculo de número validado no servidor.</p>
     </div>
   </div>;
 }

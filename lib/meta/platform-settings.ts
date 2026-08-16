@@ -182,6 +182,25 @@ export async function getPlatformWhatsAppEmbeddedSignupCredentials() {
   };
 }
 
+export async function getPlatformWhatsAppRuntimeCredentials() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      appId: true,
+      appSecretEncrypted: true,
+      whatsappSystemUserAccessTokenEncrypted: true,
+    },
+  });
+  const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
+  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
+  if (!settings?.appId || !appSecret || !systemUserAccessToken) return null;
+  return {
+    appId: settings.appId,
+    appSecret,
+    systemUserAccessToken,
+  };
+}
+
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {
   const existing = await prisma.platformMetaSettings.findUnique({
     where: { id: PLATFORM_META_SETTINGS_ID },

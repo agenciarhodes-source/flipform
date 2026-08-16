@@ -25,14 +25,23 @@ type WhatsAppPhone = {
   qualityRating: string | null;
 };
 
-async function metaJson(url: URL, operation: string, input: { accessToken?: string; method?: 'GET' | 'POST' } = {}) {
+async function metaJson(url: URL, operation: string, input: {
+  accessToken?: string;
+  method?: 'GET' | 'POST';
+  body?: unknown;
+} = {}) {
+  const headers: Record<string, string> = {};
+  if (input.accessToken) headers.Authorization = `Bearer ${input.accessToken}`;
+  if (input.body !== undefined) headers['Content-Type'] = 'application/json';
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: input.method || 'GET',
       signal: AbortSignal.timeout(TIMEOUT_MS),
       cache: 'no-store',
-      headers: input.accessToken ? { Authorization: `Bearer ${input.accessToken}` } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      body: input.body !== undefined ? JSON.stringify(input.body) : undefined,
     });
   } catch {
     throw new Error(`Meta WhatsApp ${operation} unavailable`);
@@ -214,4 +223,24 @@ export async function subscribeAppToWhatsAppWaba(input: { accessToken: string; a
   url.search = new URLSearchParams({ appsecret_proof: createAppSecretProof(input.accessToken, input.appSecret) }).toString();
   const data = await metaJson(url, 'subscribe_waba', { accessToken: input.accessToken, method: 'POST' });
   if (data?.success !== true && data?.success !== 'true') throw new Error('Meta WhatsApp subscribe_waba unsuccessful');
+}
+
+export async function registerWhatsAppPhoneNumber(input: {
+  accessToken: string;
+  phoneNumberId: string;
+  pin: string;
+}) {
+  if (!/^\d{6}$/.test(input.pin)) throw new Error('Meta WhatsApp register_phone invalid pin');
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/register`);
+  const data = await metaJson(url, 'register_phone', {
+    accessToken: input.accessToken,
+    method: 'POST',
+    body: {
+      messaging_product: 'whatsapp',
+      pin: input.pin,
+    },
+  });
+  if (data?.success !== true && data?.success !== 'true') {
+    throw new Error('Meta WhatsApp register_phone unsuccessful');
+  }
 }
