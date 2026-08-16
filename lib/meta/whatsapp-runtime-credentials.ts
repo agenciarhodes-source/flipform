@@ -7,10 +7,6 @@ export type PlatformWhatsAppWebhookCredentials = {
   appSecret: string;
 };
 
-export type PlatformWhatsAppSendCredentials = {
-  systemUserAccessToken: string;
-};
-
 export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformWhatsAppWebhookCredentials | null> {
   const settings = await prisma.platformMetaSettings.findUnique({
     where: { id: 'meta' },
@@ -22,15 +18,11 @@ export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformW
   return { appSecret };
 }
 
-export async function getPlatformWhatsAppSendCredentials(): Promise<PlatformWhatsAppSendCredentials | null> {
-  const settings = await prisma.platformMetaSettings.findUnique({
-    where: { id: 'meta' },
-    select: { whatsappSystemUserAccessTokenEncrypted: true },
-  });
-
-  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
-  if (!systemUserAccessToken) return null;
-  return { systemUserAccessToken };
+// Lazy bridge kept for compatibility with the outbound module. Importing the
+// webhook credentials module never loads or decrypts the runtime send token.
+export async function getPlatformWhatsAppSendCredentials() {
+  const sendCredentials = await import('./whatsapp-send-credentials');
+  return sendCredentials.getPlatformWhatsAppSendCredentials();
 }
 
 export function getWhatsAppWebhookVerifyToken() {

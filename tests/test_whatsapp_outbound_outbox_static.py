@@ -3,7 +3,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUTBOUND = ROOT / "lib/meta/whatsapp-outbound.ts"
 RUNTIME = ROOT / "lib/meta/whatsapp-runtime.ts"
-CREDENTIALS = ROOT / "lib/meta/whatsapp-runtime-credentials.ts"
+SEND_CREDENTIALS = ROOT / "lib/meta/whatsapp-send-credentials.ts"
+WEBHOOK_CREDENTIALS = ROOT / "lib/meta/whatsapp-runtime-credentials.ts"
 ROUTE = ROOT / "app/api/conversations/[id]/messages/whatsapp/route.ts"
 DOC = ROOT / "docs/operations/whatsapp-outbound-outbox.md"
 
@@ -39,7 +40,6 @@ def test_retry_does_not_resend_ambiguous_delivery():
     assert "action: 'delivery_unknown'" in src
     assert "action: 'in_progress'" in src
     assert "await markDeliveryUnknown" in src
-    # Provider send exists only in the explicit send branch after the state machine.
     assert src.count("await sendMetaWhatsAppText({") == 1
 
 
@@ -64,12 +64,15 @@ def test_meta_send_uses_server_resolved_phone_and_runtime_token():
     assert "externalContactIdentity.externalUserId" in src
 
 
-def test_send_credentials_do_not_load_admin_system_user_token():
-    src = read(CREDENTIALS)
-    send_fn = src[src.index("export async function getPlatformWhatsAppSendCredentials"):]
-    assert "whatsappSystemUserAccessTokenEncrypted" in send_fn
-    assert "whatsappAdminSystemUserAccessTokenEncrypted" not in send_fn
-    assert "appSecretEncrypted" not in send_fn
+def test_send_credentials_are_isolated_from_webhook_credentials():
+    send_src = read(SEND_CREDENTIALS)
+    webhook_src = read(WEBHOOK_CREDENTIALS)
+    assert "whatsappSystemUserAccessTokenEncrypted" in send_src
+    assert "whatsappAdminSystemUserAccessTokenEncrypted" not in send_src
+    assert "appSecretEncrypted" not in send_src
+    assert "whatsappSystemUserAccessTokenEncrypted" not in webhook_src
+    assert "whatsappAdminSystemUserAccessTokenEncrypted" not in webhook_src
+    assert "await import('./whatsapp-send-credentials')" in webhook_src
 
 
 def test_send_endpoint_accepts_only_text_and_idempotency_key():
@@ -105,7 +108,7 @@ def test_webhook_reconciles_status_by_provider_message_id():
 
 def test_pr_has_no_schema_or_destructive_data_migration_dependency():
     src = read(OUTBOUND) + read(RUNTIME) + read(ROUTE)
-    forbidden = ["TRUNCATE ", "DROP TABLE", "DELETE FROM public.leads", "UPDATE public.leads"]
+    forbidden = ["TRUNCATE ", "DROP TABLE", "DELETE FROM PUBLIC.LEADS", "UPDATE PUBLIC.LEADS"]
     upper = src.upper()
     for token in forbidden:
         assert token not in upper
