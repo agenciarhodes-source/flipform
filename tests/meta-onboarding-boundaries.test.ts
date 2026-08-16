@@ -30,7 +30,7 @@ test('Meta onboarding registry keeps Ads, WhatsApp and Instagram as separate flo
     'instagram_business_manage_messages',
   ]);
   assert.equal(META_ONBOARDING_CHANNELS.ads_tracking.persistence, 'tenant_meta_connections');
-  assert.equal(META_ONBOARDING_CHANNELS.whatsapp_embedded_signup.persistence, 'separate_channel_connection_required');
+  assert.equal(META_ONBOARDING_CHANNELS.whatsapp_embedded_signup.persistence, 'tenant_whatsapp_connections');
   assert.equal(META_ONBOARDING_CHANNELS.instagram_business_login.persistence, 'separate_channel_connection_required');
 });
 

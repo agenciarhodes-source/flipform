@@ -9,6 +9,11 @@ export type PlatformMetaSettingsInput = {
   appId: string;
   appSecret?: string;
   businessLoginConfigId: string;
+  whatsappEmbeddedSignupConfigId: string;
+  whatsappBusinessId: string;
+  whatsappSystemUserId: string;
+  whatsappAdminSystemUserAccessToken?: string;
+  whatsappSystemUserAccessToken?: string;
   defaultPixelEnabled: boolean;
   defaultCapiEnabled: boolean;
   defaultAdvancedMatchingEnabled: boolean;
@@ -23,20 +28,64 @@ const DEFAULTS = {
   defaultQualifiedLeadEnabled: true, defaultPurchaseEnabled: true,
 };
 
+const WHATSAPP_PLATFORM_SELECT = {
+  appId: true,
+  appSecretEncrypted: true,
+  whatsappEmbeddedSignupConfigId: true,
+  whatsappBusinessId: true,
+  whatsappSystemUserId: true,
+  whatsappAdminSystemUserAccessTokenEncrypted: true,
+  whatsappSystemUserAccessTokenEncrypted: true,
+} as const;
+
+type WhatsAppPlatformSettings = {
+  appId: string | null;
+  appSecretEncrypted: string | null;
+  whatsappEmbeddedSignupConfigId: string | null;
+  whatsappBusinessId: string | null;
+  whatsappSystemUserId: string | null;
+  whatsappAdminSystemUserAccessTokenEncrypted: string | null;
+  whatsappSystemUserAccessTokenEncrypted: string | null;
+};
+
+function hasWhatsAppPlatformConfig(settings: WhatsAppPlatformSettings | null | undefined) {
+  return Boolean(
+    settings?.appId
+    && settings.appSecretEncrypted
+    && settings.whatsappEmbeddedSignupConfigId
+    && settings.whatsappBusinessId
+    && settings.whatsappSystemUserId
+    && settings.whatsappAdminSystemUserAccessTokenEncrypted
+    && settings.whatsappSystemUserAccessTokenEncrypted
+  );
+}
+
 export function getMetaOAuthRedirectUri() {
   const base = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
   return `${base}${META_OAUTH_CALLBACK_PATH}`;
 }
 
 function toAdminDto(settings: any | null) {
-  const encrypted = settings?.appSecretEncrypted || null;
+  const appSecretEncrypted = settings?.appSecretEncrypted || null;
+  const whatsappAdminTokenEncrypted = settings?.whatsappAdminSystemUserAccessTokenEncrypted || null;
+  const whatsappRuntimeTokenEncrypted = settings?.whatsappSystemUserAccessTokenEncrypted || null;
   const appId = settings?.appId || null;
   const businessLoginConfigId = settings?.businessLoginConfigId || null;
+  const whatsappEmbeddedSignupConfigId = settings?.whatsappEmbeddedSignupConfigId || null;
+  const whatsappBusinessId = settings?.whatsappBusinessId || null;
+  const whatsappSystemUserId = settings?.whatsappSystemUserId || null;
   return {
     appId,
     businessLoginConfigId,
-    appSecretConfigured: Boolean(encrypted),
-    appSecretMasked: maskSecretFromEncrypted(encrypted),
+    whatsappEmbeddedSignupConfigId,
+    whatsappBusinessId,
+    whatsappSystemUserId,
+    appSecretConfigured: Boolean(appSecretEncrypted),
+    appSecretMasked: maskSecretFromEncrypted(appSecretEncrypted),
+    whatsappAdminSystemUserAccessTokenConfigured: Boolean(whatsappAdminTokenEncrypted),
+    whatsappAdminSystemUserAccessTokenMasked: maskSecretFromEncrypted(whatsappAdminTokenEncrypted),
+    whatsappSystemUserAccessTokenConfigured: Boolean(whatsappRuntimeTokenEncrypted),
+    whatsappSystemUserAccessTokenMasked: maskSecretFromEncrypted(whatsappRuntimeTokenEncrypted),
     redirectUri: getMetaOAuthRedirectUri(),
     ...DEFAULTS,
     ...(settings ? {
@@ -47,9 +96,10 @@ function toAdminDto(settings: any | null) {
       defaultQualifiedLeadEnabled: settings.defaultQualifiedLeadEnabled,
       defaultPurchaseEnabled: settings.defaultPurchaseEnabled,
     } : {}),
-    baseConfigured: Boolean(appId && encrypted),
-    businessLoginConfigured: Boolean(appId && encrypted && businessLoginConfigId),
-    configured: Boolean(appId && encrypted),
+    baseConfigured: Boolean(appId && appSecretEncrypted),
+    businessLoginConfigured: Boolean(appId && appSecretEncrypted && businessLoginConfigId),
+    whatsappEmbeddedSignupConfigured: hasWhatsAppPlatformConfig(settings),
+    configured: Boolean(appId && appSecretEncrypted),
     updatedAt: settings?.updatedAt || null,
     updatedBy: settings?.updatedBy || null,
   };
@@ -73,6 +123,26 @@ export async function isPlatformMetaBusinessLoginAvailable() {
   return Boolean(settings?.appId && settings.appSecretEncrypted && settings.businessLoginConfigId);
 }
 
+export async function isPlatformWhatsAppEmbeddedSignupAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: WHATSAPP_PLATFORM_SELECT,
+  });
+  return hasWhatsAppPlatformConfig(settings);
+}
+
+export async function getPlatformWhatsAppEmbeddedSignupClientConfig() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: WHATSAPP_PLATFORM_SELECT,
+  });
+  if (!hasWhatsAppPlatformConfig(settings) || !settings?.appId || !settings.whatsappEmbeddedSignupConfigId) return null;
+  return {
+    appId: settings.appId,
+    configId: settings.whatsappEmbeddedSignupConfigId,
+  };
+}
+
 /** @deprecated Prefer the explicitly named base/business readiness helpers. */
 export const isPlatformMetaAvailable = isPlatformMetaBaseAvailable;
 
@@ -83,15 +153,71 @@ export async function getPlatformMetaOAuthCredentials() {
   return { appId: settings.appId, appSecret, businessLoginConfigId: settings.businessLoginConfigId };
 }
 
+export async function getPlatformWhatsAppEmbeddedSignupCredentials() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: WHATSAPP_PLATFORM_SELECT,
+  });
+  if (!hasWhatsAppPlatformConfig(settings)) return null;
+  const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
+  const adminSystemUserAccessToken = decryptIntegrationSecret(settings?.whatsappAdminSystemUserAccessTokenEncrypted);
+  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
+  if (
+    !settings?.appId
+    || !appSecret
+    || !settings.whatsappEmbeddedSignupConfigId
+    || !settings.whatsappBusinessId
+    || !settings.whatsappSystemUserId
+    || !adminSystemUserAccessToken
+    || !systemUserAccessToken
+  ) return null;
+  return {
+    appId: settings.appId,
+    appSecret,
+    configId: settings.whatsappEmbeddedSignupConfigId,
+    businessId: settings.whatsappBusinessId,
+    systemUserId: settings.whatsappSystemUserId,
+    adminSystemUserAccessToken,
+    systemUserAccessToken,
+  };
+}
+
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {
-  const existing = await prisma.platformMetaSettings.findUnique({ where: { id: PLATFORM_META_SETTINGS_ID }, select: { appSecretEncrypted: true } });
+  const existing = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      appSecretEncrypted: true,
+      whatsappAdminSystemUserAccessTokenEncrypted: true,
+      whatsappSystemUserAccessTokenEncrypted: true,
+    },
+  });
   let appSecretEncrypted = existing?.appSecretEncrypted || null;
+  let whatsappAdminSystemUserAccessTokenEncrypted = existing?.whatsappAdminSystemUserAccessTokenEncrypted || null;
+  let whatsappSystemUserAccessTokenEncrypted = existing?.whatsappSystemUserAccessTokenEncrypted || null;
+
   if (input.appSecret && !looksMaskedSecret(input.appSecret)) appSecretEncrypted = encryptIntegrationSecret(input.appSecret);
-  const { appSecret: _secret, ...safeInput } = input;
+  if (input.whatsappAdminSystemUserAccessToken && !looksMaskedSecret(input.whatsappAdminSystemUserAccessToken)) {
+    whatsappAdminSystemUserAccessTokenEncrypted = encryptIntegrationSecret(input.whatsappAdminSystemUserAccessToken);
+  }
+  if (input.whatsappSystemUserAccessToken && !looksMaskedSecret(input.whatsappSystemUserAccessToken)) {
+    whatsappSystemUserAccessTokenEncrypted = encryptIntegrationSecret(input.whatsappSystemUserAccessToken);
+  }
+
+  const {
+    appSecret: _appSecret,
+    whatsappAdminSystemUserAccessToken: _adminToken,
+    whatsappSystemUserAccessToken: _runtimeToken,
+    ...safeInput
+  } = input;
+  const secretData = {
+    appSecretEncrypted,
+    whatsappAdminSystemUserAccessTokenEncrypted,
+    whatsappSystemUserAccessTokenEncrypted,
+  };
   await prisma.platformMetaSettings.upsert({
     where: { id: PLATFORM_META_SETTINGS_ID },
-    create: { id: PLATFORM_META_SETTINGS_ID, ...safeInput, appId: input.appId || null, appSecretEncrypted, updatedById },
-    update: { ...safeInput, appId: input.appId || null, appSecretEncrypted, updatedById },
+    create: { id: PLATFORM_META_SETTINGS_ID, ...safeInput, ...secretData, appId: input.appId || null, updatedById },
+    update: { ...safeInput, ...secretData, appId: input.appId || null, updatedById },
   });
   return getPlatformMetaSettingsForAdmin();
 }

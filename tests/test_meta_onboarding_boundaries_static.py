@@ -11,7 +11,9 @@ def test_meta_onboarding_registry_separates_channel_purposes():
     assert "'ads_read', 'ads_management', 'business_management'" in registry
     assert "'whatsapp_business_management', 'whatsapp_business_messaging'" in registry
     assert "'instagram_business_basic', 'instagram_business_manage_messages'" in registry
-    assert registry.count("separate_channel_connection_required") == 2
+    assert "persistence: 'tenant_meta_connections'" in registry
+    assert "persistence: 'tenant_whatsapp_connections'" in registry
+    assert registry.count("separate_channel_connection_required") == 1
 
 
 def test_meta_oauth_state_is_signed_for_one_explicit_purpose_and_mode():
