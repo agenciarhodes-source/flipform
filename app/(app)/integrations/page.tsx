@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { IntegrationsClient } from './integrations-client';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
+import { InstagramBusinessLoginCard } from './instagram-business-login-card';
 
 export default async function IntegrationsPage() {
   const session = await getSession();
@@ -11,5 +12,6 @@ export default async function IntegrationsPage() {
   return <>
     <IntegrationsClient />
     <WhatsAppEmbeddedSignupCard />
+    <InstagramBusinessLoginCard />
   </>;
 }
