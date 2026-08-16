@@ -4,8 +4,6 @@ import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
-type DbClient = Prisma.TransactionClient | typeof prisma;
-
 type InstagramConnectionRow = {
   id: string;
   tenantId: string;
@@ -20,27 +18,23 @@ type InstagramConnectionRow = {
 
 export type SafeInstagramConnection = Omit<InstagramConnectionRow, 'tenantId'>;
 
-const CONNECTION_SELECT = `
-  id,
-  tenant_id AS "tenantId",
-  status,
-  instagram_user_id AS "instagramUserId",
-  username,
-  token_expires_at AS "tokenExpiresAt",
-  connected_at AS "connectedAt",
-  last_validated_at AS "lastValidatedAt",
-  revoked_at AS "revokedAt"
-`;
-
 export async function getActiveInstagramConnection(tenantId: string): Promise<SafeInstagramConnection | null> {
-  const rows = await prisma.$queryRawUnsafe<InstagramConnectionRow[]>(
-    `SELECT ${CONNECTION_SELECT}
-       FROM tenant_instagram_connections
-      WHERE tenant_id = $1 AND status = 'connected'
-      ORDER BY connected_at DESC
-      LIMIT 1`,
-    tenantId,
-  );
+  const rows = await prisma.$queryRaw<InstagramConnectionRow[]>`
+    SELECT id,
+           tenant_id AS "tenantId",
+           status,
+           instagram_user_id AS "instagramUserId",
+           username,
+           token_expires_at AS "tokenExpiresAt",
+           connected_at AS "connectedAt",
+           last_validated_at AS "lastValidatedAt",
+           revoked_at AS "revokedAt"
+      FROM tenant_instagram_connections
+     WHERE tenant_id = ${tenantId}
+       AND status = 'connected'
+     ORDER BY connected_at DESC
+     LIMIT 1
+  `;
   const row = rows[0];
   if (!row) return null;
   const { tenantId: _tenantId, ...safe } = row;
