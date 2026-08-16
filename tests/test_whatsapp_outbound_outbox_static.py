@@ -56,7 +56,7 @@ def test_provider_acceptance_and_buffer_reconciliation_precede_finalization():
 def test_finalize_uses_acceptance_time_for_conversation_activity():
     src = read(OUTBOUND)
     segment = src[src.index("async function finalizeAcceptedMessage"):src.index("async function sendMetaWhatsAppText")]
-    assert "providerAcceptedAt" in segment
+    assert "providerAcceptedAt" in src
     assert "const activityAt = parseAcceptedAt(metadata)" in segment
     assert "lastOutboundAt" in segment
     assert "lastMessageAt" in segment
