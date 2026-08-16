@@ -5,7 +5,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
-import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-runtime-credentials';
+import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
+import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
 
 const GRAPH_HOST = 'graph.facebook.com';
@@ -37,7 +38,7 @@ type OutboxMetadata = {
   recipientWaId: string;
   idempotencyKeyHash: string;
   requestFingerprint: string;
-  dispatchState: 'queued' | 'sending' | 'accepted' | 'sent' | 'failed' | 'delivery_unknown';
+  dispatchState: 'queued' | 'sending' | 'accepted' | 'sent' | 'delivered' | 'read' | 'failed' | 'delivery_unknown';
   attemptStartedAt?: string;
   providerMessageId?: string;
   providerAcceptedAt?: string;
@@ -87,6 +88,12 @@ function normalizeRecipient(value: string) {
   const normalized = value.trim();
   if (!/^\d{5,20}$/.test(normalized)) throw new WhatsAppOutboundError('INVALID_RECIPIENT', 'WhatsApp recipient is invalid');
   return normalized;
+}
+
+function parseAcceptedAt(metadata: OutboxMetadata) {
+  if (!metadata.providerAcceptedAt) return new Date();
+  const parsed = new Date(metadata.providerAcceptedAt);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
 async function assertRequesterCanSend(input: {
@@ -365,9 +372,10 @@ async function finalizeAcceptedMessage(input: {
       status: string;
       text: string | null;
       sent_by_user_id: string | null;
+      provider_timestamp: Date | null;
       metadata: Prisma.JsonValue | null;
     }>>`
-      SELECT id, conversation_id, status, text, sent_by_user_id, metadata
+      SELECT id, conversation_id, status, text, sent_by_user_id, provider_timestamp, metadata
       FROM public.messages
       WHERE id = ${input.messageId} AND tenant_id = ${input.tenantId}
       FOR UPDATE
@@ -379,34 +387,41 @@ async function finalizeAcceptedMessage(input: {
       throw new WhatsAppOutboundError('INVALID_REQUEST', 'Provider acceptance is missing');
     }
 
+    const activityAt = parseAcceptedAt(metadata);
+    await tx.conversation.updateMany({
+      where: {
+        id: row.conversation_id,
+        tenantId: input.tenantId,
+        OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: activityAt } }],
+      },
+      data: { lastOutboundAt: activityAt },
+    });
+    await tx.conversation.updateMany({
+      where: {
+        id: row.conversation_id,
+        tenantId: input.tenantId,
+        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: activityAt } }],
+      },
+      data: { lastMessageAt: activityAt },
+    });
+
     if (row.status === 'failed') {
-      return { message: row, metadata, finalized: false as const };
+      if (!row.provider_timestamp) {
+        await tx.message.update({ where: { id: row.id }, data: { providerTimestamp: activityAt } });
+      }
+      return { message: { ...row, provider_timestamp: row.provider_timestamp || activityAt }, metadata, finalized: false as const };
     }
     if (row.status === 'sent' || row.status === 'delivered' || row.status === 'read') {
-      return { message: row, metadata, finalized: false as const };
+      const message = row.provider_timestamp
+        ? row
+        : await tx.message.update({ where: { id: row.id }, data: { providerTimestamp: activityAt } });
+      return { message, metadata, finalized: false as const };
     }
 
-    const now = new Date();
     const nextMetadata: OutboxMetadata = { ...metadata, dispatchState: 'sent' };
     const message = await tx.message.update({
       where: { id: row.id },
-      data: { status: 'sent', providerTimestamp: now, metadata: toJson(nextMetadata) },
-    });
-    await tx.conversation.updateMany({
-      where: {
-        id: row.conversation_id,
-        tenantId: input.tenantId,
-        OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: now } }],
-      },
-      data: { lastOutboundAt: now },
-    });
-    await tx.conversation.updateMany({
-      where: {
-        id: row.conversation_id,
-        tenantId: input.tenantId,
-        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: now } }],
-      },
-      data: { lastMessageAt: now },
+      data: { status: 'sent', providerTimestamp: activityAt, metadata: toJson(nextMetadata) },
     });
     return { message, metadata: nextMetadata, finalized: true as const };
   });
@@ -471,16 +486,26 @@ async function runTrackingAfterSend(input: {
   recipientWaId: string;
 }) {
   if (!input.sentByUserId) return;
-  await processWhatsAppFunnelMessage({
-    tenantId: input.tenantId,
-    conversationId: input.conversationId,
-    messageId: input.providerMessageId,
-    phone: input.recipientWaId,
-    text: input.text,
-    direction: 'outbound',
-    senderType: 'agent',
-    metadata: { source: OUTBOX_SOURCE, localMessageId: input.messageId },
-  });
+  try {
+    await processWhatsAppFunnelMessage({
+      tenantId: input.tenantId,
+      conversationId: input.conversationId,
+      messageId: input.providerMessageId,
+      phone: input.recipientWaId,
+      text: input.text,
+      direction: 'outbound',
+      senderType: 'agent',
+      metadata: { source: OUTBOX_SOURCE, localMessageId: input.messageId },
+    });
+  } catch (error) {
+    // Conversion tracking must never turn an already accepted customer message
+    // into a failed send response. Tracking can be retried/diagnosed separately.
+    console.error('WhatsApp post-send tracking failed', {
+      tenantId: input.tenantId,
+      messageId: input.messageId,
+      errorType: error instanceof Error ? error.name : 'unknown',
+    });
+  }
 }
 
 export async function enqueueAndDispatchWhatsAppTextMessage(input: {
@@ -506,6 +531,12 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     return { status: 'sent', messageId: begun.row.id, providerMessageId: begun.metadata.providerMessageId || null, idempotent: true };
   }
   if (begun.action === 'reconcile') {
+    if (begun.metadata.providerMessageId) {
+      await reconcileBufferedWhatsAppStatusesForMessage({
+        tenantId: input.tenantId,
+        providerMessageId: begun.metadata.providerMessageId,
+      });
+    }
     const finalized = await finalizeAcceptedMessage({ tenantId: input.tenantId, messageId: begun.row.id });
     return {
       status: finalized.message.status === 'failed' ? 'failed' : 'sent',
@@ -560,18 +591,23 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     messageId: begun.row.id,
     providerMessageId: provider.providerMessageId,
   });
+  await reconcileBufferedWhatsAppStatusesForMessage({
+    tenantId: input.tenantId,
+    providerMessageId: provider.providerMessageId,
+  });
   const finalized = await finalizeAcceptedMessage({ tenantId: input.tenantId, messageId: begun.row.id });
-  if (finalized.finalized) {
-    await runTrackingAfterSend({
-      tenantId: input.tenantId,
-      conversationId: begun.row.conversation_id,
-      messageId: begun.row.id,
-      providerMessageId: provider.providerMessageId,
-      text: begun.row.text || '',
-      sentByUserId: begun.row.sent_by_user_id,
-      recipientWaId: begun.metadata.recipientWaId,
-    });
-  }
+
+  // This is the request that actually contacted Meta, so run tracking once here.
+  // The helper is best-effort and cannot change the successful send result.
+  await runTrackingAfterSend({
+    tenantId: input.tenantId,
+    conversationId: begun.row.conversation_id,
+    messageId: begun.row.id,
+    providerMessageId: provider.providerMessageId,
+    text: begun.row.text || '',
+    sentByUserId: begun.row.sent_by_user_id,
+    recipientWaId: begun.metadata.recipientWaId,
+  });
 
   return {
     status: finalized.message.status === 'failed' ? 'failed' : 'sent',

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { MessageType, recordInboundMessage } from '@/lib/conversations/core';
@@ -12,6 +12,8 @@ const STATUS_RANK: Record<string, number> = {
   delivered: 2,
   read: 3,
 };
+const STATUS_BUFFER_PROVIDER = 'meta_whatsapp_status_buffer';
+const STATUS_BUFFER_EVENT_TYPE = 'whatsapp_message_status';
 
 function constantTimeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -106,11 +108,10 @@ export async function applyWhatsAppMessageStatus(input: {
   return prisma.$transaction(async tx => {
     const locked = await tx.$queryRaw<Array<{
       id: string;
-      conversation_id: string;
       status: string;
       metadata: Prisma.JsonValue | null;
     }>>`
-      SELECT id, conversation_id, status, metadata
+      SELECT id, status, metadata
       FROM public.messages
       WHERE tenant_id = ${input.tenantId}
         AND provider = 'meta'
@@ -167,25 +168,101 @@ export async function applyWhatsAppMessageStatus(input: {
       },
     });
 
-    const activityAt = input.providerTimestamp || new Date();
-    await tx.conversation.updateMany({
-      where: {
-        id: message.conversation_id,
-        tenantId: input.tenantId,
-        OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: activityAt } }],
-      },
-      data: { lastOutboundAt: activityAt },
-    });
-    await tx.conversation.updateMany({
-      where: {
-        id: message.conversation_id,
-        tenantId: input.tenantId,
-        OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: activityAt } }],
-      },
-      data: { lastMessageAt: activityAt },
-    });
+    // Delivery/read receipts describe receipt time, not message activity time.
+    // Conversation ordering is advanced only by message ingestion/send finalization.
     return { updated: true, reason: 'advanced' as const };
   });
+}
+
+function bufferedStatusEventId(input: {
+  tenantId: string;
+  externalMessageId: string;
+  status: string;
+  providerTimestamp: Date | null;
+}) {
+  return createHash('sha256')
+    .update(`${input.tenantId}\u0000${input.externalMessageId}\u0000${input.status}\u0000${input.providerTimestamp?.toISOString() || ''}`, 'utf8')
+    .digest('hex');
+}
+
+async function bufferUnmatchedWhatsAppStatus(input: {
+  tenantId: string;
+  externalMessageId: string;
+  status: string;
+  providerTimestamp: Date | null;
+  phoneNumberId: string;
+}) {
+  const eventId = bufferedStatusEventId(input);
+  const event = await prisma.webhookEvent.upsert({
+    where: { provider_eventId: { provider: STATUS_BUFFER_PROVIDER, eventId } },
+    create: {
+      provider: STATUS_BUFFER_PROVIDER,
+      eventId,
+      eventType: STATUS_BUFFER_EVENT_TYPE,
+      tenantId: input.tenantId,
+      rawPayload: {
+        externalMessageId: input.externalMessageId,
+        status: input.status,
+        providerTimestamp: input.providerTimestamp?.toISOString() || null,
+        phoneNumberId: input.phoneNumberId,
+      } as Prisma.InputJsonValue,
+      processedAt: null,
+    },
+    update: {},
+    select: { id: true },
+  });
+  return event.id;
+}
+
+async function markBufferedStatusProcessed(id: string, tenantId: string) {
+  await prisma.webhookEvent.updateMany({
+    where: {
+      id,
+      tenantId,
+      provider: STATUS_BUFFER_PROVIDER,
+      eventType: STATUS_BUFFER_EVENT_TYPE,
+      processedAt: null,
+    },
+    data: { processedAt: new Date() },
+  });
+}
+
+export async function reconcileBufferedWhatsAppStatusesForMessage(input: {
+  tenantId: string;
+  providerMessageId: string;
+}) {
+  const buffered = await prisma.$queryRaw<Array<{ id: string; raw_payload: Prisma.JsonValue | null }>>`
+    SELECT id, raw_payload
+    FROM public.webhook_events
+    WHERE tenant_id = ${input.tenantId}
+      AND provider = ${STATUS_BUFFER_PROVIDER}
+      AND event_type = ${STATUS_BUFFER_EVENT_TYPE}
+      AND processed_at IS NULL
+      AND raw_payload->>'externalMessageId' = ${input.providerMessageId}
+    ORDER BY created_at ASC
+    LIMIT 50
+  `;
+
+  let reconciled = 0;
+  for (const item of buffered) {
+    const payload = jsonObject(item.raw_payload);
+    if (typeof payload.externalMessageId !== 'string' || typeof payload.status !== 'string') continue;
+    const providerTimestamp = typeof payload.providerTimestamp === 'string'
+      ? new Date(payload.providerTimestamp)
+      : null;
+    const validTimestamp = providerTimestamp && !Number.isNaN(providerTimestamp.getTime()) ? providerTimestamp : null;
+    const applied = await applyWhatsAppMessageStatus({
+      tenantId: input.tenantId,
+      externalMessageId: payload.externalMessageId,
+      status: payload.status,
+      providerTimestamp: validTimestamp,
+    });
+    if (applied.reason !== 'message_not_found') {
+      await markBufferedStatusProcessed(item.id, input.tenantId);
+      reconciled += 1;
+    }
+  }
+  return reconciled;
 }
 
 export async function processWhatsAppCloudWebhook(payload: any) {
@@ -193,6 +270,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
     messagesCreated: 0,
     duplicateMessages: 0,
     statusesUpdated: 0,
+    statusesBuffered: 0,
     ignored: 0,
   };
 
@@ -255,12 +333,38 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           result.ignored += 1;
           continue;
         }
-        const applied = await applyWhatsAppMessageStatus({
+        const providerTimestamp = parseProviderTimestamp(status.timestamp);
+        let applied = await applyWhatsAppMessageStatus({
           tenantId: connection.tenantId,
           externalMessageId: status.id,
           status: status.status,
-          providerTimestamp: parseProviderTimestamp(status.timestamp),
+          providerTimestamp,
         });
+
+        if (applied.reason === 'message_not_found') {
+          const bufferedId = await bufferUnmatchedWhatsAppStatus({
+            tenantId: connection.tenantId,
+            externalMessageId: status.id,
+            status: status.status,
+            providerTimestamp,
+            phoneNumberId,
+          });
+          result.statusesBuffered += 1;
+
+          // Close the opposite race: provider ID may have committed while this
+          // webhook was buffering the previously unmatched receipt.
+          const retried = await applyWhatsAppMessageStatus({
+            tenantId: connection.tenantId,
+            externalMessageId: status.id,
+            status: status.status,
+            providerTimestamp,
+          });
+          if (retried.reason !== 'message_not_found') {
+            await markBufferedStatusProcessed(bufferedId, connection.tenantId);
+            applied = retried;
+          }
+        }
+
         if (applied.updated) result.statusesUpdated += 1;
       }
     }

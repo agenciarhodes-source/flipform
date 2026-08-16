@@ -18,13 +18,6 @@ export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformW
   return { appSecret };
 }
 
-// Lazy bridge kept for compatibility with the outbound module. Importing the
-// webhook credentials module never loads or decrypts the runtime send token.
-export async function getPlatformWhatsAppSendCredentials() {
-  const sendCredentials = await import('./whatsapp-send-credentials');
-  return sendCredentials.getPlatformWhatsAppSendCredentials();
-}
-
 export function getWhatsAppWebhookVerifyToken() {
   const value = process.env.META_WHATSAPP_WEBHOOK_VERIFY_TOKEN?.trim();
   return value || null;

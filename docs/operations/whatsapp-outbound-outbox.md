@@ -2,23 +2,24 @@
 
 ## Objetivo
 
-Este módulo adiciona envio de texto pela WhatsApp Cloud API sem transformar uma falha de rede ou de persistência em mensagens duplicadas para o cliente.
+Este módulo adiciona envio de texto pela WhatsApp Cloud API sem transformar falhas de rede, persistência ou callbacks concorrentes em mensagens duplicadas para o cliente.
 
 O PR usa a própria tabela `messages` do Conversation Core como outbox. Não existe uma segunda cópia da conversa nem uma tabela paralela de mensagens.
 
 ## Fluxo
 
-1. O endpoint autenticado recebe `text` e `idempotencyKey`.
-2. O tenant e o usuário vêm exclusivamente da sessão do FlipForm.
+1. O endpoint autenticado recebe somente `text` e `idempotencyKey`.
+2. Tenant e usuário vêm exclusivamente da sessão do FlipForm.
 3. A conversa é resolvida por `tenantId + conversationId` e precisa ser `meta/whatsapp`.
-4. O destinatário vem de `ExternalContactIdentity.externalUserId`; o cliente HTTP não pode informar destinatário, WABA, `phone_number_id` ou token.
-5. A conexão ativa do tenant é resolvida no backend.
+4. O destinatário vem de `ExternalContactIdentity.externalUserId`; o cliente HTTP não informa destinatário, WABA, `phone_number_id` ou token.
+5. A conexão WhatsApp ativa do tenant é resolvida no backend.
 6. Antes de qualquer request para a Meta, uma `Message` outbound é persistida com `status=queued` e um `externalMessageId` local determinístico derivado da chave de idempotência.
 7. O item é bloqueado com `SELECT ... FOR UPDATE` e passa para `dispatchState=sending` na metadata.
-8. Somente então o backend faz `POST /{phone-number-id}/messages` na Graph API.
+8. Somente então o backend chama a Cloud API.
 9. Quando a Meta aceita a mensagem, o `wamid` retornado é persistido em `metadata.providerMessageId` antes da finalização local.
-10. A mensagem local passa para `sent` e a atividade da conversa é avançada de forma monotônica.
-11. Webhooks posteriores localizam a mensagem tanto pelo ID externo tradicional quanto por `metadata.providerMessageId` e avançam `sent -> delivered -> read` sem regressão.
+10. Recibos que tenham chegado cedo demais são reconciliados.
+11. A atividade da conversa é avançada usando o horário de aceitação/envio, nunca o horário posterior de entrega ou leitura.
+12. Webhooks posteriores avançam o status de forma monotônica sem alterar a ordenação da conversa.
 
 ## Idempotência
 
@@ -34,15 +35,39 @@ A chave original não é salva; apenas seu hash é persistido.
 
 O ponto mais perigoso é uma interrupção depois que o request saiu do FlipForm mas antes de ser possível confirmar com segurança o resultado.
 
-Nessa situação a metadata passa para `delivery_unknown`, ou permanece `sending` se o processo caiu abruptamente. O FlipForm deliberadamente não reenvia a mesma intenção automaticamente. Uma repetição poderia entregar a mesma mensagem duas vezes ao cliente.
+Nessa situação a metadata passa para `delivery_unknown`, ou permanece `sending` se o processo caiu abruptamente. O FlipForm deliberadamente não reenvia a mesma intenção automaticamente. Repetir o request externo poderia entregar a mesma mensagem duas vezes.
 
 Se o `wamid` já tiver sido persistido, uma nova chamada com a mesma chave apenas reconcilia/finaliza o registro local e não chama a Meta outra vez.
 
+## Recibos que chegam antes do `wamid` local
+
+Existe uma microjanela possível entre a resposta de sucesso da Meta e a persistência do `wamid` na `Message`. Um callback `sent`, `delivered`, `read` ou `failed` pode chegar nesse intervalo.
+
+Para não reconhecer e perder esse callback, recibos ainda sem mensagem correspondente são persistidos de forma idempotente na tabela já existente `webhook_events`, usando o provider interno `meta_whatsapp_status_buffer`.
+
+Assim que `metadata.providerMessageId` é persistido, o outbound tenta reconciliar esses recibos. O próprio webhook também tenta novamente logo depois de bufferizar, cobrindo a corrida inversa em que o `wamid` termina de ser salvo durante o processamento do callback.
+
+Após aplicação, o evento bufferizado recebe `processedAt` e deixa de ser pendente.
+
+## Timestamps e ordenação da Inbox
+
+`delivered` e `read` representam horário de recibo, não nova atividade de mensagem. Por isso esses callbacks atualizam o status/metadata da `Message`, mas não alteram `Conversation.lastMessageAt` nem `Conversation.lastOutboundAt`.
+
+A atividade outbound é registrada na finalização do envio usando `providerAcceptedAt`. Mesmo se um callback tiver avançado a mensagem para `delivered` ou `read` antes da finalização, a conversa continua usando o horário original de envio.
+
+## Tracking pós-envio
+
+O tracking de funil por frase é executado somente depois que o envio já foi aceito e reconciliado localmente.
+
+Esse tracking é best-effort: qualquer falha de banco/configuração/tracking é registrada em log, mas nunca transforma uma mensagem já aceita pela Meta em resposta HTTP de falha para o atendente.
+
 ## Credenciais
 
-O endpoint de envio usa somente o System User Access Token de runtime. O Admin System User token utilizado no Embedded Signup não é carregado pelo módulo de envio.
+O endpoint de envio usa somente o System User Access Token de runtime, carregado por `lib/meta/whatsapp-send-credentials.ts`.
 
-O token é lido e descriptografado apenas no servidor. Nenhum token, App Secret, WABA ou `phone_number_id` é aceito no payload do endpoint de conversa.
+O módulo do webhook permanece isolado em `lib/meta/whatsapp-runtime-credentials.ts` e carrega somente o App Secret necessário para validar a assinatura. O Admin System User token do Embedded Signup não é carregado por nenhum dos dois runtimes.
+
+Nenhum token ou App Secret é enviado ao navegador.
 
 ## Autorização
 
@@ -74,7 +99,7 @@ Resultados relevantes:
 
 ## Webhook
 
-O webhook oficial criado no PR anterior continua em:
+O webhook oficial permanece em:
 
 `/api/webhooks/meta/whatsapp`
 
@@ -88,4 +113,4 @@ Também não implementa retry automático para estados ambíguos. Esse comportam
 
 ## Production Data Safety
 
-Este PR não cria migration e não altera em massa nenhum dado existente. Leads, respostas, histórico de etapas, vendas, pagamentos, pipelines e formulários permanecem intocados.
+Este PR não cria migration e não altera em massa nenhum dado existente. Leads, respostas, histórico de etapas, vendas, pagamentos, pipelines, formulários e mensagens existentes permanecem intocados.

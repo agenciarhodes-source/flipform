@@ -43,13 +43,24 @@ def test_retry_does_not_resend_ambiguous_delivery():
     assert src.count("await sendMetaWhatsAppText({") == 1
 
 
-def test_provider_acceptance_is_saved_before_local_finalization():
+def test_provider_acceptance_and_buffer_reconciliation_precede_finalization():
     src = read(OUTBOUND)
     acceptance_pos = src.index("await persistProviderAcceptance({")
-    finalize_pos = src.index("await finalizeAcceptedMessage({", acceptance_pos)
-    assert acceptance_pos < finalize_pos
+    reconcile_pos = src.index("await reconcileBufferedWhatsAppStatusesForMessage({", acceptance_pos)
+    finalize_pos = src.index("await finalizeAcceptedMessage({", reconcile_pos)
+    assert acceptance_pos < reconcile_pos < finalize_pos
     assert "providerMessageId" in src
     assert "dispatchState: 'accepted'" in src
+
+
+def test_finalize_uses_acceptance_time_for_conversation_activity():
+    src = read(OUTBOUND)
+    segment = src[src.index("async function finalizeAcceptedMessage"):src.index("async function sendMetaWhatsAppText")]
+    assert "providerAcceptedAt" in segment
+    assert "const activityAt = parseAcceptedAt(metadata)" in segment
+    assert "lastOutboundAt" in segment
+    assert "lastMessageAt" in segment
+    assert "providerTimestamp: activityAt" in segment
 
 
 def test_meta_send_uses_server_resolved_phone_and_runtime_token():
@@ -64,7 +75,7 @@ def test_meta_send_uses_server_resolved_phone_and_runtime_token():
     assert "externalContactIdentity.externalUserId" in src
 
 
-def test_send_credentials_are_isolated_from_webhook_credentials():
+def test_send_credentials_are_strictly_isolated_from_webhook_credentials():
     send_src = read(SEND_CREDENTIALS)
     webhook_src = read(WEBHOOK_CREDENTIALS)
     assert "whatsappSystemUserAccessTokenEncrypted" in send_src
@@ -72,7 +83,7 @@ def test_send_credentials_are_isolated_from_webhook_credentials():
     assert "appSecretEncrypted" not in send_src
     assert "whatsappSystemUserAccessTokenEncrypted" not in webhook_src
     assert "whatsappAdminSystemUserAccessTokenEncrypted" not in webhook_src
-    assert "await import('./whatsapp-send-credentials')" in webhook_src
+    assert "whatsapp-send-credentials" not in webhook_src
 
 
 def test_send_endpoint_accepts_only_text_and_idempotency_key():
@@ -97,13 +108,35 @@ def test_agent_scope_is_enforced_again_in_service():
     assert "conversation.lead?.assignedTo === input.userId" in src
 
 
-def test_webhook_reconciles_status_by_provider_message_id():
+def test_delivery_receipts_do_not_change_conversation_activity_order():
     src = read(RUNTIME)
-    assert "metadata->>'providerMessageId' = ${input.externalMessageId}" in src
-    assert "FOR UPDATE" in src
-    assert "providerTimestamp: parseProviderTimestamp(status.timestamp)" in src
-    assert "lastOutboundAt" in src
-    assert "lastMessageAt" in src
+    segment = src[src.index("export async function applyWhatsAppMessageStatus"):src.index("function bufferedStatusEventId")]
+    assert "metadata->>'providerMessageId' = ${input.externalMessageId}" in segment
+    assert "FOR UPDATE" in segment
+    assert "lastOutboundAt" not in segment
+    assert "lastMessageAt" not in segment
+
+
+def test_unmatched_provider_statuses_are_buffered_and_reconciled():
+    src = read(RUNTIME)
+    assert "STATUS_BUFFER_PROVIDER" in src
+    assert "prisma.webhookEvent.upsert" in src
+    assert "provider_eventId" in src
+    assert "processedAt: null" in src
+    assert "raw_payload->>'externalMessageId' = ${input.providerMessageId}" in src
+    assert "export async function reconcileBufferedWhatsAppStatusesForMessage" in src
+    assert "applied.reason === 'message_not_found'" in src
+    assert "bufferUnmatchedWhatsAppStatus" in src
+    assert "markBufferedStatusProcessed" in src
+
+
+def test_post_send_tracking_is_best_effort():
+    src = read(OUTBOUND)
+    segment = src[src.index("async function runTrackingAfterSend"):src.index("export async function enqueueAndDispatchWhatsAppTextMessage")]
+    assert "try {" in segment
+    assert "await processWhatsAppFunnelMessage" in segment
+    assert "catch (error)" in segment
+    assert "WhatsApp post-send tracking failed" in segment
 
 
 def test_pr_has_no_schema_or_destructive_data_migration_dependency():
