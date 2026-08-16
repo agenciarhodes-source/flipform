@@ -143,6 +143,7 @@ export function InboxClient({
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
 
@@ -190,11 +191,14 @@ export function InboxClient({
       const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível carregar as mensagens.');
       const data = await response.json();
+      if (selectedIdRef.current !== conversationId) return;
       setMessages(Array.isArray(data.messages) ? data.messages : []);
     } catch (loadError) {
-      if (!silent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as mensagens.');
+      if (!silent && selectedIdRef.current === conversationId) {
+        setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as mensagens.');
+      }
     } finally {
-      if (!silent) setLoadingMessages(false);
+      if (!silent && selectedIdRef.current === conversationId) setLoadingMessages(false);
     }
   }
 
@@ -216,11 +220,19 @@ export function InboxClient({
   }, []);
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selectedId) {
       setMessages([]);
+      setLoadingMessages(false);
       return;
     }
 
+    // Never render the previous contact's history under a newly selected header.
+    setMessages([]);
+    setLoadingMessages(true);
     setError(null);
     setWarning(null);
     void loadMessages(selectedId);

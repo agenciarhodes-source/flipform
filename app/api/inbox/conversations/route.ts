@@ -20,7 +20,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   const conversations = await prisma.conversation.findMany({
     where,
     orderBy: [
-      { lastMessageAt: 'desc' },
+      { lastMessageAt: { sort: 'desc', nulls: 'last' } },
       { updatedAt: 'desc' },
     ],
     take: 100,
@@ -48,10 +48,9 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
         select: { id: true, name: true },
       },
       messages: {
-        orderBy: [
-          { providerTimestamp: 'desc' },
-          { createdAt: 'desc' },
-        ],
+        // createdAt is always populated, including provider-rejected/outbox rows
+        // whose providerTimestamp can legitimately remain null.
+        orderBy: { createdAt: 'desc' },
         take: 1,
         select: {
           id: true,

@@ -9,15 +9,14 @@ export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, sessio
     return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
   }
 
+  // Select the latest persisted rows using createdAt because it is always present,
+  // then render them by effective provider activity time with createdAt fallback.
   const newestFirst = await prisma.message.findMany({
     where: {
       tenantId: session.tenantId,
       conversationId: conversation.id,
     },
-    orderBy: [
-      { providerTimestamp: 'desc' },
-      { createdAt: 'desc' },
-    ],
+    orderBy: { createdAt: 'desc' },
     take: 200,
     include: {
       sentByUser: {
@@ -26,8 +25,15 @@ export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, sessio
     },
   });
 
+  const messages = newestFirst.sort((left, right) => {
+    const leftTime = (left.providerTimestamp ?? left.createdAt).getTime();
+    const rightTime = (right.providerTimestamp ?? right.createdAt).getTime();
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return left.createdAt.getTime() - right.createdAt.getTime();
+  });
+
   return NextResponse.json({
     conversation,
-    messages: newestFirst.reverse(),
+    messages,
   });
 });
