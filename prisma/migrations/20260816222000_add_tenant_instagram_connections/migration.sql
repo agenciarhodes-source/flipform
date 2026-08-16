@@ -15,7 +15,7 @@ CREATE TABLE "tenant_instagram_connections" (
     "last_validated_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "tenant_instagram_connections_pkey" PRIMARY KEY ("id")
 );
