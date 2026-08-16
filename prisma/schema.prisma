@@ -121,6 +121,9 @@ model Tenant {
   leadAttributions      LeadAttribution[]
   metaConnections       TenantMetaConnection[]
   whatsappConnections   TenantWhatsAppConnection[]
+  externalContactIdentities ExternalContactIdentity[]
+  conversations         Conversation[]
+  messages              Message[]
 
   @@map("tenants")
 }
@@ -178,6 +181,8 @@ model User {
   leadAssignmentRotationMemberships LeadAssignmentRotationMember[]
   platformMetaSettingsUpdates PlatformMetaSettings[] @relation("PlatformMetaSettingsUpdatedBy")
   metaConnectionsConnected TenantMetaConnection[] @relation("TenantMetaConnectionConnectedBy")
+  assignedConversations Conversation[] @relation("ConversationAssignee")
+  sentConversationMessages Message[] @relation("ConversationMessageSender")
 
   @@map("users")
 }
@@ -327,6 +332,8 @@ model Lead {
   tasks        Task[]
   purchases    LeadPurchase[]
   attribution  LeadAttribution?
+  externalContactIdentities ExternalContactIdentity[]
+  conversations Conversation[]
 
   @@index([tenantId])
   @@index([stageId])
@@ -839,6 +846,98 @@ model TenantWhatsAppConnection {
   @@index([tenantId])
   @@index([tenantId, status])
   @@map("tenant_whatsapp_connections")
+}
+
+model ExternalContactIdentity {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  provider       String    @default("meta")
+  channel        String
+  externalUserId String    @map("external_user_id")
+  username       String?
+  displayName    String?   @map("display_name")
+  phone          String?
+  email          String?
+  leadId         String?   @map("lead_id")
+  metadata       Json?
+  lastSeenAt     DateTime? @map("last_seen_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead          Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  conversations Conversation[]
+
+  @@unique([tenantId, provider, channel, externalUserId], name: "tenant_provider_channel_external_user", map: "external_contact_identity_tenant_channel_user_key")
+  @@index([tenantId, channel])
+  @@index([leadId])
+  @@index([tenantId, lastSeenAt])
+  @@map("external_contact_identities")
+}
+
+model Conversation {
+  id                        String    @id @default(cuid())
+  tenantId                  String    @map("tenant_id")
+  provider                  String    @default("meta")
+  channel                   String
+  externalContactIdentityId String    @map("external_contact_identity_id")
+  leadId                    String?   @map("lead_id")
+  assignedTo                String?   @map("assigned_to")
+  status                    String    @default("open")
+  startedAt                 DateTime  @default(now()) @map("started_at")
+  lastMessageAt             DateTime? @map("last_message_at")
+  lastInboundAt             DateTime? @map("last_inbound_at")
+  lastOutboundAt            DateTime? @map("last_outbound_at")
+  unreadCount               Int       @default(0) @map("unread_count")
+  resolvedAt                DateTime? @map("resolved_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  tenant                  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  externalContactIdentity ExternalContactIdentity @relation(fields: [externalContactIdentityId], references: [id], onDelete: Cascade)
+  lead                    Lead?                   @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignee                User?                   @relation("ConversationAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  messages                Message[]
+
+  @@unique([tenantId, provider, channel, externalContactIdentityId], name: "tenant_provider_channel_identity", map: "conversation_tenant_channel_identity_key")
+  @@index([tenantId, status, lastMessageAt])
+  @@index([tenantId, assignedTo])
+  @@index([tenantId, channel, lastMessageAt])
+  @@index([leadId])
+  @@index([externalContactIdentityId])
+  @@map("conversations")
+}
+
+model Message {
+  id                  String    @id @default(cuid())
+  tenantId            String    @map("tenant_id")
+  conversationId      String    @map("conversation_id")
+  provider            String    @default("meta")
+  channel             String
+  externalMessageId   String    @map("external_message_id")
+  direction           String
+  type                String    @default("text")
+  text                String?
+  status              String    @default("received")
+  senderExternalId    String?   @map("sender_external_id")
+  sentByUserId        String?   @map("sent_by_user_id")
+  replyToMessageId    String?   @map("reply_to_message_id")
+  providerTimestamp   DateTime? @map("provider_timestamp")
+  metadata            Json?
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentByUser   User?        @relation("ConversationMessageSender", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  replyTo      Message?     @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies      Message[]    @relation("MessageReplies")
+
+  @@unique([tenantId, provider, channel, externalMessageId], name: "tenant_provider_channel_external_message", map: "message_tenant_channel_external_id_key")
+  @@index([conversationId, providerTimestamp])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, channel, status])
+  @@map("messages")
 }
 
 model KanbanStageTrackingEvent {
