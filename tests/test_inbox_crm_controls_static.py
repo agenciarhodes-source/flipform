@@ -10,9 +10,17 @@ def read(path: str) -> str:
 def test_inbox_crm_actions_are_tenant_scoped_and_locked():
     source = read("lib/inbox/actions.ts")
     assert "tenant_id = ${tenantId}" in source
-    assert "FOR UPDATE" in source
+    assert source.count("FOR UPDATE") >= 2
     assert "getInboxConversationWhere(session)" in source
     assert "tenantId: input.session.tenantId" in source
+
+
+def test_external_identity_is_locked_and_cannot_be_relinked_silently():
+    source = read("lib/inbox/actions.ts")
+    assert "FROM public.external_contact_identities" in source
+    assert "identity.lead_id" in source
+    assert "existingLeadIds.some" in source
+    assert "ALREADY_LINKED" in source
 
 
 def test_agent_can_only_link_leads_assigned_to_self():
@@ -23,7 +31,7 @@ def test_agent_can_only_link_leads_assigned_to_self():
 
 def test_relinking_an_existing_different_lead_is_blocked():
     source = read("lib/inbox/actions.ts")
-    assert "conversation.leadId && conversation.leadId !== lead.id" in source
+    assert "existingLeadId !== lead.id" in source
     assert "ALREADY_LINKED" in source
 
 

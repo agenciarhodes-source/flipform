@@ -42,6 +42,21 @@ async function lockConversation(
   if (rows.length !== 1) throw new InboxActionError('NOT_FOUND', 'Conversation not found');
 }
 
+async function lockExternalIdentity(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  identityId: string,
+) {
+  const rows = await tx.$queryRaw<Array<{ id: string; lead_id: string | null }>>`
+    SELECT id, lead_id
+    FROM public.external_contact_identities
+    WHERE id = ${identityId} AND tenant_id = ${tenantId}
+    FOR UPDATE
+  `;
+  if (rows.length !== 1) throw new InboxActionError('NOT_FOUND', 'External contact identity not found');
+  return rows[0];
+}
+
 async function findScopedConversation(
   tx: Prisma.TransactionClient,
   session: InboxSessionScope,
@@ -76,6 +91,11 @@ export async function linkInboxConversationToLead(input: {
   return prisma.$transaction(async (tx) => {
     await lockConversation(tx, input.session.tenantId, conversationId);
     const conversation = await findScopedConversation(tx, input.session, conversationId);
+    const identity = await lockExternalIdentity(
+      tx,
+      input.session.tenantId,
+      conversation.externalContactIdentityId,
+    );
 
     const lead = await tx.lead.findFirst({
       where: {
@@ -87,35 +107,43 @@ export async function linkInboxConversationToLead(input: {
     });
     if (!lead) throw new InboxActionError('LEAD_NOT_FOUND', 'Lead not found in current scope');
 
-    if (conversation.leadId && conversation.leadId !== lead.id) {
-      throw new InboxActionError('ALREADY_LINKED', 'Conversation is already linked to another lead');
+    const existingLeadIds = [conversation.leadId, identity.lead_id].filter(
+      (value): value is string => Boolean(value),
+    );
+    if (existingLeadIds.some((existingLeadId) => existingLeadId !== lead.id)) {
+      throw new InboxActionError('ALREADY_LINKED', 'Conversation or identity is already linked to another lead');
     }
 
-    if (conversation.leadId === lead.id) {
+    const conversationAlreadyLinked = conversation.leadId === lead.id;
+    const identityAlreadyLinked = identity.lead_id === lead.id;
+    if (conversationAlreadyLinked && identityAlreadyLinked) {
       return {
         conversationId: conversation.id,
         lead,
         previousLeadId: conversation.leadId,
+        previousIdentityLeadId: identity.lead_id,
         changed: false as const,
       };
     }
 
-    await tx.conversation.update({
-      where: { id: conversation.id },
-      data: { leadId: lead.id },
-    });
-    await tx.externalContactIdentity.updateMany({
-      where: {
-        id: conversation.externalContactIdentityId,
-        tenantId: input.session.tenantId,
-      },
-      data: { leadId: lead.id },
-    });
+    if (!conversationAlreadyLinked) {
+      await tx.conversation.update({
+        where: { id: conversation.id },
+        data: { leadId: lead.id },
+      });
+    }
+    if (!identityAlreadyLinked) {
+      await tx.externalContactIdentity.update({
+        where: { id: identity.id },
+        data: { leadId: lead.id },
+      });
+    }
 
     return {
       conversationId: conversation.id,
       lead,
       previousLeadId: conversation.leadId,
+      previousIdentityLeadId: identity.lead_id,
       changed: true as const,
     };
   });
