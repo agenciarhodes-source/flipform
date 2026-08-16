@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
-import { isPlatformWhatsAppEmbeddedSignupAvailable } from '@/lib/meta/platform-settings';
+import {
+  isPlatformWhatsAppEmbeddedSignupAvailable,
+  isPlatformWhatsAppRuntimeAvailable,
+} from '@/lib/meta/platform-settings';
 
-function toSafeConnection(connection: any | null) {
+function toSafeConnection(connection: any | null, registeredAt: Date | null) {
   if (!connection) return null;
   return {
     status: connection.status,
@@ -15,17 +18,21 @@ function toSafeConnection(connection: any | null) {
     connectedAt: connection.connectedAt,
     systemUserAssignedAt: connection.systemUserAssignedAt,
     subscribedAt: connection.subscribedAt,
+    registeredAt,
   };
 }
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
-  const [platformAvailable, connection] = await Promise.all([
+  const [platformAvailable, runtimeAvailable, connection] = await Promise.all([
     isPlatformWhatsAppEmbeddedSignupAvailable(),
+    isPlatformWhatsAppRuntimeAvailable(),
     prisma.tenantWhatsAppConnection.findFirst({
       where: { tenantId: session.tenantId },
       orderBy: { connectedAt: 'desc' },
       select: {
+        id: true,
         status: true,
+        phoneNumberId: true,
         wabaName: true,
         displayPhoneNumber: true,
         verifiedName: true,
@@ -36,7 +43,36 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
       },
     }),
   ]);
-  return NextResponse.json({ platformAvailable, connection: toSafeConnection(connection) });
+
+  let registeredAt: Date | null = null;
+  if (connection?.status === 'connected') {
+    const registrationAudits = await prisma.auditLog.findMany({
+      where: {
+        tenantId: session.tenantId,
+        entityType: 'tenant_whatsapp_connection',
+        entityId: connection.id,
+        action: 'WHATSAPP_PHONE_REGISTERED',
+        createdAt: { gte: connection.connectedAt },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { createdAt: true, metadata: true },
+    });
+    const bindingConnectedAt = connection.connectedAt.toISOString();
+    const registrationAudit = registrationAudits.find(item => {
+      if (!item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) return false;
+      const metadata = item.metadata as Record<string, unknown>;
+      return metadata.phoneNumberId === connection.phoneNumberId
+        && metadata.bindingConnectedAt === bindingConnectedAt;
+    });
+    registeredAt = registrationAudit?.createdAt || null;
+  }
+
+  return NextResponse.json({
+    platformAvailable,
+    runtimeAvailable,
+    connection: toSafeConnection(connection, registeredAt),
+  });
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {

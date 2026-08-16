@@ -131,6 +131,22 @@ export async function isPlatformWhatsAppEmbeddedSignupAvailable() {
   return hasWhatsAppPlatformConfig(settings);
 }
 
+export async function isPlatformWhatsAppRuntimeAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      appId: true,
+      appSecretEncrypted: true,
+      whatsappSystemUserAccessTokenEncrypted: true,
+    },
+  });
+  return Boolean(
+    settings?.appId
+    && settings.appSecretEncrypted
+    && settings.whatsappSystemUserAccessTokenEncrypted
+  );
+}
+
 export async function getPlatformWhatsAppEmbeddedSignupClientConfig() {
   const settings = await prisma.platformMetaSettings.findUnique({
     where: { id: PLATFORM_META_SETTINGS_ID },
@@ -178,6 +194,25 @@ export async function getPlatformWhatsAppEmbeddedSignupCredentials() {
     businessId: settings.whatsappBusinessId,
     systemUserId: settings.whatsappSystemUserId,
     adminSystemUserAccessToken,
+    systemUserAccessToken,
+  };
+}
+
+export async function getPlatformWhatsAppRuntimeCredentials() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      appId: true,
+      appSecretEncrypted: true,
+      whatsappSystemUserAccessTokenEncrypted: true,
+    },
+  });
+  const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
+  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
+  if (!settings?.appId || !appSecret || !systemUserAccessToken) return null;
+  return {
+    appId: settings.appId,
+    appSecret,
     systemUserAccessToken,
   };
 }
