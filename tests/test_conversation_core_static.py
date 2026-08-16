@@ -73,10 +73,22 @@ def test_first_inbound_message_resolves_identity_conversation_and_message_atomic
     service = read('lib/conversations/core.ts')
     transaction = service.split('return await prisma.$transaction', 1)[1].split('});\n  } catch', 1)[0]
     assert 'tx.externalContactIdentity.upsert' in transaction
+    assert 'advanceIdentityLastSeen(tx, identity.id, timestamp)' in transaction
     assert 'tx.conversation.upsert' in transaction
     assert 'tx.message.create' in transaction
-    assert 'tx.conversation.update' in transaction
-    assert 'unreadCount: { increment: 1 }' in transaction
+    assert 'advanceInboundActivity(tx, conversation.id, timestamp)' in transaction
+    assert 'unreadCount: { increment: 1 }' in service
+
+
+def test_activity_timestamps_are_monotonic_and_old_messages_do_not_reopen_resolved_conversations():
+    service = read('lib/conversations/core.ts')
+    assert 'lastSeenAt: { lt: timestamp }' in service
+    assert 'lastInboundAt: { lt: timestamp }' in service
+    assert 'lastOutboundAt: { lt: timestamp }' in service
+    assert service.count('lastMessageAt: { lt: timestamp }') >= 2
+    assert "status: 'resolved'" in service
+    assert 'resolvedAt: { lt: timestamp }' in service
+    assert "data: { status: 'open', resolvedAt: null }" in service
 
 
 def test_services_scope_crm_links_and_assignments_by_tenant():
