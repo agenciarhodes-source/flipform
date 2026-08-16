@@ -24,11 +24,30 @@ def test_registration_accepts_only_pin_and_resolves_assets_server_side():
     assert 'getPlatformWhatsAppRuntimeCredentials' in route
 
 
+def test_registration_serializes_against_binding_replacement():
+    route = read('app/api/integrations/whatsapp/registration/route.ts')
+    assert 'prisma.$transaction' in route
+    assert 'tx.$queryRaw' in route
+    assert 'FROM public.tenants' in route
+    assert 'WHERE id = ${session.tenantId}' in route
+    assert 'FOR UPDATE' in route
+    assert 'current.id !== connection.id' in route
+    assert 'current.wabaId !== connection.wabaId' in route
+    assert 'current.phoneNumberId !== connection.phoneNumberId' in route
+    assert 'current.connectedAt.getTime() !== connection.connectedAt.getTime()' in route
+    assert 'WHATSAPP_BINDING_CHANGED' in route
+    assert 'bindingConnectedAt: current.connectedAt.toISOString()' in route
+    registration_call = route.split('await registerWhatsAppPhoneNumber', 1)[1]
+    assert 'phoneNumberId: current.phoneNumberId' in registration_call
+
+
 def test_registration_never_persists_or_logs_pin():
     route = read('app/api/integrations/whatsapp/registration/route.ts')
     audit = route.split("action: 'WHATSAPP_PHONE_REGISTERED'", 1)[1]
     assert 'parsed.data.pin' not in audit
     assert 'pin:' not in audit
+    assert 'bindingConnectedAt' in audit
+    assert 'phoneNumberId' in audit
     assert 'console.info' in route
     assert "operation: 'register_phone'" in route
     assert 'console.error' in route
@@ -62,18 +81,33 @@ def test_registration_uses_runtime_credential_without_admin_token():
     assert 'whatsappAdminSystemUserAccessTokenEncrypted' not in runtime
     assert 'adminSystemUserAccessToken' not in runtime
 
+    availability = settings.split('export async function isPlatformWhatsAppRuntimeAvailable', 1)[1].split('export async function getPlatformWhatsAppEmbeddedSignupClientConfig', 1)[0]
+    assert 'appId: true' in availability
+    assert 'appSecretEncrypted: true' in availability
+    assert 'whatsappSystemUserAccessTokenEncrypted: true' in availability
+    assert 'whatsappEmbeddedSignupConfigId' not in availability
+    assert 'whatsappBusinessId' not in availability
+    assert 'whatsappSystemUserId' not in availability
+    assert 'whatsappAdminSystemUserAccessTokenEncrypted' not in availability
 
-def test_connection_registration_marker_is_scoped_to_current_binding_window():
+
+def test_connection_registration_marker_is_bound_to_phone_and_binding_version():
     route = read('app/api/integrations/whatsapp/connection/route.ts')
+    assert 'isPlatformWhatsAppRuntimeAvailable' in route
+    assert 'runtimeAvailable' in route
     assert "action: 'WHATSAPP_PHONE_REGISTERED'" in route
     assert 'entityId: connection.id' in route
     assert 'createdAt: { gte: connection.connectedAt }' in route
+    assert 'metadata.phoneNumberId === connection.phoneNumberId' in route
+    assert 'metadata.bindingConnectedAt === bindingConnectedAt' in route
     assert 'registeredAt' in route
+    safe = route.split('function toSafeConnection', 1)[1].split('export const GET', 1)[0]
+    assert 'phoneNumberId:' not in safe
     assert 'accessToken' not in route
     assert 'appSecret' not in route
 
 
-def test_registration_ui_keeps_pin_ephemeral():
+def test_registration_ui_keeps_pin_ephemeral_and_uses_runtime_readiness():
     ui = read('app/(app)/integrations/whatsapp-embedded-signup-card.tsx')
     assert "fetch('/api/integrations/whatsapp/registration'" in ui
     assert "body: JSON.stringify({ pin })" in ui
@@ -84,6 +118,11 @@ def test_registration_ui_keeps_pin_ephemeral():
     assert 'localStorage' not in ui
     assert 'sessionStorage' not in ui
     assert 'FlipForm não salva o PIN' in ui
+    assert 'const [runtimeAvailable, setRuntimeAvailable]' in ui
+    assert 'setRuntimeAvailable(Boolean(data.runtimeAvailable))' in ui
+    assert 'disabled={registering || connecting || disconnecting || !runtimeAvailable}' in ui
+    assert 'disabled={registering || connecting || disconnecting || !runtimeAvailable || pin.length !== 6}' in ui
+    assert "connected && !runtimeAvailable" in ui
 
 
 def test_registration_pr_requires_no_schema_or_customer_data_mutation():

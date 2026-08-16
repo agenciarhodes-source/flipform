@@ -71,6 +71,7 @@ function ensureFacebookSdk(appId: string, version: string) {
 export function WhatsAppEmbeddedSignupCard() {
   const [connection, setConnection] = useState<Connection>(null);
   const [platformAvailable, setPlatformAvailable] = useState(false);
+  const [runtimeAvailable, setRuntimeAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -90,6 +91,7 @@ export function WhatsAppEmbeddedSignupCard() {
       if (!response.ok) throw new Error(data.error || 'Não foi possível carregar o WhatsApp.');
       setConnection(data.connection || null);
       setPlatformAvailable(Boolean(data.platformAvailable));
+      setRuntimeAvailable(Boolean(data.runtimeAvailable));
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível carregar o WhatsApp.');
     } finally {
@@ -271,8 +273,9 @@ export function WhatsAppEmbeddedSignupCard() {
         <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Qualidade</p><p className="text-sm font-medium">{connection?.qualityRating || '-'}</p></div>
       </div>}
 
-      {!loading && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O Embedded Signup ainda precisa ser configurado pelo Super Admin do FlipForm.</div>}
+      {!loading && !connected && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O Embedded Signup ainda precisa ser configurado pelo Super Admin do FlipForm.</div>}
       {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Conecte a conta oficial de WhatsApp Business desta empresa. O FlipForm validará o WABA e o número diretamente na Meta antes de salvar.</p>}
+      {!loading && connected && !runtimeAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A credencial de runtime do WhatsApp precisa ser configurada pelo Super Admin para registrar ou operar este número.</div>}
 
       {connected && <div className={`rounded-md border p-4 ${registered ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -298,13 +301,13 @@ export function WhatsAppEmbeddedSignupCard() {
             placeholder="PIN de 6 dígitos"
             aria-label="PIN de 6 dígitos do WhatsApp"
             className="min-w-44 flex-1 rounded border bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-emerald-600"
-            disabled={registering || connecting || disconnecting || !platformAvailable}
+            disabled={registering || connecting || disconnecting || !runtimeAvailable}
           />
           <button
             type="button"
             className="rounded bg-emerald-700 px-4 py-2 text-sm text-white disabled:opacity-60"
             onClick={registerPhone}
-            disabled={registering || connecting || disconnecting || !platformAvailable || pin.length !== 6}
+            disabled={registering || connecting || disconnecting || !runtimeAvailable || pin.length !== 6}
           >
             {registering ? 'Registrando...' : registered ? 'Registrar novamente' : 'Registrar número'}
           </button>

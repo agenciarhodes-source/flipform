@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
-import { isPlatformWhatsAppEmbeddedSignupAvailable } from '@/lib/meta/platform-settings';
+import {
+  isPlatformWhatsAppEmbeddedSignupAvailable,
+  isPlatformWhatsAppRuntimeAvailable,
+} from '@/lib/meta/platform-settings';
 
 function toSafeConnection(connection: any | null, registeredAt: Date | null) {
   if (!connection) return null;
@@ -20,14 +23,16 @@ function toSafeConnection(connection: any | null, registeredAt: Date | null) {
 }
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
-  const [platformAvailable, connection] = await Promise.all([
+  const [platformAvailable, runtimeAvailable, connection] = await Promise.all([
     isPlatformWhatsAppEmbeddedSignupAvailable(),
+    isPlatformWhatsAppRuntimeAvailable(),
     prisma.tenantWhatsAppConnection.findFirst({
       where: { tenantId: session.tenantId },
       orderBy: { connectedAt: 'desc' },
       select: {
         id: true,
         status: true,
+        phoneNumberId: true,
         wabaName: true,
         displayPhoneNumber: true,
         verifiedName: true,
@@ -41,24 +46,33 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
 
   let registeredAt: Date | null = null;
   if (connection?.status === 'connected') {
-    const registrationAudit = await prisma.auditLog.findFirst({
+    const registrationAudits = await prisma.auditLog.findMany({
       where: {
         tenantId: session.tenantId,
         entityType: 'tenant_whatsapp_connection',
         entityId: connection.id,
         action: 'WHATSAPP_PHONE_REGISTERED',
-        // connectedAt is reset on every Embedded Signup completion, including
-        // when a historical row is reused for another phone in the same WABA.
-        // This prevents a previous phone registration from being shown as current.
         createdAt: { gte: connection.connectedAt },
       },
       orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
+      take: 20,
+      select: { createdAt: true, metadata: true },
+    });
+    const bindingConnectedAt = connection.connectedAt.toISOString();
+    const registrationAudit = registrationAudits.find(item => {
+      if (!item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) return false;
+      const metadata = item.metadata as Record<string, unknown>;
+      return metadata.phoneNumberId === connection.phoneNumberId
+        && metadata.bindingConnectedAt === bindingConnectedAt;
     });
     registeredAt = registrationAudit?.createdAt || null;
   }
 
-  return NextResponse.json({ platformAvailable, connection: toSafeConnection(connection, registeredAt) });
+  return NextResponse.json({
+    platformAvailable,
+    runtimeAvailable,
+    connection: toSafeConnection(connection, registeredAt),
+  });
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {

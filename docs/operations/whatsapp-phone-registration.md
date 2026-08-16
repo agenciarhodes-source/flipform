@@ -11,10 +11,11 @@ A referência oficial da Meta para esse fluxo é `POST /{Phone-Number-ID}/regist
 - O navegador envia somente o PIN de 6 dígitos.
 - O navegador nunca informa WABA ID, Phone Number ID, token, App Secret ou System User ID para a chamada de registro.
 - O backend carrega o binding ativo em `TenantWhatsAppConnection` usando o `tenantId` da sessão.
-- O backend revalida o System User token e o WABA/número imediatamente antes do registro.
+- O backend revalida o System User token e o WABA/número antes do registro.
 - O PIN não é salvo no banco, em audit log, metadata ou logs de aplicação.
 - A credencial operacional usada é o System User Access Token global da plataforma com permissão de WhatsApp Business Messaging.
 - O Admin System User token do onboarding não é carregado pelo fluxo de registro.
+- A disponibilidade do registro depende somente das credenciais de runtime realmente necessárias; ela não depende de Configuration ID, Business ID ou System User ID usados apenas durante o Embedded Signup.
 
 ## Endpoint interno
 
@@ -40,13 +41,28 @@ O servidor resolve:
 4. System User token pela configuração global da plataforma;
 5. validação das permissões do token;
 6. validação de que o número ainda pertence ao WABA vinculado;
-7. chamada oficial de registro na Meta.
+7. serialização do registro com substituições de binding do Embedded Signup;
+8. chamada oficial de registro na Meta.
+
+## Concorrência com reconexão
+
+O Embedded Signup pode reutilizar a mesma linha de `TenantWhatsAppConnection` ao selecionar outro número do mesmo WABA. Por isso, somente comparar o `id` da conexão não identifica uma troca de número.
+
+O registro usa o mesmo `FOR UPDATE` na linha do tenant já utilizado pela conclusão do Embedded Signup. Depois de adquirir o lock, o backend relê a conexão ativa e exige que `id`, `wabaId`, `phoneNumberId` e `connectedAt` continuem iguais ao snapshot previamente validado. Se qualquer parte mudou, a chamada externa não é executada e a API responde com conflito para que a tela seja recarregada.
+
+O lock é mantido durante a única chamada externa `/{Phone-Number-ID}/register`, impedindo que a conclusão de outro Embedded Signup altere o binding enquanto aquele número está sendo registrado.
 
 ## Registro operacional na UI
 
-Após sucesso, o FlipForm grava somente o evento de auditoria `WHATSAPP_PHONE_REGISTERED`, sem PIN. O horário desse evento, quando posterior ao `connectedAt` atual do binding, é usado para mostrar que o número foi registrado.
+Após sucesso, o FlipForm grava somente o evento de auditoria `WHATSAPP_PHONE_REGISTERED`, sem PIN. A metadata contém o `phoneNumberId` registrado e o `bindingConnectedAt` que identifica a versão exata do binding.
 
-O `connectedAt` é renovado quando o Embedded Signup é concluído novamente. Isso impede que um registro antigo de outro número do mesmo WABA seja exibido como válido para o binding atual.
+A tela considera um número registrado apenas quando encontra um audit marker que corresponda simultaneamente:
+
+- ao mesmo `TenantWhatsAppConnection.id`;
+- ao mesmo `phoneNumberId` atual;
+- ao mesmo `connectedAt` atual do binding.
+
+Isso evita que um registro antigo ou uma corrida de reconexão faça outro número aparecer incorretamente como registrado.
 
 Se a gravação do audit log falhar depois de a Meta já ter aceitado o registro, a resposta de registro continua sendo sucesso. Isso evita transformar uma falha local de auditoria em uma tentativa automática que poderia alterar novamente o estado de verificação em duas etapas.
 

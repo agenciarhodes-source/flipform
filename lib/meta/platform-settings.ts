@@ -131,6 +131,22 @@ export async function isPlatformWhatsAppEmbeddedSignupAvailable() {
   return hasWhatsAppPlatformConfig(settings);
 }
 
+export async function isPlatformWhatsAppRuntimeAvailable() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      appId: true,
+      appSecretEncrypted: true,
+      whatsappSystemUserAccessTokenEncrypted: true,
+    },
+  });
+  return Boolean(
+    settings?.appId
+    && settings.appSecretEncrypted
+    && settings.whatsappSystemUserAccessTokenEncrypted
+  );
+}
+
 export async function getPlatformWhatsAppEmbeddedSignupClientConfig() {
   const settings = await prisma.platformMetaSettings.findUnique({
     where: { id: PLATFORM_META_SETTINGS_ID },
