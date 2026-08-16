@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getPlatformWhatsAppCloudRuntimeCredentials, getWhatsAppWebhookVerifyToken } from '@/lib/meta/whatsapp-runtime-credentials';
+import { getPlatformWhatsAppWebhookCredentials, getWhatsAppWebhookVerifyToken } from '@/lib/meta/whatsapp-runtime-credentials';
 import { processWhatsAppCloudWebhook, verifyWhatsAppWebhookChallenge, verifyWhatsAppWebhookSignature } from '@/lib/meta/whatsapp-runtime';
 
 export const runtime = 'nodejs';
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const credentials = await getPlatformWhatsAppCloudRuntimeCredentials();
+  const credentials = await getPlatformWhatsAppWebhookCredentials();
   if (!credentials) return new Response('Webhook not configured', { status: 503 });
 
   const rawBody = await req.text();

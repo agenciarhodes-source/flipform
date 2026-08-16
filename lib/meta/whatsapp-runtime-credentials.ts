@@ -3,32 +3,19 @@ import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { decryptIntegrationSecret } from '@/lib/tracking/crypto';
 
-export type PlatformWhatsAppCloudRuntimeCredentials = {
-  appId: string;
+export type PlatformWhatsAppWebhookCredentials = {
   appSecret: string;
-  systemUserAccessToken: string;
 };
 
-export async function getPlatformWhatsAppCloudRuntimeCredentials(): Promise<PlatformWhatsAppCloudRuntimeCredentials | null> {
+export async function getPlatformWhatsAppWebhookCredentials(): Promise<PlatformWhatsAppWebhookCredentials | null> {
   const settings = await prisma.platformMetaSettings.findUnique({
     where: { id: 'meta' },
-    select: {
-      appId: true,
-      appSecretEncrypted: true,
-      whatsappSystemUserAccessTokenEncrypted: true,
-    },
+    select: { appSecretEncrypted: true },
   });
 
   const appSecret = decryptIntegrationSecret(settings?.appSecretEncrypted);
-  const systemUserAccessToken = decryptIntegrationSecret(settings?.whatsappSystemUserAccessTokenEncrypted);
-
-  if (!settings?.appId || !appSecret || !systemUserAccessToken) return null;
-
-  return {
-    appId: settings.appId,
-    appSecret,
-    systemUserAccessToken,
-  };
+  if (!appSecret) return null;
+  return { appSecret };
 }
 
 export function getWhatsAppWebhookVerifyToken() {

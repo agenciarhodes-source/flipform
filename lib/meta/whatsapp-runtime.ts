@@ -3,13 +3,8 @@ import 'server-only';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { MessageStatus, MessageType, recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
-import { createAppSecretProof, META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
-import { getPlatformWhatsAppCloudRuntimeCredentials } from '@/lib/meta/whatsapp-runtime-credentials';
-import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
+import { MessageType, recordInboundMessage } from '@/lib/conversations/core';
 
-const GRAPH_HOST = 'graph.facebook.com';
-const REQUEST_TIMEOUT_MS = 10_000;
 const STATUS_RANK: Record<string, number> = {
   received: 0,
   queued: 0,
@@ -102,15 +97,16 @@ export async function applyWhatsAppMessageStatus(input: {
   if (!['sent', 'delivered', 'read', 'failed'].includes(input.status)) return { updated: false, reason: 'unsupported_status' as const };
 
   return prisma.$transaction(async tx => {
-    const message = await tx.message.findFirst({
-      where: {
-        tenantId: input.tenantId,
-        provider: 'meta',
-        channel: 'whatsapp',
-        externalMessageId: input.externalMessageId,
-      },
-      select: { id: true, status: true },
-    });
+    const locked = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+      SELECT id, status
+      FROM public.messages
+      WHERE tenant_id = ${input.tenantId}
+        AND provider = 'meta'
+        AND channel = 'whatsapp'
+        AND external_message_id = ${input.externalMessageId}
+      FOR UPDATE
+    `;
+    const message = locked[0];
     if (!message) return { updated: false, reason: 'message_not_found' as const };
 
     if (input.status === 'failed') {
@@ -207,114 +203,4 @@ export async function processWhatsAppCloudWebhook(payload: any) {
   }
 
   return result;
-}
-
-export async function sendWhatsAppTextMessage(input: {
-  tenantId: string;
-  conversationId: string;
-  text: string;
-  sentByUserId?: string | null;
-}) {
-  const text = input.text.trim();
-  if (!text) throw new Error('WhatsApp message text is required');
-  if (text.length > 4096) throw new Error('WhatsApp message text is too long');
-
-  const conversation = await prisma.conversation.findFirst({
-    where: {
-      id: input.conversationId,
-      tenantId: input.tenantId,
-      provider: 'meta',
-      channel: 'whatsapp',
-    },
-    include: { externalContactIdentity: true },
-  });
-  if (!conversation) throw new Error('WhatsApp conversation not found for tenant');
-
-  if (input.sentByUserId) {
-    const membership = await prisma.tenantUser.findFirst({
-      where: { tenantId: input.tenantId, userId: input.sentByUserId, status: 'active' },
-      select: { id: true },
-    });
-    if (!membership) throw new Error('Sender is not an active tenant user');
-  }
-
-  const connection = await prisma.tenantWhatsAppConnection.findFirst({
-    where: { tenantId: input.tenantId, status: 'connected' },
-    orderBy: { connectedAt: 'desc' },
-    select: { id: true, phoneNumberId: true },
-  });
-  if (!connection) throw new Error('WhatsApp is not connected for tenant');
-
-  const credentials = await getPlatformWhatsAppCloudRuntimeCredentials();
-  if (!credentials) throw new Error('WhatsApp Cloud API runtime is not configured');
-
-  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${connection.phoneNumberId}/messages`);
-  url.searchParams.set('appsecret_proof', createAppSecretProof(credentials.systemUserAccessToken, credentials.appSecret));
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      headers: {
-        Authorization: `Bearer ${credentials.systemUserAccessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: conversation.externalContactIdentity.externalUserId,
-        type: 'text',
-        text: { preview_url: false, body: text },
-      }),
-    });
-  } catch {
-    throw new Error('Meta WhatsApp send unavailable');
-  }
-
-  const data = await response.json().catch(() => null);
-  const externalMessageId = typeof data?.messages?.[0]?.id === 'string' ? data.messages[0].id : null;
-  if (!response.ok || data?.error || !externalMessageId) {
-    console.error('Meta WhatsApp send failed', {
-      tenantId: input.tenantId,
-      httpStatus: response.status,
-      metaCode: data?.error?.code,
-      metaType: data?.error?.type,
-    });
-    throw new Error('Meta WhatsApp send failed');
-  }
-
-  const persisted = await recordOutboundMessage({
-    tenantId: input.tenantId,
-    conversationId: conversation.id,
-    externalMessageId,
-    text,
-    type: 'text',
-    status: 'sent' as MessageStatus,
-    sentByUserId: input.sentByUserId ?? null,
-    providerTimestamp: new Date(),
-    metadata: {
-      source: 'meta_whatsapp_cloud_api',
-      connectionId: connection.id,
-      phoneNumberId: connection.phoneNumberId,
-    },
-  });
-
-  await processWhatsAppFunnelMessage({
-    tenantId: input.tenantId,
-    conversationId: conversation.id,
-    messageId: persisted.message.id,
-    leadId: conversation.leadId || conversation.externalContactIdentity.leadId || null,
-    phone: conversation.externalContactIdentity.phone,
-    name: conversation.externalContactIdentity.displayName,
-    email: conversation.externalContactIdentity.email,
-    text,
-    direction: 'outbound',
-    senderType: input.sentByUserId ? 'agent' : 'system',
-    timestamp: persisted.message.providerTimestamp?.toISOString() || null,
-    metadata: { externalMessageId },
-  });
-
-  return persisted;
 }

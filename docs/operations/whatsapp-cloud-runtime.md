@@ -1,17 +1,18 @@
-# WhatsApp Cloud API Runtime
+# WhatsApp Cloud API Webhook Runtime
 
 ## Objetivo
 
-Este módulo conecta a fundação de WhatsApp Embedded Signup ao Conversation Core do FlipForm usando a WhatsApp Cloud API oficial da Meta.
+Este módulo conecta a fundação de WhatsApp Embedded Signup ao Conversation Core do FlipForm para receber eventos oficiais da WhatsApp Cloud API com isolamento por tenant.
 
-Ele cobre quatro responsabilidades:
+Ele cobre:
 
 1. verificação do webhook público;
 2. validação criptográfica de notificações POST;
-3. roteamento de eventos para o tenant correto pelo `phone_number_id` previamente vinculado;
-4. envio server-side de mensagens de texto usando a credencial de runtime do System User da plataforma.
+3. roteamento por `phone_number_id` previamente vinculado;
+4. persistência de mensagens inbound;
+5. atualização segura de status de mensagens já conhecidas.
 
-A Inbox visual, automações, templates e mídia continuam fora deste PR.
+O envio outbound foi deliberadamente retirado deste PR. Ele será implementado em um PR separado com outbox/idempotência durável, para evitar o cenário em que a Meta aceita a mensagem mas uma falha local impede o registro do envio.
 
 ## Endpoint público
 
@@ -19,7 +20,7 @@ Callback:
 
 `/api/webhooks/meta/whatsapp`
 
-Em produção, considerando o domínio atual do app, o callback esperado é:
+Em produção:
 
 `https://app.flipform.com.br/api/webhooks/meta/whatsapp`
 
@@ -29,7 +30,7 @@ O challenge usa a variável de ambiente:
 
 `META_WHATSAPP_WEBHOOK_VERIFY_TOKEN`
 
-Esse valor deve ser configurado na Vercel e informado no painel de Webhooks do Meta App. O token não pertence a nenhum tenant e não é recebido do browser.
+Esse valor deve ser configurado na Vercel e informado no painel de Webhooks do Meta App. O token é de plataforma, não de tenant.
 
 O endpoint exige:
 
@@ -37,13 +38,15 @@ O endpoint exige:
 - `hub.verify_token` igual ao valor configurado;
 - `hub.challenge` presente.
 
-A comparação do verify token é feita em tempo constante.
+A comparação é feita em tempo constante.
 
 ### POST — assinatura
 
-O corpo é lido como texto bruto antes do parse de JSON. O header `X-Hub-Signature-256` é validado com HMAC-SHA256 e o Meta App Secret já armazenado de forma criptografada na configuração da plataforma.
+O corpo é lido como texto bruto antes do parse de JSON. O header `X-Hub-Signature-256` é validado com HMAC-SHA256 usando o Meta App Secret armazenado pela plataforma.
 
 Payload sem assinatura válida recebe 401 e não chega ao Conversation Core.
+
+O módulo de webhook carrega somente o App Secret. Tokens administrativos e System User Access Tokens não são carregados por esse endpoint.
 
 ## Resolução de tenant
 
@@ -57,9 +60,7 @@ O fluxo é:
 → `tenantId`
 → Conversation Core.
 
-Se o número não estiver vinculado ou estiver revogado, o evento é ignorado sem tentar adivinhar tenant.
-
-Isso preserva o isolamento entre clientes mesmo quando a credencial operacional da plataforma consegue administrar mais de um WABA.
+Se o número não estiver vinculado ou estiver revogado, o evento é ignorado sem tentar inferir tenant.
 
 ## Mensagens inbound
 
@@ -73,66 +74,31 @@ Mensagens recebidas são normalizadas para o Conversation Core:
 - tipo Meta → tipo universal do core;
 - `phone_number_id`, WABA e contexto → metadata técnica.
 
-A idempotência continua sendo garantida pelo Conversation Core e sua unique constraint de mensagem externa.
+A idempotência é garantida pelo Conversation Core e sua unique constraint de mensagem externa.
 
 ## Status de mensagem
 
-Eventos de status atualizam mensagens pelo mesmo escopo:
+Eventos `sent`, `delivered`, `read` e `failed` são aplicados usando:
 
 `tenant + provider=meta + channel=whatsapp + externalMessageId`.
 
-O runtime aceita `sent`, `delivered`, `read` e `failed`.
+A linha da mensagem é bloqueada com `SELECT ... FOR UPDATE` durante a transação. Isso serializa callbacks concorrentes e impede que um `sent` atrasado sobrescreva `delivered`/`read`.
 
-Status de sucesso são monotônicos: um evento atrasado de `sent` não rebaixa uma mensagem que já está `delivered` ou `read`. Um `failed` também não substitui uma mensagem já entregue/lida.
+Um `failed` também não rebaixa uma mensagem já entregue ou lida.
 
-## Envio de texto
-
-`sendWhatsAppTextMessage()` é um serviço server-side; não há endpoint público de envio neste PR.
-
-O serviço recebe somente:
-
-- `tenantId`;
-- `conversationId`;
-- texto;
-- `sentByUserId` opcional.
-
-Ele não aceita `phone_number_id`, WABA ou access token do caller.
-
-Antes do request externo, o runtime:
-
-1. confirma que a conversa é do tenant e do canal WhatsApp;
-2. valida que o usuário remetente é membro ativo do tenant quando informado;
-3. busca a conexão WhatsApp ativa do próprio tenant;
-4. carrega App Secret + System User Access Token apenas no servidor;
-5. envia para `/{Phone-Number-ID}/messages`;
-6. persiste o ID `wamid...` devolvido pela Meta via `recordOutboundMessage()`;
-7. reaproveita o hook existente de tracking de frases do funil para mensagens de agentes.
-
-## Credenciais
-
-O runtime usa somente:
-
-- Meta App Secret;
-- WhatsApp System User Access Token de runtime.
-
-O Admin System User Access Token usado no Embedded Signup não é carregado por este módulo.
-
-Credenciais não são retornadas para tenant/browser e não são escritas nos logs.
-
-## Compatibilidade
-
-O endpoint legado interno:
+## Endpoint interno legado
 
 `/api/webhooks/whatsapp/message`
 
-permanece inalterado e protegido por `INTERNAL_JOB_SECRET`/`CRON_SECRET`. Ele continua servindo apenas ao fluxo interno de tracking já existente e não é tratado como webhook oficial da Meta.
+permanece inalterado e protegido por `INTERNAL_JOB_SECRET`/`CRON_SECRET`. Ele continua sendo um endpoint interno de tracking e não é tratado como webhook oficial da Meta.
 
 ## Fora deste PR
 
+- envio de mensagem pela Cloud API;
+- outbox/idempotência outbound;
 - Inbox/chat UI;
-- endpoint autenticado para agente enviar pela UI;
 - templates;
-- upload ou download de mídia;
+- mídia;
 - marcação de mensagens como lidas;
 - criação automática de Lead;
 - distribuição/round-robin;
@@ -141,11 +107,12 @@ permanece inalterado e protegido por `INTERNAL_JOB_SECRET`/`CRON_SECRET`. Ele co
 
 ## Próximos passos
 
-1. criar a Inbox usando `Conversation`/`Message`;
-2. expor envio autenticado para agentes via service `sendWhatsAppTextMessage()`;
-3. vincular operação da conversa ao Lead/Kanban;
-4. tratar mídia/templates em PRs pequenos;
-5. implementar Instagram no mesmo Conversation Core.
+1. criar outbox durável para envio WhatsApp;
+2. implementar envio server-side com idempotency key e reconciliação do `wamid`;
+3. criar endpoint autenticado para agentes;
+4. construir Inbox usando `Conversation`/`Message`;
+5. vincular operação ao Lead/Kanban;
+6. implementar Instagram no mesmo Conversation Core.
 
 ## Segurança de dados
 
