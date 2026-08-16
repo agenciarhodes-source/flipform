@@ -83,7 +83,7 @@ def test_registration_ui_keeps_pin_ephemeral():
     assert "setPin('')" in ui
     assert 'localStorage' not in ui
     assert 'sessionStorage' not in ui
-    assert 'O FlipForm não salva o PIN' in ui
+    assert 'FlipForm não salva o PIN' in ui
 
 
 def test_registration_pr_requires_no_schema_or_customer_data_mutation():
