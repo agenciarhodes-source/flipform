@@ -1,44 +1,31 @@
 import 'server-only';
 
-import { randomUUID } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
-type InstagramConnectionRow = {
-  id: string;
-  tenantId: string;
-  status: string;
-  instagramUserId: string;
-  username: string | null;
-  tokenExpiresAt: Date | null;
-  connectedAt: Date;
-  lastValidatedAt: Date | null;
-  revokedAt: Date | null;
-};
+const SAFE_CONNECTION_SELECT = {
+  id: true,
+  status: true,
+  instagramUserId: true,
+  username: true,
+  tokenExpiresAt: true,
+  connectedAt: true,
+  lastValidatedAt: true,
+  revokedAt: true,
+} as const;
 
-export type SafeInstagramConnection = Omit<InstagramConnectionRow, 'tenantId'>;
+export async function getActiveInstagramConnection(tenantId: string) {
+  const connection = await prisma.tenantInstagramConnection.findFirst({
+    where: { tenantId, status: 'connected' },
+    orderBy: { connectedAt: 'desc' },
+    select: SAFE_CONNECTION_SELECT,
+  });
+  if (!connection) return null;
 
-export async function getActiveInstagramConnection(tenantId: string): Promise<SafeInstagramConnection | null> {
-  const rows = await prisma.$queryRaw<InstagramConnectionRow[]>`
-    SELECT id,
-           tenant_id AS "tenantId",
-           status,
-           instagram_user_id AS "instagramUserId",
-           username,
-           token_expires_at AS "tokenExpiresAt",
-           connected_at AS "connectedAt",
-           last_validated_at AS "lastValidatedAt",
-           revoked_at AS "revokedAt"
-      FROM tenant_instagram_connections
-     WHERE tenant_id = ${tenantId}
-       AND status = 'connected'
-     ORDER BY connected_at DESC
-     LIMIT 1
-  `;
-  const row = rows[0];
-  if (!row) return null;
-  const { tenantId: _tenantId, ...safe } = row;
-  return safe;
+  if (connection.tokenExpiresAt && connection.tokenExpiresAt.getTime() <= Date.now()) {
+    return { ...connection, status: 'expired' as const };
+  }
+  return connection;
 }
 
 async function lockTenant(tx: Prisma.TransactionClient, tenantId: string) {
@@ -60,67 +47,68 @@ export async function persistInstagramConnection(input: {
   return prisma.$transaction(async tx => {
     await lockTenant(tx, input.tenantId);
 
-    const conflict = await tx.$queryRaw<Array<{ tenantId: string }>>`
-      SELECT tenant_id AS "tenantId"
-        FROM tenant_instagram_connections
-       WHERE instagram_user_id = ${input.instagramUserId}
-         AND tenant_id <> ${input.tenantId}
-       LIMIT 1
-    `;
-    if (conflict[0]) throw new Error('INSTAGRAM_ACCOUNT_BOUND_TO_OTHER_TENANT');
+    const conflict = await tx.tenantInstagramConnection.findFirst({
+      where: {
+        instagramUserId: input.instagramUserId,
+        tenantId: { not: input.tenantId },
+      },
+      select: { id: true },
+    });
+    if (conflict) throw new Error('INSTAGRAM_ACCOUNT_BOUND_TO_OTHER_TENANT');
 
-    const existing = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id
-        FROM tenant_instagram_connections
-       WHERE tenant_id = ${input.tenantId}
-         AND instagram_user_id = ${input.instagramUserId}
-       LIMIT 1
-    `;
-    const connectionId = existing[0]?.id || randomUUID();
+    await tx.tenantInstagramConnection.updateMany({
+      where: {
+        tenantId: input.tenantId,
+        status: 'connected',
+        instagramUserId: { not: input.instagramUserId },
+      },
+      data: { status: 'revoked', revokedAt: now },
+    });
 
-    await tx.$executeRaw`
-      UPDATE tenant_instagram_connections
-         SET status = 'revoked', revoked_at = ${now}, updated_at = ${now}
-       WHERE tenant_id = ${input.tenantId}
-         AND status = 'connected'
-         AND instagram_user_id <> ${input.instagramUserId}
-    `;
-
-    if (existing[0]) {
-      await tx.$executeRaw`
-        UPDATE tenant_instagram_connections
-           SET status = 'connected',
-               username = ${input.username},
-               access_token_encrypted = ${input.accessTokenEncrypted},
-               token_expires_at = ${input.tokenExpiresAt},
-               connected_by_id = ${input.connectedById},
-               connected_at = ${now},
-               last_validated_at = ${now},
-               revoked_at = NULL,
-               updated_at = ${now}
-         WHERE id = ${connectionId}
-           AND tenant_id = ${input.tenantId}
-      `;
-    } else {
-      await tx.$executeRaw`
-        INSERT INTO tenant_instagram_connections (
-          id, tenant_id, status, instagram_user_id, username,
-          access_token_encrypted, token_expires_at, connected_by_id,
-          connected_at, last_validated_at, created_at, updated_at
-        ) VALUES (
-          ${connectionId}, ${input.tenantId}, 'connected', ${input.instagramUserId}, ${input.username},
-          ${input.accessTokenEncrypted}, ${input.tokenExpiresAt}, ${input.connectedById},
-          ${now}, ${now}, ${now}, ${now}
-        )
-      `;
+    const existing = await tx.tenantInstagramConnection.findUnique({
+      where: { instagramUserId: input.instagramUserId },
+      select: { id: true, tenantId: true },
+    });
+    if (existing && existing.tenantId !== input.tenantId) {
+      throw new Error('INSTAGRAM_ACCOUNT_BOUND_TO_OTHER_TENANT');
     }
+
+    const connection = existing
+      ? await tx.tenantInstagramConnection.update({
+          where: { id: existing.id },
+          data: {
+            status: 'connected',
+            username: input.username,
+            accessTokenEncrypted: input.accessTokenEncrypted,
+            tokenExpiresAt: input.tokenExpiresAt,
+            connectedById: input.connectedById,
+            connectedAt: now,
+            lastValidatedAt: now,
+            revokedAt: null,
+          },
+          select: { id: true, connectedAt: true },
+        })
+      : await tx.tenantInstagramConnection.create({
+          data: {
+            tenantId: input.tenantId,
+            status: 'connected',
+            instagramUserId: input.instagramUserId,
+            username: input.username,
+            accessTokenEncrypted: input.accessTokenEncrypted,
+            tokenExpiresAt: input.tokenExpiresAt,
+            connectedById: input.connectedById,
+            connectedAt: now,
+            lastValidatedAt: now,
+          },
+          select: { id: true, connectedAt: true },
+        });
 
     await tx.auditLog.create({
       data: {
         tenantId: input.tenantId,
         userId: input.connectedById,
         entityType: 'tenant_instagram_connection',
-        entityId: connectionId,
+        entityId: connection.id,
         action: 'INSTAGRAM_CONNECTION_CONNECTED',
         metadata: {
           instagramUserId: input.instagramUserId,
@@ -130,7 +118,7 @@ export async function persistInstagramConnection(input: {
       },
     });
 
-    return { id: connectionId, connectedAt: now };
+    return connection;
   });
 }
 
@@ -138,23 +126,17 @@ export async function revokeInstagramConnection(input: { tenantId: string; userI
   const now = new Date();
   return prisma.$transaction(async tx => {
     await lockTenant(tx, input.tenantId);
-    const rows = await tx.$queryRaw<Array<{ id: string; instagramUserId: string }>>`
-      SELECT id, instagram_user_id AS "instagramUserId"
-        FROM tenant_instagram_connections
-       WHERE tenant_id = ${input.tenantId}
-         AND status = 'connected'
-       ORDER BY connected_at DESC
-       LIMIT 1
-    `;
-    const connection = rows[0];
+    const connection = await tx.tenantInstagramConnection.findFirst({
+      where: { tenantId: input.tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'desc' },
+      select: { id: true, instagramUserId: true },
+    });
     if (!connection) return false;
 
-    await tx.$executeRaw`
-      UPDATE tenant_instagram_connections
-         SET status = 'revoked', revoked_at = ${now}, updated_at = ${now}
-       WHERE id = ${connection.id}
-         AND tenant_id = ${input.tenantId}
-    `;
+    await tx.tenantInstagramConnection.update({
+      where: { id: connection.id },
+      data: { status: 'revoked', revokedAt: now },
+    });
     await tx.auditLog.create({
       data: {
         tenantId: input.tenantId,
