@@ -108,10 +108,11 @@ export async function validateInstagramProfessionalAccount(input: { accessToken:
     throw new Error('Instagram profile validation returned no username');
   }
 
-  // A lightweight Conversations API call verifies that this token can manage
-  // messages for the authenticated Instagram professional account. Empty data
-  // is valid; a missing permission is returned by Meta as an API error.
-  const conversationsUrl = new URL(`${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/me/conversations`);
+  const instagramUserId = String(profile.id);
+  // Official Conversations API requires the professional account ID plus
+  // platform=instagram. Empty data is valid; a permission failure is not.
+  const conversationsUrl = new URL(`${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/${instagramUserId}/conversations`);
+  conversationsUrl.searchParams.set('platform', 'instagram');
   conversationsUrl.searchParams.set('limit', '1');
   await fetchJson(conversationsUrl.toString(), {
     method: 'GET',
@@ -119,7 +120,7 @@ export async function validateInstagramProfessionalAccount(input: { accessToken:
   }, 'messaging_permission_validation');
 
   return {
-    instagramUserId: String(profile.id),
+    instagramUserId,
     username: profile.username as string,
   };
 }
