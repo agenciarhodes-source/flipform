@@ -1,3 +1,7 @@
+ALTER TABLE "platform_meta_settings"
+    ADD COLUMN "instagram_app_id" TEXT,
+    ADD COLUMN "instagram_app_secret_encrypted" TEXT;
+
 CREATE TABLE "tenant_instagram_connections" (
     "id" TEXT NOT NULL,
     "tenant_id" TEXT NOT NULL,
@@ -24,6 +28,9 @@ CREATE INDEX "tenant_instagram_connections_tenant_id_idx"
 
 CREATE INDEX "tenant_instagram_connections_tenant_id_status_idx"
     ON "tenant_instagram_connections"("tenant_id", "status");
+
+CREATE INDEX "tenant_instagram_connections_connected_by_id_idx"
+    ON "tenant_instagram_connections"("connected_by_id");
 
 ALTER TABLE "tenant_instagram_connections"
     ADD CONSTRAINT "tenant_instagram_connections_tenant_id_fkey"
