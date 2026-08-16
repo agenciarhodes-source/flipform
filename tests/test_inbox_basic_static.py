@@ -33,7 +33,7 @@ def test_inbox_access_scope_is_tenant_safe_and_agents_are_assignment_scoped():
     assert "...getInboxConversationWhere(session)" in src
 
 
-def test_inbox_read_routes_use_server_session_and_permissions():
+def test_inbox_read_routes_use_server_session_permissions_and_effective_time():
     conversations = read('app/api/inbox/conversations/route.ts')
     messages = read('app/api/inbox/conversations/[id]/messages/route.ts')
     mark_read = read('app/api/inbox/conversations/[id]/read/route.ts')
@@ -41,13 +41,16 @@ def test_inbox_read_routes_use_server_session_and_permissions():
     assert "withPermission('INBOX_VIEW'" in conversations
     assert "getInboxConversationWhere(session)" in conversations
     assert "take: 100" in conversations
-    assert "orderBy: { createdAt: 'desc' }" in conversations
     assert "lastMessageAt: { sort: 'desc', nulls: 'last' }" in conversations
+    assert "COALESCE(provider_timestamp, created_at) DESC" in conversations
+    assert "tenant_id = ${session.tenantId}" in conversations
+    assert "Prisma.join(conversationIds)" in conversations
     assert "withPermission('INBOX_VIEW'" in messages
     assert "findAccessibleInboxConversation(session, ctx.params.id)" in messages
-    assert "tenantId: session.tenantId" in messages
-    assert "conversationId: conversation.id" in messages
-    assert "take: 200" in messages
+    assert "tenant_id = ${session.tenantId}" in messages
+    assert "conversation_id = ${conversation.id}" in messages
+    assert "COALESCE(provider_timestamp, created_at) DESC" in messages
+    assert "LIMIT 200" in messages
     assert "providerTimestamp ?? left.createdAt" in messages
     assert "providerTimestamp ?? right.createdAt" in messages
     assert "withPermission('INBOX_MANAGE'" in mark_read
@@ -65,6 +68,7 @@ def test_inbox_discards_stale_message_requests_after_selection_changes():
     assert "selectedIdRef.current !== conversationId" in client
     selection_segment = client[client.index("useEffect(() => {\n    if (!selectedId)"):]
     assert "setMessages([])" in selection_segment
+    assert "setLoadingMessages(true)" in selection_segment
 
 
 def test_inbox_client_cannot_choose_provider_assets_or_recipient():
