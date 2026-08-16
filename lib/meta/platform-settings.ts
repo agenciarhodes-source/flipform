@@ -9,6 +9,8 @@ export type PlatformMetaSettingsInput = {
   appId: string;
   appSecret?: string;
   businessLoginConfigId: string;
+  instagramAppId: string;
+  instagramAppSecret?: string;
   whatsappEmbeddedSignupConfigId: string;
   whatsappBusinessId: string;
   whatsappSystemUserId: string;
@@ -67,9 +69,11 @@ export function getMetaOAuthRedirectUri() {
 
 function toAdminDto(settings: any | null) {
   const appSecretEncrypted = settings?.appSecretEncrypted || null;
+  const instagramAppSecretEncrypted = settings?.instagramAppSecretEncrypted || null;
   const whatsappAdminTokenEncrypted = settings?.whatsappAdminSystemUserAccessTokenEncrypted || null;
   const whatsappRuntimeTokenEncrypted = settings?.whatsappSystemUserAccessTokenEncrypted || null;
   const appId = settings?.appId || null;
+  const instagramAppId = settings?.instagramAppId || null;
   const businessLoginConfigId = settings?.businessLoginConfigId || null;
   const whatsappEmbeddedSignupConfigId = settings?.whatsappEmbeddedSignupConfigId || null;
   const whatsappBusinessId = settings?.whatsappBusinessId || null;
@@ -77,11 +81,14 @@ function toAdminDto(settings: any | null) {
   return {
     appId,
     businessLoginConfigId,
+    instagramAppId,
     whatsappEmbeddedSignupConfigId,
     whatsappBusinessId,
     whatsappSystemUserId,
     appSecretConfigured: Boolean(appSecretEncrypted),
     appSecretMasked: maskSecretFromEncrypted(appSecretEncrypted),
+    instagramAppSecretConfigured: Boolean(instagramAppSecretEncrypted),
+    instagramAppSecretMasked: maskSecretFromEncrypted(instagramAppSecretEncrypted),
     whatsappAdminSystemUserAccessTokenConfigured: Boolean(whatsappAdminTokenEncrypted),
     whatsappAdminSystemUserAccessTokenMasked: maskSecretFromEncrypted(whatsappAdminTokenEncrypted),
     whatsappSystemUserAccessTokenConfigured: Boolean(whatsappRuntimeTokenEncrypted),
@@ -98,6 +105,7 @@ function toAdminDto(settings: any | null) {
     } : {}),
     baseConfigured: Boolean(appId && appSecretEncrypted),
     businessLoginConfigured: Boolean(appId && appSecretEncrypted && businessLoginConfigId),
+    instagramLoginConfigured: Boolean(instagramAppId && instagramAppSecretEncrypted),
     whatsappEmbeddedSignupConfigured: hasWhatsAppPlatformConfig(settings),
     configured: Boolean(appId && appSecretEncrypted),
     updatedAt: settings?.updatedAt || null,
@@ -222,15 +230,20 @@ export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInpu
     where: { id: PLATFORM_META_SETTINGS_ID },
     select: {
       appSecretEncrypted: true,
+      instagramAppSecretEncrypted: true,
       whatsappAdminSystemUserAccessTokenEncrypted: true,
       whatsappSystemUserAccessTokenEncrypted: true,
     },
   });
   let appSecretEncrypted = existing?.appSecretEncrypted || null;
+  let instagramAppSecretEncrypted = existing?.instagramAppSecretEncrypted || null;
   let whatsappAdminSystemUserAccessTokenEncrypted = existing?.whatsappAdminSystemUserAccessTokenEncrypted || null;
   let whatsappSystemUserAccessTokenEncrypted = existing?.whatsappSystemUserAccessTokenEncrypted || null;
 
   if (input.appSecret && !looksMaskedSecret(input.appSecret)) appSecretEncrypted = encryptIntegrationSecret(input.appSecret);
+  if (input.instagramAppSecret && !looksMaskedSecret(input.instagramAppSecret)) {
+    instagramAppSecretEncrypted = encryptIntegrationSecret(input.instagramAppSecret);
+  }
   if (input.whatsappAdminSystemUserAccessToken && !looksMaskedSecret(input.whatsappAdminSystemUserAccessToken)) {
     whatsappAdminSystemUserAccessTokenEncrypted = encryptIntegrationSecret(input.whatsappAdminSystemUserAccessToken);
   }
@@ -240,19 +253,34 @@ export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInpu
 
   const {
     appSecret: _appSecret,
+    instagramAppSecret: _instagramAppSecret,
     whatsappAdminSystemUserAccessToken: _adminToken,
     whatsappSystemUserAccessToken: _runtimeToken,
     ...safeInput
   } = input;
   const secretData = {
     appSecretEncrypted,
+    instagramAppSecretEncrypted,
     whatsappAdminSystemUserAccessTokenEncrypted,
     whatsappSystemUserAccessTokenEncrypted,
   };
   await prisma.platformMetaSettings.upsert({
     where: { id: PLATFORM_META_SETTINGS_ID },
-    create: { id: PLATFORM_META_SETTINGS_ID, ...safeInput, ...secretData, appId: input.appId || null, updatedById },
-    update: { ...safeInput, ...secretData, appId: input.appId || null, updatedById },
+    create: {
+      id: PLATFORM_META_SETTINGS_ID,
+      ...safeInput,
+      ...secretData,
+      appId: input.appId || null,
+      instagramAppId: input.instagramAppId || null,
+      updatedById,
+    },
+    update: {
+      ...safeInput,
+      ...secretData,
+      appId: input.appId || null,
+      instagramAppId: input.instagramAppId || null,
+      updatedById,
+    },
   });
   return getPlatformMetaSettingsForAdmin();
 }

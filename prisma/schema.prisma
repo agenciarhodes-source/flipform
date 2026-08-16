@@ -121,6 +121,7 @@ model Tenant {
   leadAttributions      LeadAttribution[]
   metaConnections       TenantMetaConnection[]
   whatsappConnections   TenantWhatsAppConnection[]
+  instagramConnections  TenantInstagramConnection[]
   externalContactIdentities ExternalContactIdentity[]
   conversations         Conversation[]
   messages              Message[]
@@ -181,6 +182,7 @@ model User {
   leadAssignmentRotationMemberships LeadAssignmentRotationMember[]
   platformMetaSettingsUpdates PlatformMetaSettings[] @relation("PlatformMetaSettingsUpdatedBy")
   metaConnectionsConnected TenantMetaConnection[] @relation("TenantMetaConnectionConnectedBy")
+  instagramConnectionsConnected TenantInstagramConnection[] @relation("TenantInstagramConnectionConnectedBy")
   assignedConversations Conversation[] @relation("ConversationAssignee")
   sentConversationMessages Message[] @relation("ConversationMessageSender")
 
@@ -769,6 +771,8 @@ model PlatformMetaSettings {
   appId                                       String?  @map("app_id")
   appSecretEncrypted                          String?  @map("app_secret_encrypted")
   businessLoginConfigId                       String?  @map("business_login_config_id")
+  instagramAppId                              String?  @map("instagram_app_id")
+  instagramAppSecretEncrypted                 String?  @map("instagram_app_secret_encrypted")
   whatsappEmbeddedSignupConfigId              String?  @map("whatsapp_embedded_signup_config_id")
   whatsappBusinessId                          String?  @map("whatsapp_business_id")
   whatsappSystemUserId                        String?  @map("whatsapp_system_user_id")
@@ -846,6 +850,30 @@ model TenantWhatsAppConnection {
   @@index([tenantId])
   @@index([tenantId, status])
   @@map("tenant_whatsapp_connections")
+}
+
+model TenantInstagramConnection {
+  id                   String    @id @default(cuid())
+  tenantId             String    @map("tenant_id")
+  status               String    @default("connected")
+  instagramUserId      String    @unique @map("instagram_user_id")
+  username             String?
+  accessTokenEncrypted String    @map("access_token_encrypted")
+  tokenExpiresAt       DateTime? @map("token_expires_at")
+  connectedById        String?   @map("connected_by_id")
+  connectedAt          DateTime  @default(now()) @map("connected_at")
+  lastValidatedAt      DateTime? @map("last_validated_at")
+  revokedAt            DateTime? @map("revoked_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectedBy User?  @relation("TenantInstagramConnectionConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([connectedById])
+  @@map("tenant_instagram_connections")
 }
 
 model ExternalContactIdentity {
