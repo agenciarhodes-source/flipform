@@ -11,6 +11,7 @@ export default async function InboxPage() {
   return (
     <InboxClient
       canManage={can(session.role, 'INBOX_MANAGE')}
+      canAssign={['owner', 'admin', 'manager'].includes(session.role)}
       canSendWhatsApp={can(session.role, 'LEADS_CONTACT_WHATSAPP')}
     />
   );

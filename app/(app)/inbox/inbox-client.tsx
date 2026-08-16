@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ConversationActions } from './conversation-actions';
 
 interface InboxIdentity {
   id: string;
@@ -127,9 +128,11 @@ function MessageStatus({ status }: { status: string }) {
 
 export function InboxClient({
   canManage,
+  canAssign,
   canSendWhatsApp,
 }: {
   canManage: boolean;
+  canAssign: boolean;
   canSendWhatsApp: boolean;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
@@ -166,6 +169,15 @@ export function InboxClient({
     });
   }, [conversations, search]);
 
+  function selectConversation(conversationId: string | null) {
+    selectedIdRef.current = conversationId;
+    setMessages([]);
+    setLoadingMessages(Boolean(conversationId));
+    setError(null);
+    setWarning(null);
+    setSelectedId(conversationId);
+  }
+
   async function loadConversations(silent = false) {
     if (!silent) setLoadingConversations(true);
     try {
@@ -175,8 +187,15 @@ export function InboxClient({
       const next = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
       setConversations(next);
       setSelectedId((current) => {
-        if (current && next.some((conversation) => conversation.id === current)) return current;
-        return next[0]?.id || null;
+        const nextId = current && next.some((conversation) => conversation.id === current)
+          ? current
+          : next[0]?.id || null;
+        if (nextId !== current) {
+          selectedIdRef.current = nextId;
+          setMessages([]);
+          setLoadingMessages(Boolean(nextId));
+        }
+        return nextId;
       });
     } catch (loadError) {
       if (!silent) setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as conversas.');
@@ -230,7 +249,6 @@ export function InboxClient({
       return;
     }
 
-    // Never render the previous contact's history under a newly selected header.
     setMessages([]);
     setLoadingMessages(true);
     setError(null);
@@ -330,7 +348,7 @@ export function InboxClient({
                   <button
                     key={conversation.id}
                     type="button"
-                    onClick={() => setSelectedId(conversation.id)}
+                    onClick={() => selectConversation(conversation.id)}
                     className={`flex w-full gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 ${active ? 'bg-brand-50/70' : ''}`}
                   >
                     <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
@@ -358,6 +376,7 @@ export function InboxClient({
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
                         <span className="capitalize">{conversation.channel}</span>
                         {conversation.assignee?.name && <><span>•</span><span className="truncate">{conversation.assignee.name}</span></>}
+                        {conversation.status === 'resolved' && <><span>•</span><span>resolvida</span></>}
                       </div>
                     </div>
                   </button>
@@ -379,7 +398,7 @@ export function InboxClient({
           ) : (
             <>
               <header className="flex min-h-16 items-center gap-3 border-b px-3 py-2 md:px-5">
-                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSelectedId(null)} aria-label="Voltar para conversas">
+                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => selectConversation(null)} aria-label="Voltar para conversas">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
@@ -389,13 +408,22 @@ export function InboxClient({
                   <div className="truncate text-sm font-semibold">{contactName(selected)}</div>
                   <div className="truncate text-xs text-muted-foreground">
                     {selected.externalContactIdentity.phone || selected.externalContactIdentity.username || selected.externalContactIdentity.externalUserId}
-                    {selected.lead ? ` • Lead vinculado` : ' • Sem lead vinculado'}
+                    {selected.lead ? ` • Lead: ${selected.lead.name}` : ' • Sem lead vinculado'}
                   </div>
                 </div>
                 <div className="hidden text-right text-xs text-muted-foreground sm:block">
                   <div className="capitalize">{selected.status}</div>
                   {selected.assignee?.name && <div className="max-w-40 truncate">{selected.assignee.name}</div>}
                 </div>
+                <ConversationActions
+                  conversationId={selected.id}
+                  status={selected.status}
+                  lead={selected.lead}
+                  assignee={selected.assignee}
+                  canManage={canManage}
+                  canAssign={canAssign}
+                  onChanged={() => loadConversations(true)}
+                />
               </header>
 
               <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 md:px-6">
