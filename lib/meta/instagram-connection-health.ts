@@ -3,7 +3,6 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { decryptIntegrationSecret } from '@/lib/tracking/crypto';
-import { getActiveInstagramConnection } from './instagram-connection';
 import { isPlatformInstagramLoginAvailable } from './instagram-platform';
 import { INSTAGRAM_WEBHOOK_FIELDS, validateInstagramProfessionalAccount } from './instagram';
 import {
@@ -188,7 +187,17 @@ async function hasCompleteWebhookSubscription(input: { tenantId: string; connect
 export async function getInstagramConnectionHealthForTenant(tenantId: string) {
   const [platformAvailable, connection] = await Promise.all([
     isPlatformInstagramLoginAvailable(),
-    getActiveInstagramConnection(tenantId),
+    prisma.tenantInstagramConnection.findFirst({
+      where: { tenantId },
+      orderBy: { connectedAt: 'desc' },
+      select: {
+        id: true,
+        status: true,
+        connectedAt: true,
+        tokenExpiresAt: true,
+        lastValidatedAt: true,
+      },
+    }),
   ]);
   if (!connection) {
     return buildInstagramConnectionHealth({
@@ -199,7 +208,9 @@ export async function getInstagramConnectionHealthForTenant(tenantId: string) {
     });
   }
   const [webhookSubscriptionComplete, latestHealthAudit] = await Promise.all([
-    hasCompleteWebhookSubscription({ tenantId, connectionId: connection.id, connectedAt: connection.connectedAt }),
+    connection.status === 'connected'
+      ? hasCompleteWebhookSubscription({ tenantId, connectionId: connection.id, connectedAt: connection.connectedAt })
+      : Promise.resolve(false),
     getLatestConnectionHealthAudit({
       tenantId,
       entityType: 'tenant_instagram_connection',
