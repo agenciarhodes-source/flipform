@@ -135,3 +135,33 @@ test('provider failure classifier is conservative around transient Meta failures
   denied.status = 401;
   assert.equal(classifyMetaConnectionProviderError(denied).state, 'action_required');
 });
+
+test('WhatsApp provider helper preserves HTTP and provider code for health classification', async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: { code: 190, type: 'OAuthException', message: 'Invalid OAuth access token.' },
+  }), {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  try {
+    const { validateWhatsAppSystemUserToken } = await import('../lib/meta/whatsapp');
+    await assert.rejects(
+      validateWhatsAppSystemUserToken({
+        accessToken: 'runtime-token',
+        debugAccessToken: 'runtime-token',
+        appId: 'app-id',
+        wabaId: 'waba-id',
+      }),
+      (error: any) => {
+        assert.equal(error.status, 401);
+        assert.equal(error.providerCode, 190);
+        assert.equal(error.providerType, 'OAuthException');
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
