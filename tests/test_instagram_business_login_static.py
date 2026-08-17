@@ -10,7 +10,9 @@ def read(path: str) -> str:
 def test_instagram_registry_and_current_scopes_are_isolated_from_ads_and_whatsapp():
     registry = read('lib/meta/onboarding.ts')
     assert "flow: 'instagram_business_login'" in registry
-    assert "requiredScopes: ['instagram_business_basic', 'instagram_business_manage_messages']" in registry
+    assert "'instagram_business_basic'" in registry
+    assert "'instagram_business_manage_messages'" in registry
+    assert "'instagram_business_manage_comments'" in registry
     assert "persistence: 'tenant_instagram_connections'" in registry
     instagram = read('lib/meta/instagram.ts')
     assert "INSTAGRAM_GRAPH_BASE_URL = 'https://graph.instagram.com'" in instagram

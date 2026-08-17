@@ -59,7 +59,7 @@ export async function persistInstagramConnection(input: {
   accessTokenEncrypted: string;
   tokenExpiresAt: Date | null;
   connectedById: string;
-  webhookSubscribed: boolean;
+  webhookFields: readonly string[];
 }) {
   const now = new Date();
   return prisma.$transaction(async tx => {
@@ -136,7 +136,7 @@ export async function persistInstagramConnection(input: {
       },
     });
 
-    if (input.webhookSubscribed) {
+    if (input.webhookFields.length > 0) {
       await tx.auditLog.create({
         data: {
           tenantId: input.tenantId,
@@ -146,7 +146,7 @@ export async function persistInstagramConnection(input: {
           action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION,
           metadata: {
             instagramUserId: input.instagramUserId,
-            fields: ['messages'],
+            fields: [...input.webhookFields],
           },
         },
       });
