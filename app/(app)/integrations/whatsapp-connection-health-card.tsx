@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConnectionHealthPanel, type ConnectionHealth } from './connection-health-panel';
+import { WHATSAPP_CONNECTION_CHANGED_EVENT } from './connection-events';
 
 export function WhatsAppConnectionHealthCard() {
   const [health, setHealth] = useState<ConnectionHealth>(null);
@@ -27,7 +28,12 @@ export function WhatsAppConnectionHealthCard() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    const refresh = () => { void load(); };
+    window.addEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh);
+  }, [load]);
 
   async function checkConnection() {
     setChecking(true);
