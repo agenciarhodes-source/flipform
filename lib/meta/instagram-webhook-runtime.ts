@@ -1,10 +1,14 @@
 import 'server-only';
 
 import { createHmac, timingSafeEqual } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordInboundMessage, type MessageType } from '@/lib/conversations/core';
 
 const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
+const INSTAGRAM_COMMENT_EVENT_PROVIDER = 'instagram_comment';
+const INSTAGRAM_COMMENT_FIELDS = ['comments', 'live_comments'] as const;
+type InstagramCommentField = (typeof INSTAGRAM_COMMENT_FIELDS)[number];
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -84,6 +88,13 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
   };
 }
 
+function subscriptionFields(metadata: unknown) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return [] as string[];
+  const fields = (metadata as Record<string, unknown>).fields;
+  if (!Array.isArray(fields)) return [] as string[];
+  return fields.filter((field): field is string => typeof field === 'string');
+}
+
 async function resolveConnectedInstagramTenant(instagramUserId: string) {
   const connection = await prisma.tenantInstagramConnection.findUnique({
     where: { instagramUserId },
@@ -99,11 +110,109 @@ async function resolveConnectedInstagramTenant(instagramUserId: string) {
       action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION,
       createdAt: { gte: connection.connectedAt },
     },
-    select: { id: true },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, metadata: true },
   });
   if (!webhookSubscription) return null;
 
-  return connection;
+  return {
+    ...connection,
+    webhookFields: subscriptionFields(webhookSubscription.metadata),
+  };
+}
+
+function isInstagramCommentField(value: unknown): value is InstagramCommentField {
+  return typeof value === 'string'
+    && INSTAGRAM_COMMENT_FIELDS.some(field => field === value);
+}
+
+function collectInstagramCommentChanges(entry: any) {
+  const changes: Array<{ field: InstagramCommentField; value: any }> = [];
+
+  if (isInstagramCommentField(entry?.field)) {
+    changes.push({ field: entry.field, value: entry?.value });
+  }
+
+  if (Array.isArray(entry?.changes)) {
+    for (const change of entry.changes) {
+      if (isInstagramCommentField(change?.field)) {
+        changes.push({ field: change.field, value: change?.value });
+      }
+    }
+  }
+
+  return changes;
+}
+
+function normalizeInstagramComment(input: {
+  field: InstagramCommentField;
+  value: any;
+  instagramProfessionalAccountId: string;
+  entryTime: unknown;
+}) {
+  const commentId = stringId(input.value?.id);
+  if (!commentId) return null;
+
+  const commenterInstagramScopedId = stringId(input.value?.from?.id);
+  const selfInstagramScopedId = stringId(input.value?.from?.self_ig_scoped_id);
+  const commenterUsername = typeof input.value?.from?.username === 'string'
+    ? input.value.from.username.trim() || null
+    : null;
+  const text = typeof input.value?.text === 'string' ? input.value.text : null;
+  const mediaId = stringId(input.value?.media?.id);
+  const mediaProductType = typeof input.value?.media?.media_product_type === 'string'
+    ? input.value.media.media_product_type
+    : null;
+  const occurredAt = providerTimestamp(input.entryTime);
+  const isSelf = commenterInstagramScopedId === input.instagramProfessionalAccountId
+    || Boolean(selfInstagramScopedId);
+
+  return {
+    commentId,
+    field: input.field,
+    commenterInstagramScopedId,
+    commenterUsername,
+    text,
+    mediaId,
+    mediaProductType,
+    occurredAt,
+    isSelf,
+  };
+}
+
+async function persistInstagramCommentEvent(input: {
+  tenantId: string;
+  instagramProfessionalAccountId: string;
+  comment: NonNullable<ReturnType<typeof normalizeInstagramComment>>;
+}) {
+  const eventId = `${input.instagramProfessionalAccountId}:${input.comment.commentId}`;
+  try {
+    await prisma.webhookEvent.create({
+      data: {
+        provider: INSTAGRAM_COMMENT_EVENT_PROVIDER,
+        eventId,
+        eventType: input.comment.field,
+        tenantId: input.tenantId,
+        processedAt: new Date(),
+        rawPayload: {
+          instagramProfessionalAccountId: input.instagramProfessionalAccountId,
+          commentId: input.comment.commentId,
+          commenterInstagramScopedId: input.comment.commenterInstagramScopedId,
+          commenterUsername: input.comment.commenterUsername,
+          text: input.comment.text,
+          mediaId: input.comment.mediaId,
+          mediaProductType: input.comment.mediaProductType,
+          occurredAt: input.comment.occurredAt?.toISOString() || null,
+        },
+      },
+    });
+    return { duplicate: false };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return { duplicate: true };
+    }
+    throw error;
+  }
 }
 
 export async function processInstagramWebhook(payload: unknown) {
@@ -112,6 +221,9 @@ export async function processInstagramWebhook(payload: unknown) {
     inbound: 0,
     duplicates: 0,
     echoes: 0,
+    comments: 0,
+    commentDuplicates: 0,
+    selfComments: 0,
     ignored: 0,
   };
 
@@ -121,54 +233,90 @@ export async function processInstagramWebhook(payload: unknown) {
   for (const entry of entries) {
     result.entries += 1;
     const instagramProfessionalAccountId = stringId(entry?.id);
-    const events = Array.isArray(entry?.messaging) ? entry.messaging : [];
+    const messagingEvents = Array.isArray(entry?.messaging) ? entry.messaging : [];
+    const commentChanges = collectInstagramCommentChanges(entry);
+
     if (!instagramProfessionalAccountId) {
-      result.ignored += events.length;
+      result.ignored += messagingEvents.length + commentChanges.length;
       continue;
     }
 
     const connection = await resolveConnectedInstagramTenant(instagramProfessionalAccountId);
     if (!connection) {
-      result.ignored += events.length;
+      result.ignored += messagingEvents.length + commentChanges.length;
       continue;
     }
 
-    for (const event of events) {
-      const message = event?.message;
-      const externalMessageId = stringId(message?.mid);
-      const senderId = stringId(event?.sender?.id);
-      const recipientId = stringId(event?.recipient?.id);
+    if (connection.webhookFields.includes('messages')) {
+      for (const event of messagingEvents) {
+        const message = event?.message;
+        const externalMessageId = stringId(message?.mid);
+        const senderId = stringId(event?.sender?.id);
+        const recipientId = stringId(event?.recipient?.id);
 
-      if (!message || !externalMessageId || !senderId || !recipientId) {
+        if (!message || !externalMessageId || !senderId || !recipientId) {
+          result.ignored += 1;
+          continue;
+        }
+
+        if (message?.is_echo === true || senderId === instagramProfessionalAccountId) {
+          result.echoes += 1;
+          continue;
+        }
+
+        if (recipientId !== instagramProfessionalAccountId) {
+          result.ignored += 1;
+          continue;
+        }
+
+        const normalized = normalizeInstagramMessage(message, instagramProfessionalAccountId);
+        const persisted = await recordInboundMessage({
+          tenantId: connection.tenantId,
+          provider: 'meta',
+          channel: 'instagram',
+          externalUserId: senderId,
+          externalMessageId,
+          text: normalized.text,
+          type: normalized.type,
+          providerTimestamp: providerTimestamp(event?.timestamp),
+          metadata: normalized.metadata,
+        });
+
+        if (persisted.duplicate) result.duplicates += 1;
+        else result.inbound += 1;
+      }
+    } else {
+      result.ignored += messagingEvents.length;
+    }
+
+    for (const change of commentChanges) {
+      if (!connection.webhookFields.includes(change.field)) {
         result.ignored += 1;
         continue;
       }
 
-      if (message?.is_echo === true || senderId === instagramProfessionalAccountId) {
-        result.echoes += 1;
-        continue;
-      }
-
-      if (recipientId !== instagramProfessionalAccountId) {
-        result.ignored += 1;
-        continue;
-      }
-
-      const normalized = normalizeInstagramMessage(message, instagramProfessionalAccountId);
-      const persisted = await recordInboundMessage({
-        tenantId: connection.tenantId,
-        provider: 'meta',
-        channel: 'instagram',
-        externalUserId: senderId,
-        externalMessageId,
-        text: normalized.text,
-        type: normalized.type,
-        providerTimestamp: providerTimestamp(event?.timestamp),
-        metadata: normalized.metadata,
+      const comment = normalizeInstagramComment({
+        field: change.field,
+        value: change.value,
+        instagramProfessionalAccountId,
+        entryTime: entry?.time,
       });
+      if (!comment) {
+        result.ignored += 1;
+        continue;
+      }
+      if (comment.isSelf) {
+        result.selfComments += 1;
+        continue;
+      }
 
-      if (persisted.duplicate) result.duplicates += 1;
-      else result.inbound += 1;
+      const persisted = await persistInstagramCommentEvent({
+        tenantId: connection.tenantId,
+        instagramProfessionalAccountId,
+        comment,
+      });
+      if (persisted.duplicate) result.commentDuplicates += 1;
+      else result.comments += 1;
     }
   }
 

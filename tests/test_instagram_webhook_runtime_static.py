@@ -37,7 +37,7 @@ def test_instagram_webhook_credentials_are_least_privilege_and_channel_specific(
 
 def test_webhook_resolves_tenant_from_bound_and_webhook_subscribed_instagram_account():
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
-    resolver = runtime.split('async function resolveConnectedInstagramTenant', 1)[1].split('export async function processInstagramWebhook', 1)[0]
+    resolver = runtime.split('async function resolveConnectedInstagramTenant', 1)[1].split('function isInstagramCommentField', 1)[0]
     processor = runtime.split('export async function processInstagramWebhook', 1)[1]
 
     assert 'where: { instagramUserId }' in resolver
@@ -46,6 +46,7 @@ def test_webhook_resolves_tenant_from_bound_and_webhook_subscribed_instagram_acc
     assert "action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION" in resolver
     assert 'createdAt: { gte: connection.connectedAt }' in resolver
     assert 'if (!webhookSubscription) return null' in resolver
+    assert 'webhookFields: subscriptionFields(webhookSubscription.metadata)' in resolver
     assert 'entry?.id' in processor
     assert 'tenantId: connection.tenantId' in processor
     assert 'payload.tenantId' not in processor
@@ -55,6 +56,7 @@ def test_webhook_resolves_tenant_from_bound_and_webhook_subscribed_instagram_acc
 def test_inbound_instagram_messages_use_conversation_core_and_skip_business_echoes():
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
 
+    assert "connection.webhookFields.includes('messages')" in runtime
     assert 'recordInboundMessage({' in runtime
     assert "provider: 'meta'" in runtime
     assert "channel: 'instagram'" in runtime
@@ -72,14 +74,16 @@ def test_instagram_connection_subscribes_professional_account_and_marks_subscrip
     connection = read('lib/meta/instagram-connection.ts')
 
     assert '/subscribed_apps`' in helper
-    assert "subscribed_fields: ['messages']" in helper
+    assert "INSTAGRAM_WEBHOOK_FIELDS = ['messages', 'comments', 'live_comments'] as const" in helper
+    assert 'subscribed_fields: [...INSTAGRAM_WEBHOOK_FIELDS]' in helper
     assert 'Authorization: `Bearer ${input.accessToken}`' in helper
     assert "'webhook_subscription'" in helper
-    subscribe_pos = callback.index('await subscribeInstagramMessagingWebhooks')
+    subscribe_pos = callback.index('await subscribeInstagramWebhooks')
     persist_pos = callback.index('await persistInstagramConnection')
     assert subscribe_pos < persist_pos
-    assert 'webhookSubscribed: true' in callback
+    assert 'webhookFields: INSTAGRAM_WEBHOOK_FIELDS' in callback
     assert "INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED'" in connection
+    assert 'fields: [...input.webhookFields]' in connection
     assert "action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION" in connection
     assert "status: 'reconnect_required' as const" in connection
 

@@ -8,7 +8,8 @@ import { META_INSTAGRAM_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import {
   exchangeInstagramAuthorizationCode,
   exchangeInstagramLongLivedToken,
-  subscribeInstagramMessagingWebhooks,
+  INSTAGRAM_WEBHOOK_FIELDS,
+  subscribeInstagramWebhooks,
   validateInstagramProfessionalAccount,
 } from '@/lib/meta/instagram';
 import {
@@ -89,7 +90,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       throw new Error('Instagram OAuth user does not match validated professional account');
     }
 
-    await subscribeInstagramMessagingWebhooks({
+    await subscribeInstagramWebhooks({
       instagramUserId: account.instagramUserId,
       accessToken: longLived.accessToken,
     });
@@ -105,7 +106,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       accessTokenEncrypted: encryptIntegrationSecret(longLived.accessToken),
       tokenExpiresAt,
       connectedById: session.userId,
-      webhookSubscribed: true,
+      webhookFields: INSTAGRAM_WEBHOOK_FIELDS,
     });
 
     console.info('Instagram Business Login connected', {
@@ -113,13 +114,16 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       instagramUserId: account.instagramUserId,
       username: account.username,
       onboardingPurpose: META_INSTAGRAM_ONBOARDING_PURPOSE,
-      webhookFields: ['messages'],
+      webhookFields: INSTAGRAM_WEBHOOK_FIELDS,
       hasExpiration: Boolean(tokenExpiresAt),
     });
     return clearState(redirect('connected'));
   } catch (error) {
     const conflict = error instanceof Error && error.message === 'INSTAGRAM_ACCOUNT_BOUND_TO_OTHER_TENANT';
-    const permissions = error instanceof Error && error.message.includes('messaging_permission_validation');
+    const permissions = error instanceof Error && (
+      error.message.includes('messaging_permission_validation')
+      || error.message.includes('webhook_subscription')
+    );
     console.error('Instagram Business Login callback failed', {
       tenantId: session.tenantId,
       onboardingPurpose: META_INSTAGRAM_ONBOARDING_PURPOSE,

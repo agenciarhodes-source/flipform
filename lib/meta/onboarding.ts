@@ -26,7 +26,11 @@ export const META_ONBOARDING_CHANNELS = {
   [META_INSTAGRAM_ONBOARDING_PURPOSE]: {
     channel: 'instagram',
     flow: 'instagram_business_login',
-    requiredScopes: ['instagram_business_basic', 'instagram_business_manage_messages'],
+    requiredScopes: [
+      'instagram_business_basic',
+      'instagram_business_manage_messages',
+      'instagram_business_manage_comments',
+    ],
     persistence: 'tenant_instagram_connections',
   },
 } as const;
