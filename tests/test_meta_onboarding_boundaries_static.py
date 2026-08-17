@@ -10,7 +10,9 @@ def test_meta_onboarding_registry_separates_channel_purposes():
     assert "META_INSTAGRAM_ONBOARDING_PURPOSE = 'instagram_business_login'" in registry
     assert "'ads_read', 'ads_management', 'business_management'" in registry
     assert "'whatsapp_business_management', 'whatsapp_business_messaging'" in registry
-    assert "'instagram_business_basic', 'instagram_business_manage_messages'" in registry
+    assert "'instagram_business_basic'" in registry
+    assert "'instagram_business_manage_messages'" in registry
+    assert "'instagram_business_manage_comments'" in registry
     assert "persistence: 'tenant_meta_connections'" in registry
     assert "persistence: 'tenant_whatsapp_connections'" in registry
     assert "persistence: 'tenant_instagram_connections'" in registry
