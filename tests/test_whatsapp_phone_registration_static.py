@@ -93,13 +93,16 @@ def test_registration_uses_runtime_credential_without_admin_token():
 
 def test_connection_registration_marker_is_bound_to_phone_and_binding_version():
     route = read('app/api/integrations/whatsapp/connection/route.ts')
+    helper = read('lib/meta/whatsapp-connection-health.ts')
     assert 'isPlatformWhatsAppRuntimeAvailable' in route
     assert 'runtimeAvailable' in route
-    assert "action: 'WHATSAPP_PHONE_REGISTERED'" in route
-    assert 'entityId: connection.id' in route
-    assert 'createdAt: { gte: connection.connectedAt }' in route
-    assert 'metadata.phoneNumberId === connection.phoneNumberId' in route
-    assert 'metadata.bindingConnectedAt === bindingConnectedAt' in route
+    assert 'getWhatsAppRegisteredAt' in route
+    assert "action: WHATSAPP_PHONE_REGISTERED_ACTION" in helper
+    assert "const WHATSAPP_PHONE_REGISTERED_ACTION = 'WHATSAPP_PHONE_REGISTERED'" in helper
+    assert 'entityId: input.connectionId' in helper
+    assert 'createdAt: { gte: input.connectedAt }' in helper
+    assert 'metadata.phoneNumberId === input.phoneNumberId' in helper
+    assert 'metadata.bindingConnectedAt === bindingConnectedAt' in helper
     assert 'registeredAt' in route
     safe = route.split('function toSafeConnection', 1)[1].split('export const GET', 1)[0]
     assert 'phoneNumberId:' not in safe
