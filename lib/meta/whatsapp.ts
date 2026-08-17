@@ -56,7 +56,15 @@ async function metaJson(url: URL, operation: string, input: {
       metaCode: data?.error?.code,
       metaType: data?.error?.type,
     });
-    throw new Error(`Meta WhatsApp ${operation} failed`);
+    const error = new Error(`Meta WhatsApp ${operation} failed`) as Error & {
+      status?: number;
+      providerCode?: string | number | null;
+      providerType?: string | null;
+    };
+    error.status = response.status;
+    error.providerCode = data?.error?.code ?? null;
+    error.providerType = typeof data?.error?.type === 'string' ? data.error.type : null;
+    throw error;
   }
   return data;
 }
