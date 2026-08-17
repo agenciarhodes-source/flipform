@@ -6,6 +6,10 @@ import {
   isPlatformWhatsAppEmbeddedSignupAvailable,
   isPlatformWhatsAppRuntimeAvailable,
 } from '@/lib/meta/platform-settings';
+import {
+  getWhatsAppConnectionHealthForTenant,
+  getWhatsAppRegisteredAt,
+} from '@/lib/meta/whatsapp-connection-health';
 
 function toSafeConnection(connection: any | null, registeredAt: Date | null) {
   if (!connection) return null;
@@ -18,12 +22,13 @@ function toSafeConnection(connection: any | null, registeredAt: Date | null) {
     connectedAt: connection.connectedAt,
     systemUserAssignedAt: connection.systemUserAssignedAt,
     subscribedAt: connection.subscribedAt,
+    lastValidatedAt: connection.lastValidatedAt,
     registeredAt,
   };
 }
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
-  const [platformAvailable, runtimeAvailable, connection] = await Promise.all([
+  const [platformAvailable, runtimeAvailable, connection, health] = await Promise.all([
     isPlatformWhatsAppEmbeddedSignupAvailable(),
     isPlatformWhatsAppRuntimeAvailable(),
     prisma.tenantWhatsAppConnection.findFirst({
@@ -40,38 +45,26 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
         connectedAt: true,
         systemUserAssignedAt: true,
         subscribedAt: true,
+        lastValidatedAt: true,
       },
     }),
+    getWhatsAppConnectionHealthForTenant(session.tenantId),
   ]);
 
-  let registeredAt: Date | null = null;
-  if (connection?.status === 'connected') {
-    const registrationAudits = await prisma.auditLog.findMany({
-      where: {
+  const registeredAt = connection?.status === 'connected'
+    ? await getWhatsAppRegisteredAt({
         tenantId: session.tenantId,
-        entityType: 'tenant_whatsapp_connection',
-        entityId: connection.id,
-        action: 'WHATSAPP_PHONE_REGISTERED',
-        createdAt: { gte: connection.connectedAt },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      select: { createdAt: true, metadata: true },
-    });
-    const bindingConnectedAt = connection.connectedAt.toISOString();
-    const registrationAudit = registrationAudits.find(item => {
-      if (!item.metadata || typeof item.metadata !== 'object' || Array.isArray(item.metadata)) return false;
-      const metadata = item.metadata as Record<string, unknown>;
-      return metadata.phoneNumberId === connection.phoneNumberId
-        && metadata.bindingConnectedAt === bindingConnectedAt;
-    });
-    registeredAt = registrationAudit?.createdAt || null;
-  }
+        connectionId: connection.id,
+        phoneNumberId: connection.phoneNumberId,
+        connectedAt: connection.connectedAt,
+      })
+    : null;
 
   return NextResponse.json({
     platformAvailable,
     runtimeAvailable,
     connection: toSafeConnection(connection, registeredAt),
+    health,
   });
 });
 
