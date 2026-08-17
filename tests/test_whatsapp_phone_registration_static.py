@@ -128,6 +128,17 @@ def test_registration_ui_keeps_pin_ephemeral_and_uses_runtime_readiness():
     assert "connected && !runtimeAvailable" in ui
 
 
+def test_whatsapp_health_refreshes_after_sibling_connection_mutations():
+    ui = read('app/(app)/integrations/whatsapp-embedded-signup-card.tsx')
+    health = read('app/(app)/integrations/whatsapp-connection-health-card.tsx')
+    events = read('app/(app)/integrations/connection-events.ts')
+    assert ui.count('notifyWhatsAppConnectionChanged();') >= 3
+    assert "WHATSAPP_CONNECTION_CHANGED_EVENT = 'flipform:whatsapp-connection-changed'" in events
+    assert 'window.dispatchEvent(new Event(WHATSAPP_CONNECTION_CHANGED_EVENT))' in events
+    assert 'window.addEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh)' in health
+    assert 'window.removeEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh)' in health
+
+
 def test_registration_pr_requires_no_schema_or_customer_data_mutation():
     schema = read('prisma/schema.prisma')
     whatsapp = schema.split('model TenantWhatsAppConnection {', 1)[1].split('\n}', 1)[0]
