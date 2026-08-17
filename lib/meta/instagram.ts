@@ -109,8 +109,6 @@ export async function validateInstagramProfessionalAccount(input: { accessToken:
   }
 
   const instagramUserId = String(profile.id);
-  // Official Conversations API requires the professional account ID plus
-  // platform=instagram. Empty data is valid; a permission failure is not.
   const conversationsUrl = new URL(`${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/${instagramUserId}/conversations`);
   conversationsUrl.searchParams.set('platform', 'instagram');
   conversationsUrl.searchParams.set('limit', '1');
@@ -123,4 +121,23 @@ export async function validateInstagramProfessionalAccount(input: { accessToken:
     instagramUserId,
     username: profile.username as string,
   };
+}
+
+export async function subscribeInstagramMessagingWebhooks(input: {
+  instagramUserId: string;
+  accessToken: string;
+}) {
+  const url = `${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/${encodeURIComponent(input.instagramUserId)}/subscribed_apps`;
+  const payload = await fetchJson(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${input.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ subscribed_fields: ['messages'] }),
+  }, 'webhook_subscription');
+
+  if (payload.success !== true) {
+    throw new Error('Instagram webhook subscription did not return success');
+  }
 }

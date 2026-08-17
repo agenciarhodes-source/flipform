@@ -8,6 +8,7 @@ import { META_INSTAGRAM_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import {
   exchangeInstagramAuthorizationCode,
   exchangeInstagramLongLivedToken,
+  subscribeInstagramMessagingWebhooks,
   validateInstagramProfessionalAccount,
 } from '@/lib/meta/instagram';
 import {
@@ -88,6 +89,11 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       throw new Error('Instagram OAuth user does not match validated professional account');
     }
 
+    await subscribeInstagramMessagingWebhooks({
+      instagramUserId: account.instagramUserId,
+      accessToken: longLived.accessToken,
+    });
+
     const tokenExpiresAt = longLived.expiresInSeconds
       ? new Date(Date.now() + longLived.expiresInSeconds * 1000)
       : null;
@@ -106,6 +112,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       instagramUserId: account.instagramUserId,
       username: account.username,
       onboardingPurpose: META_INSTAGRAM_ONBOARDING_PURPOSE,
+      webhookFields: ['messages'],
       hasExpiration: Boolean(tokenExpiresAt),
     });
     return clearState(redirect('connected'));
