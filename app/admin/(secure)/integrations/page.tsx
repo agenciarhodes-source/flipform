@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
 
 type Settings = {
@@ -121,6 +122,7 @@ export default function AdminIntegrationsPage() {
       <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar configuração'}</Button>
     </Card>}
 
+    <MetaPlatformReadinessPanel />
     <TenantMetaBindingManager />
   </div>;
 }
