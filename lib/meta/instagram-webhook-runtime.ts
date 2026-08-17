@@ -43,7 +43,10 @@ function stringId(value: unknown) {
 function providerTimestamp(value: unknown) {
   const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  const date = new Date(numeric);
+  // Meta webhook examples are not fully uniform: some timestamps are Unix seconds,
+  // while messaging payloads commonly use milliseconds. Normalize both safely.
+  const milliseconds = numeric < 100_000_000_000 ? numeric * 1000 : numeric;
+  const date = new Date(milliseconds);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

@@ -31,6 +31,14 @@ def test_instagram_comment_webhook_accepts_direct_and_changes_payload_shapes():
     assert 'mediaProductType' in runtime
 
 
+def test_instagram_comment_timestamps_accept_seconds_or_milliseconds():
+    runtime = read('lib/meta/instagram-webhook-runtime.ts')
+
+    assert 'numeric < 100_000_000_000 ? numeric * 1000 : numeric' in runtime
+    assert 'const occurredAt = providerTimestamp(input.entryTime)' in runtime
+    assert 'providerTimestamp(event?.timestamp)' in runtime
+
+
 def test_instagram_comments_are_tenant_safe_idempotent_and_do_not_create_conversations():
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
 
