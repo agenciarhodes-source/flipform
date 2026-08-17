@@ -130,10 +130,12 @@ export function InboxClient({
   canManage,
   canAssign,
   canSendWhatsApp,
+  canSendInstagram,
 }: {
   canManage: boolean;
   canAssign: boolean;
   canSendWhatsApp: boolean;
+  canSendInstagram: boolean;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -149,6 +151,11 @@ export function InboxClient({
   const selectedIdRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
+  const selectedChannelCanSend = selected?.channel === 'whatsapp'
+    ? canSendWhatsApp
+    : selected?.channel === 'instagram'
+      ? canSendInstagram
+      : false;
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -173,6 +180,7 @@ export function InboxClient({
     selectedIdRef.current = conversationId;
     setMessages([]);
     setLoadingMessages(Boolean(conversationId));
+    setDraft('');
     setError(null);
     setWarning(null);
     setSelectedId(conversationId);
@@ -194,6 +202,9 @@ export function InboxClient({
           selectedIdRef.current = nextId;
           setMessages([]);
           setLoadingMessages(Boolean(nextId));
+          setDraft('');
+          setError(null);
+          setWarning(null);
         }
         return nextId;
       });
@@ -246,11 +257,13 @@ export function InboxClient({
     if (!selectedId) {
       setMessages([]);
       setLoadingMessages(false);
+      setDraft('');
       return;
     }
 
     setMessages([]);
     setLoadingMessages(true);
+    setDraft('');
     setError(null);
     setWarning(null);
     void loadMessages(selectedId);
@@ -264,7 +277,29 @@ export function InboxClient({
   }, [messages.length, selectedId]);
 
   async function sendMessage() {
-    if (!selected || selected.channel !== 'whatsapp' || !canSendWhatsApp || sending) return;
+    if (!selected || sending) return;
+
+    const conversationId = selected.id;
+    const channel = selected.channel;
+    const canSendChannel = channel === 'whatsapp'
+      ? canSendWhatsApp
+      : channel === 'instagram'
+        ? canSendInstagram
+        : false;
+    if (!canSendChannel) return;
+
+    if (channel === 'instagram' && !selected.lastInboundAt) {
+      setError('O Instagram só permite responder depois que a pessoa inicia a conversa.');
+      return;
+    }
+
+    const endpoint = channel === 'whatsapp'
+      ? `/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp`
+      : channel === 'instagram'
+        ? `/api/conversations/${encodeURIComponent(conversationId)}/messages/instagram`
+        : null;
+    if (!endpoint) return;
+
     const text = draft.trim();
     if (!text) return;
 
@@ -272,7 +307,7 @@ export function InboxClient({
     setError(null);
     setWarning(null);
     try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(selected.id)}/messages/whatsapp`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -285,16 +320,20 @@ export function InboxClient({
         throw new Error(data.error || 'Não foi possível enviar a mensagem.');
       }
 
-      setDraft('');
-      if (response.status === 202) {
-        setWarning(data.warning || 'O status do envio ainda está sendo confirmado. O Flipform não repetirá o envio automaticamente.');
+      if (selectedIdRef.current === conversationId) {
+        setDraft('');
+        if (response.status === 202) {
+          setWarning(data.warning || 'O status do envio ainda está sendo confirmado. O Flipform não repetirá o envio automaticamente.');
+        }
       }
       await Promise.all([
-        loadMessages(selected.id, true),
+        loadMessages(conversationId, true),
         loadConversations(true),
       ]);
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar a mensagem.');
+      if (selectedIdRef.current === conversationId) {
+        setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar a mensagem.');
+      }
     } finally {
       setSending(false);
     }
@@ -308,7 +347,7 @@ export function InboxClient({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h1 className="font-heading text-lg font-semibold">Conversas</h1>
-                <p className="text-xs text-muted-foreground">WhatsApp agora, Instagram preparado no core.</p>
+                <p className="text-xs text-muted-foreground">WhatsApp e Instagram em uma só Inbox.</p>
               </div>
               <Button
                 variant="ghost"
@@ -472,11 +511,15 @@ export function InboxClient({
                     </div>
                   )}
 
-                  {selected.channel !== 'whatsapp' ? (
+                  {selected.channel !== 'whatsapp' && selected.channel !== 'instagram' ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
-                      O histórico multicanal já suporta Instagram. O envio pelo Direct entra na próxima etapa da integração Instagram.
+                      O envio ainda não está disponível para este canal.
                     </div>
-                  ) : !canSendWhatsApp ? (
+                  ) : selected.channel === 'instagram' && !selected.lastInboundAt ? (
+                    <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
+                      O Instagram só permite responder depois que a pessoa inicia a conversa.
+                    </div>
+                  ) : !selectedChannelCanSend ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
                       Seu perfil possui acesso somente de leitura para esta conversa.
                     </div>
@@ -493,7 +536,7 @@ export function InboxClient({
                         }}
                         maxLength={4096}
                         rows={2}
-                        placeholder="Digite uma mensagem..."
+                        placeholder={selected.channel === 'instagram' ? 'Responder no Instagram...' : 'Digite uma mensagem...'}
                         className="min-h-[44px] max-h-36 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={sending}
                       />
@@ -503,7 +546,7 @@ export function InboxClient({
                         className="h-11 w-11 shrink-0"
                         onClick={() => void sendMessage()}
                         disabled={sending || !draft.trim()}
-                        aria-label="Enviar mensagem"
+                        aria-label={selected.channel === 'instagram' ? 'Enviar mensagem pelo Instagram' : 'Enviar mensagem pelo WhatsApp'}
                       >
                         {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>
