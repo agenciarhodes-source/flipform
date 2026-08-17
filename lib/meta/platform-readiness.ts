@@ -1,8 +1,8 @@
 import 'server-only';
 
-import { getPlatformInstagramLoginCredentials, INSTAGRAM_OAUTH_CALLBACK_PATH } from './instagram-platform';
 import { INSTAGRAM_GRAPH_VERSION } from './instagram';
-import { getPlatformInstagramWebhookCredentials, getInstagramWebhookVerifyToken } from './instagram-runtime-credentials';
+import { getPlatformInstagramLoginCredentials, INSTAGRAM_OAUTH_CALLBACK_PATH } from './instagram-platform';
+import { getInstagramWebhookVerifyToken, getPlatformInstagramWebhookCredentials } from './instagram-runtime-credentials';
 import { META_PLATFORM_GRAPH_API_VERSION } from './oauth';
 import {
   getPlatformMetaOAuthCredentials,
@@ -38,10 +38,7 @@ export type MetaReadinessComponent = {
 export type MetaPlatformReadiness = {
   status: MetaPlatformReadinessStatus;
   summary: string;
-  graphApiVersions: {
-    meta: string;
-    instagram: string;
-  };
+  graphApiVersions: { meta: string; instagram: string };
   endpoints: {
     adsOAuthCallback: string;
     instagramOAuthCallback: string;
@@ -103,19 +100,19 @@ function appUrlReady(baseUrl: string | null, nodeEnv: string | undefined) {
   return url.protocol === 'https:' && !['localhost', '127.0.0.1', '::1'].includes(url.hostname);
 }
 
-function passFailCheck(input: {
+function check(input: {
   key: string;
   label: string;
   ok: boolean;
-  passDetail: string;
-  failDetail: string;
+  pass: string;
+  fail: string;
   blocking?: boolean;
 }): MetaReadinessCheck {
   return {
     key: input.key,
     label: input.label,
     status: input.ok ? 'pass' : 'fail',
-    detail: input.ok ? input.passDetail : input.failDetail,
+    detail: input.ok ? input.pass : input.fail,
     blocking: input.blocking ?? true,
   };
 }
@@ -123,18 +120,31 @@ function passFailCheck(input: {
 function component(input: {
   key: MetaReadinessComponent['key'];
   label: string;
-  readySummary: string;
-  actionSummary: string;
+  ready: string;
+  action: string;
   checks: MetaReadinessCheck[];
 }): MetaReadinessComponent {
-  const ready = input.checks.every(check => !check.blocking || check.status === 'pass');
+  const isReady = input.checks.every(item => !item.blocking || item.status === 'pass');
   return {
     key: input.key,
     label: input.label,
-    status: ready ? 'ready' : 'action_required',
-    summary: ready ? input.readySummary : input.actionSummary,
+    status: isReady ? 'ready' : 'action_required',
+    summary: isReady ? input.ready : input.action,
     checks: input.checks,
   };
+}
+
+/**
+ * Readiness must diagnose broken encryption/configuration instead of becoming
+ * unavailable itself. Credential loaders may throw when an encrypted secret can
+ * no longer be decrypted, so each probe is isolated and fails closed to false.
+ */
+export async function probeCredentialReadability(loader: () => Promise<unknown>) {
+  try {
+    return Boolean(await loader());
+  } catch {
+    return false;
+  }
 }
 
 export function buildMetaPlatformReadiness(
@@ -144,34 +154,28 @@ export function buildMetaPlatformReadiness(
   now = new Date(),
 ): MetaPlatformReadiness {
   const baseUrl = normalizedAppBaseUrl(environment.appUrl);
-  const publicAppUrlReady = appUrlReady(baseUrl, environment.nodeEnv);
+  const publicUrlReady = appUrlReady(baseUrl, environment.nodeEnv);
 
   const base = component({
     key: 'base',
     label: 'Base Meta da plataforma',
-    readySummary: 'Credenciais centrais legíveis e URL pública preparada.',
-    actionSummary: 'A configuração central da Meta ainda possui pendências.',
+    ready: 'Credenciais centrais legíveis e URL pública preparada.',
+    action: 'A configuração central da Meta ainda possui pendências.',
     checks: [
-      passFailCheck({
-        key: 'meta_app_id',
-        label: 'Meta App ID',
-        ok: present(settings.appId),
-        passDetail: 'App ID configurado no Admin.',
-        failDetail: 'Configure o Meta App ID no Admin.',
+      check({
+        key: 'meta_app_id', label: 'Meta App ID', ok: present(settings.appId),
+        pass: 'App ID configurado no Admin.', fail: 'Configure o Meta App ID no Admin.',
       }),
-      passFailCheck({
-        key: 'meta_app_secret',
-        label: 'Meta App Secret',
+      check({
+        key: 'meta_app_secret', label: 'Meta App Secret',
         ok: Boolean(settings.appSecretConfigured && probes.metaOAuthReadable),
-        passDetail: 'App Secret criptografado e legível pelo backend.',
-        failDetail: 'Configure novamente o App Secret ou valide a chave de criptografia da plataforma.',
+        pass: 'App Secret criptografado e legível pelo backend.',
+        fail: 'Configure novamente o App Secret ou valide a chave de criptografia da plataforma.',
       }),
-      passFailCheck({
-        key: 'public_app_url',
-        label: 'URL pública do FlipForm',
-        ok: publicAppUrlReady,
-        passDetail: `URL base válida para callbacks: ${baseUrl}.`,
-        failDetail: environment.nodeEnv === 'production'
+      check({
+        key: 'public_app_url', label: 'URL pública do FlipForm', ok: publicUrlReady,
+        pass: `URL base válida para callbacks: ${baseUrl}.`,
+        fail: environment.nodeEnv === 'production'
           ? 'NEXT_PUBLIC_APP_URL deve apontar para uma URL HTTPS pública em produção.'
           : 'Configure NEXT_PUBLIC_APP_URL com uma URL HTTP/HTTPS válida.',
       }),
@@ -181,29 +185,24 @@ export function buildMetaPlatformReadiness(
   const ads = component({
     key: 'ads',
     label: 'Ads / Facebook Login for Business',
-    readySummary: 'O onboarding de Ads está preparado internamente.',
-    actionSummary: 'O onboarding de Ads ainda não pode ser liberado.',
+    ready: 'O onboarding de Ads está preparado internamente.',
+    action: 'O onboarding de Ads ainda não pode ser liberado.',
     checks: [
-      passFailCheck({
-        key: 'business_login_config_id',
-        label: 'Configuration ID',
-        ok: present(settings.businessLoginConfigId),
-        passDetail: 'Configuration ID de Ads configurado.',
-        failDetail: 'Configure o Facebook Login for Business Configuration ID.',
+      check({
+        key: 'business_login_config_id', label: 'Configuration ID', ok: present(settings.businessLoginConfigId),
+        pass: 'Configuration ID de Ads configurado.', fail: 'Configure o Facebook Login for Business Configuration ID.',
       }),
-      passFailCheck({
-        key: 'ads_callback',
-        label: 'OAuth callback',
-        ok: publicAppUrlReady && typeof settings.redirectUri === 'string' && settings.redirectUri.startsWith(`${baseUrl || ''}/`),
-        passDetail: settings.redirectUri || 'Callback configurado.',
-        failDetail: 'O callback de Ads não está consistente com a URL pública da plataforma.',
+      check({
+        key: 'ads_callback', label: 'OAuth callback',
+        ok: publicUrlReady && typeof settings.redirectUri === 'string' && settings.redirectUri.startsWith(`${baseUrl || ''}/`),
+        pass: settings.redirectUri || 'Callback configurado.',
+        fail: 'O callback de Ads não está consistente com a URL pública da plataforma.',
       }),
-      passFailCheck({
-        key: 'ads_credentials_readable',
-        label: 'Credenciais de runtime',
+      check({
+        key: 'ads_credentials_readable', label: 'Credenciais de runtime',
         ok: probes.metaOAuthReadable && present(settings.businessLoginConfigId),
-        passDetail: 'O backend consegue carregar as credenciais necessárias para iniciar o OAuth.',
-        failDetail: 'As credenciais de Ads não estão utilizáveis pelo backend.',
+        pass: 'O backend consegue carregar as credenciais necessárias para iniciar o OAuth.',
+        fail: 'As credenciais de Ads não estão utilizáveis pelo backend.',
       }),
     ],
   });
@@ -211,29 +210,23 @@ export function buildMetaPlatformReadiness(
   const instagram = component({
     key: 'instagram',
     label: 'Instagram Business Login',
-    readySummary: 'O Business Login do Instagram está preparado internamente.',
-    actionSummary: 'O Business Login do Instagram possui pendências.',
+    ready: 'O Business Login do Instagram está preparado internamente.',
+    action: 'O Business Login do Instagram possui pendências.',
     checks: [
-      passFailCheck({
-        key: 'instagram_app_id',
-        label: 'Instagram App ID',
-        ok: present(settings.instagramAppId),
-        passDetail: 'Instagram App ID configurado.',
-        failDetail: 'Configure o Instagram App ID no Admin.',
+      check({
+        key: 'instagram_app_id', label: 'Instagram App ID', ok: present(settings.instagramAppId),
+        pass: 'Instagram App ID configurado.', fail: 'Configure o Instagram App ID no Admin.',
       }),
-      passFailCheck({
-        key: 'instagram_app_secret',
-        label: 'Instagram App Secret',
+      check({
+        key: 'instagram_app_secret', label: 'Instagram App Secret',
         ok: Boolean(settings.instagramAppSecretConfigured && probes.instagramLoginReadable),
-        passDetail: 'Instagram App Secret criptografado e legível pelo backend.',
-        failDetail: 'Configure novamente o Instagram App Secret ou valide a criptografia da plataforma.',
+        pass: 'Instagram App Secret criptografado e legível pelo backend.',
+        fail: 'Configure novamente o Instagram App Secret ou valide a criptografia da plataforma.',
       }),
-      passFailCheck({
-        key: 'instagram_callback',
-        label: 'OAuth callback',
-        ok: publicAppUrlReady,
-        passDetail: endpoint(baseUrl, INSTAGRAM_OAUTH_CALLBACK_PATH),
-        failDetail: 'A URL pública precisa estar válida antes de cadastrar o callback do Instagram.',
+      check({
+        key: 'instagram_callback', label: 'OAuth callback', ok: publicUrlReady,
+        pass: endpoint(baseUrl, INSTAGRAM_OAUTH_CALLBACK_PATH),
+        fail: 'A URL pública precisa estar válida antes de cadastrar o callback do Instagram.',
       }),
     ],
   });
@@ -241,29 +234,24 @@ export function buildMetaPlatformReadiness(
   const instagramWebhook = component({
     key: 'instagram_webhook',
     label: 'Instagram Webhook',
-    readySummary: 'Endpoint, assinatura e verificação estão preparados.',
-    actionSummary: 'O webhook do Instagram ainda possui pendências de plataforma.',
+    ready: 'Endpoint, assinatura e verificação estão preparados.',
+    action: 'O webhook do Instagram ainda possui pendências de plataforma.',
     checks: [
-      passFailCheck({
-        key: 'instagram_webhook_secret',
-        label: 'Assinatura do webhook',
-        ok: probes.instagramWebhookSecretReadable,
-        passDetail: 'O backend consegue carregar o App Secret usado para validar X-Hub-Signature-256.',
-        failDetail: 'O App Secret do Instagram não está disponível para validar assinaturas.',
+      check({
+        key: 'instagram_webhook_secret', label: 'Assinatura do webhook', ok: probes.instagramWebhookSecretReadable,
+        pass: 'O backend consegue carregar o App Secret usado para validar X-Hub-Signature-256.',
+        fail: 'O App Secret do Instagram não está disponível para validar assinaturas.',
       }),
-      passFailCheck({
-        key: 'instagram_webhook_verify_token',
-        label: 'Verify Token',
+      check({
+        key: 'instagram_webhook_verify_token', label: 'Verify Token',
         ok: environment.instagramWebhookVerifyTokenConfigured,
-        passDetail: 'Verify Token configurado no ambiente sem exposição ao navegador.',
-        failDetail: 'Configure META_INSTAGRAM_WEBHOOK_VERIFY_TOKEN no ambiente da aplicação.',
+        pass: 'Verify Token configurado no ambiente sem exposição ao navegador.',
+        fail: 'Configure META_INSTAGRAM_WEBHOOK_VERIFY_TOKEN no ambiente da aplicação.',
       }),
-      passFailCheck({
-        key: 'instagram_webhook_url',
-        label: 'Callback URL',
-        ok: publicAppUrlReady,
-        passDetail: endpoint(baseUrl, META_INSTAGRAM_WEBHOOK_PATH),
-        failDetail: 'A URL pública precisa estar válida para cadastrar o webhook na Meta.',
+      check({
+        key: 'instagram_webhook_url', label: 'Callback URL', ok: publicUrlReady,
+        pass: endpoint(baseUrl, META_INSTAGRAM_WEBHOOK_PATH),
+        fail: 'A URL pública precisa estar válida para cadastrar o webhook na Meta.',
       }),
     ],
   });
@@ -271,43 +259,32 @@ export function buildMetaPlatformReadiness(
   const whatsapp = component({
     key: 'whatsapp',
     label: 'WhatsApp Embedded Signup',
-    readySummary: 'Embedded Signup e runtime estão preparados internamente.',
-    actionSummary: 'O WhatsApp ainda possui pendências de configuração da plataforma.',
+    ready: 'Embedded Signup e runtime estão preparados internamente.',
+    action: 'O WhatsApp ainda possui pendências de configuração da plataforma.',
     checks: [
-      passFailCheck({
-        key: 'whatsapp_config_id',
-        label: 'Embedded Signup Configuration ID',
-        ok: present(settings.whatsappEmbeddedSignupConfigId),
-        passDetail: 'Configuration ID configurado.',
-        failDetail: 'Configure o Configuration ID do WhatsApp Embedded Signup.',
+      check({
+        key: 'whatsapp_config_id', label: 'Embedded Signup Configuration ID', ok: present(settings.whatsappEmbeddedSignupConfigId),
+        pass: 'Configuration ID configurado.', fail: 'Configure o Configuration ID do WhatsApp Embedded Signup.',
       }),
-      passFailCheck({
-        key: 'whatsapp_business_id',
-        label: 'Business ID da plataforma',
-        ok: present(settings.whatsappBusinessId),
-        passDetail: 'Business ID da plataforma configurado.',
-        failDetail: 'Configure o Business ID da plataforma.',
+      check({
+        key: 'whatsapp_business_id', label: 'Business ID da plataforma', ok: present(settings.whatsappBusinessId),
+        pass: 'Business ID da plataforma configurado.', fail: 'Configure o Business ID da plataforma.',
       }),
-      passFailCheck({
-        key: 'whatsapp_system_user',
-        label: 'System User do FlipForm',
-        ok: present(settings.whatsappSystemUserId),
-        passDetail: 'System User ID configurado.',
-        failDetail: 'Configure o System User ID usado pela plataforma.',
+      check({
+        key: 'whatsapp_system_user', label: 'System User do FlipForm', ok: present(settings.whatsappSystemUserId),
+        pass: 'System User ID configurado.', fail: 'Configure o System User ID usado pela plataforma.',
       }),
-      passFailCheck({
-        key: 'whatsapp_admin_runtime',
-        label: 'Credenciais administrativas',
+      check({
+        key: 'whatsapp_admin_runtime', label: 'Credenciais administrativas',
         ok: Boolean(settings.whatsappAdminSystemUserAccessTokenConfigured && probes.whatsappEmbeddedSignupReadable),
-        passDetail: 'Token administrativo criptografado e legível para atribuição do System User.',
-        failDetail: 'O token administrativo do WhatsApp não está utilizável pelo backend.',
+        pass: 'Token administrativo criptografado e legível para atribuição do System User.',
+        fail: 'O token administrativo do WhatsApp não está utilizável pelo backend.',
       }),
-      passFailCheck({
-        key: 'whatsapp_runtime',
-        label: 'Credencial de runtime',
+      check({
+        key: 'whatsapp_runtime', label: 'Credencial de runtime',
         ok: Boolean(settings.whatsappSystemUserAccessTokenConfigured && probes.whatsappRuntimeReadable),
-        passDetail: 'System User token de runtime criptografado e legível.',
-        failDetail: 'O System User token de runtime não está utilizável pelo backend.',
+        pass: 'System User token de runtime criptografado e legível.',
+        fail: 'O System User token de runtime não está utilizável pelo backend.',
       }),
     ],
   });
@@ -315,29 +292,24 @@ export function buildMetaPlatformReadiness(
   const whatsappWebhook = component({
     key: 'whatsapp_webhook',
     label: 'WhatsApp Webhook',
-    readySummary: 'Endpoint, assinatura e verificação estão preparados.',
-    actionSummary: 'O webhook do WhatsApp ainda possui pendências de plataforma.',
+    ready: 'Endpoint, assinatura e verificação estão preparados.',
+    action: 'O webhook do WhatsApp ainda possui pendências de plataforma.',
     checks: [
-      passFailCheck({
-        key: 'whatsapp_webhook_secret',
-        label: 'Assinatura do webhook',
-        ok: probes.whatsappWebhookSecretReadable,
-        passDetail: 'O backend consegue carregar o App Secret usado para validar X-Hub-Signature-256.',
-        failDetail: 'O App Secret da Meta não está disponível para validar assinaturas do WhatsApp.',
+      check({
+        key: 'whatsapp_webhook_secret', label: 'Assinatura do webhook', ok: probes.whatsappWebhookSecretReadable,
+        pass: 'O backend consegue carregar o App Secret usado para validar X-Hub-Signature-256.',
+        fail: 'O App Secret da Meta não está disponível para validar assinaturas do WhatsApp.',
       }),
-      passFailCheck({
-        key: 'whatsapp_webhook_verify_token',
-        label: 'Verify Token',
+      check({
+        key: 'whatsapp_webhook_verify_token', label: 'Verify Token',
         ok: environment.whatsappWebhookVerifyTokenConfigured,
-        passDetail: 'Verify Token configurado no ambiente sem exposição ao navegador.',
-        failDetail: 'Configure META_WHATSAPP_WEBHOOK_VERIFY_TOKEN no ambiente da aplicação.',
+        pass: 'Verify Token configurado no ambiente sem exposição ao navegador.',
+        fail: 'Configure META_WHATSAPP_WEBHOOK_VERIFY_TOKEN no ambiente da aplicação.',
       }),
-      passFailCheck({
-        key: 'whatsapp_webhook_url',
-        label: 'Callback URL',
-        ok: publicAppUrlReady,
-        passDetail: endpoint(baseUrl, META_WHATSAPP_WEBHOOK_PATH),
-        failDetail: 'A URL pública precisa estar válida para cadastrar o webhook na Meta.',
+      check({
+        key: 'whatsapp_webhook_url', label: 'Callback URL', ok: publicUrlReady,
+        pass: endpoint(baseUrl, META_WHATSAPP_WEBHOOK_PATH),
+        fail: 'A URL pública precisa estar válida para cadastrar o webhook na Meta.',
       }),
     ],
   });
@@ -350,10 +322,7 @@ export function buildMetaPlatformReadiness(
     summary: internallyReady
       ? 'A configuração interna do FlipForm está pronta. Os gates externos da Meta ainda devem ser confirmados antes da liberação ampla para clientes.'
       : 'Existem pendências internas que devem ser resolvidas antes de liberar novas conexões Meta.',
-    graphApiVersions: {
-      meta: META_PLATFORM_GRAPH_API_VERSION,
-      instagram: INSTAGRAM_GRAPH_VERSION,
-    },
+    graphApiVersions: { meta: META_PLATFORM_GRAPH_API_VERSION, instagram: INSTAGRAM_GRAPH_VERSION },
     endpoints: {
       adsOAuthCallback: settings.redirectUri,
       instagramOAuthCallback: endpoint(baseUrl, INSTAGRAM_OAUTH_CALLBACK_PATH),
@@ -386,33 +355,32 @@ export function buildMetaPlatformReadiness(
 }
 
 export async function getMetaPlatformReadinessForAdmin() {
+  const settings = await getPlatformMetaSettingsForAdmin();
   const [
-    settings,
-    metaOAuthCredentials,
-    instagramLoginCredentials,
-    instagramWebhookCredentials,
-    whatsappEmbeddedSignupCredentials,
-    whatsappRuntimeCredentials,
-    whatsappWebhookCredentials,
+    metaOAuthReadable,
+    instagramLoginReadable,
+    instagramWebhookSecretReadable,
+    whatsappEmbeddedSignupReadable,
+    whatsappRuntimeReadable,
+    whatsappWebhookSecretReadable,
   ] = await Promise.all([
-    getPlatformMetaSettingsForAdmin(),
-    getPlatformMetaOAuthCredentials(),
-    getPlatformInstagramLoginCredentials(),
-    getPlatformInstagramWebhookCredentials(),
-    getPlatformWhatsAppEmbeddedSignupCredentials(),
-    getPlatformWhatsAppRuntimeCredentials(),
-    getPlatformWhatsAppWebhookCredentials(),
+    probeCredentialReadability(() => getPlatformMetaOAuthCredentials()),
+    probeCredentialReadability(() => getPlatformInstagramLoginCredentials()),
+    probeCredentialReadability(() => getPlatformInstagramWebhookCredentials()),
+    probeCredentialReadability(() => getPlatformWhatsAppEmbeddedSignupCredentials()),
+    probeCredentialReadability(() => getPlatformWhatsAppRuntimeCredentials()),
+    probeCredentialReadability(() => getPlatformWhatsAppWebhookCredentials()),
   ]);
 
   return buildMetaPlatformReadiness(
     settings,
     {
-      metaOAuthReadable: Boolean(metaOAuthCredentials),
-      instagramLoginReadable: Boolean(instagramLoginCredentials),
-      instagramWebhookSecretReadable: Boolean(instagramWebhookCredentials),
-      whatsappEmbeddedSignupReadable: Boolean(whatsappEmbeddedSignupCredentials),
-      whatsappRuntimeReadable: Boolean(whatsappRuntimeCredentials),
-      whatsappWebhookSecretReadable: Boolean(whatsappWebhookCredentials),
+      metaOAuthReadable,
+      instagramLoginReadable,
+      instagramWebhookSecretReadable,
+      whatsappEmbeddedSignupReadable,
+      whatsappRuntimeReadable,
+      whatsappWebhookSecretReadable,
     },
     {
       nodeEnv: process.env.NODE_ENV,
