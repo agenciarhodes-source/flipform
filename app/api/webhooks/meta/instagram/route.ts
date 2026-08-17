@@ -8,9 +8,12 @@ import {
   verifyInstagramWebhookChallenge,
   verifyInstagramWebhookSignature,
 } from '@/lib/meta/instagram-webhook-runtime';
+import { drainInstagramCommentAutomationQueue } from '@/lib/meta/instagram-comment-automation';
+import { scheduleAfterResponse } from '@/lib/vercel-wait-until';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   const verifyToken = getInstagramWebhookVerifyToken();
@@ -51,6 +54,24 @@ export async function POST(req: NextRequest) {
   try {
     const result = await processInstagramWebhook(payload);
     console.info('Meta Instagram webhook processed', result);
+
+    const backgroundWork = drainInstagramCommentAutomationQueue()
+      .then(workerResult => {
+        if (workerResult.claimed > 0 || workerResult.errors > 0) {
+          console.info('Instagram comment automation worker processed', workerResult);
+        }
+      })
+      .catch(error => {
+        // Queue rows remain durable and can be reclaimed by a later signed webhook.
+        console.error('Instagram comment automation background worker failed', {
+          errorType: error instanceof Error ? error.name : 'unknown',
+        });
+      });
+
+    if (!scheduleAfterResponse(backgroundWork)) {
+      await backgroundWork;
+    }
+
     return Response.json({ ok: true });
   } catch (error) {
     console.error('Meta Instagram webhook processing failed', {

@@ -53,7 +53,8 @@ def test_instagram_comments_are_tenant_safe_idempotent_and_do_not_create_convers
     assert 'entry.tenantId' not in runtime
 
     comment_segment = runtime.split('async function persistInstagramCommentEvent', 1)[1].split('export async function processInstagramWebhook', 1)[0]
-    assert 'prisma.webhookEvent.create' in comment_segment
+    assert 'prisma.$transaction' in comment_segment
+    assert 'tx.webhookEvent.create' in comment_segment
     assert 'prisma.conversation' not in comment_segment
     assert 'recordInboundMessage' not in comment_segment
 

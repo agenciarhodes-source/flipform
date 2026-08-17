@@ -4,6 +4,10 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordInboundMessage, type MessageType } from '@/lib/conversations/core';
+import {
+  createInstagramCommentAutomationJob,
+  prepareInstagramCommentAutomationForComment,
+} from '@/lib/meta/instagram-comment-automation';
 
 const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
 const INSTAGRAM_COMMENT_EVENT_PROVIDER = 'instagram_comment';
@@ -189,30 +193,52 @@ async function persistInstagramCommentEvent(input: {
   comment: NonNullable<ReturnType<typeof normalizeInstagramComment>>;
 }) {
   const eventId = `${input.instagramProfessionalAccountId}:${input.comment.commentId}`;
+  const preparedAutomation = input.comment.field === 'comments' && input.comment.text
+    ? await prepareInstagramCommentAutomationForComment({
+      tenantId: input.tenantId,
+      text: input.comment.text,
+    })
+    : null;
+
   try {
-    await prisma.webhookEvent.create({
-      data: {
-        provider: INSTAGRAM_COMMENT_EVENT_PROVIDER,
-        eventId,
-        eventType: input.comment.field,
-        tenantId: input.tenantId,
-        processedAt: new Date(),
-        rawPayload: {
-          instagramProfessionalAccountId: input.instagramProfessionalAccountId,
-          commentId: input.comment.commentId,
-          commenterInstagramScopedId: input.comment.commenterInstagramScopedId,
-          commenterUsername: input.comment.commenterUsername,
-          text: input.comment.text,
-          mediaId: input.comment.mediaId,
-          mediaProductType: input.comment.mediaProductType,
-          occurredAt: input.comment.occurredAt?.toISOString() || null,
+    return await prisma.$transaction(async tx => {
+      const event = await tx.webhookEvent.create({
+        data: {
+          provider: INSTAGRAM_COMMENT_EVENT_PROVIDER,
+          eventId,
+          eventType: input.comment.field,
+          tenantId: input.tenantId,
+          processedAt: new Date(),
+          rawPayload: {
+            instagramProfessionalAccountId: input.instagramProfessionalAccountId,
+            commentId: input.comment.commentId,
+            commenterInstagramScopedId: input.comment.commenterInstagramScopedId,
+            commenterUsername: input.comment.commenterUsername,
+            text: input.comment.text,
+            mediaId: input.comment.mediaId,
+            mediaProductType: input.comment.mediaProductType,
+            occurredAt: input.comment.occurredAt?.toISOString() || null,
+          },
         },
-      },
+        select: { id: true },
+      });
+
+      if (preparedAutomation) {
+        await createInstagramCommentAutomationJob(tx, {
+          tenantId: input.tenantId,
+          sourceCommentEventId: event.id,
+          prepared: preparedAutomation,
+        });
+      }
+
+      return {
+        duplicate: false as const,
+        automationQueued: Boolean(preparedAutomation),
+      };
     });
-    return { duplicate: false };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return { duplicate: true };
+      return { duplicate: true as const, automationQueued: false as const };
     }
     throw error;
   }
@@ -227,6 +253,7 @@ export async function processInstagramWebhook(payload: unknown) {
     comments: 0,
     commentDuplicates: 0,
     selfComments: 0,
+    automationsQueued: 0,
     ignored: 0,
   };
 
@@ -320,6 +347,7 @@ export async function processInstagramWebhook(payload: unknown) {
       });
       if (persisted.duplicate) result.commentDuplicates += 1;
       else result.comments += 1;
+      if (persisted.automationQueued) result.automationsQueued += 1;
     }
   }
 
