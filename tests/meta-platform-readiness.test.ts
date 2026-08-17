@@ -86,6 +86,16 @@ test('Meta readiness fails closed when secrets are configured but cannot be read
   assert.equal(readiness.components.find(component => component.key === 'whatsapp')?.status, 'action_required');
 });
 
+test('credential probe converts decryption/runtime errors into unreadable state', async () => {
+  const { probeCredentialReadability } = await import('../lib/meta/platform-readiness');
+
+  assert.equal(await probeCredentialReadability(async () => ({ token: 'loaded' })), true);
+  assert.equal(await probeCredentialReadability(async () => null), false);
+  assert.equal(await probeCredentialReadability(async () => {
+    throw new Error('cannot decrypt');
+  }), false);
+});
+
 test('Meta readiness requires webhook verify tokens without exposing their values', async () => {
   const { buildMetaPlatformReadiness } = await import('../lib/meta/platform-readiness');
   const readiness = buildMetaPlatformReadiness(
