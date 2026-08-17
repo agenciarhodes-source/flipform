@@ -35,7 +35,7 @@ def test_instagram_webhook_credentials_are_least_privilege_and_channel_specific(
     assert 'whatsapp' not in credentials.lower()
 
 
-def test_webhook_resolves_tenant_from_bound_instagram_account_not_external_tenant_id():
+def test_webhook_resolves_tenant_from_bound_and_webhook_subscribed_instagram_account():
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
     resolver = runtime.split('async function resolveConnectedInstagramTenant', 1)[1].split('export async function processInstagramWebhook', 1)[0]
     processor = runtime.split('export async function processInstagramWebhook', 1)[1]
@@ -43,6 +43,9 @@ def test_webhook_resolves_tenant_from_bound_instagram_account_not_external_tenan
     assert 'where: { instagramUserId }' in resolver
     assert "connection.status !== 'connected'" in resolver
     assert 'connection.revokedAt' in resolver
+    assert "action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION" in resolver
+    assert 'createdAt: { gte: connection.connectedAt }' in resolver
+    assert 'if (!webhookSubscription) return null' in resolver
     assert 'entry?.id' in processor
     assert 'tenantId: connection.tenantId' in processor
     assert 'payload.tenantId' not in processor
@@ -63,9 +66,10 @@ def test_inbound_instagram_messages_use_conversation_core_and_skip_business_echo
     assert 'if (persisted.duplicate)' in runtime
 
 
-def test_instagram_connection_subscribes_professional_account_to_message_webhooks_before_persistence():
+def test_instagram_connection_subscribes_professional_account_and_marks_subscription_before_reporting_connected():
     helper = read('lib/meta/instagram.ts')
     callback = read('app/api/integrations/instagram/callback/route.ts')
+    connection = read('lib/meta/instagram-connection.ts')
 
     assert '/subscribed_apps`' in helper
     assert "subscribed_fields: ['messages']" in helper
@@ -74,6 +78,10 @@ def test_instagram_connection_subscribes_professional_account_to_message_webhook
     subscribe_pos = callback.index('await subscribeInstagramMessagingWebhooks')
     persist_pos = callback.index('await persistInstagramConnection')
     assert subscribe_pos < persist_pos
+    assert 'webhookSubscribed: true' in callback
+    assert "INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED'" in connection
+    assert "action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION" in connection
+    assert "status: 'reconnect_required' as const" in connection
 
 
 def test_instagram_webhook_foundation_adds_no_schema_or_customer_data_mutation():

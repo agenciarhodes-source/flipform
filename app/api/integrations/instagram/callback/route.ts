@@ -105,6 +105,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       accessTokenEncrypted: encryptIntegrationSecret(longLived.accessToken),
       tokenExpiresAt,
       connectedById: session.userId,
+      webhookSubscribed: true,
     });
 
     console.info('Instagram Business Login connected', {

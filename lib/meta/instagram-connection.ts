@@ -3,6 +3,8 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
+const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
+
 const SAFE_CONNECTION_SELECT = {
   id: true,
   status: true,
@@ -25,6 +27,21 @@ export async function getActiveInstagramConnection(tenantId: string) {
   if (connection.tokenExpiresAt && connection.tokenExpiresAt.getTime() <= Date.now()) {
     return { ...connection, status: 'expired' as const };
   }
+
+  const webhookSubscription = await prisma.auditLog.findFirst({
+    where: {
+      tenantId,
+      entityType: 'tenant_instagram_connection',
+      entityId: connection.id,
+      action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION,
+      createdAt: { gte: connection.connectedAt },
+    },
+    select: { id: true },
+  });
+  if (!webhookSubscription) {
+    return { ...connection, status: 'reconnect_required' as const };
+  }
+
   return connection;
 }
 
@@ -42,6 +59,7 @@ export async function persistInstagramConnection(input: {
   accessTokenEncrypted: string;
   tokenExpiresAt: Date | null;
   connectedById: string;
+  webhookSubscribed: boolean;
 }) {
   const now = new Date();
   return prisma.$transaction(async tx => {
@@ -117,6 +135,22 @@ export async function persistInstagramConnection(input: {
         },
       },
     });
+
+    if (input.webhookSubscribed) {
+      await tx.auditLog.create({
+        data: {
+          tenantId: input.tenantId,
+          userId: input.connectedById,
+          entityType: 'tenant_instagram_connection',
+          entityId: connection.id,
+          action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION,
+          metadata: {
+            instagramUserId: input.instagramUserId,
+            fields: ['messages'],
+          },
+        },
+      });
+    }
 
     return connection;
   });

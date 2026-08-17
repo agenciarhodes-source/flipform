@@ -30,8 +30,8 @@ O mesmo valor deve ser configurado no App Dashboard da Meta para o webhook do In
 - O módulo de webhook carrega somente o Instagram App Secret; ele não carrega o access token da conta profissional.
 - O tenant nunca é aceito do payload externo.
 - `entry.id` é tratado como o Instagram Professional Account ID e resolvido contra `tenant_instagram_connections`.
-- Somente bindings locais com status `connected` e sem revogação são aceitos.
-- Payloads de contas desconhecidas ou desconectadas são ignorados, sem criar tenant, conexão ou Lead.
+- Somente bindings locais com status `connected`, sem revogação e com auditoria de inscrição do webhook são aceitos.
+- Payloads de contas desconhecidas, desconectadas ou sem inscrição confirmada são ignorados, sem criar tenant, conexão ou Lead.
 
 ## Mensagens
 
@@ -63,7 +63,13 @@ Durante o Business Login, depois de validar a conta e a permissão de mensagens,
 
 com o campo `messages`, usando o Instagram User access token daquela conta. A conexão só é persistida depois que a inscrição retorna sucesso.
 
+Na mesma transação que persiste o binding, o FlipForm cria a auditoria `INSTAGRAM_WEBHOOK_SUBSCRIBED`. A API de status só reporta a integração como plenamente conectada quando existe esse marcador para a conexão atual. Um binding legado sem esse marcador retorna `reconnect_required`, exigindo uma nova conexão em vez de permanecer silenciosamente ativo sem eventos.
+
 Além dessa inscrição por conta, o Instagram/Webhooks Product do Meta App precisa ter o callback e o campo `messages` configurados no App Dashboard.
+
+## Rollout
+
+No momento de implementação do #202, a produção possuía zero registros em `tenant_instagram_connections`. Ainda assim, o marcador de auditoria torna o rollout seguro em outros ambientes e em qualquer cenário onde um binding antigo exista: ele não será aceito pelo runtime nem apresentado como totalmente conectado até ser reconectado e inscrito.
 
 ## Escopo seguinte
 

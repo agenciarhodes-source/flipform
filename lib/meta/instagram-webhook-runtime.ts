@@ -4,6 +4,8 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { recordInboundMessage, type MessageType } from '@/lib/conversations/core';
 
+const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
+
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
@@ -85,9 +87,22 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
 async function resolveConnectedInstagramTenant(instagramUserId: string) {
   const connection = await prisma.tenantInstagramConnection.findUnique({
     where: { instagramUserId },
-    select: { tenantId: true, status: true, revokedAt: true },
+    select: { id: true, tenantId: true, status: true, revokedAt: true, connectedAt: true },
   });
   if (!connection || connection.status !== 'connected' || connection.revokedAt) return null;
+
+  const webhookSubscription = await prisma.auditLog.findFirst({
+    where: {
+      tenantId: connection.tenantId,
+      entityType: 'tenant_instagram_connection',
+      entityId: connection.id,
+      action: INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION,
+      createdAt: { gte: connection.connectedAt },
+    },
+    select: { id: true },
+  });
+  if (!webhookSubscription) return null;
+
   return connection;
 }
 
