@@ -49,6 +49,7 @@ const NAV: NavItem[] = [
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
+  { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/forms", label: "Formulários", icon: FileText },
   { href: "/sales-rotation", label: "Rodízio de leads", icon: Shuffle, permission: "LEAD_ASSIGNMENT_ROTATION_VIEW" },
   { href: "/domains", label: "Domínios", icon: Globe2, permission: "DOMAINS_VIEW" },
