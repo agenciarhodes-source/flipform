@@ -67,6 +67,7 @@ export const formCreateSchema = z.object({
     message: z.string().optional(),
     buttonText: z.string().optional(),
     redirectUrl: z.string().optional().nullable(),
+    qualifiedRedirectUrl: z.string().url('URL de redirecionamento inválida.').refine((url) => /^https?:\/\//i.test(url), 'Use uma URL iniciando com http:// ou https://.').optional().nullable(),
   }).optional().nullable(),
   leadSource: z.string().refine((source) => FORM_LEAD_SOURCE_VALUES.includes(source as typeof FORM_LEAD_SOURCE_VALUES[number]), 'Selecione uma origem válida para os leads deste formulário.').default('formulario'),
   pipelineId: z.string().optional(),

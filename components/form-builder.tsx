@@ -63,6 +63,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
   const [dqMessage, setDqMessage] = useState('No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.');
   const [dqButtonText, setDqButtonText] = useState('Entendi');
   const [dqRedirectUrl, setDqRedirectUrl] = useState('');
+  const [qualifiedRedirectUrl, setQualifiedRedirectUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [leadSource, setLeadSource] = useState('formulario');
   const [fields, setFields] = useState<Field[]>([]);
@@ -115,6 +116,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
       setDqMessage(f.disqualificationSettings?.message || 'No momento, seu perfil não atende aos critérios necessários para continuar este cadastro.');
       setDqButtonText(f.disqualificationSettings?.buttonText || 'Entendi');
       setDqRedirectUrl(f.disqualificationSettings?.redirectUrl || '');
+      setQualifiedRedirectUrl(f.disqualificationSettings?.qualifiedRedirectUrl || '');
       setIsActive(f.isActive);
       setLeadSource(f.leadSource || 'formulario');
       setPipelineId(f.pipelineId || '');
@@ -278,7 +280,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         theme,
         coverImageUrl: coverImageUrl || null,
         logoUrl: formLogoUrl || null,
-        successMessage, leadSource, disqualificationSettings: { title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptionObjects(field.options) })), pipelineId, initialStageId,
+        successMessage, leadSource, disqualificationSettings: { title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null, qualifiedRedirectUrl: qualifiedRedirectUrl || null }, isActive, fields: fields.map((field) => ({ ...field, options: cleanOptionObjects(field.options) })), pipelineId, initialStageId,
       };
       const res = await fetch(formId ? `/api/forms/${formId}` : '/api/forms', {
         method: formId ? 'PUT' : 'POST',
@@ -455,6 +457,13 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <div><Label>Título público</Label><Input value={publicTitle} onChange={(e) => setPublicTitle(e.target.value)} /></div>
                 <div><Label>Descrição</Label><Textarea value={publicDescription} onChange={(e) => setPublicDescription(e.target.value)} rows={2} /></div>
                 <div><Label>Mensagem de sucesso</Label><Input value={successMessage} onChange={(e) => setSuccessMessage(e.target.value)} /></div>
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                  <div>
+                    <Label>Redirecionamento para lead qualificado</Label>
+                    <p className="text-xs text-muted-foreground">Opcional. Ao concluir o formulário como qualificado, o lead verá um botão para continuar para este link.</p>
+                  </div>
+                  <Input type="url" value={qualifiedRedirectUrl} onChange={(e) => setQualifiedRedirectUrl(e.target.value)} placeholder="https://..." />
+                </div>
                 <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
                   <div><Label>Mensagem para lead não qualificado</Label><p className="text-xs text-muted-foreground">Tela exibida quando uma pergunta qualificatória encerra o cadastro.</p></div>
                   <Input value={dqTitle} onChange={(e) => setDqTitle(e.target.value)} placeholder="Título da tela" />
@@ -612,7 +621,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
         primaryColor={primaryColor}
         successMessage={successMessage}
         fields={fields}
-        disqualificationSettings={{ title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null }}
+        disqualificationSettings={{ title: dqTitle, message: dqMessage, buttonText: dqButtonText, redirectUrl: dqRedirectUrl || null, qualifiedRedirectUrl: qualifiedRedirectUrl || null }}
         onClose={() => setShowPreview(false)}
       />}
     </div>
