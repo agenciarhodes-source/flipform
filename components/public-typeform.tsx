@@ -28,7 +28,7 @@ interface Props {
     bgColor?: string | null; buttonColor?: string | null; textColor?: string | null;
     theme?: string | null; coverImageUrl?: string | null;
     successMessage: string; logoUrl?: string | null; tenantName?: string;
-    disqualificationSettings?: { title?: string; message?: string; buttonText?: string; redirectUrl?: string | null } | null;
+    disqualificationSettings?: { title?: string; message?: string; buttonText?: string; redirectUrl?: string | null; qualifiedRedirectUrl?: string | null } | null;
     fields: PublicField[];
   };
   onSubmit: (answers: { fieldId: string; label: string; value: any }[]) => Promise<PublicFormSubmitResponse | { ok: true; qualified: false }>;
@@ -158,6 +158,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   }
 
   if (done) {
+    const qualifiedRedirectUrl = form.disqualificationSettings?.qualifiedRedirectUrl || null;
     return (
       <div className={`min-h-full flex items-center justify-center p-6 ${themeBgClass}`} style={themeBgStyle}>
         <div className="max-w-md w-full text-center animate-fade-in" style={textStyle}>
@@ -165,7 +166,16 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
             <CheckCircle2 className="w-10 h-10" style={{ color: form.primaryColor }} />
           </div>
           <h2 className="font-heading text-2xl font-bold mb-2">{form.successMessage}</h2>
-          <p className={isDark ? 'text-slate-400' : 'text-muted-foreground'}>Você já pode fechar esta janela.</p>
+          <p className={isDark ? 'text-slate-400' : 'text-muted-foreground'}>{qualifiedRedirectUrl ? 'Seu cadastro foi concluído. Clique em continuar para avançar.' : 'Você já pode fechar esta janela.'}</p>
+          {qualifiedRedirectUrl && (
+            <Button
+              className="mt-6 text-white"
+              style={{ backgroundColor: buttonColor }}
+              onClick={() => { if (!previewMode) window.location.href = qualifiedRedirectUrl; }}
+            >
+              Continuar
+            </Button>
+          )}
         </div>
       </div>
     );
