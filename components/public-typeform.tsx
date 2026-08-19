@@ -116,7 +116,16 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
       setSubmitting(true);
       try {
         const result = await onSubmit(fields.map((f) => ({ fieldId: f.id, label: f.label, value: normalizeAnswerForSubmit(f, answers[f.id]) })));
-        if (result.qualified === false) setDisqualified(true); else setDone(true);
+        if (result.qualified === false) {
+          setDisqualified(true);
+        } else {
+          const qualifiedRedirectUrl = form.disqualificationSettings?.qualifiedRedirectUrl || null;
+          if (qualifiedRedirectUrl) {
+            window.location.href = qualifiedRedirectUrl;
+            return;
+          }
+          setDone(true);
+        }
       } catch (e: any) {
         setError(e?.message || 'Erro ao enviar. Tente novamente.');
         submitGuard.current = false;
