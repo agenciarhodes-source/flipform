@@ -67,7 +67,11 @@ def test_execution_enqueue_is_atomic_and_idempotent_without_new_table():
     assert 'ON CONFLICT (provider, event_id) DO NOTHING' in core
     assert "createHash('sha256')" in core
     assert "'flipform-automation-execution-v1'" in core
+    event_id_fn = core.split('export function automationExecutionEventId', 1)[1].split('export async function enqueueAutomationExecution', 1)[0]
+    assert 'definitionVersionId' not in event_id_fn
     assert 'definitionVersionId: input.definition.versionId' in core
+    assert 'assertAutomationDefinitionVersionInTenant(tx' in core
+    assert 'tenantId: input.tenantId' in core
     assert "state: 'queued'" in core
     assert 'actionIndex: 0' in core
 

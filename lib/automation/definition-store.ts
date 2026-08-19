@@ -20,7 +20,7 @@ import {
   AutomationTriggerDefinition,
 } from './types';
 
-const AUTOMATION_DEFINITION_ENTITY_TYPE = 'automation_definition_v1';
+export const AUTOMATION_DEFINITION_ENTITY_TYPE = 'automation_definition_v1';
 const AUTOMATION_DEFINITION_CREATED_ACTION = 'AUTOMATION_DEFINITION_CREATED';
 const AUTOMATION_DEFINITION_UPDATED_ACTION = 'AUTOMATION_DEFINITION_UPDATED';
 const MAX_TRIGGER_OR_ACTION_CONFIG_BYTES = 16 * 1024;
@@ -170,6 +170,25 @@ function definitionMetadata(input: {
     trigger: input.trigger,
     actions: input.actions,
   };
+}
+
+export async function assertAutomationDefinitionVersionInTenant(
+  tx: Prisma.TransactionClient,
+  input: { tenantId: string; definitionId: string; definitionVersionId: string },
+) {
+  const persisted = await tx.auditLog.findFirst({
+    where: {
+      id: input.definitionVersionId,
+      tenantId: input.tenantId,
+      entityType: AUTOMATION_DEFINITION_ENTITY_TYPE,
+      entityId: input.definitionId,
+      action: { in: [AUTOMATION_DEFINITION_CREATED_ACTION, AUTOMATION_DEFINITION_UPDATED_ACTION] },
+    },
+    select: { id: true },
+  });
+  if (!persisted) {
+    throw new AutomationCoreError('INVALID_REQUEST', 'Automation definition does not belong to this tenant');
+  }
 }
 
 export async function listAutomationDefinitions(tenantId: string) {

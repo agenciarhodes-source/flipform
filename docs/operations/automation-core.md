@@ -27,7 +27,7 @@ O core não consulta Meta, não recebe webhooks e não decide regras específica
 4. aplicar as condições específicas daquele trigger;
 5. persistir o evento de origem e chamar `enqueueAutomationExecution(...)` na mesma transação quando atomicidade for necessária.
 
-O `sourceEventKey` deve ser estável para o evento externo. O core deriva um SHA-256 com tenant + definição + versão + source event para impedir execução duplicada.
+O `sourceEventKey` deve ser estável para o evento externo. O core deriva um SHA-256 com tenant + definição + source event para impedir que o mesmo evento execute novamente após uma mudança de versão. A versão exata usada na primeira decisão continua persistida no job e é validada pelo worker.
 
 ## Action handlers
 

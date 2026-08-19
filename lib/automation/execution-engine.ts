@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { asObject, assertAutomationType, normalizeJsonObject, toJson } from './json';
-import { listAutomationDefinitions } from './definition-store';
+import { assertAutomationDefinitionVersionInTenant, listAutomationDefinitions } from './definition-store';
 import {
   AutomationActionHandlerResult,
   AutomationActionHandlers,
@@ -68,7 +68,6 @@ function parseExecutionMetadata(value: Prisma.JsonValue | null | undefined): Aut
 export function automationExecutionEventId(input: {
   tenantId: string;
   definitionId: string;
-  definitionVersionId: string;
   sourceEventKey: string;
 }) {
   return createHash('sha256')
@@ -76,7 +75,6 @@ export function automationExecutionEventId(input: {
       'flipform-automation-execution-v1',
       input.tenantId,
       input.definitionId,
-      input.definitionVersionId,
       input.sourceEventKey,
     ].join('\n'))
     .digest('hex');
@@ -99,6 +97,11 @@ export async function enqueueAutomationExecution(
     throw new AutomationCoreError('INVALID_REQUEST', 'Automation source event key is invalid');
   }
   assertAutomationType(input.definition.trigger.type, 'Trigger');
+  await assertAutomationDefinitionVersionInTenant(tx, {
+    tenantId: input.tenantId,
+    definitionId: input.definition.id,
+    definitionVersionId: input.definition.versionId,
+  });
   const executionInput = normalizeJsonObject(
     input.executionInput ?? {},
     'Automation execution input',
@@ -107,7 +110,6 @@ export async function enqueueAutomationExecution(
   const eventId = automationExecutionEventId({
     tenantId: input.tenantId,
     definitionId: input.definition.id,
-    definitionVersionId: input.definition.versionId,
     sourceEventKey,
   });
   const metadata: AutomationExecutionMetadata = {
