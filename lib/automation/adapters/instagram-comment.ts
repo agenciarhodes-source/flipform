@@ -14,6 +14,11 @@ export const INSTAGRAM_PRIVATE_REPLY_ACTION = 'instagram.private_reply';
 
 export type InstagramCommentCoreMatchType = 'exact' | 'contains';
 
+type ParsedInstagramCommentTrigger = {
+  keywordNormalized: string;
+  matchType: InstagramCommentCoreMatchType;
+};
+
 export type PreparedInstagramCommentCoreAutomation = {
   definition: AutomationDefinitionSnapshot;
   keywordNormalized: string;
@@ -24,11 +29,14 @@ function stringField(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function parseTriggerConfig(definition: AutomationDefinitionSnapshot) {
+function parseTriggerConfig(
+  definition: AutomationDefinitionSnapshot,
+): ParsedInstagramCommentTrigger | null {
   if (definition.trigger.type !== INSTAGRAM_COMMENT_KEYWORD_TRIGGER) return null;
   const keyword = stringField(definition.trigger.config.keyword);
-  const matchType = definition.trigger.config.matchType === 'exact' || definition.trigger.config.matchType === 'contains'
-    ? definition.trigger.config.matchType
+  const rawMatchType = definition.trigger.config.matchType;
+  const matchType: InstagramCommentCoreMatchType | null = rawMatchType === 'exact' || rawMatchType === 'contains'
+    ? rawMatchType
     : null;
   if (!keyword || !matchType) return null;
   const keywordNormalized = normalizeInstagramCommentAutomationText(keyword);
