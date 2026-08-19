@@ -54,7 +54,7 @@ Estados persistidos:
 - `delivery_unknown`
 - `skipped`
 
-O worker usa `FOR UPDATE SKIP LOCKED`, lease de 2 minutos, cursor de ação e no máximo 3 tentativas internas. Definição removida, desabilitada ou alterada de versão antes da execução é marcada como `skipped` em vez de executar uma configuração diferente da que originou o job.
+O worker usa `FOR UPDATE SKIP LOCKED`, lease de 2 minutos, token de fencing por tentativa, cursor de ação e no máximo 3 tentativas internas. Linhas com lease ainda ativo são filtradas antes do `LIMIT`, e qualquer write de cursor/release/finalização exige o token da tentativa que fez o claim. Definição removida, desabilitada ou alterada de versão antes da execução é marcada como `skipped` em vez de executar uma configuração diferente da que originou o job.
 
 O cursor é persistido após cada ação concluída. Mesmo assim, um crash entre o efeito externo e a gravação local ainda pode repetir a chamada; por isso a idempotência do handler é requisito de segurança, não otimização.
 

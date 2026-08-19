@@ -32,6 +32,7 @@ type AutomationExecutionMetadata = {
   attempts: number;
   actionIndex: number;
   attemptStartedAt?: string;
+  leaseToken?: string;
   completedAt?: string;
   outcome?: string;
   lastErrorCode?: string;
@@ -159,6 +160,34 @@ function processingLeaseIsStale(metadata: AutomationExecutionMetadata, now = Dat
   return !Number.isFinite(startedAt) || now - startedAt >= AUTOMATION_PROCESSING_LEASE_MS;
 }
 
+async function writeExecutionWhileLeaseOwned(input: {
+  executionId: string;
+  leaseToken: string;
+  metadata: AutomationExecutionMetadata;
+  processed: boolean;
+}) {
+  const updated = input.processed
+    ? await prisma.$queryRaw<Array<{ id: string }>>`
+        UPDATE public.webhook_events
+        SET raw_payload = ${JSON.stringify(input.metadata)}::jsonb, processed_at = NOW()
+        WHERE id = ${input.executionId}
+          AND raw_payload->>'source' = ${AUTOMATION_EXECUTION_SOURCE}
+          AND raw_payload->>'state' = 'processing'
+          AND raw_payload->>'leaseToken' = ${input.leaseToken}
+        RETURNING id
+      `
+    : await prisma.$queryRaw<Array<{ id: string }>>`
+        UPDATE public.webhook_events
+        SET raw_payload = ${JSON.stringify(input.metadata)}::jsonb, processed_at = NULL
+        WHERE id = ${input.executionId}
+          AND raw_payload->>'source' = ${AUTOMATION_EXECUTION_SOURCE}
+          AND raw_payload->>'state' = 'processing'
+          AND raw_payload->>'leaseToken' = ${input.leaseToken}
+        RETURNING id
+      `;
+  return Boolean(updated[0]);
+}
+
 async function finalizeExecution(input: {
   executionId: string;
   metadata: AutomationExecutionMetadata;
@@ -167,6 +196,7 @@ async function finalizeExecution(input: {
   lastErrorCode?: string;
   actionIndex?: number;
 }) {
+  if (!input.metadata.leaseToken) return false;
   const nextMetadata: AutomationExecutionMetadata = {
     ...input.metadata,
     state: input.state,
@@ -175,9 +205,11 @@ async function finalizeExecution(input: {
     outcome: input.outcome,
     ...(input.lastErrorCode ? { lastErrorCode: input.lastErrorCode } : {}),
   };
-  await prisma.webhookEvent.update({
-    where: { id: input.executionId },
-    data: { rawPayload: toJson(nextMetadata), processedAt: new Date() },
+  return writeExecutionWhileLeaseOwned({
+    executionId: input.executionId,
+    leaseToken: input.metadata.leaseToken,
+    metadata: nextMetadata,
+    processed: true,
   });
 }
 
@@ -187,27 +219,44 @@ async function releaseExecution(input: {
   actionIndex: number;
   lastErrorCode: string;
 }) {
-  const { attemptStartedAt: _attemptStartedAt, completedAt: _completedAt, outcome: _outcome, ...rest } = input.metadata;
+  if (!input.metadata.leaseToken) return false;
+  const {
+    attemptStartedAt: _attemptStartedAt,
+    leaseToken: _leaseToken,
+    completedAt: _completedAt,
+    outcome: _outcome,
+    ...rest
+  } = input.metadata;
   const nextMetadata: AutomationExecutionMetadata = {
     ...rest,
     state: 'queued',
     actionIndex: input.actionIndex,
     lastErrorCode: input.lastErrorCode,
   };
-  await prisma.webhookEvent.update({
-    where: { id: input.executionId },
-    data: { rawPayload: toJson(nextMetadata), processedAt: null },
+  return writeExecutionWhileLeaseOwned({
+    executionId: input.executionId,
+    leaseToken: input.metadata.leaseToken,
+    metadata: nextMetadata,
+    processed: false,
   });
 }
 
 async function claimAutomationExecutions(batchSize = AUTOMATION_WORKER_BATCH_SIZE) {
   const safeBatchSize = Math.max(1, Math.min(50, Math.trunc(batchSize)));
+  const staleBeforeIso = new Date(Date.now() - AUTOMATION_PROCESSING_LEASE_MS).toISOString();
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const rows = await tx.$queryRaw<LockedAutomationExecution[]>`
       SELECT id, tenant_id, raw_payload
       FROM public.webhook_events
       WHERE provider = ${AUTOMATION_EXECUTION_PROVIDER}
         AND processed_at IS NULL
+        AND NOT COALESCE(
+          raw_payload->>'source' = ${AUTOMATION_EXECUTION_SOURCE}
+          AND raw_payload->>'state' = 'processing'
+          AND raw_payload->>'attemptStartedAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
+          AND raw_payload->>'attemptStartedAt' > ${staleBeforeIso},
+          FALSE
+        )
       ORDER BY created_at ASC
       LIMIT ${safeBatchSize}
       FOR UPDATE SKIP LOCKED
@@ -247,6 +296,7 @@ async function claimAutomationExecutions(batchSize = AUTOMATION_WORKER_BATCH_SIZ
         state: 'processing',
         attempts: metadata.attempts + 1,
         attemptStartedAt: new Date().toISOString(),
+        leaseToken: randomUUID(),
       };
       await tx.webhookEvent.update({ where: { id: row.id }, data: { rawPayload: toJson(nextMetadata) } });
       claimed.push({ id: row.id, tenantId: row.tenant_id, metadata: nextMetadata });
@@ -260,9 +310,12 @@ async function persistExecutionActionCursor(input: {
   metadata: AutomationExecutionMetadata;
   actionIndex: number;
 }) {
-  await prisma.webhookEvent.update({
-    where: { id: input.executionId },
-    data: { rawPayload: toJson({ ...input.metadata, actionIndex: input.actionIndex }) },
+  if (!input.metadata.leaseToken) return false;
+  return writeExecutionWhileLeaseOwned({
+    executionId: input.executionId,
+    leaseToken: input.metadata.leaseToken,
+    metadata: { ...input.metadata, actionIndex: input.actionIndex },
+    processed: false,
   });
 }
 
@@ -355,7 +408,8 @@ async function processClaimedExecution(
 
     if (result.status === 'completed') {
       actionIndex += 1;
-      await persistExecutionActionCursor({ executionId: execution.id, metadata: execution.metadata, actionIndex });
+      const cursorPersisted = await persistExecutionActionCursor({ executionId: execution.id, metadata: execution.metadata, actionIndex });
+      if (!cursorPersisted) return 'deferred' as const;
       continue;
     }
     if (result.status === 'retry') {

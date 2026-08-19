@@ -87,6 +87,13 @@ def test_worker_uses_lease_skip_locked_version_binding_and_cursor():
     assert 'persistExecutionActionCursor' in core
     assert 'actionIndex += 1' in core
     assert 'processedAt: new Date()' in core
+    assert 'leaseToken: randomUUID()' in core
+    assert "raw_payload->>'leaseToken' = ${input.leaseToken}" in core
+    assert "raw_payload->>'state' = 'processing'" in core
+    claim_query = core.split('async function claimAutomationExecutions', 1)[1].split('async function persistExecutionActionCursor', 1)[0]
+    assert claim_query.index('AND NOT COALESCE(') < claim_query.index('LIMIT ${safeBatchSize}')
+    assert "raw_payload->>'attemptStartedAt' > ${staleBeforeIso}" in claim_query
+    assert "if (!cursorPersisted) return 'deferred' as const" in core
 
 
 def test_action_handlers_are_explicit_idempotent_and_fail_closed():
