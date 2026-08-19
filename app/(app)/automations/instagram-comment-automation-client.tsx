@@ -64,7 +64,12 @@ function payloadFromRule(rule: AutomationRule, overrides?: Partial<DraftRule>) {
   };
 }
 
-function statusTone(health: ConnectionHealth, connected: boolean) {
+async function responsePayload(response: Response) {
+  return response.json().catch(() => ({}));
+}
+
+function statusTone(health: ConnectionHealth, connected: boolean, connectionError: string | null) {
+  if (connectionError) return 'border-amber-200 bg-amber-50 text-amber-900';
   if (!connected || !health || health.state === 'not_connected' || health.state === 'revoked') {
     return 'border-slate-200 bg-slate-50 text-slate-800';
   }
@@ -75,7 +80,8 @@ function statusTone(health: ConnectionHealth, connected: boolean) {
   return 'border-rose-200 bg-rose-50 text-rose-900';
 }
 
-function connectionLabel(connection: InstagramConnection, health: ConnectionHealth) {
+function connectionLabel(connection: InstagramConnection, health: ConnectionHealth, connectionError: string | null) {
+  if (connectionError) return 'Status do Instagram indisponível';
   if (!connection || connection.status !== 'connected') return 'Instagram não conectado';
   if (!health) return 'Instagram conectado';
   return `Instagram: ${health.label}`;
@@ -85,6 +91,8 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [connection, setConnection] = useState<InstagramConnection>(null);
   const [health, setHealth] = useState<ConnectionHealth>(null);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
@@ -94,25 +102,43 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [rulesResponse, connectionResponse] = await Promise.all([
-        fetch('/api/integrations/instagram/comment-automations', { cache: 'no-store' }),
-        fetch('/api/integrations/instagram/connection', { cache: 'no-store' }),
-      ]);
-      const [rulesPayload, connectionPayload] = await Promise.all([
-        rulesResponse.json(),
-        connectionResponse.json(),
-      ]);
-      if (!rulesResponse.ok) throw new Error(rulesPayload.error || 'Não foi possível carregar as automações.');
-      if (!connectionResponse.ok) throw new Error(connectionPayload.error || 'Não foi possível verificar o Instagram.');
-      setRules(Array.isArray(rulesPayload.rules) ? rulesPayload.rules : []);
-      setConnection(connectionPayload.connection || null);
-      setHealth(connectionPayload.health || null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível carregar as automações.');
-    } finally {
-      setLoading(false);
+    setRulesError(null);
+    setConnectionError(null);
+
+    const [rulesResult, connectionResult] = await Promise.allSettled([
+      fetch('/api/integrations/instagram/comment-automations', { cache: 'no-store' }),
+      fetch('/api/integrations/instagram/connection', { cache: 'no-store' }),
+    ]);
+
+    if (rulesResult.status === 'fulfilled') {
+      const payload = await responsePayload(rulesResult.value);
+      if (rulesResult.value.ok) {
+        setRules(Array.isArray(payload.rules) ? payload.rules : []);
+      } else {
+        const message = payload.error || 'Não foi possível carregar as automações.';
+        setRulesError(message);
+        toast.error(message);
+      }
+    } else {
+      const message = 'Não foi possível carregar as automações.';
+      setRulesError(message);
+      toast.error(message);
     }
+
+    if (connectionResult.status === 'fulfilled') {
+      const payload = await responsePayload(connectionResult.value);
+      if (connectionResult.value.ok) {
+        setConnection(payload.connection || null);
+        setHealth(payload.health || null);
+      } else {
+        const message = payload.error || 'Não foi possível verificar o Instagram.';
+        setConnectionError(message);
+      }
+    } else {
+      setConnectionError('Não foi possível verificar o Instagram agora.');
+    }
+
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -121,10 +147,16 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
 
   const activeCount = useMemo(() => rules.filter(rule => rule.enabled).length, [rules]);
   const connected = connection?.status === 'connected';
-  const needsReconnect = !connected || health?.state === 'expired' || health?.state === 'revoked' || health?.state === 'action_required';
+  const needsReconnect = !connectionError && (
+    !connected
+    || health?.state === 'expired'
+    || health?.state === 'revoked'
+    || health?.state === 'action_required'
+  );
 
   function openCreate() {
-    const nextOrder = rules.length ? Math.max(...rules.map(rule => rule.orderIndex)) + 10 : 0;
+    const highestOrder = rules.length ? Math.max(...rules.map(rule => rule.orderIndex)) : -10;
+    const nextOrder = Math.min(10000, Math.max(0, highestOrder + 10));
     setEditingRuleId(null);
     setDraft({ ...EMPTY_DRAFT, orderIndex: nextOrder });
     setEditorOpen(true);
@@ -155,7 +187,7 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(draft),
       });
-      const payload = await response.json();
+      const payload = await responsePayload(response);
       if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar a automação.');
       toast.success(editingRuleId ? 'Automação atualizada.' : 'Automação criada.');
       setEditorOpen(false);
@@ -177,7 +209,7 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payloadFromRule(rule, { enabled: !rule.enabled })),
       });
-      const payload = await response.json();
+      const payload = await responsePayload(response);
       if (!response.ok) throw new Error(payload.error || 'Não foi possível alterar o status da automação.');
       setRules(current => current.map(item => item.id === rule.id ? payload.rule : item));
       toast.success(rule.enabled ? 'Automação pausada.' : 'Automação ativada.');
@@ -209,12 +241,13 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
         )}
       </div>
 
-      <div className={`rounded-xl border p-4 ${statusTone(health, connected)}`}>
+      <div className={`rounded-xl border p-4 ${statusTone(health, connected, connectionError)}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold">{connectionLabel(connection, health)}</p>
+            <p className="text-sm font-semibold">{connectionLabel(connection, health, connectionError)}</p>
             <p className="mt-1 text-xs opacity-85">
-              {connected && health ? health.summary : 'Conecte uma conta profissional do Instagram para executar respostas automáticas.'}
+              {connectionError
+                || (connected && health ? health.summary : 'Conecte uma conta profissional do Instagram para executar respostas automáticas.')}
             </p>
           </div>
           <Link
@@ -251,6 +284,14 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
 
         {loading ? (
           <div className="p-8 text-center text-sm text-muted-foreground">Carregando automações...</div>
+        ) : rulesError ? (
+          <div className="p-8 text-center">
+            <p className="font-medium">Não foi possível carregar as automações</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{rulesError}</p>
+            <button type="button" onClick={() => void load()} className="mt-4 rounded-md border px-4 py-2 text-sm font-medium">
+              Tentar novamente
+            </button>
+          </div>
         ) : rules.length === 0 ? (
           <div className="p-8 text-center">
             <p className="font-medium">Nenhuma automação criada</p>
@@ -298,11 +339,7 @@ export function InstagramCommentAutomationClient({ canEdit }: { canEdit: boolean
                         {savingId === rule.id ? 'Salvando...' : rule.enabled ? 'Pausar' : 'Ativar'}
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => openEdit(rule)}
-                      className="rounded-md border px-3 py-2 text-sm font-medium"
-                    >
+                    <button type="button" onClick={() => openEdit(rule)} className="rounded-md border px-3 py-2 text-sm font-medium">
                       {canEdit ? 'Editar' : 'Visualizar'}
                     </button>
                   </div>

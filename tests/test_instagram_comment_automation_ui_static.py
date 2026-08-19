@@ -37,6 +37,24 @@ def test_comment_automation_ui_preserves_required_full_patch_contract():
     assert 'JSON.stringify(draft)' in client
 
 
+def test_rule_loading_is_independent_from_connection_health_loading():
+    client = read('app/(app)/automations/instagram-comment-automation-client.tsx')
+
+    assert 'Promise.allSettled' in client
+    assert "if (rulesResult.status === 'fulfilled')" in client
+    assert "if (connectionResult.status === 'fulfilled')" in client
+    assert 'setRules(Array.isArray(payload.rules) ? payload.rules : [])' in client
+    assert 'setConnectionError' in client
+    assert 'rulesError ? (' in client
+
+
+def test_generated_priority_stays_inside_backend_range():
+    client = read('app/(app)/automations/instagram-comment-automation-client.tsx')
+
+    assert 'Math.min(10000, Math.max(0, highestOrder + 10))' in client
+    assert 'max={10000}' in client
+
+
 def test_comment_automation_ui_surfaces_connection_health_and_reconnect_path():
     client = read('app/(app)/automations/instagram-comment-automation-client.tsx')
 
