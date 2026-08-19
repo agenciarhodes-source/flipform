@@ -93,13 +93,16 @@ def test_registration_uses_runtime_credential_without_admin_token():
 
 def test_connection_registration_marker_is_bound_to_phone_and_binding_version():
     route = read('app/api/integrations/whatsapp/connection/route.ts')
+    helper = read('lib/meta/whatsapp-connection-health.ts')
     assert 'isPlatformWhatsAppRuntimeAvailable' in route
     assert 'runtimeAvailable' in route
-    assert "action: 'WHATSAPP_PHONE_REGISTERED'" in route
-    assert 'entityId: connection.id' in route
-    assert 'createdAt: { gte: connection.connectedAt }' in route
-    assert 'metadata.phoneNumberId === connection.phoneNumberId' in route
-    assert 'metadata.bindingConnectedAt === bindingConnectedAt' in route
+    assert 'getWhatsAppRegisteredAt' in route
+    assert "action: WHATSAPP_PHONE_REGISTERED_ACTION" in helper
+    assert "const WHATSAPP_PHONE_REGISTERED_ACTION = 'WHATSAPP_PHONE_REGISTERED'" in helper
+    assert 'entityId: input.connectionId' in helper
+    assert 'createdAt: { gte: input.connectedAt }' in helper
+    assert 'metadata.phoneNumberId === input.phoneNumberId' in helper
+    assert 'metadata.bindingConnectedAt === bindingConnectedAt' in helper
     assert 'registeredAt' in route
     safe = route.split('function toSafeConnection', 1)[1].split('export const GET', 1)[0]
     assert 'phoneNumberId:' not in safe
@@ -123,6 +126,17 @@ def test_registration_ui_keeps_pin_ephemeral_and_uses_runtime_readiness():
     assert 'disabled={registering || connecting || disconnecting || !runtimeAvailable}' in ui
     assert 'disabled={registering || connecting || disconnecting || !runtimeAvailable || pin.length !== 6}' in ui
     assert "connected && !runtimeAvailable" in ui
+
+
+def test_whatsapp_health_refreshes_after_sibling_connection_mutations():
+    ui = read('app/(app)/integrations/whatsapp-embedded-signup-card.tsx')
+    health = read('app/(app)/integrations/whatsapp-connection-health-card.tsx')
+    events = read('app/(app)/integrations/connection-events.ts')
+    assert ui.count('notifyWhatsAppConnectionChanged();') >= 3
+    assert "WHATSAPP_CONNECTION_CHANGED_EVENT = 'flipform:whatsapp-connection-changed'" in events
+    assert 'window.dispatchEvent(new Event(WHATSAPP_CONNECTION_CHANGED_EVENT))' in events
+    assert 'window.addEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh)' in health
+    assert 'window.removeEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, refresh)' in health
 
 
 def test_registration_pr_requires_no_schema_or_customer_data_mutation():

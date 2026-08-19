@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { notifyWhatsAppConnectionChanged } from './connection-events';
 
 declare global {
   interface Window {
@@ -123,6 +124,7 @@ export function WhatsAppEmbeddedSignupCard() {
       setPin('');
       toast.success('WhatsApp conectado ao FlipForm. Agora registre o número para concluir a ativação da Cloud API.');
       await loadConnection();
+      notifyWhatsAppConnectionChanged();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível concluir a conexão do WhatsApp.');
     } finally {
@@ -230,6 +232,7 @@ export function WhatsAppEmbeddedSignupCard() {
       setPin('');
       toast.success('Número registrado na WhatsApp Cloud API.');
       await loadConnection();
+      notifyWhatsAppConnectionChanged();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível registrar o número.');
     } finally {
@@ -247,6 +250,7 @@ export function WhatsAppEmbeddedSignupCard() {
       setPin('');
       toast.success('WhatsApp desconectado do FlipForm.');
       await loadConnection();
+      notifyWhatsAppConnectionChanged();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível desconectar o WhatsApp.');
     } finally {
