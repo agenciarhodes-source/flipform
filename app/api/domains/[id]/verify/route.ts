@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withPermission } from "@/lib/rbac-server";
-import { activateCustomFormDomain, syncDomainWithVercel } from "@/lib/custom-form-domains";
+import { activateCustomFormDomain, buildConnection, syncDomainWithVercel } from "@/lib/custom-form-domains";
 import { logAudit } from "@/lib/audit";
 
 export const POST = withPermission(
@@ -18,26 +18,28 @@ export const POST = withPermission(
     const verificationDomain = result.instruction.name || "leads";
     const verificationType = result.instruction.type;
     const verificationValue = result.instruction.value;
+    const verifiedByVercel = result.existsOnVercel && result.verified && result.verificationStatus === "verified";
+    const shouldActivate = result.status === "active" || verifiedByVercel;
 
     const data = {
-      status: result.status,
-      verificationStatus: result.verificationStatus,
-      sslStatus: result.sslStatus,
+      status: shouldActivate ? "active" : result.status,
+      verificationStatus: shouldActivate ? "verified" : result.verificationStatus,
+      sslStatus: shouldActivate ? "active" : result.sslStatus,
       vercelVerified: result.verified,
-      dnsTarget,
+      dnsTarget: shouldActivate ? null : dnsTarget,
       verificationType,
       verificationDomain,
-      verificationValue,
-      verificationReason: result.reason ?? null,
+      verificationValue: shouldActivate ? null : verificationValue,
+      verificationReason: shouldActivate ? null : result.reason ?? null,
       lastCheckedAt: new Date(),
-      verifiedAt: result.status === "active" ? new Date() : domain.verifiedAt,
+      verifiedAt: shouldActivate ? new Date() : domain.verifiedAt,
     };
 
-    const updated = result.status === "active"
+    const updated = shouldActivate
       ? await activateCustomFormDomain({ domainId: domain.id, actorUserId: session.userId, source: "client_verify", data })
       : await prisma.customFormDomain.update({ where: { id: domain.id }, data });
 
-    if (result.status !== "active") {
+    if (!shouldActivate) {
       await logAudit({
         tenantId: domain.tenantId,
         userId: session.userId,
@@ -58,7 +60,7 @@ export const POST = withPermission(
         : hasDnsTarget
           ? "Domínio aguardando configuração DNS."
           : "Domínio aguardando configuração técnica.",
-      connection: result.connection,
+      connection: isActive ? buildConnection("active") : result.connection,
     });
   },
 );
