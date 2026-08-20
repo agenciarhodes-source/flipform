@@ -29,6 +29,8 @@ def test_vercel_verified_domain_activates_without_undocumented_ssl_fields():
     assert 'status: shouldActivate ? "active" : result.status' in route
     assert 'verificationStatus: shouldActivate ? "verified" : result.verificationStatus' in route
     assert 'sslStatus: shouldActivate ? "active" : result.sslStatus' in route
+    assert 'dnsTarget: shouldActivate ? null : dnsTarget' in route
+    assert 'verificationValue: shouldActivate ? null : verificationValue' in route
     assert 'verifiedAt: shouldActivate ? new Date() : domain.verifiedAt' in route
     assert 'if (!shouldActivate)' in route
     assert 'connection: isActive ? buildConnection("active") : result.connection' in route
