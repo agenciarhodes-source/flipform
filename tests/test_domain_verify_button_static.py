@@ -19,3 +19,16 @@ def test_verify_dns_button_calls_real_domain_verification_route():
     assert 'syncDomainWithVercel(domain.domain)' in route
     assert 'activateCustomFormDomain' in route
     assert 'lastCheckedAt: new Date()' in route
+
+
+def test_vercel_verified_domain_activates_without_undocumented_ssl_fields():
+    route = read('app/api/domains/[id]/verify/route.ts')
+
+    assert 'result.existsOnVercel && result.verified && result.verificationStatus === "verified"' in route
+    assert 'const shouldActivate = result.status === "active" || verifiedByVercel;' in route
+    assert 'status: shouldActivate ? "active" : result.status' in route
+    assert 'verificationStatus: shouldActivate ? "verified" : result.verificationStatus' in route
+    assert 'sslStatus: shouldActivate ? "active" : result.sslStatus' in route
+    assert 'verifiedAt: shouldActivate ? new Date() : domain.verifiedAt' in route
+    assert 'if (!shouldActivate)' in route
+    assert 'connection: isActive ? buildConnection("active") : result.connection' in route
