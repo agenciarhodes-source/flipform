@@ -47,7 +47,7 @@ def test_new_comments_use_only_core_queue_while_legacy_worker_is_drain_only():
 
     assert 'await enqueueInstagramCommentCoreAutomation(tx' in runtime
     assert 'createInstagramCommentAutomationJob' not in runtime
-    assert 'drainAutomationExecutionQueue' in route
+    assert 'runAutomationWorker' in route
     assert 'legacyDrainWork' in route
     assert 'drainInstagramCommentAutomationQueue' in route
 
