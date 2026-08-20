@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
+import { syncInstagramCommentAutomationRuleToCore } from '@/lib/automation/bridges/instagram-comment-rule-sync';
 import {
   enqueueAndDispatchInstagramPrivateReply,
   InstagramPrivateReplyError,
@@ -295,6 +296,19 @@ export async function createInstagramCommentAutomation(input: {
       },
       select: { id: true, createdAt: true },
     });
+
+    await syncInstagramCommentAutomationRuleToCore(tx, {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      ruleId,
+      name: fields.name,
+      keyword: fields.keyword,
+      matchType: input.matchType,
+      replyText: fields.replyText,
+      enabled: input.enabled,
+      orderIndex: input.orderIndex,
+    });
+
     return {
       id: ruleId,
       versionId: log.id,
@@ -350,6 +364,19 @@ export async function updateInstagramCommentAutomation(input: {
       },
       select: { id: true, createdAt: true },
     });
+
+    await syncInstagramCommentAutomationRuleToCore(tx, {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      ruleId: input.ruleId,
+      name: fields.name,
+      keyword: fields.keyword,
+      matchType: input.matchType,
+      replyText: fields.replyText,
+      enabled: input.enabled,
+      orderIndex: input.orderIndex,
+    });
+
     return {
       id: input.ruleId,
       versionId: log.id,
