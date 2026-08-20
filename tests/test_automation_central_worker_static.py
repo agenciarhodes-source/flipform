@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -20,7 +19,7 @@ def test_central_worker_uses_shared_core_queue_and_explicit_handler_registry():
     assert 'runAutomationWorker' in index
 
 
-def test_internal_worker_route_is_cron_secret_protected_and_supports_manual_post():
+def test_internal_worker_route_is_cron_secret_protected_and_supports_scheduler_get_or_manual_post():
     route = read('app/api/internal/jobs/automation-core/route.ts')
 
     assert 'isCronRequestAuthorized(req)' in route
@@ -32,18 +31,16 @@ def test_internal_worker_route_is_cron_secret_protected_and_supports_manual_post
     assert 'export const maxDuration = 60' in route
 
 
-def test_vercel_runs_central_worker_every_minute():
-    config = json.loads(read('vercel.json'))
-    assert config['crons'] == [{
-        'path': '/api/internal/jobs/automation-core',
-        'schedule': '* * * * *',
-    }]
+def test_scheduler_is_not_coupled_to_vercel_cron_plan():
+    assert not (ROOT / 'vercel.json').exists()
+    route = read('app/api/internal/jobs/automation-core/route.ts')
+    assert 'isCronRequestAuthorized(req)' in route
 
 
-def test_instagram_keeps_low_latency_worker_but_retries_no_longer_depend_on_new_webhooks():
+def test_instagram_keeps_low_latency_worker_and_central_route_can_reclaim_queue():
     route = read('app/api/webhooks/meta/instagram/route.ts')
-    cron = read('app/api/internal/jobs/automation-core/route.ts')
+    central = read('app/api/internal/jobs/automation-core/route.ts')
 
     assert 'runAutomationWorker()' in route
-    assert 'runAutomationWorker()' in cron
+    assert 'runAutomationWorker()' in central
     assert 'reclaimed by the central scheduled worker' in route
