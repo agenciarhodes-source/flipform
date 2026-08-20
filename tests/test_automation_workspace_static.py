@@ -16,8 +16,9 @@ def test_automations_page_routes_through_channel_neutral_workspace():
     assert "can(session.role, 'INTEGRATIONS_EDIT')" in page
     assert 'Automation Builder' in workspace
     assert 'InstagramCommentAutomationClient' in workspace
+    assert 'WhatsAppMessageAutomationClient' in workspace
     assert 'Comentário do Instagram → Direct' in workspace
-    assert 'WhatsApp' in workspace
+    assert 'Mensagem do WhatsApp → Resposta' in workspace
     assert 'Fluxos multietapas' in workspace
 
 
@@ -30,6 +31,7 @@ def test_workspace_is_ui_only_and_preserves_existing_runtime_authority():
     assert 'accessToken' not in workspace
     assert 'appSecret' not in workspace
     assert 'InstagramCommentAutomationClient canEdit={canEdit}' in workspace
+    assert 'WhatsAppMessageAutomationClient canEdit={canEdit}' in workspace
 
 
 def test_workspace_does_not_touch_crm_or_create_parallel_runtime():
