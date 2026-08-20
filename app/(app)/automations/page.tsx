@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
-import { InstagramCommentAutomationClient } from './instagram-comment-automation-client';
+import { AutomationWorkspaceClient } from './automation-workspace-client';
 
 export default async function AutomationsPage() {
   const session = await getSession();
@@ -9,7 +9,7 @@ export default async function AutomationsPage() {
   if (!can(session.role, 'INTEGRATIONS_VIEW')) redirect('/dashboard');
 
   return (
-    <InstagramCommentAutomationClient
+    <AutomationWorkspaceClient
       canEdit={can(session.role, 'INTEGRATIONS_EDIT')}
     />
   );

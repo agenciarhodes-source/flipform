@@ -9,11 +9,13 @@ def read(path: str) -> str:
 
 def test_automations_page_is_tenant_session_and_rbac_scoped():
     page = read('app/(app)/automations/page.tsx')
+    workspace = read('app/(app)/automations/automation-workspace-client.tsx')
 
     assert 'getSession()' in page
     assert "can(session.role, 'INTEGRATIONS_VIEW')" in page
     assert "can(session.role, 'INTEGRATIONS_EDIT')" in page
-    assert 'InstagramCommentAutomationClient' in page
+    assert 'AutomationWorkspaceClient' in page
+    assert 'InstagramCommentAutomationClient' in workspace
 
 
 def test_comment_automation_ui_uses_existing_tenant_safe_endpoints_only():
@@ -74,6 +76,7 @@ def test_automations_are_discoverable_from_main_navigation():
 def test_ui_milestone_does_not_mutate_crm_or_add_destructive_rule_actions():
     paths = [
         'app/(app)/automations/page.tsx',
+        'app/(app)/automations/automation-workspace-client.tsx',
         'app/(app)/automations/instagram-comment-automation-client.tsx',
         'components/app-shell.tsx',
     ]
