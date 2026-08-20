@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { InstagramCommentAutomationClient } from './instagram-comment-automation-client';
+import { WhatsAppMessageAutomationClient } from './whatsapp-message-automation-client';
 
-type WorkspaceView = 'overview' | 'instagram-comment';
+type WorkspaceView = 'overview' | 'instagram-comment' | 'whatsapp-message';
 
 function StepBadge({ index, label }: { index: number; label: string }) {
   return (
@@ -16,22 +17,33 @@ function StepBadge({ index, label }: { index: number; label: string }) {
   );
 }
 
+function BackButton({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="mx-auto w-full max-w-7xl px-4 pt-4 lg:px-6 lg:pt-6">
+      <button type="button" onClick={onClick} className="text-sm font-medium text-brand-700 hover:text-brand-800">
+        ← Voltar para automações
+      </button>
+    </div>
+  );
+}
+
 export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
   const [view, setView] = useState<WorkspaceView>('overview');
 
   if (view === 'instagram-comment') {
     return (
       <div className="space-y-2">
-        <div className="mx-auto w-full max-w-7xl px-4 pt-4 lg:px-6 lg:pt-6">
-          <button
-            type="button"
-            onClick={() => setView('overview')}
-            className="text-sm font-medium text-brand-700 hover:text-brand-800"
-          >
-            ← Voltar para automações
-          </button>
-        </div>
+        <BackButton onClick={() => setView('overview')} />
         <InstagramCommentAutomationClient canEdit={canEdit} />
+      </div>
+    );
+  }
+
+  if (view === 'whatsapp-message') {
+    return (
+      <div className="space-y-2">
+        <BackButton onClick={() => setView('overview')} />
+        <WhatsAppMessageAutomationClient canEdit={canEdit} />
       </div>
     );
   }
@@ -43,7 +55,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
           <p className="text-sm font-medium text-brand-700">Automation Builder</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Automações</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Centralize os fluxos que começam em Instagram, WhatsApp e outros canais. O primeiro fluxo disponível já usa o Automation Core em produção.
+            Centralize fluxos de Instagram e WhatsApp no mesmo Automation Core, com configuração tenant-safe e execução durável.
           </p>
         </div>
         {!canEdit && (
@@ -59,7 +71,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Como um fluxo funciona</p>
             <h2 className="mt-2 text-lg font-semibold">Gatilho → condição → ação</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              A estrutura do builder será única para todos os canais. Começamos pelo fluxo de comentário do Instagram e vamos adicionar novos gatilhos e ações sem criar runtimes paralelos.
+              Instagram e WhatsApp já usam o mesmo motor. Os próximos passos adicionam condições, esperas e ações de CRM sem criar runtimes paralelos.
             </p>
           </div>
           <div className="grid min-w-0 gap-2 sm:grid-cols-3 lg:min-w-[520px]">
@@ -89,35 +101,30 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
               Quando alguém comenta uma palavra ou frase configurada em um post ou Reel, o FlipForm envia uma resposta privada automaticamente.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border bg-background px-2 py-1">Comentário</span>
-              <span>→</span>
-              <span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span>
-              <span>→</span>
-              <span className="rounded-md border bg-background px-2 py-1">DM privada</span>
+              <span className="rounded-md border bg-background px-2 py-1">Comentário</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">DM privada</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setView('instagram-comment')}
-              className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
+            <button type="button" onClick={() => setView('instagram-comment')} className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
               {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
             </button>
           </article>
 
-          <article className="flex min-h-[260px] flex-col rounded-2xl border border-dashed bg-muted/20 p-5">
+          <article className="flex min-h-[260px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">Próxima etapa</span>
-                <h3 className="mt-4 text-lg font-semibold">WhatsApp</h3>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Disponível</span>
+                <h3 className="mt-4 text-lg font-semibold">Mensagem do WhatsApp → Resposta</h3>
               </div>
-              <span className="rounded-lg border bg-background px-2.5 py-1.5 text-xs font-semibold">WhatsApp</span>
+              <span className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs font-semibold">WhatsApp</span>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Fluxos de mensagem recebida, qualificação, respostas automáticas e encaminhamento para atendimento humano usando o mesmo Automation Core.
+              Quando uma mensagem recebida combina com a palavra-chave configurada, o FlipForm responde automaticamente pelo WhatsApp.
             </p>
-            <div className="mt-auto rounded-lg border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-              Em preparação para o próximo adapter do Core.
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-md border bg-background px-2 py-1">Mensagem</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Resposta</span>
             </div>
+            <button type="button" onClick={() => setView('whatsapp-message')} className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
+              {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
+            </button>
           </article>
 
           <article className="flex min-h-[260px] flex-col rounded-2xl border border-dashed bg-muted/20 p-5">
@@ -143,13 +150,10 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
           <div>
             <h2 className="font-semibold">Próxima evolução do builder</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              O próximo adapter será o WhatsApp; depois conectaremos ações de Lead e Kanban ao mesmo motor de automação.
+              Agora que Instagram e WhatsApp estão configuráveis, o próximo marco adiciona blocos multietapas e ações de Lead/Kanban ao mesmo motor.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 text-xs">
-            <span className="rounded-full border px-3 py-1.5">Automation Core</span>
-            <span className="rounded-full border px-3 py-1.5">Tenant-safe</span>
-          </div>
+          <div className="flex shrink-0 gap-2 text-xs"><span className="rounded-full border px-3 py-1.5">Automation Core</span><span className="rounded-full border px-3 py-1.5">Tenant-safe</span></div>
         </div>
       </section>
     </div>
