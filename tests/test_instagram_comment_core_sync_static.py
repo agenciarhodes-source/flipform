@@ -38,12 +38,14 @@ def test_definition_store_supports_transactional_mirror_upsert():
 
 def test_cutover_runs_core_while_legacy_queue_is_drain_only():
     route = read('app/api/webhooks/meta/instagram/route.ts')
+    worker = read('lib/automation/worker.ts')
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
     bridge = read('lib/automation/bridges/instagram-comment-rule-sync.ts')
     legacy = read('lib/meta/instagram-comment-automation.ts')
 
-    assert 'drainAutomationExecutionQueue' in route
-    assert 'createInstagramPrivateReplyAutomationHandler' in route
+    assert 'runAutomationWorker' in route
+    assert 'drainAutomationExecutionQueue' in worker
+    assert 'createInstagramPrivateReplyAutomationHandler' in worker
     assert 'drainInstagramCommentAutomationQueue' in route
     assert 'legacyDrainWork' in route
     assert 'enqueueInstagramCommentCoreAutomation' in runtime
