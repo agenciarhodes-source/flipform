@@ -7,8 +7,9 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 
-def test_adapter_uses_generic_core_without_replacing_legacy_runtime():
+def test_adapter_uses_generic_core_for_new_runtime_with_legacy_drain_preserved():
     adapter = read('lib/automation/adapters/instagram-comment.ts')
+    runtime = read('lib/meta/instagram-webhook-runtime.ts')
     webhook = read('app/api/webhooks/meta/instagram/route.ts')
 
     assert "INSTAGRAM_COMMENT_KEYWORD_TRIGGER = 'instagram.comment.keyword'" in adapter
@@ -18,8 +19,9 @@ def test_adapter_uses_generic_core_without_replacing_legacy_runtime():
     assert 'normalizeInstagramCommentAutomationText' in adapter
     assert 'instagramCommentAutomationMatches' in adapter
 
-    assert 'instagram-comment-automation-core-adapter' not in webhook
-    assert 'drainAutomationExecutionQueue' not in webhook
+    assert 'enqueueInstagramCommentCoreAutomation' in runtime
+    assert 'createInstagramCommentAutomationJob' not in runtime
+    assert 'drainAutomationExecutionQueue' in webhook
     assert 'drainInstagramCommentAutomationQueue' in webhook
 
 
