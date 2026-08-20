@@ -1,9 +1,5 @@
 import { NextRequest } from 'next/server';
-import {
-  createInstagramPrivateReplyAutomationHandler,
-  drainAutomationExecutionQueue,
-  INSTAGRAM_PRIVATE_REPLY_ACTION,
-} from '@/lib/automation';
+import { runAutomationWorker } from '@/lib/automation';
 import {
   getInstagramWebhookVerifyToken,
   getPlatformInstagramWebhookCredentials,
@@ -19,10 +15,6 @@ import { scheduleAfterResponse } from '@/lib/vercel-wait-until';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-const instagramAutomationHandlers = {
-  [INSTAGRAM_PRIVATE_REPLY_ACTION]: createInstagramPrivateReplyAutomationHandler(),
-};
 
 export async function GET(req: NextRequest) {
   const verifyToken = getInstagramWebhookVerifyToken();
@@ -64,14 +56,14 @@ export async function POST(req: NextRequest) {
     const result = await processInstagramWebhook(payload);
     console.info('Meta Instagram webhook processed', result);
 
-    const coreWork = drainAutomationExecutionQueue({ handlers: instagramAutomationHandlers })
+    const coreWork = runAutomationWorker()
       .then(workerResult => {
         if (workerResult.claimed > 0 || workerResult.errors > 0) {
           console.info('Instagram automation core worker processed', workerResult);
         }
       })
       .catch(error => {
-        // Core queue rows remain durable and can be reclaimed by a later signed webhook.
+        // Core queue rows remain durable and are also reclaimed by the central scheduled worker.
         console.error('Instagram automation core background worker failed', {
           errorType: error instanceof Error ? error.name : 'unknown',
         });
