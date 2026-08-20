@@ -204,6 +204,61 @@ export async function listEnabledAutomationDefinitionsByTrigger(input: {
   return definitions.filter((definition: AutomationDefinitionSnapshot) => definition.enabled && definition.trigger.type === triggerType);
 }
 
+export async function upsertAutomationDefinitionMirrorInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    tenantId: string;
+    userId: string;
+    definitionId: string;
+    name: string;
+    enabled: boolean;
+    orderIndex: number;
+    trigger: { type: string; config?: Record<string, unknown> };
+    actions: Array<{ id?: string; type: string; config?: Record<string, unknown> }>;
+  },
+) {
+  const fields = validateDefinitionFields(input);
+  const definitionId = assertAutomationId(input.definitionId, 'Automation definition');
+
+  await tx.$queryRaw`SELECT id FROM public.tenants WHERE id = ${input.tenantId} FOR UPDATE`;
+  const definitions = await loadLatestDefinitions(tx, input.tenantId);
+  const current = definitions.find((definition: AutomationDefinitionSnapshot) => definition.id === definitionId);
+  const versionNumber = (current?.versionNumber ?? 0) + 1;
+  const action = current ? AUTOMATION_DEFINITION_UPDATED_ACTION : AUTOMATION_DEFINITION_CREATED_ACTION;
+
+  const log = await tx.auditLog.create({
+    data: {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      entityType: AUTOMATION_DEFINITION_ENTITY_TYPE,
+      entityId: definitionId,
+      action,
+      metadata: toJson(definitionMetadata({
+        versionNumber,
+        name: fields.name,
+        enabled: input.enabled,
+        orderIndex: input.orderIndex,
+        trigger: fields.trigger,
+        actions: fields.actions,
+      })),
+    },
+    select: { id: true, createdAt: true },
+  });
+
+  return {
+    id: definitionId,
+    versionId: log.id,
+    versionNumber,
+    configuredByUserId: input.userId,
+    name: fields.name,
+    enabled: input.enabled,
+    orderIndex: input.orderIndex,
+    trigger: fields.trigger,
+    actions: fields.actions,
+    updatedAt: log.createdAt,
+  } satisfies AutomationDefinitionSnapshot;
+}
+
 export async function createAutomationDefinition(input: {
   tenantId: string;
   userId: string;
