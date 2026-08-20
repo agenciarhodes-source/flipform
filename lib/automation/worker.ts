@@ -1,8 +1,10 @@
 import 'server-only';
 
 import { INSTAGRAM_PRIVATE_REPLY_ACTION } from './adapters/instagram-comment';
+import { WHATSAPP_SEND_TEXT_ACTION } from './adapters/whatsapp-message';
 import { drainAutomationExecutionQueue } from './execution-engine';
 import { createInstagramPrivateReplyAutomationHandler } from './handlers/instagram-private-reply';
+import { createWhatsAppSendTextAutomationHandler } from './handlers/whatsapp-send-text';
 import type { AutomationActionHandlers } from './types';
 
 const AUTOMATION_CENTRAL_WORKER_BATCH_SIZE = 25;
@@ -10,6 +12,7 @@ const AUTOMATION_CENTRAL_WORKER_BATCH_SIZE = 25;
 export function createAutomationWorkerHandlers(): AutomationActionHandlers {
   return {
     [INSTAGRAM_PRIVATE_REPLY_ACTION]: createInstagramPrivateReplyAutomationHandler(),
+    [WHATSAPP_SEND_TEXT_ACTION]: createWhatsAppSendTextAutomationHandler(),
   };
 }
 

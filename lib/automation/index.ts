@@ -15,7 +15,16 @@ export {
   INSTAGRAM_PRIVATE_REPLY_ACTION,
   prepareInstagramCommentCoreAutomation,
 } from './adapters/instagram-comment';
+export {
+  enqueueWhatsAppMessageCoreAutomation,
+  normalizeWhatsAppAutomationText,
+  prepareWhatsAppMessageCoreAutomation,
+  WHATSAPP_MESSAGE_KEYWORD_TRIGGER,
+  WHATSAPP_SEND_TEXT_ACTION,
+  whatsappMessageAutomationMatches,
+} from './adapters/whatsapp-message';
 export { createInstagramPrivateReplyAutomationHandler } from './handlers/instagram-private-reply';
+export { createWhatsAppSendTextAutomationHandler } from './handlers/whatsapp-send-text';
 export {
   createAutomationWorkerHandlers,
   runAutomationWorker,
@@ -34,4 +43,8 @@ export type {
   InstagramCommentCoreMatchType,
   PreparedInstagramCommentCoreAutomation,
 } from './adapters/instagram-comment';
+export type {
+  PreparedWhatsAppMessageCoreAutomation,
+  WhatsAppMessageCoreMatchType,
+} from './adapters/whatsapp-message';
 export { AutomationCoreError } from './types';
