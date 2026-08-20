@@ -13,7 +13,6 @@ def core_text() -> str:
         read('lib/automation/json.ts'),
         read('lib/automation/definition-store.ts'),
         read('lib/automation/execution-engine.ts'),
-        read('lib/automation/index.ts'),
     ])
 
 
