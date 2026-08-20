@@ -11,6 +11,7 @@ def test_qualified_redirect_reuses_existing_form_settings_without_migration():
     schema = read('lib/schemas.ts')
     builder = read('components/form-builder.tsx')
     public = read('components/public-typeform.tsx')
+    custom_domain = read('app/custom-domain/[slug]/page.tsx')
     prisma = read('prisma/schema.prisma')
 
     assert 'qualifiedRedirectUrl:' in schema
@@ -22,6 +23,7 @@ def test_qualified_redirect_reuses_existing_form_settings_without_migration():
     assert 'form.disqualificationSettings?.qualifiedRedirectUrl || null' in public
     assert 'window.location.href = qualifiedRedirectUrl' in public
     assert 'if (!previewMode)' in public
+    assert 'disqualificationSettings: form.disqualificationSettings as any' in custom_domain
     assert 'qualifiedRedirectUrl' not in prisma
 
 
