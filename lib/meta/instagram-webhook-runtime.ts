@@ -4,10 +4,8 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordInboundMessage, type MessageType } from '@/lib/conversations/core';
-import {
-  createInstagramCommentAutomationJob,
-  prepareInstagramCommentAutomationForComment,
-} from '@/lib/meta/instagram-comment-automation';
+import { enqueueInstagramCommentCoreAutomation } from '@/lib/automation/adapters/instagram-comment';
+import { prepareInstagramCommentCoreCutover } from '@/lib/automation/bridges/instagram-comment-core-cutover';
 
 const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
 const INSTAGRAM_COMMENT_EVENT_PROVIDER = 'instagram_comment';
@@ -65,7 +63,7 @@ function normalizedAttachmentType(attachment: any): MessageType {
 
 function normalizeInstagramMessage(message: any, instagramProfessionalAccountId: string) {
   const text = typeof message?.text === 'string' ? message.text : null;
-  const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
+  const attachments = Array.isArray(message?.attachments) ? message?.attachments : [];
   const type: MessageType = text !== null
     ? 'text'
     : attachments.length
@@ -193,10 +191,13 @@ async function persistInstagramCommentEvent(input: {
   comment: NonNullable<ReturnType<typeof normalizeInstagramComment>>;
 }) {
   const eventId = `${input.instagramProfessionalAccountId}:${input.comment.commentId}`;
-  const preparedAutomation = input.comment.field === 'comments' && input.comment.text
-    ? await prepareInstagramCommentAutomationForComment({
+  const commentText = input.comment.field === 'comments' && input.comment.text
+    ? input.comment.text
+    : null;
+  const preparedAutomation = commentText
+    ? await prepareInstagramCommentCoreCutover({
       tenantId: input.tenantId,
-      text: input.comment.text,
+      text: commentText,
     })
     : null;
 
@@ -223,17 +224,19 @@ async function persistInstagramCommentEvent(input: {
         select: { id: true },
       });
 
-      if (preparedAutomation) {
-        await createInstagramCommentAutomationJob(tx, {
+      if (preparedAutomation && commentText) {
+        await enqueueInstagramCommentCoreAutomation(tx, {
           tenantId: input.tenantId,
+          sourceEventKey: eventId,
           sourceCommentEventId: event.id,
+          commentText,
           prepared: preparedAutomation,
         });
       }
 
       return {
         duplicate: false as const,
-        automationQueued: Boolean(preparedAutomation),
+        automationQueued: Boolean(preparedAutomation && commentText),
       };
     });
   } catch (error) {

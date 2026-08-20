@@ -36,19 +36,25 @@ def test_definition_store_supports_transactional_mirror_upsert():
     assert 'metadata: toJson(definitionMetadata({' in store
 
 
-def test_sync_does_not_cut_over_runtime_or_touch_crm():
-    webhook = read('app/api/webhooks/meta/instagram/route.ts')
+def test_cutover_runs_core_while_legacy_queue_is_drain_only():
+    route = read('app/api/webhooks/meta/instagram/route.ts')
+    runtime = read('lib/meta/instagram-webhook-runtime.ts')
     bridge = read('lib/automation/bridges/instagram-comment-rule-sync.ts')
     legacy = read('lib/meta/instagram-comment-automation.ts')
 
-    assert 'drainInstagramCommentAutomationQueue' in webhook
-    assert 'drainAutomationExecutionQueue' not in webhook
+    assert 'drainAutomationExecutionQueue' in route
+    assert 'createInstagramPrivateReplyAutomationHandler' in route
+    assert 'drainInstagramCommentAutomationQueue' in route
+    assert 'legacyDrainWork' in route
+    assert 'enqueueInstagramCommentCoreAutomation' in runtime
+    assert 'prepareInstagramCommentCoreCutover' in runtime
+    assert 'createInstagramCommentAutomationJob' not in runtime
     assert 'enqueueAutomationExecution' not in bridge
     assert 'drainAutomationExecutionQueue' not in bridge
 
-    combined = bridge + '\n' + legacy
-    for forbidden in ('/api/leads', '/api/kanban', 'Pipeline', 'Conversation', 'Message', 'accessToken', 'appSecret'):
-        assert forbidden not in bridge
+    combined = bridge + '\n' + legacy + '\n' + runtime + '\n' + route
+    for forbidden in ('/api/leads', '/api/kanban', 'prisma.lead.', 'tx.lead.'):
+        assert forbidden not in combined
 
 
 def test_core_mirror_contract_matches_existing_adapter_literals():

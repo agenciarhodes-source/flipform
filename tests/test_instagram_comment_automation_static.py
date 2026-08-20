@@ -51,20 +51,20 @@ def test_keyword_normalization_and_matching_are_deterministic():
     assert 'const rule = rules.find(candidate =>' in service
 
 
-def test_comment_and_matching_automation_job_commit_atomically():
+def test_comment_and_matching_core_execution_commit_atomically():
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
-    service = read('lib/meta/instagram-comment-automation.ts')
+    engine = read('lib/automation/execution-engine.ts')
 
-    assert 'prepareInstagramCommentAutomationForComment' in runtime
+    assert 'prepareInstagramCommentCoreCutover' in runtime
     assert "input.comment.field === 'comments'" in runtime
     assert 'return await prisma.$transaction(async tx =>' in runtime
     assert 'const event = await tx.webhookEvent.create' in runtime
-    assert 'await createInstagramCommentAutomationJob(tx' in runtime
+    assert 'await enqueueInstagramCommentCoreAutomation(tx' in runtime
+    assert 'sourceEventKey: eventId' in runtime
     assert 'sourceCommentEventId: event.id' in runtime
-    assert 'automationQueued: Boolean(preparedAutomation)' in runtime
-    assert "provider: AUTOMATION_JOB_PROVIDER" in service
-    assert 'eventId: input.sourceCommentEventId' in service
-    assert 'return tx.webhookEvent.create' in service
+    assert 'automationQueued: Boolean(preparedAutomation && commentText)' in runtime
+    assert 'createInstagramCommentAutomationJob' not in runtime
+    assert "AUTOMATION_EXECUTION_PROVIDER = 'automation_execution_v1'" in engine
 
 
 def test_duplicate_comment_webhook_cannot_create_a_late_or_duplicate_automation_job():
@@ -76,7 +76,7 @@ def test_duplicate_comment_webhook_cannot_create_a_late_or_duplicate_automation_
     assert 'if (persisted.automationQueued) result.automationsQueued += 1' in runtime
 
 
-def test_automation_queue_is_durable_and_rule_version_bound():
+def test_legacy_automation_queue_remains_durable_for_transition_drain():
     service = read('lib/meta/instagram-comment-automation.ts')
 
     assert "AUTOMATION_JOB_PROVIDER = 'instagram_comment_automation'" in service
@@ -87,7 +87,7 @@ def test_automation_queue_is_durable_and_rule_version_bound():
     assert 'processedAt: new Date()' in service
 
 
-def test_worker_claims_with_skip_locked_and_reuses_safe_private_reply_runtime():
+def test_legacy_worker_claims_with_skip_locked_and_reuses_safe_private_reply_runtime():
     service = read('lib/meta/instagram-comment-automation.ts')
 
     assert 'FOR UPDATE SKIP LOCKED' in service
@@ -115,7 +115,7 @@ def test_worker_attributes_to_current_authorized_user_and_has_no_crm_mutation():
     assert 'tx.message.' not in service
 
 
-def test_signed_webhook_extends_background_work_with_next_request_context_and_safe_fallback():
+def test_signed_webhook_drains_core_and_pre_cutover_legacy_jobs_with_safe_fallback():
     route = read('app/api/webhooks/meta/instagram/route.ts')
     helper = read('lib/vercel-wait-until.ts')
 
@@ -124,11 +124,13 @@ def test_signed_webhook_extends_background_work_with_next_request_context_and_sa
     assert 'waitUntil?: (promise: Promise<unknown>) => void' in helper
     assert 'waitUntil(promise)' in helper
     assert 'return false' in helper
+    assert 'drainAutomationExecutionQueue' in route
+    assert 'createInstagramPrivateReplyAutomationHandler' in route
     assert 'drainInstagramCommentAutomationQueue' in route
-    assert 'const backgroundWork = drainInstagramCommentAutomationQueue()' in route
+    assert 'const backgroundWork = Promise.all([coreWork, legacyDrainWork]).then(() => undefined)' in route
     assert 'scheduleAfterResponse(backgroundWork)' in route
     assert 'await backgroundWork' in route
-    assert route.index('verifyInstagramWebhookSignature') < route.index('drainInstagramCommentAutomationQueue')
+    assert route.index("if (!verifyInstagramWebhookSignature") < route.index('const coreWork = drainAutomationExecutionQueue')
     assert not (ROOT / 'vercel.json').exists()
     assert not (ROOT / 'app/api/cron/instagram-comment-automations/route.ts').exists()
 
@@ -140,6 +142,7 @@ def test_automation_foundation_has_no_migration_or_destructive_customer_data_ope
         'app/api/webhooks/meta/instagram/route.ts',
         'app/api/integrations/instagram/comment-automations/route.ts',
         'app/api/integrations/instagram/comment-automations/[id]/route.ts',
+        'lib/automation/bridges/instagram-comment-core-cutover.ts',
     ]
     combined = '\n'.join(read(path) for path in paths).upper()
 
