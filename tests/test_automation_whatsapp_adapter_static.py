@@ -50,15 +50,16 @@ def test_central_worker_registers_whatsapp_handler_without_replacing_instagram()
     assert 'createWhatsAppSendTextAutomationHandler' in index
 
 
-def test_whatsapp_adapter_is_foundation_only_and_does_not_cut_over_webhook_yet():
+def test_whatsapp_inbound_cutover_is_implemented_in_runtime_not_route():
     webhook = read('app/api/webhooks/meta/whatsapp/route.ts')
     runtime = read('lib/meta/whatsapp-runtime.ts')
 
     assert 'processWhatsAppCloudWebhook(payload)' in webhook
     assert 'prepareWhatsAppMessageCoreAutomation' not in webhook
     assert 'enqueueWhatsAppMessageCoreAutomation' not in webhook
-    assert 'prepareWhatsAppMessageCoreAutomation' not in runtime
-    assert 'enqueueWhatsAppMessageCoreAutomation' not in runtime
+    assert 'prepareWhatsAppMessageCoreAutomation' in runtime
+    assert 'enqueueWhatsAppMessageCoreAutomation' in runtime
+    assert 'onCreated: async (tx, created) => {' in runtime
 
 
 def test_whatsapp_core_adapter_does_not_touch_lead_or_kanban_and_exposes_no_secrets():
