@@ -220,7 +220,7 @@ export default function DomainsClient() {
     const res = await fetch(url, { method });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return toast.error(data.error || "Ação não concluída.");
-    toast.success(success);
+    toast.success(data.message || success);
     load();
   };
 
@@ -459,14 +459,15 @@ export default function DomainsClient() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:justify-end">
-                      
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => {
                           if (domainActive) return toast.success("Domínio ativo e pronto para uso.");
-                          if (shouldShowDns) return toast.info("Domínio aguardando configuração DNS.");
-                          return toast.info("Domínio aguardando configuração técnica.");
+                          return action(
+                            `/api/domains/${d.id}/verify`,
+                            "Verificação atualizada.",
+                          );
                         }}
                       >
                         Verificar DNS
