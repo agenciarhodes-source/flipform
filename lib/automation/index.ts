@@ -16,6 +16,10 @@ export {
   prepareInstagramCommentCoreAutomation,
 } from './adapters/instagram-comment';
 export { createInstagramPrivateReplyAutomationHandler } from './handlers/instagram-private-reply';
+export {
+  createAutomationWorkerHandlers,
+  runAutomationWorker,
+} from './worker';
 export type {
   AutomationActionDefinition,
   AutomationActionHandler,
