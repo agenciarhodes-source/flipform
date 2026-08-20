@@ -4,6 +4,10 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { MessageType, recordInboundMessage } from '@/lib/conversations/core';
+import {
+  enqueueWhatsAppMessageCoreAutomation,
+  prepareWhatsAppMessageCoreAutomation,
+} from '@/lib/automation/adapters/whatsapp-message';
 
 const STATUS_RANK: Record<string, number> = {
   received: 0,
@@ -269,6 +273,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
   const result = {
     messagesCreated: 0,
     duplicateMessages: 0,
+    automationsQueued: 0,
     statusesUpdated: 0,
     statusesBuffered: 0,
     ignored: 0,
@@ -306,6 +311,16 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           result.ignored += 1;
           continue;
         }
+
+        const messageText = normalizeMessageText(message);
+        const preparedAutomation = messageText
+          ? await prepareWhatsAppMessageCoreAutomation({
+            tenantId: connection.tenantId,
+            text: messageText,
+          })
+          : null;
+        let automationQueued = false;
+
         const persisted = await recordInboundMessage({
           tenantId: connection.tenantId,
           channel: 'whatsapp',
@@ -314,7 +329,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           externalMessageId: message.id,
           displayName: contacts.get(message.from) ?? null,
           phone: message.from,
-          text: normalizeMessageText(message),
+          text: messageText,
           type: normalizeMessageType(message.type),
           providerTimestamp: parseProviderTimestamp(message.timestamp),
           metadata: normalizedMessageMetadata({
@@ -323,9 +338,25 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             value,
             message,
           }),
-        });
+        }, preparedAutomation && messageText ? {
+          onCreated: async (tx, created) => {
+            await enqueueWhatsAppMessageCoreAutomation(tx, {
+              tenantId: connection.tenantId,
+              sourceEventKey: `meta-whatsapp:${phoneNumberId}:${message.id}`,
+              sourceMessageId: message.id,
+              conversationId: created.conversationId,
+              messageText,
+              prepared: preparedAutomation,
+            });
+            automationQueued = true;
+          },
+        } : undefined);
+
         if (persisted.duplicate) result.duplicateMessages += 1;
-        else result.messagesCreated += 1;
+        else {
+          result.messagesCreated += 1;
+          if (automationQueued) result.automationsQueued += 1;
+        }
       }
 
       for (const status of Array.isArray(value?.statuses) ? value.statuses : []) {
