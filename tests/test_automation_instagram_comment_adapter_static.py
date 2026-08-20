@@ -11,6 +11,7 @@ def test_adapter_uses_generic_core_for_new_runtime_with_legacy_drain_preserved()
     adapter = read('lib/automation/adapters/instagram-comment.ts')
     runtime = read('lib/meta/instagram-webhook-runtime.ts')
     webhook = read('app/api/webhooks/meta/instagram/route.ts')
+    worker = read('lib/automation/worker.ts')
 
     assert "INSTAGRAM_COMMENT_KEYWORD_TRIGGER = 'instagram.comment.keyword'" in adapter
     assert "INSTAGRAM_PRIVATE_REPLY_ACTION = 'instagram.private_reply'" in adapter
@@ -21,7 +22,8 @@ def test_adapter_uses_generic_core_for_new_runtime_with_legacy_drain_preserved()
 
     assert 'enqueueInstagramCommentCoreAutomation' in runtime
     assert 'createInstagramCommentAutomationJob' not in runtime
-    assert 'drainAutomationExecutionQueue' in webhook
+    assert 'runAutomationWorker' in webhook
+    assert 'drainAutomationExecutionQueue' in worker
     assert 'drainInstagramCommentAutomationQueue' in webhook
 
 
