@@ -111,6 +111,19 @@ export type RecordInboundMessageInput = {
   metadata?: Prisma.InputJsonValue;
 };
 
+export type RecordInboundMessageCreatedContext = {
+  identityId: string;
+  conversationId: string;
+  messageId: string;
+};
+
+export type RecordInboundMessageOptions = {
+  onCreated?: (
+    tx: Prisma.TransactionClient,
+    context: RecordInboundMessageCreatedContext,
+  ) => Promise<void>;
+};
+
 async function getExistingInboundMessage(input: {
   tenantId: string;
   provider: ConversationProvider;
@@ -129,7 +142,10 @@ async function getExistingInboundMessage(input: {
   });
 }
 
-export async function recordInboundMessage(rawInput: RecordInboundMessageInput) {
+export async function recordInboundMessage(
+  rawInput: RecordInboundMessageInput,
+  options: RecordInboundMessageOptions = {},
+) {
   const tenantId = required(rawInput.tenantId, 'tenantId');
   const externalUserId = required(rawInput.externalUserId, 'externalUserId');
   const externalMessageId = required(rawInput.externalMessageId, 'externalMessageId');
@@ -221,6 +237,14 @@ export async function recordInboundMessage(rawInput: RecordInboundMessageInput) 
       });
 
       const updatedConversation = await advanceInboundActivity(tx, conversation.id, timestamp);
+
+      if (options.onCreated) {
+        await options.onCreated(tx, {
+          identityId: updatedIdentity.id,
+          conversationId: updatedConversation.id,
+          messageId: message.id,
+        });
+      }
 
       return { identity: updatedIdentity, conversation: updatedConversation, message, duplicate: false as const };
     });
