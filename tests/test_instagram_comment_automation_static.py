@@ -117,6 +117,7 @@ def test_worker_attributes_to_current_authorized_user_and_has_no_crm_mutation():
 
 def test_signed_webhook_drains_core_and_pre_cutover_legacy_jobs_with_safe_fallback():
     route = read('app/api/webhooks/meta/instagram/route.ts')
+    worker = read('lib/automation/worker.ts')
     helper = read('lib/vercel-wait-until.ts')
 
     assert "Symbol.for('@next/request-context')" in helper
@@ -124,14 +125,15 @@ def test_signed_webhook_drains_core_and_pre_cutover_legacy_jobs_with_safe_fallba
     assert 'waitUntil?: (promise: Promise<unknown>) => void' in helper
     assert 'waitUntil(promise)' in helper
     assert 'return false' in helper
-    assert 'drainAutomationExecutionQueue' in route
-    assert 'createInstagramPrivateReplyAutomationHandler' in route
+    assert 'runAutomationWorker' in route
+    assert 'drainAutomationExecutionQueue' in worker
+    assert 'createInstagramPrivateReplyAutomationHandler' in worker
     assert 'drainInstagramCommentAutomationQueue' in route
     assert 'const backgroundWork = Promise.all([coreWork, legacyDrainWork]).then(() => undefined)' in route
     assert 'scheduleAfterResponse(backgroundWork)' in route
     assert 'await backgroundWork' in route
-    assert route.index("if (!verifyInstagramWebhookSignature") < route.index('const coreWork = drainAutomationExecutionQueue')
-    assert not (ROOT / 'vercel.json').exists()
+    assert route.index("if (!verifyInstagramWebhookSignature") < route.index('const coreWork = runAutomationWorker')
+    assert (ROOT / 'vercel.json').exists()
     assert not (ROOT / 'app/api/cron/instagram-comment-automations/route.ts').exists()
 
 
