@@ -14,7 +14,7 @@ import {
 
 const WHATSAPP_SCHEMA_NOT_READY = 'WHATSAPP_SCHEMA_NOT_READY';
 
-function isWhatsAppSchemaNotReady(error: unknown) {
+function isWhatsAppSchemaNotReady(error: unknown): error is Prisma.PrismaClientKnownRequestError {
   return error instanceof Prisma.PrismaClientKnownRequestError
     && (error.code === 'P2021' || error.code === 'P2022');
 }
