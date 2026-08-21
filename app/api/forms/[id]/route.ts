@@ -5,6 +5,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formCreateSchema } from '@/lib/schemas';
 import { cleanOptions, requiresOptions, validateChoiceOptions } from '@/lib/form-field-validation';
+import { generateUniqueFormSlug } from '@/lib/forms/generate-unique-form-slug';
 
 async function validatePipelineAndStage(tenantId: string, pipelineId: string, stageId: string) {
   const pipeline = await prisma.pipeline.findFirst({
@@ -17,6 +18,14 @@ async function validatePipelineAndStage(tenantId: string, pipelineId: string, st
   if (!stage) return { error: 'Etapa inicial não pertence ao pipeline selecionado.', status: 400 };
   if (stage.isArchived) return { error: 'Etapa inicial está arquivada.', status: 400 };
   return { pipeline, stage };
+}
+
+function isDuplicatePlaceholderName(name: string) {
+  return /\(\s*c[oó]pia(?:\s+\d+)?\s*\)\s*$/i.test(name.trim());
+}
+
+function hasDuplicatePlaceholderSlug(slug: string) {
+  return /(?:^|-)copia(?:-\d+)?(?:-|$)/.test(slug);
 }
 
 export const GET = withPermission('FORMS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
@@ -61,11 +70,37 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
       if ('error' in validation) return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
+    // Uma cópia nasce com slug "...-copia". Assim que ela recebe seu nome definitivo,
+    // sincronizamos o link uma única vez. Formulários normais (e cópias já sincronizadas)
+    // mantêm o slug estável para não quebrar URLs publicadas em campanhas.
+    const duplicateAudit = hasDuplicatePlaceholderSlug(existing.slug)
+      ? await prisma.auditLog.findFirst({
+          where: {
+            tenantId: session.tenantId,
+            entityType: 'form',
+            entityId: existing.id,
+            action: 'form.duplicated',
+          },
+          select: { id: true },
+        })
+      : null;
+    const duplicateSlugNeedsSync = Boolean(duplicateAudit)
+      && hasDuplicatePlaceholderSlug(existing.slug)
+      && !isDuplicatePlaceholderName(data.name);
+    const nextSlug = duplicateSlugNeedsSync
+      ? await generateUniqueFormSlug({
+          tenantId: session.tenantId,
+          name: data.name,
+          excludeSlug: existing.slug,
+        })
+      : existing.slug;
+
     await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       await tx.form.update({
         where: { id: ctx.params.id },
         data: {
           name: data.name,
+          slug: nextSlug,
           publicTitle: data.publicTitle,
           publicDescription: data.publicDescription ?? null,
           primaryColor: data.primaryColor || existing.primaryColor,
@@ -105,7 +140,14 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
     await logAudit({
       tenantId: session.tenantId, userId: session.userId,
       entityType: 'form', entityId: ctx.params.id, action: 'form.updated',
-      metadata: { pipelineId: newPipelineId, initialStageId: newStageId, leadSource: data.leadSource || existing.leadSource || 'formulario' },
+      metadata: {
+        pipelineId: newPipelineId,
+        initialStageId: newStageId,
+        leadSource: data.leadSource || existing.leadSource || 'formulario',
+        previousSlug: existing.slug,
+        slug: nextSlug,
+        duplicateSlugSynced: duplicateSlugNeedsSync,
+      },
     });
 
     return NextResponse.json({ ok: true });
