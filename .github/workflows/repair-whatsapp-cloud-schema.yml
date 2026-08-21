@@ -1,0 +1,36 @@
+name: Repair WhatsApp Cloud Schema
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair-whatsapp-schema:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      JWT_SECRET_CURRENT: ${{ secrets.JWT_SECRET_CURRENT }}
+      JWT_SECRET_PREVIOUS: ${{ secrets.JWT_SECRET_PREVIOUS }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Repair WhatsApp Cloud schema
+        run: npx tsx scripts/repair-whatsapp-cloud-schema.ts
+
+      - name: Verify WhatsApp migration state
+        run: npx prisma migrate status
