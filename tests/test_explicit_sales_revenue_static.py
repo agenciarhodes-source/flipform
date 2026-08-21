@@ -22,7 +22,10 @@ def test_legacy_sale_value_is_not_an_official_revenue_fallback():
     assert 'saleValueCents' not in PURCHASES.split('export function getLeadRevenueSource', 1)[1]
 
 
-def test_meta_purchase_is_skipped_without_an_explicit_purchase():
+def test_meta_purchase_waits_for_an_explicit_purchase_without_creating_false_revenue():
     assert "amountCents: { gt: 0 }" in TRACKING
-    assert 'Meta Purchase não enviado: venda sem valor monetário registrado.' in TRACKING
-    assert 'conversionValue: purchase.amountCents / 100' in TRACKING
+    assert "status: 'awaiting_purchase'" in TRACKING
+    assert 'Meta Purchase não enviado: venda sem valor monetário registrado.' not in TRACKING
+    assert 'conversionValue: explicitPurchase.amountCents / 100' in TRACKING
+    assert "return `meta-purchase:${context.purchase.id}`" in TRACKING
+    assert 'dispatchLeadPurchaseTracking' in TRACKING

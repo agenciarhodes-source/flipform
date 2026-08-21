@@ -49,6 +49,12 @@ export const kanbanEventSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+export type TrackingPurchaseContext = {
+  id: string;
+  amountCents: number;
+  currency?: string | null;
+};
+
 export type TrackingDispatchContext = {
   tenantId: string;
   leadId?: string | null;
@@ -56,16 +62,26 @@ export type TrackingDispatchContext = {
   fromStageId?: string | null;
   toStageId?: string | null;
   triggeredById?: string | null;
-  source: 'public_form' | 'kanban' | 'test';
+  source: 'public_form' | 'kanban' | 'purchase' | 'test';
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
   /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
   metaLeadEventId?: string | null;
+  /** Explicit commercial purchase. Purchase tracking never invents revenue from a stage move. */
+  purchase?: TrackingPurchaseContext | null;
 };
 
 export function resolveTrackingEventId(
   mapping: { provider?: string; eventName?: string; customEventName?: string | null },
-  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId'>,
+  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId' | 'purchase'>,
 ) {
+  if (
+    mapping.provider === 'meta'
+    && mapping.eventName === 'Purchase'
+    && !mapping.customEventName
+    && context.purchase?.id
+  ) {
+    return `meta-purchase:${context.purchase.id}`;
+  }
   if (
     mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
@@ -155,6 +171,14 @@ export async function shouldSkipDuplicate(params: { tenantId: string; leadId?: s
   return Boolean(exists);
 }
 
+async function shouldSkipEventId(provider: string, eventId: string) {
+  const exists = await prisma.trackingEventLog.findFirst({
+    where: { provider, eventId, status: { in: ['pending', 'sent'] } },
+    select: { id: true },
+  });
+  return Boolean(exists);
+}
+
 function decimalToNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
   if (typeof value === 'number') return value;
@@ -167,7 +191,7 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
   const value = decimalToNumber(mapping.conversionValue);
   const data: Record<string, unknown> = {
     content_name: mapping.customEventName || mapping.eventName,
-    content_category: source === 'public_form' ? 'form_submission' : 'kanban',
+    content_category: source === 'public_form' ? 'form_submission' : source === 'purchase' ? 'purchase' : 'kanban',
     currency: mapping.currency || 'BRL',
   };
   if (value !== undefined) data.value = value;
@@ -181,7 +205,24 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
 
 async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRuntimeConfig, context: TrackingDispatchContext, metaLeadData: MetaLeadUserData) {
   const eventName = mapping.customEventName || mapping.eventName;
-  const eventId = resolveTrackingEventId(mapping, context);
+  let explicitPurchase = context.purchase || null;
+
+  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase' && !explicitPurchase && context.leadId) {
+    explicitPurchase = await prisma.leadPurchase.findFirst({
+      where: { tenantId: context.tenantId, leadId: context.leadId, amountCents: { gt: 0 } },
+      orderBy: [{ purchaseDate: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, amountCents: true, currency: true },
+    });
+  }
+
+  // A Kanban stage is a signal, not proof of revenue. Wait silently until a
+  // real LeadPurchase exists instead of creating a misleading skipped/error log.
+  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase' && !explicitPurchase) {
+    return { provider: mapping.provider, eventName, status: 'awaiting_purchase', eventId: null };
+  }
+
+  const effectiveContext = explicitPurchase ? { ...context, purchase: explicitPurchase } : context;
+  const eventId = resolveTrackingEventId(mapping, effectiveContext);
   const base = {
     tenantId: context.tenantId,
     leadId: context.leadId || null,
@@ -195,24 +236,25 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
     source: context.source,
   };
 
-  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase') {
-    const purchase = context.leadId ? await prisma.leadPurchase.findFirst({
-      where: { tenantId: context.tenantId, leadId: context.leadId, amountCents: { gt: 0 } },
-      orderBy: [{ purchaseDate: 'desc' }, { createdAt: 'desc' }],
-      select: { amountCents: true },
-    }) : null;
-    if (!purchase) {
-      await logTrackingEvent({ ...base, status: 'skipped', reason: 'Meta Purchase não enviado: venda sem valor monetário registrado.' });
+  if (mapping.provider === 'meta' && mapping.eventName === 'Purchase' && explicitPurchase) {
+    // Explicit LeadPurchase is the only source of truth for Meta Purchase value.
+    mapping = {
+      ...mapping,
+      conversionValue: explicitPurchase.amountCents / 100,
+      currency: explicitPurchase.currency || 'BRL',
+    };
+
+    // One deterministic event per purchase. Re-entering the stage, retrying a UI
+    // request or registering the same purchase path cannot duplicate a sent event.
+    if (await shouldSkipEventId(mapping.provider, eventId)) {
+      return { provider: mapping.provider, eventName, status: 'duplicate', eventId };
+    }
+  } else {
+    const skip = await shouldSkipDuplicate({ tenantId: context.tenantId, leadId: context.leadId, toStageId: context.toStageId || mapping.stageId, provider: mapping.provider, eventName });
+    if (skip) {
+      await logTrackingEvent({ ...base, status: 'skipped', reason: 'duplicate' });
       return { provider: mapping.provider, eventName, status: 'skipped', eventId };
     }
-    // The explicit purchase is the only source for Meta Purchase value.
-    mapping = { ...mapping, conversionValue: purchase.amountCents / 100, currency: 'BRL' };
-  }
-
-  const skip = await shouldSkipDuplicate({ tenantId: context.tenantId, leadId: context.leadId, toStageId: context.toStageId || mapping.stageId, provider: mapping.provider, eventName });
-  if (skip) {
-    await logTrackingEvent({ ...base, status: 'skipped', reason: 'duplicate' });
-    return { provider: mapping.provider, eventName, status: 'skipped', eventId };
   }
 
   await logTrackingEvent({ ...base, status: 'pending' });
@@ -297,6 +339,29 @@ export async function dispatchKanbanStageTracking(context: TrackingDispatchConte
   const mappings = await prisma.kanbanStageTrackingEvent.findMany({
     where: { tenantId: context.tenantId, stageId: context.toStageId, enabled: true },
   });
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: context.tenantId, legacySettings: settings });
+  const metaLeadData = await resolveMetaLeadData(context, mappings);
+  const results = [];
+  for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData));
+  return results;
+}
+
+export async function dispatchLeadPurchaseTracking(
+  input: Omit<TrackingDispatchContext, 'source'> & { purchase: TrackingPurchaseContext },
+) {
+  if (!input.toStageId) return [];
+  const context: TrackingDispatchContext = { ...input, source: 'purchase' };
+  const settings = await getTrackingConfig(context.tenantId);
+  const mappings = await prisma.kanbanStageTrackingEvent.findMany({
+    where: {
+      tenantId: context.tenantId,
+      stageId: context.toStageId as string,
+      enabled: true,
+      provider: 'meta',
+      eventName: 'Purchase',
+    },
+  });
+  if (mappings.length === 0) return [];
   const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: context.tenantId, legacySettings: settings });
   const metaLeadData = await resolveMetaLeadData(context, mappings);
   const results = [];

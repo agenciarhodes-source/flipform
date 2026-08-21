@@ -150,12 +150,9 @@ export function IntegrationsClient() {
   }
 
   async function addEvent() {
-    if (isMetaPurchase && (!Number(form.conversionValue) || Number(form.conversionValue) <= 0)) {
-      toast.error('Informe um valor de conversão para eventos Purchase.');
-      return;
-    }
     try {
-      const res = await fetch('/api/integrations/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const payload = isMetaPurchase ? { ...form, conversionValue: null, currency: 'BRL' } : form;
+      const res = await fetch('/api/integrations/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro ao criar evento.');
       toast.success('Evento do funil criado.');
@@ -205,7 +202,7 @@ export function IntegrationsClient() {
             <button type="button" className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60" onClick={connectMeta} disabled={connectingMeta || disconnectingMeta}>{connectingMeta ? 'Redirecionando...' : metaConnection.status === 'authorized' ? 'Trocar conta Meta' : 'Conectar com a Meta'}</button>
             {metaConnection.status === 'authorized' && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnectMeta} disabled={connectingMeta || disconnectingMeta}>{disconnectingMeta ? 'Desconectando...' : 'Desconectar'}</button>}
           </div> : <p className="text-sm text-amber-700">A integração Meta ainda está sendo configurada pela plataforma.</p>}
-          {metaConnection.status === 'authorized' && !metaConnection.managedByPlatform && <p className="text-xs text-muted-foreground">Ao trocar a conta, entre na Meta com a identidade que possui acesso aos anúncios deste cliente. A seleção de ativos atual será resetada por segurança após a nova autorização.</p>}
+          {metaConnection.status === 'authorized' && !metaConnection.managedByPlatform && <p className="text-xs text-muted-foreground">Reautorizar a mesma identidade preserva os ativos já vinculados. Ao trocar para outra identidade Meta, revise a conta de anúncios e o Pixel/Dataset antes de publicar novas campanhas.</p>}
         </div>
         <MetaAssetSelector connection={metaConnection} onSaved={load} />
         <div className="border-t pt-4"><h3 className="font-medium">Configuração manual — legado</h3><p className="text-xs text-muted-foreground">Estes dados continuam ativos para Pixel e Conversions API atuais.</p></div>
@@ -274,7 +271,7 @@ export function IntegrationsClient() {
     </div>
 
     <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
-      <div><h2 className="font-semibold text-lg">Eventos do funil</h2><p className="text-sm text-muted-foreground">Cada vez que um lead entrar no formulário ou avançar para uma etapa configurada, o FlipForm enviará um evento para os pixels conectados.</p></div>
+      <div><h2 className="font-semibold text-lg">Eventos do funil</h2><p className="text-sm text-muted-foreground">Eventos de etapa representam avanço no funil. Para Meta Purchase, a etapa apenas habilita o gatilho: o valor real sempre vem de uma compra registrada no lead.</p></div>
       <div className="grid gap-2 md:grid-cols-4">
         <select className="border rounded p-2" value={form.pipelineId||''} onChange={e=>{ const p = pipelines.find(x=>x.id===e.target.value); setForm({...form, pipelineId:e.target.value, stageId:p?.stages?.[0]?.id || ''}); }}><option value="">Pipeline</option>{pipelines.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
         <select className="border rounded p-2" value={form.stageId||''} onChange={e=>setForm({...form, stageId:e.target.value})}><option value="">Etapa</option>{(selectedPipeline?.stages||[]).map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
@@ -283,13 +280,13 @@ export function IntegrationsClient() {
         {form.eventName === 'CustomEvent' && <input className="border rounded p-2" placeholder="Nome personalizado" value={form.customEventName||''} onChange={e=>setForm({...form, customEventName:e.target.value})} />}
         <input className="border rounded p-2" placeholder="Label Google / nome externo" value={form.conversionLabel||''} onChange={e=>setForm({...form, conversionLabel:e.target.value})} />
         <div className="space-y-1">
-          <input className="w-full border rounded p-2" type="number" step="0.01" placeholder={isMetaPurchase ? 'Ex: 1.00' : 'Valor opcional'} aria-label={isMetaPurchase ? 'Valor da compra' : 'Valor opcional'} value={form.conversionValue||''} onChange={e=>setForm({...form, conversionValue:e.target.value})} />
-          <p className="text-xs text-muted-foreground">{isMetaPurchase ? 'O valor será obtido da venda registrada manualmente' : 'Valor opcional'}</p>
+          <input className="w-full border rounded p-2 disabled:bg-muted disabled:text-muted-foreground" type="number" step="0.01" placeholder={isMetaPurchase ? 'Valor automático da compra' : 'Valor opcional'} aria-label={isMetaPurchase ? 'Valor automático da compra' : 'Valor opcional'} value={isMetaPurchase ? '' : form.conversionValue||''} disabled={isMetaPurchase} onChange={e=>setForm({...form, conversionValue:e.target.value})} />
+          <p className="text-xs text-muted-foreground">{isMetaPurchase ? 'O valor e a moeda vêm automaticamente da compra registrada no lead. Nenhum valor fixo é necessário.' : 'Valor opcional'}</p>
         </div>
         <label className="flex items-center gap-2 text-sm border rounded p-2"><input type="checkbox" checked={!!form.enabled} onChange={e=>setForm({...form, enabled:e.target.checked})} /> Ativo</label>
       </div>
       <button className="px-4 py-2 rounded bg-black text-white" onClick={addEvent}>Adicionar evento</button>
-      <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Pipeline</th><th className="p-2 text-left">Etapa</th><th className="p-2 text-left">Provedor</th><th className="p-2 text-left">Evento</th><th className="p-2 text-left">Label/Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{events.map(ev=>{ const p=pipelines.find(x=>x.id===ev.pipelineId); const st=p?.stages?.find((s:any)=>s.id===ev.stageId); return <tr key={ev.id} className="border-t"><td className="p-2">{p?.name || ev.pipelineId}</td><td className="p-2">{st?.name || ev.stageId}</td><td className="p-2">{providers.find(p=>p.value===ev.provider)?.label || ev.provider}</td><td className="p-2">{ev.customEventName || ev.eventName}</td><td className="p-2">{ev.conversionLabel || '-'} {ev.conversionValue ? `· R$ ${ev.conversionValue}` : ''}</td><td className="p-2">{ev.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>toggleEvent(ev)}>{ev.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteEvent(ev.id)}>Excluir</button></td></tr>})}{events.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={7}>Nenhum evento configurado.</td></tr>}</tbody></table></div>
+      <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Pipeline</th><th className="p-2 text-left">Etapa</th><th className="p-2 text-left">Provedor</th><th className="p-2 text-left">Evento</th><th className="p-2 text-left">Label/Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{events.map(ev=>{ const p=pipelines.find(x=>x.id===ev.pipelineId); const st=p?.stages?.find((s:any)=>s.id===ev.stageId); const purchaseValueFromLead=ev.provider==='meta'&&ev.eventName==='Purchase'; return <tr key={ev.id} className="border-t"><td className="p-2">{p?.name || ev.pipelineId}</td><td className="p-2">{st?.name || ev.stageId}</td><td className="p-2">{providers.find(p=>p.value===ev.provider)?.label || ev.provider}</td><td className="p-2">{ev.customEventName || ev.eventName}</td><td className="p-2">{ev.conversionLabel || '-'} {purchaseValueFromLead ? '· valor da compra registrada' : ev.conversionValue ? `· R$ ${ev.conversionValue}` : ''}</td><td className="p-2">{ev.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>toggleEvent(ev)}>{ev.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteEvent(ev.id)}>Excluir</button></td></tr>})}{events.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={7}>Nenhum evento configurado.</td></tr>}</tbody></table></div>
     </div>
 
     <div className="rounded-xl border bg-white p-5 space-y-3 shadow-sm">
@@ -301,7 +298,7 @@ export function IntegrationsClient() {
     </div>
 
     <div className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-xl border bg-blue-50 p-5 text-sm text-blue-950"><h2 className="font-semibold mb-2">Como usar</h2><p>Para melhores resultados, configure um evento Purchase na etapa final do seu funil. Use eventos intermediários para treinar suas campanhas com sinais mais qualificados. Eventos falhos não impedem o funcionamento do CRM.</p></div>
+      <div className="rounded-xl border bg-blue-50 p-5 text-sm text-blue-950"><h2 className="font-semibold mb-2">Como usar</h2><p>Configure Purchase na etapa de venda do funil. O FlipForm só envia Purchase quando existe uma compra real registrada com valor maior que zero. Você pode registrar a compra antes ou depois de mover o lead para essa etapa; cada compra recebe um identificador próprio e é enviada no máximo uma vez.</p></div>
       <div className="rounded-xl border bg-white p-5"><h2 className="font-semibold mb-2">Últimos logs</h2><div className="space-y-2 text-sm">{visibleLogs.slice(0,6).map(log=><div key={log.id} className="flex justify-between gap-3 border-b pb-1"><span>{log.provider} · {log.eventName}{log.source ? ` · ${log.source}` : ''}</span><span className="text-right text-muted-foreground">{log.status}{log.reason ? ` · ${log.reason}` : ''}</span></div>)}{visibleLogs.length===0 && <p className="text-muted-foreground">Nenhum evento registrado ainda.</p>}</div></div>
     </div>
   </div>;
