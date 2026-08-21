@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { prisma } from '@/lib/prisma';
 import {
   createAutomationDefinition,
   listAutomationDefinitions,
@@ -11,7 +12,24 @@ import {
   WHATSAPP_SEND_TEXT_ACTION,
   type WhatsAppMessageCoreMatchType,
 } from './adapters/whatsapp-message';
+import {
+  LEAD_ENSURE_FROM_CONVERSATION_ACTION,
+  LEAD_MOVE_STAGE_ACTION,
+} from './adapters/crm';
 import type { AutomationDefinitionSnapshot } from './types';
+
+export type WhatsAppLeadTemperature = 'cold' | 'warm' | 'hot';
+
+export type WhatsAppEnsureLeadConfig = {
+  pipelineId: string;
+  stageId: string;
+  temperature: WhatsAppLeadTemperature;
+};
+
+export type WhatsAppMoveLeadConfig = {
+  pipelineId: string;
+  stageId: string;
+};
 
 export type WhatsAppMessageAutomationRule = {
   id: string;
@@ -25,7 +43,9 @@ export type WhatsAppMessageAutomationRule = {
   matchType: WhatsAppMessageCoreMatchType;
   replyText: string;
   enabled: boolean;
-  actionId: string;
+  replyActionId: string;
+  ensureLead: (WhatsAppEnsureLeadConfig & { actionId: string }) | null;
+  moveLead: (WhatsAppMoveLeadConfig & { actionId: string }) | null;
   updatedAt: Date;
 };
 
@@ -45,15 +65,50 @@ function stringField(value: unknown) {
 
 function parseRule(definition: AutomationDefinitionSnapshot): WhatsAppMessageAutomationRule | null {
   if (definition.trigger.type !== WHATSAPP_MESSAGE_KEYWORD_TRIGGER) return null;
-  if (definition.actions.length !== 1) return null;
+  if (definition.actions.length < 1 || definition.actions.length > 3) return null;
 
   const keyword = stringField(definition.trigger.config.keyword);
   const matchType = definition.trigger.config.matchType === 'exact' || definition.trigger.config.matchType === 'contains'
     ? definition.trigger.config.matchType
     : null;
-  const action = definition.actions[0];
-  const replyText = action.type === WHATSAPP_SEND_TEXT_ACTION ? stringField(action.config.text) : null;
+
+  const supportedTypes = new Set([
+    WHATSAPP_SEND_TEXT_ACTION,
+    LEAD_ENSURE_FROM_CONVERSATION_ACTION,
+    LEAD_MOVE_STAGE_ACTION,
+  ]);
+  if (definition.actions.some(action => !supportedTypes.has(action.type))) return null;
+
+  const replyActions = definition.actions.filter(action => action.type === WHATSAPP_SEND_TEXT_ACTION);
+  const ensureActions = definition.actions.filter(action => action.type === LEAD_ENSURE_FROM_CONVERSATION_ACTION);
+  const moveActions = definition.actions.filter(action => action.type === LEAD_MOVE_STAGE_ACTION);
+  if (replyActions.length !== 1 || ensureActions.length > 1 || moveActions.length > 1) return null;
+
+  const replyAction = replyActions[0];
+  const replyText = stringField(replyAction.config.text);
   if (!keyword || !matchType || !replyText) return null;
+
+  let ensureLead: WhatsAppMessageAutomationRule['ensureLead'] = null;
+  const ensureAction = ensureActions[0];
+  if (ensureAction) {
+    const pipelineId = stringField(ensureAction.config.pipelineId);
+    const stageId = stringField(ensureAction.config.stageId);
+    const rawTemperature = ensureAction.config.temperature;
+    const temperature: WhatsAppLeadTemperature | null = rawTemperature === 'cold' || rawTemperature === 'warm' || rawTemperature === 'hot'
+      ? rawTemperature
+      : null;
+    if (!pipelineId || !stageId || !temperature) return null;
+    ensureLead = { actionId: ensureAction.id, pipelineId, stageId, temperature };
+  }
+
+  let moveLead: WhatsAppMessageAutomationRule['moveLead'] = null;
+  const moveAction = moveActions[0];
+  if (moveAction) {
+    const pipelineId = stringField(moveAction.config.pipelineId);
+    const stageId = stringField(moveAction.config.stageId);
+    if (!pipelineId || !stageId) return null;
+    moveLead = { actionId: moveAction.id, pipelineId, stageId };
+  }
 
   const keywordNormalized = normalizeWhatsAppAutomationText(keyword);
   if (!keywordNormalized) return null;
@@ -70,7 +125,9 @@ function parseRule(definition: AutomationDefinitionSnapshot): WhatsAppMessageAut
     matchType,
     replyText,
     enabled: definition.enabled,
-    actionId: action.id,
+    replyActionId: replyAction.id,
+    ensureLead,
+    moveLead,
     updatedAt: definition.updatedAt,
   };
 }
@@ -81,6 +138,8 @@ function validateFields(input: {
   matchType: WhatsAppMessageCoreMatchType;
   replyText: string;
   orderIndex: number;
+  ensureLead?: WhatsAppEnsureLeadConfig | null;
+  moveLead?: WhatsAppMoveLeadConfig | null;
 }) {
   const name = input.name.trim();
   const keyword = input.keyword.trim();
@@ -100,7 +159,115 @@ function validateFields(input: {
     throw new WhatsAppMessageAutomationConfigError('INVALID_REQUEST', 'Automation order is invalid');
   }
 
-  return { name, keyword, keywordNormalized, replyText };
+  const ensureLead = input.ensureLead
+    ? {
+        pipelineId: input.ensureLead.pipelineId.trim(),
+        stageId: input.ensureLead.stageId.trim(),
+        temperature: input.ensureLead.temperature,
+      }
+    : null;
+  if (
+    ensureLead
+    && (
+      !ensureLead.pipelineId
+      || !ensureLead.stageId
+      || !['cold', 'warm', 'hot'].includes(ensureLead.temperature)
+    )
+  ) {
+    throw new WhatsAppMessageAutomationConfigError('INVALID_REQUEST', 'Lead creation config is invalid');
+  }
+
+  const moveLead = input.moveLead
+    ? {
+        pipelineId: input.moveLead.pipelineId.trim(),
+        stageId: input.moveLead.stageId.trim(),
+      }
+    : null;
+  if (moveLead && (!moveLead.pipelineId || !moveLead.stageId)) {
+    throw new WhatsAppMessageAutomationConfigError('INVALID_REQUEST', 'Lead move config is invalid');
+  }
+  if (ensureLead && moveLead && ensureLead.pipelineId !== moveLead.pipelineId) {
+    throw new WhatsAppMessageAutomationConfigError(
+      'INVALID_REQUEST',
+      'Lead creation and movement must use the same pipeline in one flow',
+    );
+  }
+
+  return { name, keyword, keywordNormalized, replyText, ensureLead, moveLead };
+}
+
+async function assertCrmTargets(input: {
+  tenantId: string;
+  ensureLead: WhatsAppEnsureLeadConfig | null;
+  moveLead: WhatsAppMoveLeadConfig | null;
+}) {
+  const targets = [
+    input.ensureLead ? { pipelineId: input.ensureLead.pipelineId, stageId: input.ensureLead.stageId } : null,
+    input.moveLead ? { pipelineId: input.moveLead.pipelineId, stageId: input.moveLead.stageId } : null,
+  ].filter((target): target is { pipelineId: string; stageId: string } => Boolean(target));
+
+  const uniqueTargets = [...new Map(targets.map(target => [`${target.pipelineId}:${target.stageId}`, target])).values()];
+  for (const target of uniqueTargets) {
+    const stage = await prisma.pipelineStage.findFirst({
+      where: {
+        id: target.stageId,
+        pipelineId: target.pipelineId,
+        isArchived: false,
+        pipeline: { tenantId: input.tenantId, isArchived: false },
+      },
+      select: { id: true },
+    });
+    if (!stage) {
+      throw new WhatsAppMessageAutomationConfigError('INVALID_REQUEST', 'Pipeline or stage is invalid');
+    }
+  }
+}
+
+type ConfigurableAction = {
+  id?: string;
+  type: string;
+  config: Record<string, unknown>;
+};
+
+function buildActions(
+  fields: {
+    replyText: string;
+    ensureLead: WhatsAppEnsureLeadConfig | null;
+    moveLead: WhatsAppMoveLeadConfig | null;
+  },
+  current?: WhatsAppMessageAutomationRule,
+) {
+  const actions: ConfigurableAction[] = [{
+    ...(current?.replyActionId ? { id: current.replyActionId } : {}),
+    type: WHATSAPP_SEND_TEXT_ACTION,
+    config: { text: fields.replyText },
+  }];
+
+  if (fields.ensureLead) {
+    actions.push({
+      ...(current?.ensureLead?.actionId ? { id: current.ensureLead.actionId } : {}),
+      type: LEAD_ENSURE_FROM_CONVERSATION_ACTION,
+      config: {
+        pipelineId: fields.ensureLead.pipelineId,
+        stageId: fields.ensureLead.stageId,
+        source: 'whatsapp',
+        temperature: fields.ensureLead.temperature,
+      },
+    });
+  }
+
+  if (fields.moveLead) {
+    actions.push({
+      ...(current?.moveLead?.actionId ? { id: current.moveLead.actionId } : {}),
+      type: LEAD_MOVE_STAGE_ACTION,
+      config: {
+        pipelineId: fields.moveLead.pipelineId,
+        stageId: fields.moveLead.stageId,
+      },
+    });
+  }
+
+  return actions;
 }
 
 export async function listWhatsAppMessageAutomations(tenantId: string) {
@@ -119,8 +286,16 @@ export async function createWhatsAppMessageAutomation(input: {
   replyText: string;
   enabled: boolean;
   orderIndex: number;
+  ensureLead?: WhatsAppEnsureLeadConfig | null;
+  moveLead?: WhatsAppMoveLeadConfig | null;
 }) {
   const fields = validateFields(input);
+  await assertCrmTargets({
+    tenantId: input.tenantId,
+    ensureLead: fields.ensureLead,
+    moveLead: fields.moveLead,
+  });
+
   const definition = await createAutomationDefinition({
     tenantId: input.tenantId,
     userId: input.userId,
@@ -134,10 +309,7 @@ export async function createWhatsAppMessageAutomation(input: {
         matchType: input.matchType,
       },
     },
-    actions: [{
-      type: WHATSAPP_SEND_TEXT_ACTION,
-      config: { text: fields.replyText },
-    }],
+    actions: buildActions(fields),
   });
 
   const rule = parseRule(definition);
@@ -155,6 +327,8 @@ export async function updateWhatsAppMessageAutomation(input: {
   replyText: string;
   enabled: boolean;
   orderIndex: number;
+  ensureLead?: WhatsAppEnsureLeadConfig | null;
+  moveLead?: WhatsAppMoveLeadConfig | null;
 }) {
   const fields = validateFields(input);
   const rules = await listWhatsAppMessageAutomations(input.tenantId);
@@ -162,6 +336,12 @@ export async function updateWhatsAppMessageAutomation(input: {
   if (!current) {
     throw new WhatsAppMessageAutomationConfigError('NOT_FOUND', 'Automation not found');
   }
+
+  await assertCrmTargets({
+    tenantId: input.tenantId,
+    ensureLead: fields.ensureLead,
+    moveLead: fields.moveLead,
+  });
 
   const definition = await updateAutomationDefinition({
     tenantId: input.tenantId,
@@ -177,11 +357,7 @@ export async function updateWhatsAppMessageAutomation(input: {
         matchType: input.matchType,
       },
     },
-    actions: [{
-      id: current.actionId,
-      type: WHATSAPP_SEND_TEXT_ACTION,
-      config: { text: fields.replyText },
-    }],
+    actions: buildActions(fields, current),
   });
 
   const rule = parseRule(definition);

@@ -58,14 +58,19 @@ def test_lead_move_action_preserves_pipeline_scope_history_and_tracking_retry():
     assert "return { status: 'retry', code: 'KANBAN_TRACKING_RETRY' }" in handler
 
 
-def test_crm_actions_are_dormant_until_builder_explicitly_emits_them():
+def test_crm_actions_are_emitted_by_server_config_builder_not_client_runtime():
     config = read('lib/automation/whatsapp-message-config.ts')
     workspace = read('app/(app)/automations/whatsapp-message-automation-client.tsx')
 
-    assert 'LEAD_ENSURE_FROM_CONVERSATION_ACTION' not in config
-    assert 'LEAD_MOVE_STAGE_ACTION' not in config
+    assert 'LEAD_ENSURE_FROM_CONVERSATION_ACTION' in config
+    assert 'LEAD_MOVE_STAGE_ACTION' in config
+    assert 'type: LEAD_ENSURE_FROM_CONVERSATION_ACTION' in config
+    assert 'type: LEAD_MOVE_STAGE_ACTION' in config
+    assert "source: 'whatsapp'" in config
     assert 'lead.ensure_from_conversation' not in workspace
     assert 'lead.move_stage' not in workspace
+    assert '/api/leads' not in workspace
+    assert '/api/kanban' not in workspace
 
 
 def test_crm_handlers_do_not_call_http_or_expose_provider_credentials():
