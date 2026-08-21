@@ -148,9 +148,11 @@ def test_connection_status_accepts_ad_account_and_pixel_without_business():
     assert ".delete" not in route.lower()
 
 
-def test_reauthorization_clears_only_meta_asset_selection_for_safety():
+def test_reauthorization_preserves_existing_meta_asset_selection():
     callback = (ROOT / "app/api/integrations/meta/callback/route.ts").read_text()
     assert "getMetaUserProfile" in callback
+    assert "Keep the already validated tenant -> ad account -> Pixel binding intact" in callback
+    update_block = callback.split("update: {", 1)[1].split("        },\n      });", 1)[0]
     for field in (
         "metaBusinessId: null",
         "metaBusinessName: null",
@@ -160,7 +162,8 @@ def test_reauthorization_clears_only_meta_asset_selection_for_safety():
         "metaPixelName: null",
         "assetsSelectedAt: null",
     ):
-        assert field in callback
+        assert field not in update_block
+    assert "existingAssetBindingPreserved: true" in callback
     assert "deleteMany" not in callback
     assert "DELETE FROM" not in callback.upper()
 
