@@ -355,7 +355,7 @@ export async function dispatchLeadPurchaseTracking(
   const mappings = await prisma.kanbanStageTrackingEvent.findMany({
     where: {
       tenantId: context.tenantId,
-      stageId: context.toStageId,
+      stageId: context.toStageId as string,
       enabled: true,
       provider: 'meta',
       eventName: 'Purchase',
