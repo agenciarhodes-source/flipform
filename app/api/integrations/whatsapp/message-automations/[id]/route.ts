@@ -7,6 +7,17 @@ import {
   WhatsAppMessageAutomationConfigError,
 } from '@/lib/automation/whatsapp-message-config';
 
+const ensureLeadSchema = z.object({
+  pipelineId: z.string().trim().min(1).max(128),
+  stageId: z.string().trim().min(1).max(128),
+  temperature: z.enum(['cold', 'warm', 'hot']).default('warm'),
+}).strict();
+
+const moveLeadSchema = z.object({
+  pipelineId: z.string().trim().min(1).max(128),
+  stageId: z.string().trim().min(1).max(128),
+}).strict();
+
 const ruleSchema = z.object({
   name: z.string().trim().min(1).max(120),
   keyword: z.string().trim().min(1).max(160),
@@ -14,6 +25,8 @@ const ruleSchema = z.object({
   replyText: z.string().trim().min(1).max(4096),
   enabled: z.boolean(),
   orderIndex: z.number().int().min(0).max(10000),
+  ensureLead: ensureLeadSchema.nullable().optional().default(null),
+  moveLead: moveLeadSchema.nullable().optional().default(null),
 }).strict();
 
 export const PATCH = withPermission(
