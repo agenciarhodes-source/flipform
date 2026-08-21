@@ -104,6 +104,9 @@ export type MetaAdsReadOnlyDiagnostics = {
   }>;
 };
 
+type MetaAdsCampaignDiagnostic = MetaAdsReadOnlyDiagnostics['campaigns'][number];
+type MetaAdsCampaignSummary = MetaAdsReadOnlyDiagnostics['campaignSummary'];
+
 export async function getMetaAdsReadOnlyDiagnostics(input: {
   accessToken: string;
   appSecret: string;
@@ -129,17 +132,17 @@ export async function getMetaAdsReadOnlyDiagnostics(input: {
     }),
   ]);
 
-  const campaigns = (Array.isArray(campaignsPayload?.data) ? campaignsPayload.data : [])
-    .map((item: any) => ({
+  const campaigns: MetaAdsCampaignDiagnostic[] = (Array.isArray(campaignsPayload?.data) ? campaignsPayload.data : [])
+    .map((item: any): MetaAdsCampaignDiagnostic => ({
       id: safeString(item?.id, 80) || '',
       name: safeString(item?.name),
       status: safeString(item?.status, 80),
       effectiveStatus: safeString(item?.effective_status, 80),
       updatedTime: safeString(item?.updated_time, 80),
     }))
-    .filter((item: { id: string }) => Boolean(item.id));
+    .filter((item: MetaAdsCampaignDiagnostic) => Boolean(item.id));
 
-  const summary = campaigns.reduce((acc, campaign) => {
+  const summary = campaigns.reduce<MetaAdsCampaignSummary>((acc, campaign) => {
     const status = (campaign.status || '').toUpperCase();
     const effective = (campaign.effectiveStatus || '').toUpperCase();
     if (effective === 'ACTIVE') acc.active += 1;
