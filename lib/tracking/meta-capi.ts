@@ -25,6 +25,13 @@ export type MetaCapiPayload = {
   customData?: Record<string, unknown>;
 };
 
+export type MetaCapiSendResult = {
+  ok: boolean;
+  reason?: string;
+  eventsReceived?: number;
+  traceId?: string;
+};
+
 export function normalizeMetaText(value: string): string {
   return value.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -89,7 +96,41 @@ export function formatMetaCapiError(data: any, fallback: string) {
   return parts.join(' | ');
 }
 
-export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<{ ok: boolean; reason?: string }> {
+function finiteNonNegativeInteger(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && Number.isInteger(value)
+    ? value
+    : undefined;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+export function parseMetaCapiSuccess(data: unknown): MetaCapiSendResult {
+  const payload = data && typeof data === 'object' ? data as Record<string, unknown> : {};
+  const eventsReceived = finiteNonNegativeInteger(payload.events_received);
+  const traceId = stringValue(payload.fbtrace_id);
+
+  // Meta's normal success acknowledgement includes events_received. When the
+  // provider explicitly says zero events were received, a HTTP 2xx alone must
+  // not be treated as a delivered conversion in FlipForm.
+  if (eventsReceived === 0) {
+    return {
+      ok: false,
+      reason: `Meta CAPI não confirmou o recebimento do evento${traceId ? ` | fbtrace_id: ${traceId}` : ''}`,
+      eventsReceived,
+      traceId,
+    };
+  }
+
+  return {
+    ok: true,
+    eventsReceived,
+    traceId,
+  };
+}
+
+export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaCapiSendResult> {
   const body = {
     data: [
       {
@@ -111,13 +152,15 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<{ ok:
     body: JSON.stringify(body),
   });
 
+  let responseData: unknown = null;
+  try {
+    responseData = await res.json();
+  } catch {}
+
   if (!res.ok) {
-    let reason = `Meta CAPI HTTP ${res.status}`;
-    try {
-      const data = await res.json();
-      reason = formatMetaCapiError(data, reason);
-    } catch {}
+    const reason = formatMetaCapiError(responseData, `Meta CAPI HTTP ${res.status}`);
     return { ok: false, reason };
   }
-  return { ok: true };
+
+  return parseMetaCapiSuccess(responseData);
 }
