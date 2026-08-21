@@ -151,13 +151,9 @@ export const GET = withAuth(async (req: NextRequest, session) => {
           connectedAt: now,
           lastValidatedAt: now,
           revokedAt: null,
-          metaBusinessId: null,
-          metaBusinessName: null,
-          metaAdAccountId: null,
-          metaAdAccountName: null,
-          metaPixelId: null,
-          metaPixelName: null,
-          assetsSelectedAt: null,
+          // Reauthorizing the same Meta identity refreshes the credential only.
+          // Keep the already validated tenant -> ad account -> Pixel binding intact;
+          // silently clearing it interrupts conversion tracking until an admin binds it again.
         },
       });
 
@@ -172,6 +168,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
             authorizationMode,
             status,
             tokenType: validation.tokenType,
+            existingAssetBindingPreserved: true,
           } as any,
         },
       });
