@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +11,25 @@ import {
   getWhatsAppConnectionHealthForTenant,
   getWhatsAppRegisteredAt,
 } from '@/lib/meta/whatsapp-connection-health';
+
+const WHATSAPP_SCHEMA_NOT_READY = 'WHATSAPP_SCHEMA_NOT_READY';
+
+function isWhatsAppSchemaNotReady(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    && (error.code === 'P2021' || error.code === 'P2022');
+}
+
+function schemaNotReadyResponse() {
+  return NextResponse.json({
+    code: WHATSAPP_SCHEMA_NOT_READY,
+    error: 'O módulo do WhatsApp precisa concluir uma atualização da plataforma.',
+    schemaReady: false,
+    platformAvailable: false,
+    runtimeAvailable: false,
+    connection: null,
+    health: null,
+  }, { status: 503 });
+}
 
 function toSafeConnection(connection: any | null, registeredAt: Date | null) {
   if (!connection) return null;
@@ -28,44 +48,56 @@ function toSafeConnection(connection: any | null, registeredAt: Date | null) {
 }
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
-  const [platformAvailable, runtimeAvailable, connection, health] = await Promise.all([
-    isPlatformWhatsAppEmbeddedSignupAvailable(),
-    isPlatformWhatsAppRuntimeAvailable(),
-    prisma.tenantWhatsAppConnection.findFirst({
-      where: { tenantId: session.tenantId },
-      orderBy: { connectedAt: 'desc' },
-      select: {
-        id: true,
-        status: true,
-        phoneNumberId: true,
-        wabaName: true,
-        displayPhoneNumber: true,
-        verifiedName: true,
-        qualityRating: true,
-        connectedAt: true,
-        systemUserAssignedAt: true,
-        subscribedAt: true,
-        lastValidatedAt: true,
-      },
-    }),
-    getWhatsAppConnectionHealthForTenant(session.tenantId),
-  ]);
+  try {
+    const [platformAvailable, runtimeAvailable, connection, health] = await Promise.all([
+      isPlatformWhatsAppEmbeddedSignupAvailable(),
+      isPlatformWhatsAppRuntimeAvailable(),
+      prisma.tenantWhatsAppConnection.findFirst({
+        where: { tenantId: session.tenantId },
+        orderBy: { connectedAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          phoneNumberId: true,
+          wabaName: true,
+          displayPhoneNumber: true,
+          verifiedName: true,
+          qualityRating: true,
+          connectedAt: true,
+          systemUserAssignedAt: true,
+          subscribedAt: true,
+          lastValidatedAt: true,
+        },
+      }),
+      getWhatsAppConnectionHealthForTenant(session.tenantId),
+    ]);
 
-  const registeredAt = connection?.status === 'connected'
-    ? await getWhatsAppRegisteredAt({
+    const registeredAt = connection?.status === 'connected'
+      ? await getWhatsAppRegisteredAt({
+          tenantId: session.tenantId,
+          connectionId: connection.id,
+          phoneNumberId: connection.phoneNumberId,
+          connectedAt: connection.connectedAt,
+        })
+      : null;
+
+    return NextResponse.json({
+      schemaReady: true,
+      platformAvailable,
+      runtimeAvailable,
+      connection: toSafeConnection(connection, registeredAt),
+      health,
+    });
+  } catch (error) {
+    if (isWhatsAppSchemaNotReady(error)) {
+      console.warn('WhatsApp Cloud schema is not ready', {
         tenantId: session.tenantId,
-        connectionId: connection.id,
-        phoneNumberId: connection.phoneNumberId,
-        connectedAt: connection.connectedAt,
-      })
-    : null;
-
-  return NextResponse.json({
-    platformAvailable,
-    runtimeAvailable,
-    connection: toSafeConnection(connection, registeredAt),
-    health,
-  });
+        errorCode: error.code,
+      });
+      return schemaNotReadyResponse();
+    }
+    throw error;
+  }
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
@@ -76,28 +108,33 @@ export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextReques
   });
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  const connection = await prisma.tenantWhatsAppConnection.findFirst({
-    where: { tenantId: session.tenantId, status: 'connected' },
-    orderBy: { connectedAt: 'desc' },
-    select: { id: true },
-  });
-  if (!connection) return NextResponse.json({ disconnected: false });
+  try {
+    const connection = await prisma.tenantWhatsAppConnection.findFirst({
+      where: { tenantId: session.tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'desc' },
+      select: { id: true },
+    });
+    if (!connection) return NextResponse.json({ disconnected: false });
 
-  const now = new Date();
-  await prisma.$transaction(async tx => {
-    await tx.tenantWhatsAppConnection.update({
-      where: { id: connection.id },
-      data: { status: 'revoked', revokedAt: now },
+    const now = new Date();
+    await prisma.$transaction(async tx => {
+      await tx.tenantWhatsAppConnection.update({
+        where: { id: connection.id },
+        data: { status: 'revoked', revokedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          tenantId: session.tenantId,
+          userId: session.userId,
+          entityType: 'tenant_whatsapp_connection',
+          entityId: connection.id,
+          action: 'WHATSAPP_CONNECTION_REVOKED',
+        },
+      });
     });
-    await tx.auditLog.create({
-      data: {
-        tenantId: session.tenantId,
-        userId: session.userId,
-        entityType: 'tenant_whatsapp_connection',
-        entityId: connection.id,
-        action: 'WHATSAPP_CONNECTION_REVOKED',
-      },
-    });
-  });
-  return NextResponse.json({ disconnected: true });
+    return NextResponse.json({ disconnected: true });
+  } catch (error) {
+    if (isWhatsAppSchemaNotReady(error)) return schemaNotReadyResponse();
+    throw error;
+  }
 });
