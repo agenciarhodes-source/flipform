@@ -7,7 +7,7 @@ const schema = z.object({
   appId: z.string().trim().max(128),
   appSecret: z.string().trim().min(1).max(512).optional(),
   businessLoginConfigId: z.string().trim().max(128),
-  instagramAppId: z.string().trim().max(128),
+  instagramAppId: z.string().trim().max(128).optional(),
   instagramAppSecret: z.string().trim().min(1).max(512).optional(),
   whatsappEmbeddedSignupConfigId: z.string().trim().max(128),
   whatsappBusinessId: z.string().trim().max(128),
