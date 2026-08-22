@@ -8,6 +8,7 @@ import {
   getInstagramOAuthRedirectUri,
   getPlatformInstagramLoginCredentials,
 } from '@/lib/meta/instagram-platform';
+import { isInstagramRuntimeReady } from '@/lib/meta/instagram-runtime-readiness';
 import {
   INSTAGRAM_OAUTH_STATE_COOKIE,
   INSTAGRAM_OAUTH_STATE_COOKIE_PATH,
@@ -21,9 +22,15 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   });
   if (!rl.allowed) return rateLimitResponse(rl);
 
-  const credentials = await getPlatformInstagramLoginCredentials();
-  if (!credentials) {
-    return NextResponse.json({ error: 'O Instagram ainda não foi configurado pela plataforma.' }, { status: 503 });
+  const [credentials, runtimeReady] = await Promise.all([
+    getPlatformInstagramLoginCredentials(),
+    isInstagramRuntimeReady(),
+  ]);
+  if (!credentials || !runtimeReady) {
+    return NextResponse.json(
+      { error: 'A conexão com o Instagram está temporariamente indisponível.' },
+      { status: 503 },
+    );
   }
 
   const created = createMetaOAuthStateForPurpose(

@@ -17,6 +17,7 @@ import {
   getPlatformInstagramLoginCredentials,
 } from '@/lib/meta/instagram-platform';
 import { persistInstagramConnection } from '@/lib/meta/instagram-connection';
+import { isInstagramRuntimeReady } from '@/lib/meta/instagram-runtime-readiness';
 import {
   INSTAGRAM_OAUTH_STATE_COOKIE,
   INSTAGRAM_OAUTH_STATE_COOKIE_PATH,
@@ -71,8 +72,11 @@ export const GET = withAuth(async (req: NextRequest, session) => {
   if (!code) return clearState(redirect('error'));
 
   try {
-    const credentials = await getPlatformInstagramLoginCredentials();
-    if (!credentials) return clearState(redirect('error'));
+    const [credentials, runtimeReady] = await Promise.all([
+      getPlatformInstagramLoginCredentials(),
+      isInstagramRuntimeReady(),
+    ]);
+    if (!credentials || !runtimeReady) return clearState(redirect('error'));
 
     const shortLived = await exchangeInstagramAuthorizationCode({
       appId: credentials.appId,
