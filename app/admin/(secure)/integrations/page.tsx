@@ -10,6 +10,8 @@ import { InstagramPlatformConfigCard } from './instagram-platform-config-card';
 import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
 
+// Instagram App ID and Instagram App Secret are configured in the isolated InstagramPlatformConfigCard.
+
 type Settings = {
   appId: string | null;
   appSecretConfigured: boolean;
