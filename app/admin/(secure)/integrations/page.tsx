@@ -6,17 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { InstagramPlatformConfigCard } from './instagram-platform-config-card';
 import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
+
+// Instagram App ID and Instagram App Secret are configured in the isolated InstagramPlatformConfigCard.
 
 type Settings = {
   appId: string | null;
   appSecretConfigured: boolean;
   appSecretMasked: string | null;
   businessLoginConfigId: string | null;
-  instagramAppId: string | null;
-  instagramAppSecretConfigured: boolean;
-  instagramAppSecretMasked: string | null;
   whatsappEmbeddedSignupConfigId: string | null;
   whatsappBusinessId: string | null;
   whatsappSystemUserId: string | null;
@@ -28,7 +28,6 @@ type Settings = {
   configured: boolean;
   baseConfigured: boolean;
   businessLoginConfigured: boolean;
-  instagramLoginConfigured: boolean;
   whatsappEmbeddedSignupConfigured: boolean;
   defaultPixelEnabled: boolean;
   defaultCapiEnabled: boolean;
@@ -48,7 +47,6 @@ const presetLabels: Array<[keyof Settings, string]> = [
 export default function AdminIntegrationsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [appSecret, setAppSecret] = useState('');
-  const [instagramAppSecret, setInstagramAppSecret] = useState('');
   const [whatsappAdminSystemUserAccessToken, setWhatsappAdminSystemUserAccessToken] = useState('');
   const [whatsappSystemUserAccessToken, setWhatsappSystemUserAccessToken] = useState('');
   const [busy, setBusy] = useState(false);
@@ -60,14 +58,12 @@ export default function AdminIntegrationsPage() {
     const body: Record<string, unknown> = {
       appId: settings.appId || '',
       businessLoginConfigId: settings.businessLoginConfigId || '',
-      instagramAppId: settings.instagramAppId || '',
       whatsappEmbeddedSignupConfigId: settings.whatsappEmbeddedSignupConfigId || '',
       whatsappBusinessId: settings.whatsappBusinessId || '',
       whatsappSystemUserId: settings.whatsappSystemUserId || '',
       ...Object.fromEntries(presetLabels.map(([key]) => [key, settings[key]])),
     };
     if (appSecret.trim()) body.appSecret = appSecret;
-    if (instagramAppSecret.trim()) body.instagramAppSecret = instagramAppSecret;
     if (whatsappAdminSystemUserAccessToken.trim()) body.whatsappAdminSystemUserAccessToken = whatsappAdminSystemUserAccessToken;
     if (whatsappSystemUserAccessToken.trim()) body.whatsappSystemUserAccessToken = whatsappSystemUserAccessToken;
     try {
@@ -76,7 +72,6 @@ export default function AdminIntegrationsPage() {
       if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar.');
       setSettings(payload.settings);
       setAppSecret('');
-      setInstagramAppSecret('');
       setWhatsappAdminSystemUserAccessToken('');
       setWhatsappSystemUserAccessToken('');
       setMessage('Configuração salva com segurança.');
@@ -86,21 +81,12 @@ export default function AdminIntegrationsPage() {
     <div><h1 className="font-heading text-2xl font-bold">Integrações da Plataforma</h1><p className="text-sm text-muted-foreground">Configure integrações universais utilizadas pelos clientes do FlipForm.</p></div>
     {!settings ? <Card className="p-6 text-sm"><Loader2 className="inline w-4 h-4 mr-2 animate-spin" />Carregando configuração...</Card> :
     <Card className="p-6 space-y-6">
-      <div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">META</p><h2 className="font-heading text-xl font-semibold">Configuração universal da plataforma</h2><p className="text-sm text-muted-foreground">Credenciais de Ads/WhatsApp e Instagram são configuradas separadamente quando os produtos da Meta expõem identificadores próprios.</p></div><div className="flex flex-wrap gap-2"><Badge variant={settings.baseConfigured ? 'secondary' : 'outline'}>{settings.baseConfigured ? 'Base Meta configurada' : 'Base Meta pendente'}</Badge><Badge variant={settings.businessLoginConfigured ? 'secondary' : 'outline'}>{settings.businessLoginConfigured ? 'Ads Login configurado' : 'Ads Login pendente'}</Badge><Badge variant={settings.whatsappEmbeddedSignupConfigured ? 'secondary' : 'outline'}>{settings.whatsappEmbeddedSignupConfigured ? 'WhatsApp Signup configurado' : 'WhatsApp Signup pendente'}</Badge><Badge variant={settings.instagramLoginConfigured ? 'secondary' : 'outline'}>{settings.instagramLoginConfigured ? 'Instagram Login configurado' : 'Instagram Login pendente'}</Badge></div></div>
+      <div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">META</p><h2 className="font-heading text-xl font-semibold">Ads e WhatsApp da plataforma</h2><p className="text-sm text-muted-foreground">A configuração universal do Instagram é isolada em um card próprio para evitar alterações cruzadas entre canais.</p></div><div className="flex flex-wrap gap-2"><Badge variant={settings.baseConfigured ? 'secondary' : 'outline'}>{settings.baseConfigured ? 'Base Meta configurada' : 'Base Meta pendente'}</Badge><Badge variant={settings.businessLoginConfigured ? 'secondary' : 'outline'}>{settings.businessLoginConfigured ? 'Ads Login configurado' : 'Ads Login pendente'}</Badge><Badge variant={settings.whatsappEmbeddedSignupConfigured ? 'secondary' : 'outline'}>{settings.whatsappEmbeddedSignupConfigured ? 'WhatsApp Signup configurado' : 'WhatsApp Signup pendente'}</Badge></div></div>
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-2"><Label htmlFor="appId">Meta App ID — Ads/WhatsApp</Label><Input id="appId" maxLength={128} value={settings.appId || ''} onChange={e => setSettings({ ...settings, appId: e.target.value })} /></div>
         <div className="space-y-2"><Label htmlFor="appSecret">Meta App Secret — Ads/WhatsApp</Label><Input id="appSecret" type="password" maxLength={512} autoComplete="new-password" value={appSecret} onChange={e => setAppSecret(e.target.value)} placeholder={settings.appSecretConfigured ? settings.appSecretMasked || 'Segredo salvo' : 'Informe o App Secret'} /><p className="text-xs text-muted-foreground">Deixe vazio para preservar o segredo atual.</p></div>
       </div>
       <div className="space-y-2"><Label htmlFor="businessLoginConfigId">Facebook Login for Business — Configuration ID de Ads</Label><Input id="businessLoginConfigId" maxLength={128} value={settings.businessLoginConfigId || ''} onChange={e => setSettings({ ...settings, businessLoginConfigId: e.target.value })} /><p className="text-xs text-muted-foreground">Configuração utilizada pelo fluxo de autorização de anúncios e Pixel/Dataset.</p></div>
-
-      <div className="border-t pt-5 space-y-4">
-        <div><h3 className="font-medium">Instagram Business Login</h3><p className="text-xs text-muted-foreground">Use o Instagram App ID e o Instagram App Secret exibidos na configuração do produto Instagram. O segredo é criptografado e nunca é enviado ao tenant.</p></div>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2"><Label htmlFor="instagramAppId">Instagram App ID</Label><Input id="instagramAppId" maxLength={128} value={settings.instagramAppId || ''} onChange={e => setSettings({ ...settings, instagramAppId: e.target.value })} /></div>
-          <div className="space-y-2"><Label htmlFor="instagramAppSecret">Instagram App Secret</Label><Input id="instagramAppSecret" type="password" maxLength={512} autoComplete="new-password" value={instagramAppSecret} onChange={e => setInstagramAppSecret(e.target.value)} placeholder={settings.instagramAppSecretConfigured ? settings.instagramAppSecretMasked || 'Segredo salvo' : 'Informe o Instagram App Secret'} /><p className="text-xs text-muted-foreground">Deixe vazio para preservar o segredo atual.</p></div>
-        </div>
-        <p className="text-xs text-muted-foreground">Redirect URI: <code>https://app.flipform.com.br/api/integrations/instagram/callback</code></p>
-      </div>
 
       <div className="border-t pt-5 space-y-4">
         <div><h3 className="font-medium">WhatsApp Embedded Signup</h3><p className="text-xs text-muted-foreground">Credenciais de plataforma usadas para atribuir o System User do FlipForm ao WABA do cliente. Os tokens ficam criptografados e nunca são enviados ao tenant.</p></div>
@@ -119,9 +105,10 @@ export default function AdminIntegrationsPage() {
       <div><h3 className="font-medium mb-3">Configuração padrão para novos clientes</h3><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">{presetLabels.map(([key, label]) => <label key={key} className="flex gap-2 items-center rounded border p-3 text-sm"><input type="checkbox" checked={Boolean(settings[key])} onChange={e => setSettings({ ...settings, [key]: e.target.checked })} />{label}</label>)}</div></div>
       <p className="text-sm rounded-md bg-blue-50 text-blue-800 p-3">Os status indicam apenas a configuração do FlipForm. Cada produto Meta também depende das permissões, produtos e App Review exigidos pela Meta.</p>
       {message && <p className="text-sm" role="status">{message}</p>}
-      <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar configuração'}</Button>
+      <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar Ads/WhatsApp e padrões'}</Button>
     </Card>}
 
+    <InstagramPlatformConfigCard />
     <MetaPlatformReadinessPanel />
     <TenantMetaBindingManager />
   </div>;

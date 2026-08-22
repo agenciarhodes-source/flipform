@@ -9,7 +9,7 @@ export type PlatformMetaSettingsInput = {
   appId: string;
   appSecret?: string;
   businessLoginConfigId: string;
-  instagramAppId: string;
+  instagramAppId?: string;
   instagramAppSecret?: string;
   whatsappEmbeddedSignupConfigId: string;
   whatsappBusinessId: string;
@@ -22,6 +22,11 @@ export type PlatformMetaSettingsInput = {
   defaultAttributionEnabled: boolean;
   defaultQualifiedLeadEnabled: boolean;
   defaultPurchaseEnabled: boolean;
+};
+
+export type PlatformInstagramSettingsInput = {
+  instagramAppId: string;
+  instagramAppSecret?: string;
 };
 
 const DEFAULTS = {
@@ -119,6 +124,33 @@ export async function getPlatformMetaSettingsForAdmin() {
     include: { updatedBy: { select: { id: true, name: true, email: true } } },
   });
   return toAdminDto(settings);
+}
+
+function toInstagramAdminDto(settings: {
+  instagramAppId: string | null;
+  instagramAppSecretEncrypted: string | null;
+  updatedAt: Date;
+} | null) {
+  const instagramAppSecretEncrypted = settings?.instagramAppSecretEncrypted || null;
+  return {
+    instagramAppId: settings?.instagramAppId || null,
+    instagramAppSecretConfigured: Boolean(instagramAppSecretEncrypted),
+    instagramAppSecretMasked: maskSecretFromEncrypted(instagramAppSecretEncrypted),
+    configured: Boolean(settings?.instagramAppId && instagramAppSecretEncrypted),
+    updatedAt: settings?.updatedAt || null,
+  };
+}
+
+export async function getPlatformInstagramSettingsForAdmin() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: {
+      instagramAppId: true,
+      instagramAppSecretEncrypted: true,
+      updatedAt: true,
+    },
+  });
+  return toInstagramAdminDto(settings);
 }
 
 export async function isPlatformMetaBaseAvailable() {
@@ -225,25 +257,49 @@ export async function getPlatformWhatsAppRuntimeCredentials() {
   };
 }
 
+export async function updatePlatformInstagramSettings(input: PlatformInstagramSettingsInput, updatedById: string) {
+  const existing = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    select: { instagramAppSecretEncrypted: true },
+  });
+  let instagramAppSecretEncrypted = existing?.instagramAppSecretEncrypted || null;
+  if (input.instagramAppSecret && !looksMaskedSecret(input.instagramAppSecret)) {
+    instagramAppSecretEncrypted = encryptIntegrationSecret(input.instagramAppSecret);
+  }
+
+  await prisma.platformMetaSettings.upsert({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    create: {
+      id: PLATFORM_META_SETTINGS_ID,
+      instagramAppId: input.instagramAppId || null,
+      instagramAppSecretEncrypted,
+      updatedById,
+    },
+    update: {
+      instagramAppId: input.instagramAppId || null,
+      instagramAppSecretEncrypted,
+      updatedById,
+    },
+  });
+  return getPlatformInstagramSettingsForAdmin();
+}
+
 export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInput, updatedById: string) {
   const existing = await prisma.platformMetaSettings.findUnique({
     where: { id: PLATFORM_META_SETTINGS_ID },
     select: {
       appSecretEncrypted: true,
+      instagramAppId: true,
       instagramAppSecretEncrypted: true,
       whatsappAdminSystemUserAccessTokenEncrypted: true,
       whatsappSystemUserAccessTokenEncrypted: true,
     },
   });
   let appSecretEncrypted = existing?.appSecretEncrypted || null;
-  let instagramAppSecretEncrypted = existing?.instagramAppSecretEncrypted || null;
   let whatsappAdminSystemUserAccessTokenEncrypted = existing?.whatsappAdminSystemUserAccessTokenEncrypted || null;
   let whatsappSystemUserAccessTokenEncrypted = existing?.whatsappSystemUserAccessTokenEncrypted || null;
 
   if (input.appSecret && !looksMaskedSecret(input.appSecret)) appSecretEncrypted = encryptIntegrationSecret(input.appSecret);
-  if (input.instagramAppSecret && !looksMaskedSecret(input.instagramAppSecret)) {
-    instagramAppSecretEncrypted = encryptIntegrationSecret(input.instagramAppSecret);
-  }
   if (input.whatsappAdminSystemUserAccessToken && !looksMaskedSecret(input.whatsappAdminSystemUserAccessToken)) {
     whatsappAdminSystemUserAccessTokenEncrypted = encryptIntegrationSecret(input.whatsappAdminSystemUserAccessToken);
   }
@@ -253,6 +309,7 @@ export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInpu
 
   const {
     appSecret: _appSecret,
+    instagramAppId: _instagramAppId,
     instagramAppSecret: _instagramAppSecret,
     whatsappAdminSystemUserAccessToken: _adminToken,
     whatsappSystemUserAccessToken: _runtimeToken,
@@ -260,7 +317,6 @@ export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInpu
   } = input;
   const secretData = {
     appSecretEncrypted,
-    instagramAppSecretEncrypted,
     whatsappAdminSystemUserAccessTokenEncrypted,
     whatsappSystemUserAccessTokenEncrypted,
   };
@@ -271,14 +327,14 @@ export async function updatePlatformMetaSettings(input: PlatformMetaSettingsInpu
       ...safeInput,
       ...secretData,
       appId: input.appId || null,
-      instagramAppId: input.instagramAppId || null,
+      instagramAppId: existing?.instagramAppId || null,
+      instagramAppSecretEncrypted: existing?.instagramAppSecretEncrypted || null,
       updatedById,
     },
     update: {
       ...safeInput,
       ...secretData,
       appId: input.appId || null,
-      instagramAppId: input.instagramAppId || null,
       updatedById,
     },
   });
