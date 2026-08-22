@@ -2,16 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { getActiveInstagramConnection, revokeInstagramConnection } from '@/lib/meta/instagram-connection';
-import { isPlatformInstagramLoginAvailable } from '@/lib/meta/instagram-platform';
 import { getInstagramConnectionHealthForTenant } from '@/lib/meta/instagram-connection-health';
+import { getInstagramRuntimeReadiness } from '@/lib/meta/instagram-runtime-readiness';
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req: NextRequest, session) => {
-  const [platformAvailable, connection, health] = await Promise.all([
-    isPlatformInstagramLoginAvailable(),
+  const [readiness, connection, health] = await Promise.all([
+    getInstagramRuntimeReadiness(),
     getActiveInstagramConnection(session.tenantId),
     getInstagramConnectionHealthForTenant(session.tenantId),
   ]);
-  return NextResponse.json({ platformAvailable, connection, health });
+  return NextResponse.json({
+    platformAvailable: readiness.platformConfigured,
+    connectionAvailable: readiness.ready,
+    connection,
+    health,
+  });
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
