@@ -51,7 +51,7 @@ def test_whatsapp_crm_builder_keeps_same_pipeline_when_steps_are_combined():
 def test_workspace_opens_whatsapp_configuration_without_new_runtime():
     workspace = read('app/(app)/automations/automation-workspace-client.tsx')
 
-    assert "type WorkspaceView = 'overview' | 'instagram-comment' | 'whatsapp-message'" in workspace
+    assert "type WorkspaceView = 'overview' | 'instagram-comment' | 'instagram-message' | 'whatsapp-message'" in workspace
     assert "if (view === 'whatsapp-message')" in workspace
     assert 'WhatsAppMessageAutomationClient canEdit={canEdit}' in workspace
     assert "onClick={() => setView('whatsapp-message')}" in workspace
