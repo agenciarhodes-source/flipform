@@ -118,6 +118,14 @@ function toAdminDto(settings: any | null) {
   };
 }
 
+export async function getPlatformMetaSettingsForAdmin() {
+  const settings = await prisma.platformMetaSettings.findUnique({
+    where: { id: PLATFORM_META_SETTINGS_ID },
+    include: { updatedBy: { select: { id: true, name: true, email: true } } },
+  });
+  return toAdminDto(settings);
+}
+
 function toInstagramAdminDto(settings: {
   instagramAppId: string | null;
   instagramAppSecretEncrypted: string | null;
@@ -131,14 +139,6 @@ function toInstagramAdminDto(settings: {
     configured: Boolean(settings?.instagramAppId && instagramAppSecretEncrypted),
     updatedAt: settings?.updatedAt || null,
   };
-}
-
-export async function getPlatformMetaSettingsForAdmin() {
-  const settings = await prisma.platformMetaSettings.findUnique({
-    where: { id: PLATFORM_META_SETTINGS_ID },
-    include: { updatedBy: { select: { id: true, name: true, email: true } } },
-  });
-  return toAdminDto(settings);
 }
 
 export async function getPlatformInstagramSettingsForAdmin() {
