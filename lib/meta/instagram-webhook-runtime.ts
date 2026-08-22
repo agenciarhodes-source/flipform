@@ -5,6 +5,10 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordInboundMessage, type MessageType } from '@/lib/conversations/core';
 import { enqueueInstagramCommentCoreAutomation } from '@/lib/automation/adapters/instagram-comment';
+import {
+  enqueueInstagramMessageCoreAutomation,
+  prepareInstagramMessageCoreAutomation,
+} from '@/lib/automation/adapters/instagram-message';
 import { prepareInstagramCommentCoreCutover } from '@/lib/automation/bridges/instagram-comment-core-cutover';
 
 const INSTAGRAM_WEBHOOK_SUBSCRIBED_ACTION = 'INSTAGRAM_WEBHOOK_SUBSCRIBED';
@@ -257,6 +261,7 @@ export async function processInstagramWebhook(payload: unknown) {
     commentDuplicates: 0,
     selfComments: 0,
     automationsQueued: 0,
+    messageAutomationsQueued: 0,
     ignored: 0,
   };
 
@@ -303,6 +308,14 @@ export async function processInstagramWebhook(payload: unknown) {
         }
 
         const normalized = normalizeInstagramMessage(message, instagramProfessionalAccountId);
+        const preparedAutomation = normalized.text
+          ? await prepareInstagramMessageCoreAutomation({
+            tenantId: connection.tenantId,
+            text: normalized.text,
+          })
+          : null;
+        let automationQueued = false;
+
         const persisted = await recordInboundMessage({
           tenantId: connection.tenantId,
           provider: 'meta',
@@ -313,10 +326,28 @@ export async function processInstagramWebhook(payload: unknown) {
           type: normalized.type,
           providerTimestamp: providerTimestamp(event?.timestamp),
           metadata: normalized.metadata,
-        });
+        }, preparedAutomation && normalized.text ? {
+          onCreated: async (tx, created) => {
+            await enqueueInstagramMessageCoreAutomation(tx, {
+              tenantId: connection.tenantId,
+              sourceEventKey: `meta-instagram:${instagramProfessionalAccountId}:${externalMessageId}`,
+              sourceMessageId: externalMessageId,
+              conversationId: created.conversationId,
+              messageText: normalized.text as string,
+              prepared: preparedAutomation,
+            });
+            automationQueued = true;
+          },
+        } : undefined);
 
         if (persisted.duplicate) result.duplicates += 1;
-        else result.inbound += 1;
+        else {
+          result.inbound += 1;
+          if (automationQueued) {
+            result.messageAutomationsQueued += 1;
+            result.automationsQueued += 1;
+          }
+        }
       }
     } else {
       result.ignored += messagingEvents.length;

@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { InstagramCommentAutomationClient } from './instagram-comment-automation-client';
+import { InstagramMessageAutomationClient } from './instagram-message-automation-client';
 import { WhatsAppMessageAutomationClient } from './whatsapp-message-automation-client';
 
-type WorkspaceView = 'overview' | 'instagram-comment' | 'whatsapp-message';
+type WorkspaceView = 'overview' | 'instagram-comment' | 'instagram-message' | 'whatsapp-message';
 
 function StepBadge({ index, label }: { index: number; label: string }) {
   return (
@@ -39,6 +40,15 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
     );
   }
 
+  if (view === 'instagram-message') {
+    return (
+      <div className="space-y-2">
+        <BackButton onClick={() => setView('overview')} />
+        <InstagramMessageAutomationClient canEdit={canEdit} />
+      </div>
+    );
+  }
+
   if (view === 'whatsapp-message') {
     return (
       <div className="space-y-2">
@@ -55,7 +65,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
           <p className="text-sm font-medium text-brand-700">Automation Builder</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Automações</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Centralize fluxos de Instagram e WhatsApp no mesmo Automation Core, com configuração tenant-safe e execução durável.
+            Centralize fluxos opcionais de Instagram e WhatsApp no mesmo Automation Core, com configuração tenant-safe e execução durável.
           </p>
         </div>
         {!canEdit && (
@@ -71,7 +81,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Como um fluxo funciona</p>
             <h2 className="mt-2 text-lg font-semibold">Gatilho → condição → ação</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Instagram e WhatsApp já usam o mesmo motor. Os próximos passos adicionam condições, esperas e ações de CRM sem criar runtimes paralelos.
+              Comentários, Direct e WhatsApp usam o mesmo motor. Cada integração continua opcional e não interfere no funcionamento principal do FlipForm.
             </p>
           </div>
           <div className="grid min-w-0 gap-2 sm:grid-cols-3 lg:min-w-[520px]">
@@ -112,6 +122,25 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Disponível</span>
+                <h3 className="mt-4 text-lg font-semibold">Direct do Instagram → Resposta</h3>
+              </div>
+              <span className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs font-semibold">Instagram</span>
+            </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Quando uma mensagem recebida no Direct combina com uma palavra-chave, o FlipForm responde automaticamente dentro da conversa iniciada pelo usuário.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="rounded-md border bg-background px-2 py-1">Direct</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Resposta</span>
+            </div>
+            <button type="button" onClick={() => setView('instagram-message')} className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
+              {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
+            </button>
+          </article>
+
+          <article className="flex min-h-[260px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Disponível</span>
                 <h3 className="mt-4 text-lg font-semibold">Mensagem do WhatsApp → Resposta</h3>
               </div>
               <span className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs font-semibold">WhatsApp</span>
@@ -126,34 +155,19 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
               {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
             </button>
           </article>
-
-          <article className="flex min-h-[260px] flex-col rounded-2xl border border-dashed bg-muted/20 p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">Planejado</span>
-                <h3 className="mt-4 text-lg font-semibold">Fluxos multietapas</h3>
-              </div>
-              <span className="rounded-lg border bg-background px-2.5 py-1.5 text-xs font-semibold">Builder</span>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Condições, esperas, múltiplas ações, criação de lead, mudança de etapa do Kanban e handoff para atendente dentro do mesmo fluxo visual.
-            </p>
-            <div className="mt-auto rounded-lg border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-              Entrará por etapas, sem quebrar os fluxos já ativos.
-            </div>
-          </article>
         </div>
       </section>
 
-      <section className="rounded-2xl border bg-card p-5">
+      <section className="rounded-2xl border border-dashed bg-muted/20 p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="font-semibold">Próxima evolução do builder</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Agora que Instagram e WhatsApp estão configuráveis, o próximo marco adiciona blocos multietapas e ações de Lead/Kanban ao mesmo motor.
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">Planejado</span>
+            <h2 className="mt-3 font-semibold">Fluxos multietapas</h2>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              Condições, esperas e múltiplas ações poderão ser adicionadas sem mudar o comportamento dos fluxos simples que já estiverem ativos.
             </p>
           </div>
-          <div className="flex shrink-0 gap-2 text-xs"><span className="rounded-full border px-3 py-1.5">Automation Core</span><span className="rounded-full border px-3 py-1.5">Tenant-safe</span></div>
+          <div className="flex shrink-0 gap-2 text-xs"><span className="rounded-full border bg-background px-3 py-1.5">Automation Core</span><span className="rounded-full border bg-background px-3 py-1.5">Tenant-safe</span></div>
         </div>
       </section>
     </div>
