@@ -50,7 +50,7 @@ def test_instagram_migration_and_prisma_schema_are_additive_and_aligned():
     assert 'instagramConnectionsConnected' in user
 
 
-def test_instagram_uses_dedicated_platform_app_credentials():
+def test_dormant_instagram_uses_dedicated_platform_app_credentials_but_is_not_exposed_in_flipform_admin():
     platform = read('lib/meta/instagram-platform.ts')
     settings = read('lib/meta/platform-settings.ts')
     route = read('app/api/admin/integrations/meta/route.ts')
@@ -66,8 +66,9 @@ def test_instagram_uses_dedicated_platform_app_credentials():
     assert 'instagramLoginConfigured' in settings
     assert 'instagramAppId' in route
     assert 'instagramAppSecret' in route
-    assert 'Instagram App ID' in page
-    assert 'Instagram App Secret' in page
+    assert 'Instagram App ID' not in page
+    assert 'Instagram App Secret' not in page
+    assert 'Ads e WhatsApp da plataforma' in page
 
 
 def test_connect_route_uses_signed_tenant_and_purpose_bound_state():
@@ -135,9 +136,10 @@ def test_expired_token_is_not_reported_as_connected():
     assert 'Reconecte o Instagram' in ui
 
 
-def test_connection_status_and_ui_never_return_or_store_credentials_in_browser():
+def test_connection_status_and_dormant_ui_never_return_or_store_credentials_in_browser():
     route = read('app/api/integrations/instagram/connection/route.ts')
     ui = read('app/(app)/integrations/instagram-business-login-card.tsx')
+    page = read('app/(app)/integrations/page.tsx')
     assert "withPermission('INTEGRATIONS_VIEW'" in route
     assert "withPermission('INTEGRATIONS_EDIT'" in route
     assert 'accessToken' not in route
@@ -148,3 +150,4 @@ def test_connection_status_and_ui_never_return_or_store_credentials_in_browser()
     assert 'sessionStorage' not in ui
     assert 'token da conta profissional é armazenado criptografado no servidor' in ui
     assert 'não exige que uma Página do Facebook esteja vinculada' in ui
+    assert 'InstagramBusinessLoginCard' not in page

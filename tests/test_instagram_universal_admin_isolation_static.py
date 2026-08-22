@@ -67,8 +67,16 @@ def test_global_meta_save_cannot_overwrite_instagram_configuration():
     assert 'instagramAppSecret' not in page
 
 
-def test_admin_ui_uses_isolated_instagram_save_and_hides_tenant_details():
+def test_admin_ui_parks_instagram_configuration_without_mutating_backend_state():
+    page = read('app/admin/(secure)/integrations/page.tsx')
     component = read('app/admin/(secure)/integrations/instagram-platform-config-card.tsx')
+
+    assert 'InstagramPlatformConfigCard' not in page
+    assert 'Instagram App ID' not in page
+    assert 'Instagram App Secret' not in page
+    assert 'Ads e WhatsApp da plataforma' in page
+
+    # Dormant component remains isolated in source; no destructive rollback is required.
     assert "/api/admin/integrations/instagram/platform" in component
     assert 'Salvar somente Instagram' in component
     assert 'Nenhuma conexão de cliente foi alterada.' in component

@@ -19,7 +19,7 @@ def test_inbox_permissions_and_navigation_are_explicit():
     assert 'permission: "INBOX_VIEW"' in shell
     assert "can(session.role, 'INBOX_VIEW')" in page
     assert "can(session.role, 'LEADS_CONTACT_WHATSAPP')" in page
-    assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
+    assert 'canSendInstagram' not in page
 
 
 def test_inbox_access_scope_is_tenant_safe_and_agents_are_assignment_scoped():
@@ -73,14 +73,15 @@ def test_inbox_discards_stale_message_requests_after_selection_changes():
     assert "setDraft('')" in selection_segment
 
 
-def test_inbox_client_sends_whatsapp_and_instagram_without_provider_authority_fields():
+def test_inbox_client_sends_whatsapp_only_without_provider_authority_fields():
     client = read('app/(app)/inbox/inbox-client.tsx')
 
     assert "/messages/whatsapp`" in client
-    assert "/messages/instagram`" in client
+    assert "/messages/instagram`" not in client
     assert "idempotencyKey: createIdempotencyKey()" in client
     assert "text," in client
-    assert "channel === 'instagram' && !selected.lastInboundAt" in client
+    assert "conversation.channel === 'whatsapp'" in client
+    assert "selected.channel !== 'whatsapp'" in client
     assert "selectedIdRef.current === conversationId" in client
     send_segment = client[client.index("async function sendMessage()"):client.index("return (", client.index("async function sendMessage()"))]
     assert "phoneNumberId" not in send_segment
@@ -92,21 +93,20 @@ def test_inbox_client_sends_whatsapp_and_instagram_without_provider_authority_fi
     assert "appSecret" not in send_segment
 
 
-def test_inbox_instagram_composer_respects_permissions_and_user_initiated_rule():
+def test_inbox_product_surface_is_whatsapp_only():
     page = read('app/(app)/inbox/page.tsx')
     client = read('app/(app)/inbox/inbox-client.tsx')
 
-    assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
-    assert "selected?.channel === 'instagram'" in client
-    assert "canSendInstagram" in client
-    assert "O Instagram só permite responder depois que a pessoa inicia a conversa." in client
-    assert "Responder no Instagram..." in client
-    assert "Enviar mensagem pelo Instagram" in client
-    assert "WhatsApp e Instagram em uma só Inbox." in client
+    assert 'canSendInstagram' not in page
+    assert 'canSendInstagram' not in client
+    assert 'Instagram' not in client
+    assert "all.filter((conversation) => conversation.channel === 'whatsapp')" in client
+    assert 'Atendimento do WhatsApp em uma única Inbox.' in client
+    assert 'Enviar mensagem pelo WhatsApp' in client
 
 
 def test_inbox_does_not_add_or_mutate_prisma_schema():
-    # Inbox reuses the existing Conversation/Message core and channel outboxes.
+    # Inbox reuses the existing Conversation/Message core and WhatsApp outbox.
     assert not (ROOT / 'prisma/migrations/20260816_add_inbox').exists()
     client = read('app/(app)/inbox/inbox-client.tsx')
     assert "fetch('/api/inbox/conversations'" in client

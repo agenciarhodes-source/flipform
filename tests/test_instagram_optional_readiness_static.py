@@ -53,20 +53,22 @@ def test_tenant_connection_status_exposes_only_safe_boolean_readiness():
     assert 'appSecret' not in route
 
 
-def test_instagram_is_optional_in_customer_ui_and_does_not_surface_admin_internals():
+def test_instagram_is_parked_from_customer_ui_while_backend_remains_fail_closed():
     card = read('app/(app)/integrations/instagram-business-login-card.tsx')
+    page = read('app/(app)/integrations/page.tsx')
     onboarding = read('app/(app)/integrations/client-connection-onboarding.tsx')
 
-    assert 'Integração opcional para Direct, comentários e automações.' in card
-    assert 'O Instagram é opcional e está desconectado. Nenhuma ação é necessária agora.' in card
+    # Dormant implementation remains non-destructive and can be extracted later.
     assert 'connectionAvailable' in card
     assert 'App ID' not in card
     assert 'App Secret' not in card
     assert 'Super Admin' not in card
 
-    assert 'Instagram e WhatsApp são opcionais.' in onboarding
-    assert "optionalDisconnected('Instagram'" in onboarding
-    assert "optionalDisconnected('WhatsApp'" in onboarding
+    # FlipForm no longer exposes Instagram as a product surface.
+    assert 'InstagramBusinessLoginCard' not in page
+    assert 'instagram-connection' not in page
+    assert 'Instagram' not in onboarding
+    assert '/api/integrations/instagram/' not in onboarding
     assert 'payload.error' not in onboarding
     assert 'Super Admin' not in onboarding
 

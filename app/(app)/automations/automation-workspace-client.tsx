@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { InstagramCommentAutomationClient } from './instagram-comment-automation-client';
-import { InstagramMessageAutomationClient } from './instagram-message-automation-client';
 import { WhatsAppMessageAutomationClient } from './whatsapp-message-automation-client';
 
-type WorkspaceView = 'overview' | 'instagram-comment' | 'instagram-message' | 'whatsapp-message';
+type WorkspaceView = 'overview' | 'whatsapp-message';
 
 function StepBadge({ index, label }: { index: number; label: string }) {
   return (
@@ -31,24 +29,6 @@ function BackButton({ onClick }: { onClick: () => void }) {
 export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
   const [view, setView] = useState<WorkspaceView>('overview');
 
-  if (view === 'instagram-comment') {
-    return (
-      <div className="space-y-2">
-        <BackButton onClick={() => setView('overview')} />
-        <InstagramCommentAutomationClient canEdit={canEdit} />
-      </div>
-    );
-  }
-
-  if (view === 'instagram-message') {
-    return (
-      <div className="space-y-2">
-        <BackButton onClick={() => setView('overview')} />
-        <InstagramMessageAutomationClient canEdit={canEdit} />
-      </div>
-    );
-  }
-
   if (view === 'whatsapp-message') {
     return (
       <div className="space-y-2">
@@ -65,7 +45,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
           <p className="text-sm font-medium text-brand-700">Automation Builder</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Automações</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Centralize fluxos opcionais de Instagram e WhatsApp no mesmo Automation Core, com configuração tenant-safe e execução durável.
+            Centralize os fluxos do WhatsApp no Automation Core, com configuração tenant-safe e execução durável.
           </p>
         </div>
         {!canEdit && (
@@ -81,7 +61,7 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Como um fluxo funciona</p>
             <h2 className="mt-2 text-lg font-semibold">Gatilho → condição → ação</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Comentários, Direct e WhatsApp usam o mesmo motor. Cada integração continua opcional e não interfere no funcionamento principal do FlipForm.
+              Mensagens do WhatsApp usam o mesmo motor de automação do FlipForm. A conexão continua opcional e não interfere no funcionamento principal do formulário e do CRM.
             </p>
           </div>
           <div className="grid min-w-0 gap-2 sm:grid-cols-3 lg:min-w-[520px]">
@@ -95,48 +75,10 @@ export function AutomationWorkspaceClient({ canEdit }: { canEdit: boolean }) {
       <section>
         <div className="mb-3">
           <h2 className="font-semibold">Fluxos disponíveis</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Escolha um canal para configurar ou acompanhar suas automações.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Configure ou acompanhe as automações do WhatsApp.</p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          <article className="flex min-h-[260px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Disponível</span>
-                <h3 className="mt-4 text-lg font-semibold">Comentário do Instagram → Direct</h3>
-              </div>
-              <span className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs font-semibold">Instagram</span>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Quando alguém comenta uma palavra ou frase configurada em um post ou Reel, o FlipForm envia uma resposta privada automaticamente.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border bg-background px-2 py-1">Comentário</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">DM privada</span>
-            </div>
-            <button type="button" onClick={() => setView('instagram-comment')} className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
-              {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
-            </button>
-          </article>
-
-          <article className="flex min-h-[260px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">Disponível</span>
-                <h3 className="mt-4 text-lg font-semibold">Direct do Instagram → Resposta</h3>
-              </div>
-              <span className="rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs font-semibold">Instagram</span>
-            </div>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Quando uma mensagem recebida no Direct combina com uma palavra-chave, o FlipForm responde automaticamente dentro da conversa iniciada pelo usuário.
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded-md border bg-background px-2 py-1">Direct</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Palavra-chave</span><span>→</span><span className="rounded-md border bg-background px-2 py-1">Resposta</span>
-            </div>
-            <button type="button" onClick={() => setView('instagram-message')} className="mt-auto rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
-              {canEdit ? 'Gerenciar fluxo' : 'Visualizar fluxo'}
-            </button>
-          </article>
-
+        <div className="grid gap-4 lg:grid-cols-2">
           <article className="flex min-h-[260px] flex-col rounded-2xl border bg-card p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>

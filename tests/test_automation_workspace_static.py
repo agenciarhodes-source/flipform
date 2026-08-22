@@ -7,7 +7,7 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 
-def test_automations_page_routes_through_channel_neutral_workspace():
+def test_automations_page_routes_through_whatsapp_workspace():
     page = read('app/(app)/automations/page.tsx')
     workspace = read('app/(app)/automations/automation-workspace-client.tsx')
 
@@ -15,11 +15,12 @@ def test_automations_page_routes_through_channel_neutral_workspace():
     assert "can(session.role, 'INTEGRATIONS_VIEW')" in page
     assert "can(session.role, 'INTEGRATIONS_EDIT')" in page
     assert 'Automation Builder' in workspace
-    assert 'InstagramCommentAutomationClient' in workspace
     assert 'WhatsAppMessageAutomationClient' in workspace
-    assert 'Comentário do Instagram → Direct' in workspace
     assert 'Mensagem do WhatsApp → Resposta' in workspace
     assert 'Fluxos multietapas' in workspace
+    assert 'InstagramCommentAutomationClient' not in workspace
+    assert 'InstagramMessageAutomationClient' not in workspace
+    assert 'Instagram' not in workspace
 
 
 def test_workspace_is_ui_only_and_preserves_existing_runtime_authority():
@@ -30,7 +31,6 @@ def test_workspace_is_ui_only_and_preserves_existing_runtime_authority():
     assert 'tenantId' not in workspace
     assert 'accessToken' not in workspace
     assert 'appSecret' not in workspace
-    assert 'InstagramCommentAutomationClient canEdit={canEdit}' in workspace
     assert 'WhatsAppMessageAutomationClient canEdit={canEdit}' in workspace
 
 
