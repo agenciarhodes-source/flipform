@@ -7,7 +7,6 @@ import {
   Check,
   CheckCheck,
   Clock3,
-  Instagram,
   MessageSquareText,
   RefreshCw,
   Search,
@@ -130,12 +129,10 @@ export function InboxClient({
   canManage,
   canAssign,
   canSendWhatsApp,
-  canSendInstagram,
 }: {
   canManage: boolean;
   canAssign: boolean;
   canSendWhatsApp: boolean;
-  canSendInstagram: boolean;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -151,11 +148,7 @@ export function InboxClient({
   const selectedIdRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
-  const selectedChannelCanSend = selected?.channel === 'whatsapp'
-    ? canSendWhatsApp
-    : selected?.channel === 'instagram'
-      ? canSendInstagram
-      : false;
+  const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp : false;
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -192,7 +185,8 @@ export function InboxClient({
       const response = await fetch('/api/inbox/conversations', { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível carregar as conversas.');
       const data = await response.json();
-      const next = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
+      const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
+      const next = all.filter((conversation) => conversation.channel === 'whatsapp');
       setConversations(next);
       setSelectedId((current) => {
         const nextId = current && next.some((conversation) => conversation.id === current)
@@ -277,29 +271,9 @@ export function InboxClient({
   }, [messages.length, selectedId]);
 
   async function sendMessage() {
-    if (!selected || sending) return;
+    if (!selected || sending || selected.channel !== 'whatsapp' || !canSendWhatsApp) return;
 
     const conversationId = selected.id;
-    const channel = selected.channel;
-    const canSendChannel = channel === 'whatsapp'
-      ? canSendWhatsApp
-      : channel === 'instagram'
-        ? canSendInstagram
-        : false;
-    if (!canSendChannel) return;
-
-    if (channel === 'instagram' && !selected.lastInboundAt) {
-      setError('O Instagram só permite responder depois que a pessoa inicia a conversa.');
-      return;
-    }
-
-    const endpoint = channel === 'whatsapp'
-      ? `/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp`
-      : channel === 'instagram'
-        ? `/api/conversations/${encodeURIComponent(conversationId)}/messages/instagram`
-        : null;
-    if (!endpoint) return;
-
     const text = draft.trim();
     if (!text) return;
 
@@ -307,7 +281,7 @@ export function InboxClient({
     setError(null);
     setWarning(null);
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -347,7 +321,7 @@ export function InboxClient({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h1 className="font-heading text-lg font-semibold">Conversas</h1>
-                <p className="text-xs text-muted-foreground">WhatsApp e Instagram em uma só Inbox.</p>
+                <p className="text-xs text-muted-foreground">Atendimento do WhatsApp em uma única Inbox.</p>
               </div>
               <Button
                 variant="ghost"
@@ -377,7 +351,7 @@ export function InboxClient({
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <MessageSquareText className="h-9 w-9 opacity-40" />
                 <div className="text-sm font-medium text-foreground">Nenhuma conversa encontrada</div>
-                <div className="max-w-56 text-xs">As novas mensagens recebidas pelos canais conectados aparecerão aqui.</div>
+                <div className="max-w-56 text-xs">As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.</div>
               </div>
             ) : (
               filteredConversations.map((conversation) => {
@@ -391,9 +365,7 @@ export function InboxClient({
                     className={`flex w-full gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 ${active ? 'bg-brand-50/70' : ''}`}
                   >
                     <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                      {conversation.channel === 'instagram'
-                        ? <Instagram className="h-5 w-5" />
-                        : <MessageSquareText className="h-5 w-5" />}
+                      <MessageSquareText className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -413,7 +385,7 @@ export function InboxClient({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        <span className="capitalize">{conversation.channel}</span>
+                        <span>WhatsApp</span>
                         {conversation.assignee?.name && <><span>•</span><span className="truncate">{conversation.assignee.name}</span></>}
                         {conversation.status === 'resolved' && <><span>•</span><span>resolvida</span></>}
                       </div>
@@ -441,7 +413,7 @@ export function InboxClient({
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                  {selected.channel === 'instagram' ? <Instagram className="h-5 w-5" /> : <MessageSquareText className="h-5 w-5" />}
+                  <MessageSquareText className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{contactName(selected)}</div>
@@ -511,13 +483,9 @@ export function InboxClient({
                     </div>
                   )}
 
-                  {selected.channel !== 'whatsapp' && selected.channel !== 'instagram' ? (
+                  {selected.channel !== 'whatsapp' ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
-                      O envio ainda não está disponível para este canal.
-                    </div>
-                  ) : selected.channel === 'instagram' && !selected.lastInboundAt ? (
-                    <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
-                      O Instagram só permite responder depois que a pessoa inicia a conversa.
+                      O envio está disponível somente para o WhatsApp no FlipForm.
                     </div>
                   ) : !selectedChannelCanSend ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
@@ -536,7 +504,7 @@ export function InboxClient({
                         }}
                         maxLength={4096}
                         rows={2}
-                        placeholder={selected.channel === 'instagram' ? 'Responder no Instagram...' : 'Digite uma mensagem...'}
+                        placeholder="Digite uma mensagem..."
                         className="min-h-[44px] max-h-36 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={sending}
                       />
@@ -546,7 +514,7 @@ export function InboxClient({
                         className="h-11 w-11 shrink-0"
                         onClick={() => void sendMessage()}
                         disabled={sending || !draft.trim()}
-                        aria-label={selected.channel === 'instagram' ? 'Enviar mensagem pelo Instagram' : 'Enviar mensagem pelo WhatsApp'}
+                        aria-label="Enviar mensagem pelo WhatsApp"
                       >
                         {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>

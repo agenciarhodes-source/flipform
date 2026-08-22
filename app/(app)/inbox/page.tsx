@@ -13,7 +13,6 @@ export default async function InboxPage() {
       canManage={can(session.role, 'INBOX_MANAGE')}
       canAssign={['owner', 'admin', 'manager'].includes(session.role)}
       canSendWhatsApp={can(session.role, 'LEADS_CONTACT_WHATSAPP')}
-      canSendInstagram={can(session.role, 'INBOX_MANAGE')}
     />
   );
 }

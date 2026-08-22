@@ -5,7 +5,6 @@ import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { IntegrationsClient } from './integrations-client';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
 import { WhatsAppConnectionHealthCard } from './whatsapp-connection-health-card';
-import { InstagramBusinessLoginCard } from './instagram-business-login-card';
 
 export default async function IntegrationsPage() {
   const session = await getSession();
@@ -17,9 +16,6 @@ export default async function IntegrationsPage() {
     <div id="whatsapp-connection" className="scroll-mt-24">
       <WhatsAppEmbeddedSignupCard />
       <WhatsAppConnectionHealthCard />
-    </div>
-    <div id="instagram-connection" className="scroll-mt-24">
-      <InstagramBusinessLoginCard />
     </div>
   </>;
 }

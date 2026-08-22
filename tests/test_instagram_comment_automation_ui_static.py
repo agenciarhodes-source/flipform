@@ -7,7 +7,7 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 
-def test_automations_page_is_tenant_session_and_rbac_scoped():
+def test_automations_page_is_tenant_session_and_rbac_scoped_with_instagram_parked():
     page = read('app/(app)/automations/page.tsx')
     workspace = read('app/(app)/automations/automation-workspace-client.tsx')
 
@@ -15,7 +15,9 @@ def test_automations_page_is_tenant_session_and_rbac_scoped():
     assert "can(session.role, 'INTEGRATIONS_VIEW')" in page
     assert "can(session.role, 'INTEGRATIONS_EDIT')" in page
     assert 'AutomationWorkspaceClient' in page
-    assert 'InstagramCommentAutomationClient' in workspace
+    assert 'InstagramCommentAutomationClient' not in workspace
+    assert 'WhatsAppMessageAutomationClient' in workspace
+    assert 'Instagram' not in workspace
 
 
 def test_comment_automation_ui_uses_existing_tenant_safe_endpoints_only():
@@ -57,7 +59,7 @@ def test_generated_priority_stays_inside_backend_range():
     assert 'max={10000}' in client
 
 
-def test_comment_automation_ui_surfaces_connection_health_and_reconnect_path():
+def test_dormant_comment_automation_ui_keeps_connection_health_and_reconnect_path():
     client = read('app/(app)/automations/instagram-comment-automation-client.tsx')
 
     assert "health?.state === 'expired'" in client
@@ -67,7 +69,7 @@ def test_comment_automation_ui_surfaces_connection_health_and_reconnect_path():
     assert 'Conectar ou reconectar' in client
 
 
-def test_automations_are_discoverable_from_main_navigation():
+def test_automations_are_discoverable_from_main_navigation_for_whatsapp():
     shell = read('components/app-shell.tsx')
 
     assert '{ href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" }' in shell
