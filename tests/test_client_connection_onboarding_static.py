@@ -36,14 +36,18 @@ def test_onboarding_keeps_tenant_and_secrets_server_side():
     assert "method: 'DELETE'" not in onboarding
 
 
-def test_onboarding_has_clear_channel_and_first_automation_paths():
+def test_onboarding_treats_instagram_and_whatsapp_as_optional_modules():
     onboarding = read('app/(app)/integrations/client-connection-onboarding.tsx')
 
     assert "href: '#instagram-connection'" in onboarding
     assert "href: '#whatsapp-connection'" in onboarding
     assert 'href="/automations"' in onboarding
-    assert 'Conectar Instagram primeiro' in onboarding
+    assert 'Instagram e WhatsApp são opcionais.' in onboarding
+    assert "optionalDisconnected('Instagram'" in onboarding
+    assert "optionalDisconnected('WhatsApp'" in onboarding
     assert 'Criar automação' in onboarding
+    assert 'Conectar Instagram primeiro' not in onboarding
+    assert 'payload.error' not in onboarding
 
 
 def test_onboarding_does_not_mutate_crm_or_kanban():
