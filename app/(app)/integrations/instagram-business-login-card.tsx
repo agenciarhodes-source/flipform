@@ -167,7 +167,7 @@ export function InstagramBusinessLoginCard() {
         >{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
 
-      <p className="text-xs text-muted-foreground">Ao conectar, o token da conta profissional fica criptografado no servidor e não é enviado ao navegador. A conexão do Instagram é independente da integração de Meta Ads.</p>
+      <p className="text-xs text-muted-foreground">O token da conta profissional é armazenado criptografado no servidor e nunca é enviado ao navegador. A conexão do Instagram é independente da integração de Meta Ads.</p>
     </div>
   </div>;
 }
