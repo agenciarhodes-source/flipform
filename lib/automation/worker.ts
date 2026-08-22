@@ -3,10 +3,12 @@ import 'server-only';
 import { LEAD_ENSURE_FROM_CONVERSATION_ACTION, LEAD_MOVE_STAGE_ACTION } from './adapters/crm';
 import { FLOW_CONDITION_ACTION } from './adapters/flow-condition';
 import { INSTAGRAM_PRIVATE_REPLY_ACTION } from './adapters/instagram-comment';
+import { INSTAGRAM_SEND_TEXT_ACTION } from './adapters/instagram-message';
 import { WHATSAPP_SEND_TEXT_ACTION } from './adapters/whatsapp-message';
 import { drainAutomationExecutionQueue } from './execution-engine';
 import { createFlowConditionAutomationHandler } from './handlers/flow-condition';
 import { createInstagramPrivateReplyAutomationHandler } from './handlers/instagram-private-reply';
+import { createInstagramSendTextAutomationHandler } from './handlers/instagram-send-text';
 import { createLeadEnsureFromConversationAutomationHandler } from './handlers/lead-ensure-from-conversation';
 import { createLeadMoveStageAutomationHandler } from './handlers/lead-move-stage';
 import { createWhatsAppSendTextAutomationHandler } from './handlers/whatsapp-send-text';
@@ -18,6 +20,7 @@ export function createAutomationWorkerHandlers(): AutomationActionHandlers {
   return {
     [FLOW_CONDITION_ACTION]: createFlowConditionAutomationHandler(),
     [INSTAGRAM_PRIVATE_REPLY_ACTION]: createInstagramPrivateReplyAutomationHandler(),
+    [INSTAGRAM_SEND_TEXT_ACTION]: createInstagramSendTextAutomationHandler(),
     [WHATSAPP_SEND_TEXT_ACTION]: createWhatsAppSendTextAutomationHandler(),
     [LEAD_ENSURE_FROM_CONVERSATION_ACTION]: createLeadEnsureFromConversationAutomationHandler(),
     [LEAD_MOVE_STAGE_ACTION]: createLeadMoveStageAutomationHandler(),
