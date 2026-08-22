@@ -32,12 +32,14 @@ def test_instagram_runtime_preflight_is_read_only_and_fail_closed():
 def test_instagram_oauth_is_blocked_before_any_authorization_when_runtime_is_incomplete():
     connect = read('app/api/integrations/instagram/connect/route.ts')
     callback = read('app/api/integrations/instagram/callback/route.ts')
+    connect_handler = connect.split('export const POST', 1)[1]
+    callback_handler = callback.split('export const GET', 1)[1]
 
     assert 'isInstagramRuntimeReady' in connect
-    assert 'if (!credentials || !runtimeReady)' in connect
-    assert connect.index('if (!credentials || !runtimeReady)') < connect.index('createMetaOAuthStateForPurpose')
+    assert 'if (!credentials || !runtimeReady)' in connect_handler
+    assert connect_handler.index('if (!credentials || !runtimeReady)') < connect_handler.index('const created = createMetaOAuthStateForPurpose(')
     assert 'isInstagramRuntimeReady' in callback
-    assert callback.index('if (!credentials || !runtimeReady)') < callback.index('exchangeInstagramAuthorizationCode')
+    assert callback_handler.index('if (!credentials || !runtimeReady)') < callback_handler.index('const shortLived = await exchangeInstagramAuthorizationCode(')
 
 
 def test_tenant_connection_status_exposes_only_safe_boolean_readiness():
