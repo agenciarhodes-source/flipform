@@ -146,7 +146,7 @@ export function InstagramBusinessLoginCard() {
 
       {expired && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A autorização desta conta expirou. Reconecte o Instagram para continuar usando mensagens e automações.</div>}
 
-      {!loading && !hasBinding && connectionAvailable && <p className="text-sm text-muted-foreground">Se quiser usar este módulo, conecte uma conta profissional Business ou Creator. A configuração técnica já é administrada pelo FlipForm.</p>}
+      {!loading && !hasBinding && connectionAvailable && <p className="text-sm text-muted-foreground">Se quiser usar este módulo, conecte uma conta profissional Business ou Creator. A configuração técnica já é administrada pelo FlipForm e este fluxo não exige que uma Página do Facebook esteja vinculada à conta profissional.</p>}
 
       {!loading && !hasBinding && !connectionAvailable && <div className="rounded-md border bg-slate-50 p-3 text-sm text-slate-700">
         O Instagram é opcional e está desconectado. Nenhuma ação é necessária agora.
