@@ -12,7 +12,7 @@ type HealthState =
   | 'provider_error'
   | 'not_connected';
 
-type ChannelLevel = 'loading' | 'ready' | 'attention' | 'action_required' | 'not_connected' | 'unavailable';
+type ChannelLevel = 'loading' | 'ready' | 'attention' | 'action_required' | 'not_connected';
 
 type ChannelSummary = {
   level: ChannelLevel;
@@ -23,7 +23,7 @@ type ChannelSummary = {
   usable: boolean;
 };
 
-const BLOCKING_HEALTH = new Set<HealthState>(['action_required', 'expired', 'revoked', 'not_connected']);
+const BLOCKING_HEALTH = new Set<HealthState>(['action_required', 'expired', 'revoked']);
 
 async function readPayload(response: Response) {
   return response.json().catch(() => ({}));
@@ -36,30 +36,21 @@ function badgeClass(level: ChannelLevel) {
   return 'border-slate-200 bg-slate-50 text-slate-700';
 }
 
-function instagramSummary(payload: any): ChannelSummary {
-  if (!payload?.platformAvailable) {
-    return {
-      level: 'unavailable',
-      label: 'Configuração da plataforma pendente',
-      detail: 'O Super Admin ainda precisa concluir a configuração universal do Instagram.',
-      actionLabel: 'Ver detalhes',
-      href: '#instagram-connection',
-      usable: false,
-    };
-  }
+function optionalDisconnected(channel: 'Instagram' | 'WhatsApp', href: string): ChannelSummary {
+  return {
+    level: 'not_connected',
+    label: 'Não conectado',
+    detail: `${channel} é opcional. Conecte somente se quiser usar mensagens e automações deste canal.`,
+    actionLabel: `Ver ${channel}`,
+    href,
+    usable: false,
+  };
+}
 
+function instagramSummary(payload: any): ChannelSummary {
   const connected = payload.connection?.status === 'connected';
   const health = payload.health?.state as HealthState | undefined;
-  if (!connected) {
-    return {
-      level: 'not_connected',
-      label: 'Não conectado',
-      detail: 'Conecte uma conta profissional Business ou Creator para usar mensagens e automações.',
-      actionLabel: 'Conectar Instagram',
-      href: '#instagram-connection',
-      usable: false,
-    };
-  }
+  if (!connected) return optionalDisconnected('Instagram', '#instagram-connection');
 
   const account = payload.connection?.username ? `@${payload.connection.username}` : 'Conta profissional conectada';
   if (health && BLOCKING_HEALTH.has(health)) {
@@ -95,36 +86,16 @@ function instagramSummary(payload: any): ChannelSummary {
 }
 
 function whatsappSummary(payload: any): ChannelSummary {
-  if (!payload?.platformAvailable) {
-    return {
-      level: 'unavailable',
-      label: 'Configuração da plataforma pendente',
-      detail: 'O Super Admin ainda precisa concluir o Embedded Signup universal do WhatsApp.',
-      actionLabel: 'Ver detalhes',
-      href: '#whatsapp-connection',
-      usable: false,
-    };
-  }
-
   const connected = payload.connection?.status === 'connected';
   const health = payload.health?.state as HealthState | undefined;
-  if (!connected) {
-    return {
-      level: 'not_connected',
-      label: 'Não conectado',
-      detail: 'Conecte a conta oficial de WhatsApp Business pelo fluxo seguro da Meta.',
-      actionLabel: 'Conectar WhatsApp',
-      href: '#whatsapp-connection',
-      usable: false,
-    };
-  }
+  if (!connected) return optionalDisconnected('WhatsApp', '#whatsapp-connection');
 
   const phone = payload.connection?.displayPhoneNumber || 'Número conectado';
   if (!payload.runtimeAvailable) {
     return {
       level: 'action_required',
-      label: 'Ação do administrador necessária',
-      detail: `${phone}. A credencial de runtime da plataforma precisa ser concluída pelo Super Admin.`,
+      label: 'Conexão precisa de atenção',
+      detail: `${phone}. O canal está conectado, mas ainda não está pronto para operar.`,
       actionLabel: 'Ver conexão',
       href: '#whatsapp-connection',
       usable: false,
@@ -134,8 +105,8 @@ function whatsappSummary(payload: any): ChannelSummary {
   if (!payload.connection?.registeredAt) {
     return {
       level: 'action_required',
-      label: 'Registro do número pendente',
-      detail: `${phone}. Falta registrar o número na Cloud API para concluir a ativação.`,
+      label: 'Ativação pendente',
+      detail: `${phone}. Falta concluir a ativação para usar a Cloud API.`,
       actionLabel: 'Concluir ativação',
       href: '#whatsapp-connection',
       usable: false,
@@ -195,46 +166,16 @@ export function ClientConnectionOnboarding() {
       fetch('/api/integrations/whatsapp/connection', { cache: 'no-store' }),
     ]);
 
-    if (instagramResult.status === 'fulfilled') {
-      const payload = await readPayload(instagramResult.value);
-      setInstagram(instagramResult.value.ok ? instagramSummary(payload) : {
-        level: 'attention',
-        label: 'Status indisponível',
-        detail: payload.error || 'Não foi possível consultar o Instagram agora.',
-        actionLabel: 'Ver integração',
-        href: '#instagram-connection',
-        usable: false,
-      });
+    if (instagramResult.status === 'fulfilled' && instagramResult.value.ok) {
+      setInstagram(instagramSummary(await readPayload(instagramResult.value)));
     } else {
-      setInstagram({
-        level: 'attention',
-        label: 'Status indisponível',
-        detail: 'Não foi possível consultar o Instagram agora.',
-        actionLabel: 'Ver integração',
-        href: '#instagram-connection',
-        usable: false,
-      });
+      setInstagram(optionalDisconnected('Instagram', '#instagram-connection'));
     }
 
-    if (whatsappResult.status === 'fulfilled') {
-      const payload = await readPayload(whatsappResult.value);
-      setWhatsapp(whatsappResult.value.ok ? whatsappSummary(payload) : {
-        level: 'attention',
-        label: 'Status indisponível',
-        detail: payload.error || 'Não foi possível consultar o WhatsApp agora.',
-        actionLabel: 'Ver integração',
-        href: '#whatsapp-connection',
-        usable: false,
-      });
+    if (whatsappResult.status === 'fulfilled' && whatsappResult.value.ok) {
+      setWhatsapp(whatsappSummary(await readPayload(whatsappResult.value)));
     } else {
-      setWhatsapp({
-        level: 'attention',
-        label: 'Status indisponível',
-        detail: 'Não foi possível consultar o WhatsApp agora.',
-        actionLabel: 'Ver integração',
-        href: '#whatsapp-connection',
-        usable: false,
-      });
+      setWhatsapp(optionalDisconnected('WhatsApp', '#whatsapp-connection'));
     }
 
     setRefreshing(false);
@@ -252,12 +193,12 @@ export function ClientConnectionOnboarding() {
   const cards = [
     {
       title: 'Instagram',
-      eyebrow: 'Comentários e Direct',
+      eyebrow: 'Comentários e Direct · opcional',
       summary: instagram,
     },
     {
       title: 'WhatsApp',
-      eyebrow: 'Cloud API oficial',
+      eyebrow: 'Cloud API oficial · opcional',
       summary: whatsapp,
     },
   ];
@@ -268,15 +209,15 @@ export function ClientConnectionOnboarding() {
         <div className="border-b bg-gradient-to-br from-brand-50 via-white to-slate-50 p-5 sm:p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm font-medium text-brand-700">Configuração rápida</p>
-              <h2 id="connection-onboarding-title" className="mt-1 text-2xl font-semibold tracking-tight">Conecte seus canais</h2>
+              <p className="text-sm font-medium text-brand-700">Canais adicionais</p>
+              <h2 id="connection-onboarding-title" className="mt-1 text-2xl font-semibold tracking-tight">Conecte somente o que quiser usar</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Você conecta as contas da empresa; App ID, secrets, webhooks e demais configurações técnicas ficam centralizados no FlipForm.
+                Instagram e WhatsApp são opcionais. As configurações técnicas da plataforma ficam centralizadas no FlipForm; sua empresa apenas autoriza a própria conta quando desejar.
               </p>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-full border bg-white px-3 py-1.5 text-xs font-medium text-slate-700">
-                {connectedChannels}/2 canais operacionais
+                {connectedChannels}/2 canais conectados
               </span>
               <button
                 type="button"
@@ -314,27 +255,17 @@ export function ClientConnectionOnboarding() {
           ))}
         </div>
 
-        <div className="border-t bg-slate-50/70 p-4 sm:p-5">
+        {instagram.usable && <div className="border-t bg-slate-50/70 p-4 sm:p-5">
           <div className="flex flex-col gap-4 rounded-xl border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold">Primeira automação</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {instagram.usable
-                  ? 'Seu Instagram já pode usar a automação de comentário → mensagem privada.'
-                  : 'Conecte e deixe o Instagram operacional antes de ativar a primeira automação.'}
-              </p>
+              <p className="text-sm font-semibold">Automações do Instagram</p>
+              <p className="mt-1 text-xs text-muted-foreground">Seu Instagram já pode usar automação de comentário → mensagem privada.</p>
             </div>
-            {instagram.usable ? (
-              <Link href="/automations" className="w-fit rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
-                Criar automação
-              </Link>
-            ) : (
-              <a href="#instagram-connection" className="w-fit rounded-md border bg-white px-4 py-2.5 text-sm font-medium hover:bg-muted/60">
-                Conectar Instagram primeiro
-              </a>
-            )}
+            <Link href="/automations" className="w-fit rounded-md bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">
+              Criar automação
+            </Link>
           </div>
-        </div>
+        </div>}
       </div>
     </section>
   );
