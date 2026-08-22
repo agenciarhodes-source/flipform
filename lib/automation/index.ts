@@ -25,6 +25,14 @@ export {
   prepareInstagramCommentCoreAutomation,
 } from './adapters/instagram-comment';
 export {
+  enqueueInstagramMessageCoreAutomation,
+  INSTAGRAM_MESSAGE_KEYWORD_TRIGGER,
+  INSTAGRAM_SEND_TEXT_ACTION,
+  instagramMessageAutomationMatches,
+  normalizeInstagramMessageAutomationText,
+  prepareInstagramMessageCoreAutomation,
+} from './adapters/instagram-message';
+export {
   enqueueWhatsAppMessageCoreAutomation,
   normalizeWhatsAppAutomationText,
   prepareWhatsAppMessageCoreAutomation,
@@ -34,6 +42,7 @@ export {
 } from './adapters/whatsapp-message';
 export { createFlowConditionAutomationHandler } from './handlers/flow-condition';
 export { createInstagramPrivateReplyAutomationHandler } from './handlers/instagram-private-reply';
+export { createInstagramSendTextAutomationHandler } from './handlers/instagram-send-text';
 export { createLeadEnsureFromConversationAutomationHandler } from './handlers/lead-ensure-from-conversation';
 export { createLeadMoveStageAutomationHandler } from './handlers/lead-move-stage';
 export { createWhatsAppSendTextAutomationHandler } from './handlers/whatsapp-send-text';
@@ -56,6 +65,10 @@ export type {
   InstagramCommentCoreMatchType,
   PreparedInstagramCommentCoreAutomation,
 } from './adapters/instagram-comment';
+export type {
+  InstagramMessageCoreMatchType,
+  PreparedInstagramMessageCoreAutomation,
+} from './adapters/instagram-message';
 export type {
   PreparedWhatsAppMessageCoreAutomation,
   WhatsAppMessageCoreMatchType,
