@@ -39,14 +39,16 @@ export const fieldTypeEnum = z.enum([
   'city_state',
 ]);
 
+const flowRedirectUrlSchema = z.string().url('Link do Fluxo inválido.').refine((url) => /^https?:\/\//i.test(url), 'Use uma URL iniciando com http:// ou https://.');
+
 export const formFieldSchema = z.object({
   id: z.string().optional(),
   label: z.string().min(1),
   placeholder: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
   fieldType: fieldTypeEnum,
-  options: z.array(z.union([z.string(), z.object({ id: z.string().optional(), label: z.string(), qualifies: z.boolean().optional() })])).optional().nullable(),
-  validationRules: z.object({ selectionMode: z.enum(['single', 'multiple']).optional(), isQualifier: z.boolean().optional(), qualificationMode: z.enum(['any', 'all']).optional() }).passthrough().optional().nullable(),
+  options: z.array(z.union([z.string(), z.object({ id: z.string().optional(), label: z.string(), qualifies: z.boolean().optional(), redirectUrl: flowRedirectUrlSchema.optional() })])).optional().nullable(),
+  validationRules: z.object({ selectionMode: z.enum(['single', 'multiple']).optional(), isQualifier: z.boolean().optional(), qualificationMode: z.enum(['any', 'all']).optional(), isFlow: z.boolean().optional() }).passthrough().optional().nullable(),
   isRequired: z.boolean().default(false),
   orderIndex: z.number().int(),
 });
