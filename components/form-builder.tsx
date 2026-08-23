@@ -15,7 +15,7 @@ import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflo
 import { PublicFormPreview } from './public-form-preview';
 import { FormLogoPicker } from './form-builder/form-logo-picker';
 import { FORM_LEAD_SOURCES } from '@/lib/leads';
-import { cleanOptionObjects, cleanOptions, defaultSelectionModeFor, isQualifier, normalizeOptionObjects, normalizeOptions, normalizeQualificationMode, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
+import { cleanOptionObjects, cleanOptions, defaultSelectionModeFor, isFlow, isQualifier, normalizeOptionObjects, normalizeOptions, normalizeQualificationMode, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
 
 const FIELD_TYPES = [
   { v: 'short_text', l: 'Texto curto' },
@@ -42,7 +42,7 @@ interface Field {
   description?: string | null;
   fieldType: string;
   options?: any[] | null;
-  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; [key: string]: unknown } | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; isFlow?: boolean; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -205,13 +205,19 @@ export function FormBuilder({ formId }: { formId?: string }) {
     const normalized = normalizeOptionObjects(field.options);
     return {
       options: normalized.length ? normalized : [{ id: 'opt_1', label: '', qualifies: false }, { id: 'opt_2', label: '', qualifies: false }],
-      validationRules: { ...(field.validationRules || {}), selectionMode: defaultSelectionModeFor(fieldType) },
+      validationRules: { ...(field.validationRules || {}), selectionMode: defaultSelectionModeFor(fieldType), isFlow: fieldType === 'multi_select' ? false : field.validationRules?.isFlow },
     };
   };
 
   const updateOption = (idx: number, optionIdx: number, value: string) => {
     const options = normalizeOptionObjects(fields[idx].options);
     options[optionIdx] = { ...options[optionIdx], label: value };
+    updateField(idx, { options });
+  };
+
+  const updateOptionRedirectUrl = (idx: number, optionIdx: number, value: string) => {
+    const options = normalizeOptionObjects(fields[idx].options);
+    options[optionIdx] = { ...options[optionIdx], redirectUrl: value };
     updateField(idx, { options });
   };
 
@@ -540,7 +546,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                             const checked = normalizeSelectionMode(selected.fieldType, selected.validationRules) === mode;
                             const disabled = selected.fieldType !== 'multi_select' && mode === 'multiple';
                             return (
-                              <button key={mode} type="button" disabled={disabled} onClick={() => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), selectionMode: mode } })} className={`rounded-md border p-3 text-left text-sm transition ${checked ? 'border-brand-500 bg-brand-50' : 'border-border hover:bg-muted'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}>
+                              <button key={mode} type="button" disabled={disabled} onClick={() => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), selectionMode: mode, isFlow: mode === 'multiple' ? false : selected.validationRules?.isFlow } })} className={`rounded-md border p-3 text-left text-sm transition ${checked ? 'border-brand-500 bg-brand-50' : 'border-border hover:bg-muted'} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}>
                                 <span className="font-medium">{mode === 'single' ? 'Apenas uma opção' : 'Várias opções'}</span>
                               </button>
                             );
@@ -571,29 +577,53 @@ export function FormBuilder({ formId }: { formId?: string }) {
                           </div>
                         )}
                       </div>
+                      <div className="space-y-3 rounded-md border bg-background p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <Label>Fluxo</Label>
+                            <p className="text-xs text-muted-foreground">Direcione o lead para um link diferente conforme a opção escolhida. O redirecionamento só acontece depois que o cadastro for salvo com sucesso.</p>
+                          </div>
+                          <Switch
+                            checked={isFlow(selected.validationRules)}
+                            disabled={normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple'}
+                            onCheckedChange={(checked) => updateField(selectedIdx!, { validationRules: { ...(selected.validationRules || {}), isFlow: checked, selectionMode: 'single' } })}
+                          />
+                        </div>
+                        {normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple' && (
+                          <p className="text-xs text-amber-600">Fluxo está disponível quando o lead pode escolher apenas uma opção.</p>
+                        )}
+                      </div>
                       <div className="space-y-2">
                         <Label>Opções de resposta</Label>
                         <p className="text-xs text-muted-foreground">{normalizeSelectionMode(selected.fieldType, selected.validationRules) === 'multiple' ? 'O lead poderá escolher uma ou mais opções.' : 'O lead poderá escolher apenas uma opção.'}</p>
                         {normalizeOptionObjects(selected.options).map((option, optionIdx) => (
-                          <div key={optionIdx} className="flex items-center gap-2 rounded-md border bg-background p-2">
-                            <Input ref={(el) => { optionInputRefs.current[`${selectedIdx}-${optionIdx}`] = el; }} value={option.label} onChange={(e) => updateOption(selectedIdx!, optionIdx, e.target.value)} placeholder={`Opção ${optionIdx + 1}`} />
-                            {isQualifier(selected.validationRules) && (
-                              <label className="flex min-w-[120px] items-center gap-2 text-xs">
-                                <input
-                                  type="checkbox"
-                                  checked={option.qualifies === true}
-                                  onChange={(e) => {
-                                    const options = normalizeOptionObjects(selected.options);
-                                    options[optionIdx] = { ...options[optionIdx], qualifies: e.target.checked };
-                                    updateField(selectedIdx!, { options });
-                                  }}
-                                />
-                                Qualifica
-                              </label>
+                          <div key={optionIdx} className="space-y-2 rounded-md border bg-background p-2">
+                            <div className="flex items-center gap-2">
+                              <Input ref={(el) => { optionInputRefs.current[`${selectedIdx}-${optionIdx}`] = el; }} value={option.label} onChange={(e) => updateOption(selectedIdx!, optionIdx, e.target.value)} placeholder={`Opção ${optionIdx + 1}`} />
+                              {isQualifier(selected.validationRules) && (
+                                <label className="flex min-w-[120px] items-center gap-2 text-xs">
+                                  <input
+                                    type="checkbox"
+                                    checked={option.qualifies === true}
+                                    onChange={(e) => {
+                                      const options = normalizeOptionObjects(selected.options);
+                                      options[optionIdx] = { ...options[optionIdx], qualifies: e.target.checked };
+                                      updateField(selectedIdx!, { options });
+                                    }}
+                                  />
+                                  Qualifica
+                                </label>
+                              )}
+                              <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, -1)} disabled={optionIdx === 0}>↑</Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, 1)} disabled={optionIdx === normalizeOptionObjects(selected.options).length - 1}>↓</Button>
+                              <Button type="button" size="sm" variant="outline" onClick={() => removeOption(selectedIdx!, optionIdx)} disabled={normalizeOptionObjects(selected.options).length <= 2}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+                            </div>
+                            {isFlow(selected.validationRules) && (
+                              <div className="space-y-1.5 px-1 pb-1">
+                                <Label className="text-xs">Link de destino</Label>
+                                <Input type="url" value={option.redirectUrl || ''} onChange={(e) => updateOptionRedirectUrl(selectedIdx!, optionIdx, e.target.value)} placeholder="https://..." />
+                              </div>
                             )}
-                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, -1)} disabled={optionIdx === 0}>↑</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => moveOption(selectedIdx!, optionIdx, 1)} disabled={optionIdx === normalizeOptionObjects(selected.options).length - 1}>↓</Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => removeOption(selectedIdx!, optionIdx)} disabled={normalizeOptionObjects(selected.options).length <= 2}><Trash2 className="h-3 w-3 text-destructive" /></Button>
                           </div>
                         ))}
                         <Button type="button" variant="outline" size="sm" onClick={() => addOption(selectedIdx!)}><Plus className="mr-1 h-3 w-3" />Adicionar opção</Button>
