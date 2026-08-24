@@ -5,6 +5,7 @@ PICKER = ROOT / 'components/settings/company-logo-picker.tsx'
 SETTINGS = ROOT / 'components/settings-page-client.tsx'
 VALIDATION = ROOT / 'lib/tenant-logo.ts'
 SCHEMA = ROOT / 'lib/schemas-tenant.ts'
+SETTINGS_ROUTE = ROOT / 'app/api/settings/tenant/route.ts'
 
 
 def read(path: Path) -> str:
@@ -54,3 +55,10 @@ def test_settings_page_uses_company_logo_picker_instead_of_url_input():
 def test_existing_http_logo_urls_remain_backward_compatible():
     validation = read(VALIDATION)
     assert "url.protocol === 'http:' || url.protocol === 'https:'" in validation
+
+
+def test_logo_data_is_not_duplicated_into_audit_metadata():
+    route = read(SETTINGS_ROUTE)
+    assert "from: current.logoUrl ? '[configured]' : null" in route
+    assert "to: normalized ? '[configured]' : null" in route
+    assert 'changes.logoUrl = { from: current.logoUrl, to: normalized }' not in route
