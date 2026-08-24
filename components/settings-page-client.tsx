@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Save, Building2, Palette, Image as ImageIcon, AlertTriangle, ExternalLink, Globe, ShieldCheck, Users as UsersIcon, Workflow, FileText, UsersRound } from 'lucide-react';
+import { Save, Building2, Palette, AlertTriangle, ExternalLink, Globe, ShieldCheck, Users as UsersIcon, Workflow, FileText, UsersRound } from 'lucide-react';
+import { CompanyLogoPicker } from '@/components/settings/company-logo-picker';
 import { can } from '@/lib/rbac';
 import { formatDate } from '@/lib/utils';
 
@@ -175,17 +176,7 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
               ))}
             </div>
           </div>
-          <div>
-            <Label className="flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" />Logo (URL)</Label>
-            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} disabled={!canEdit} placeholder="https://exemplo.com/logo.png" />
-            <p className="text-xs text-muted-foreground mt-1">Deixe em branco para usar as iniciais como fallback.</p>
-            {logoUrl && (
-              <div className="mt-2 p-3 rounded-md border bg-muted/40 flex items-center gap-3">
-                <img src={logoUrl} alt="Preview" className="w-12 h-12 object-contain rounded" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                <span className="text-xs text-muted-foreground">Preview do logo</span>
-              </div>
-            )}
-          </div>
+          <CompanyLogoPicker value={logoUrl} onChange={setLogoUrl} disabled={!canEdit} />
         </Card>
       </div>
 
