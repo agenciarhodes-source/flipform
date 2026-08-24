@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Loader2 } from 'lucide-react';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStateName, getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
-import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
+import { cleanOptionObjects, cleanOptions, evaluateQualification, formatBrazilPhone, formatCnpj, formatCpf, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions, resolveFlowRedirectUrl } from '@/lib/form-field-validation';
 import type { PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
 
 interface PublicField {
@@ -16,7 +16,7 @@ interface PublicField {
   description?: string | null;
   fieldType: string;
   options?: any[] | null;
-  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; [key: string]: unknown } | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; isFlow?: boolean; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
@@ -119,6 +119,11 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
         if (result.qualified === false) {
           setDisqualified(true);
         } else {
+          const flowRedirectUrl = [...fields].reverse().map((field) => resolveFlowRedirectUrl(field, answers[field.id])).find(Boolean) || null;
+          if (flowRedirectUrl) {
+            window.location.href = flowRedirectUrl;
+            return;
+          }
           const qualifiedRedirectUrl = form.disqualificationSettings?.qualifiedRedirectUrl || null;
           if (qualifiedRedirectUrl) {
             window.location.href = qualifiedRedirectUrl;
