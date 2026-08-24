@@ -51,7 +51,12 @@ export const PUT = withPermission('SETTINGS_EDIT', async (req, session) => {
     if (data.logoUrl !== undefined) {
       const normalized = data.logoUrl === '' ? null : data.logoUrl;
       if (normalized !== current.logoUrl) {
-        updates.logoUrl = normalized; changes.logoUrl = { from: current.logoUrl, to: normalized };
+        updates.logoUrl = normalized;
+        // Não duplicar data URLs potencialmente grandes dentro dos logs de auditoria.
+        changes.logoUrl = {
+          from: current.logoUrl ? '[configured]' : null,
+          to: normalized ? '[configured]' : null,
+        };
         auditActions.push('tenant.logo_updated');
       }
     }
