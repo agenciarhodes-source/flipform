@@ -10,6 +10,7 @@ import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@
 import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
+import { assertPhoneNotUsedInForm, DuplicateFormPhoneError, DUPLICATE_FORM_PHONE_CODE } from '@/lib/form-duplicate-lead';
 
 /**
  * Public form submit endpoint.
@@ -78,7 +79,13 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const leadSource = form.leadSource?.trim() || 'formulario';
 
     type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; validationRules?: unknown; [key: string]: unknown };
-    const fieldsById = new Map<string, FieldRow>((form.fields as FieldRow[]).map((f) => [f.id, f]));
+    const orderedFields = form.fields as FieldRow[];
+    const fieldsById = new Map<string, FieldRow>(orderedFields.map((f) => [f.id, f]));
+    const primaryPhoneField = orderedFields.find((f) => f.fieldType === 'phone_br' || f.fieldType === 'phone');
+    const primaryPhoneRules = primaryPhoneField?.validationRules && typeof primaryPhoneField.validationRules === 'object' && !Array.isArray(primaryPhoneField.validationRules)
+      ? primaryPhoneField.validationRules as Record<string, unknown>
+      : null;
+    const preventDuplicateLead = primaryPhoneRules?.preventDuplicateLead === true;
 
     // Filtra apenas answers com fieldId válido para este form
     const cleanAnswers = parsed.data.answers
@@ -100,7 +107,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       v === '' ||
       (Array.isArray(v) && v.length === 0);
 
-    const missingRequired = (form.fields as FieldRow[])
+    const missingRequired = orderedFields
       .filter((f) => f.isRequired)
       .filter((f) => {
         const a = cleanAnswers.find((x) => x.fieldId === f.id);
@@ -190,13 +197,28 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
     const email = pickByType(['email']);
     const phone = pickByType(['phone_br', 'phone']);
+    const protectedPhoneAnswer = preventDuplicateLead && primaryPhoneField
+      ? normalizedAnswers.find((a) => a.fieldId === primaryPhoneField.id && !isEmpty(a.value))
+      : null;
+    const protectedPhone = protectedPhoneAnswer ? String(protectedPhoneAnswer.value) : null;
     const locationAnswer = normalizedAnswers.find((a) => a.fieldType === 'city_state' && a.value && typeof a.value === 'object')?.value as any;
     const leadState = locationAnswer?.state || null;
     const leadCity = locationAnswer?.city || null;
 
-    // Cria lead + answers + history dentro de uma transaction para garantir atomicidade
+    // Cria lead + answers + history dentro de uma transaction para garantir atomicidade.
+    // Quando a proteção está ativa, a verificação acontece antes do rodízio para não gerar
+    // qualquer efeito colateral em uma submissão duplicada.
     const assignmentResult = { assignedTo: null as string | null, reason: 'not_started' };
     const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+      if (protectedPhone) {
+        await assertPhoneNotUsedInForm({
+          tx,
+          tenantId: form.tenantId,
+          formId: form.id,
+          phone: protectedPhone,
+        });
+      }
+
       const rotation = await assignLeadByRotation({ tenantId: form.tenantId, formId: form.id, tx });
       assignmentResult.assignedTo = rotation.assignedTo;
       assignmentResult.reason = rotation.reason;
@@ -321,6 +343,12 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       ...(publicMetaTracking ? { tracking: { meta: publicMetaTracking } } : {}),
     });
   } catch (e: any) {
+    if (e instanceof DuplicateFormPhoneError) {
+      return NextResponse.json(
+        { error: e.message, code: DUPLICATE_FORM_PHONE_CODE },
+        { status: 409 },
+      );
+    }
     console.error('public submit error', e);
     return NextResponse.json({ error: 'Erro interno ao enviar formulário. Tente novamente.' }, { status: 500 });
   }
