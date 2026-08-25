@@ -49,7 +49,6 @@ interface Field {
 
 export function FormBuilder({ formId }: { formId?: string }) {
   const router = useRouter();
-  const canEdit = true;
   const [name, setName] = useState('');
   const [publicTitle, setPublicTitle] = useState('');
   const [publicDescription, setPublicDescription] = useState('');
@@ -446,6 +445,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                         {pipelines.filter((p) => !p.isArchived).map((p) => (
                           <SelectItem key={p.id} value={p.id}>{p.name}{p.isDefault ? ' • padrão' : ''}</SelectItem>
                         ))}
+                        {/* Pipeline atual arquivado: exibir para sinalizar */}
                         {pipelineArchived && currentPipeline && (
                           <SelectItem value={currentPipeline.id}>{currentPipeline.name} (arquivado)</SelectItem>
                         )}
