@@ -42,13 +42,14 @@ interface Field {
   description?: string | null;
   fieldType: string;
   options?: any[] | null;
-  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; isFlow?: boolean; [key: string]: unknown } | null;
+  validationRules?: { selectionMode?: 'single' | 'multiple'; isQualifier?: boolean; qualificationMode?: 'any' | 'all'; isFlow?: boolean; preventDuplicateLead?: boolean; [key: string]: unknown } | null;
   isRequired: boolean;
   orderIndex: number;
 }
 
 export function FormBuilder({ formId }: { formId?: string }) {
   const router = useRouter();
+  const canEdit = true;
   const [name, setName] = useState('');
   const [publicTitle, setPublicTitle] = useState('');
   const [publicDescription, setPublicDescription] = useState('');
@@ -306,6 +307,15 @@ export function FormBuilder({ formId }: { formId?: string }) {
 
   const selected = selectedIdx !== null ? fields[selectedIdx] : null;
   const needsOptions = selected && ['single_select', 'multi_select', 'dropdown'].includes(selected.fieldType);
+  const primaryPhoneFieldIndex = fields.findIndex((field) => field.fieldType === 'phone_br' || field.fieldType === 'phone');
+  const primaryPhoneField = primaryPhoneFieldIndex >= 0 ? fields[primaryPhoneFieldIndex] : null;
+  const preventDuplicateLead = primaryPhoneField?.validationRules?.preventDuplicateLead === true;
+  const setPreventDuplicateLead = (checked: boolean) => {
+    if (primaryPhoneFieldIndex < 0 || !primaryPhoneField) return;
+    updateField(primaryPhoneFieldIndex, {
+      validationRules: { ...(primaryPhoneField.validationRules || {}), preventDuplicateLead: checked },
+    });
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -393,6 +403,25 @@ export function FormBuilder({ formId }: { formId?: string }) {
             </Card>
 
             <Card className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="font-heading font-semibold mb-1">Cadastro único por formulário</h3>
+                  <p className="text-xs text-muted-foreground">Quando ativado, um telefone que já gerou lead neste formulário não poderá gerar outro lead nele. O mesmo telefone continua permitido em outros formulários.</p>
+                </div>
+                <Switch
+                  checked={preventDuplicateLead}
+                  disabled={primaryPhoneFieldIndex < 0}
+                  onCheckedChange={setPreventDuplicateLead}
+                />
+              </div>
+              {primaryPhoneFieldIndex < 0 ? (
+                <p className="text-xs text-amber-600 mt-3">Adicione um campo “Telefone Brasil” para habilitar esta proteção.</p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-3">A validação usa o primeiro campo de telefone do formulário e acontece antes da criação do lead.</p>
+              )}
+            </Card>
+
+            <Card className="p-5">
               <h3 className="font-heading font-semibold mb-1 flex items-center gap-2"><Workflow className="w-4 h-4 text-brand-600" />Destino do lead</h3>
               <p className="text-xs text-muted-foreground mb-4">Para qual pipeline e etapa este lead entra ao enviar.</p>
               {noActivePipelines ? (
@@ -417,7 +446,6 @@ export function FormBuilder({ formId }: { formId?: string }) {
                         {pipelines.filter((p) => !p.isArchived).map((p) => (
                           <SelectItem key={p.id} value={p.id}>{p.name}{p.isDefault ? ' • padrão' : ''}</SelectItem>
                         ))}
-                        {/* Pipeline atual arquivado: exibir para sinalizar */}
                         {pipelineArchived && currentPipeline && (
                           <SelectItem value={currentPipeline.id}>{currentPipeline.name} (arquivado)</SelectItem>
                         )}
