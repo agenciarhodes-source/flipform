@@ -1,9 +1,15 @@
 'use client';
+import { useEffect } from 'react';
 import { PublicTypeform } from '@/components/public-typeform';
 import { buildPublicAttribution } from '@/lib/attribution';
 import { fireMetaLeadPixel, type PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
+import { firePublicGtmLeadEvent, loadPublicGtmContainer } from '@/lib/tracking/gtm-client';
 
-export function PublicFormView({ form }: { form: any }) {
+export function PublicFormView({ form, gtmContainerId }: { form: any; gtmContainerId?: string | null }) {
+  useEffect(() => {
+    loadPublicGtmContainer(gtmContainerId);
+  }, [gtmContainerId]);
+
   const submit = async (answers: any) => {
     let res: Response;
     try {
@@ -27,8 +33,11 @@ export function PublicFormView({ form }: { form: any }) {
       throw new Error(msg);
     }
     const result: PublicFormSubmitResponse = await res.json();
-    if (result.qualified === true && result.tracking?.meta) {
-      fireMetaLeadPixel(result.tracking.meta);
+    if (result.qualified === true) {
+      firePublicGtmLeadEvent(gtmContainerId);
+      if (result.tracking?.meta) {
+        fireMetaLeadPixel(result.tracking.meta);
+      }
     }
     return result;
   };
