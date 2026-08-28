@@ -29,11 +29,18 @@ export default async function PublicFormPage({ params }: { params: { slug: strin
     );
   }
 
+  // Only the non-secret GTM runtime flags are exposed to the public form.
+  const gtmSettings = await prisma.tenantIntegrationSettings.findUnique({
+    where: { tenantId: form.tenantId },
+    select: { gtmEnabled: true, gtmContainerId: true },
+  });
+  const publicGtmContainerId = gtmSettings?.gtmEnabled ? gtmSettings.gtmContainerId : null;
+
   // Logo: prioriza form.logoUrl, fallback para tenant.logoUrl
   // Cor: prioriza form.primaryColor, fallback para tenant.primaryColor
   const logoUrl = form.logoUrl || form.tenant?.logoUrl || null;
   const primaryColor = form.primaryColor || form.tenant?.primaryColor || '#2563EB';
-  return <PublicFormView form={{
+  return <PublicFormView gtmContainerId={publicGtmContainerId} form={{
     slug: form.slug,
     publicTitle: form.publicTitle,
     publicDescription: form.publicDescription,
