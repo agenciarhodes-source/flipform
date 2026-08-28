@@ -18,9 +18,18 @@ export default async function CustomDomainPublicFormPage({ params }: { params: {
     include: { fields: { orderBy: { orderIndex: 'asc' } }, tenant: { select: { name: true, primaryColor: true, logoUrl: true, status: true } } },
   });
   if (!form || BLOCKED.has(String(form.tenant.status))) return notFound();
+
+  // Match the standard public form route: expose only non-secret GTM runtime config
+  // for the tenant that owns this verified custom domain.
+  const gtmSettings = await prisma.tenantIntegrationSettings.findUnique({
+    where: { tenantId: customDomain.tenantId },
+    select: { gtmEnabled: true, gtmContainerId: true },
+  });
+  const publicGtmContainerId = gtmSettings?.gtmEnabled ? gtmSettings.gtmContainerId : null;
+
   const logoUrl = form.logoUrl || form.tenant?.logoUrl || null;
   const primaryColor = form.primaryColor || form.tenant?.primaryColor || '#2563EB';
-  return <PublicFormView form={{
+  return <PublicFormView gtmContainerId={publicGtmContainerId} form={{
     slug: form.slug, publicTitle: form.publicTitle, publicDescription: form.publicDescription, primaryColor, bgColor: form.bgColor,
     buttonColor: form.buttonColor, textColor: form.textColor, theme: form.theme, coverImageUrl: form.coverImageUrl, successMessage: form.successMessage,
     disqualificationSettings: form.disqualificationSettings as any,
