@@ -35,9 +35,9 @@ export function PublicFormView({ form, gtmContainerId }: { form: any; gtmContain
     const result: PublicFormSubmitResponse = await res.json();
     if (result.qualified === true) {
       firePublicGtmLeadEvent(gtmContainerId);
-      if (result.tracking?.meta) {
-        fireMetaLeadPixel(result.tracking.meta);
-      }
+    }
+    if (result.qualified === true && result.tracking?.meta) {
+      fireMetaLeadPixel(result.tracking.meta);
     }
     return result;
   };
