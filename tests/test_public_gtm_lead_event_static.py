@@ -54,12 +54,11 @@ def test_gtm_lead_payload_contains_no_pii_or_internal_lead_id():
         assert pii not in event_function
 
 
-def test_meta_pixel_behavior_remains_inside_same_qualified_success_path():
+def test_meta_pixel_behavior_remains_exactly_on_existing_qualified_guard():
     view = read(VIEW)
-    qualified = view.index('if (result.qualified === true)')
-    meta_guard = view.index('if (result.tracking?.meta)', qualified)
+    meta_guard = view.index('if (result.qualified === true && result.tracking?.meta)')
     meta_fire = view.index('fireMetaLeadPixel(result.tracking.meta)', meta_guard)
-    assert qualified < meta_guard < meta_fire
+    assert meta_guard < meta_fire
 
 
 def test_tracking_failures_are_non_blocking_for_form_experience():
