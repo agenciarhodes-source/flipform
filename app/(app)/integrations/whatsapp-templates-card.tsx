@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { onWhatsAppConnectionChanged } from './connection-events';
+import { WHATSAPP_CONNECTION_CHANGED_EVENT } from './connection-events';
 
 type Template = {
   id: string | null;
@@ -97,7 +97,9 @@ export function WhatsAppTemplatesCard() {
 
   useEffect(() => {
     void load();
-    return onWhatsAppConnectionChanged(() => void load({ silent: true }));
+    const handleConnectionChange = () => void load({ silent: true });
+    window.addEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, handleConnectionChange);
+    return () => window.removeEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, handleConnectionChange);
   }, [load]);
 
   const counters = useMemo(() => ({
