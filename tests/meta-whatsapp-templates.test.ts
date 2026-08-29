@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {
+  createWhatsAppMessageTemplate,
+  listWhatsAppMessageTemplates,
+} from '../lib/meta/whatsapp-templates';
 
 process.env.JWT_SECRET_CURRENT = 'meta-whatsapp-templates-test-secret';
-
-const { createWhatsAppMessageTemplate, listWhatsAppMessageTemplates } = await import('../lib/meta/whatsapp-templates');
 
 test('lists templates only from the tenant-selected WABA using the server token', async () => {
   const previousFetch = globalThis.fetch;
