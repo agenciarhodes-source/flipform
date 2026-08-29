@@ -177,3 +177,49 @@ test('Ads and WhatsApp rollout is not blocked by optional Instagram diagnostics'
   assert.equal(rollout.components.find(component => component.key === 'whatsapp')?.status, 'ready');
   assert.equal(rollout.components.find(component => component.key === 'whatsapp_webhook')?.status, 'ready');
 });
+
+test('universal WhatsApp runtime token validation enforces FlipForm app and messaging scopes', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      data: {
+        is_valid: true,
+        app_id: '123456789',
+        scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+        granular_scopes: [],
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+    const { validateWhatsAppPlatformRuntimeToken } = await import('../lib/meta/whatsapp');
+    const result = await validateWhatsAppPlatformRuntimeToken({
+      accessToken: 'runtime-token-placeholder',
+      appId: '123456789',
+    });
+
+    assert.equal(result.grantedScopes.includes('whatsapp_business_management'), true);
+    assert.equal(result.grantedScopes.includes('whatsapp_business_messaging'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('universal WhatsApp system user validation checks membership in FlipForm Business without writes', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      data: [{ id: 'system-user-1', name: 'FlipForm WhatsApp Runtime', role: 'ADMIN' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } })) as typeof fetch;
+
+    const { verifyWhatsAppPlatformSystemUser } = await import('../lib/meta/whatsapp');
+    const valid = await verifyWhatsAppPlatformSystemUser({
+      adminSystemUserAccessToken: 'admin-token-placeholder',
+      appSecret: 'app-secret-placeholder',
+      businessId: 'business-1',
+      systemUserId: 'system-user-1',
+    });
+
+    assert.equal(valid, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
