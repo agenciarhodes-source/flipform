@@ -146,6 +146,7 @@ export function InboxClient({
   const [warning, setWarning] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
+  const requestedConversationIdRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
   const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp : false;
@@ -186,12 +187,34 @@ export function InboxClient({
       if (!response.ok) throw new Error('Não foi possível carregar as conversas.');
       const data = await response.json();
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
-      const next = all.filter((conversation) => conversation.channel === 'whatsapp');
+      let next = all.filter((conversation) => conversation.channel === 'whatsapp');
+      const requestedId = requestedConversationIdRef.current;
+
+      if (requestedId && !next.some((conversation) => conversation.id === requestedId)) {
+        const directResponse = await fetch(`/api/inbox/conversations/${encodeURIComponent(requestedId)}/messages`, { cache: 'no-store' });
+        if (directResponse.ok) {
+          const directData = await directResponse.json();
+          const directConversation = directData.conversation as Omit<InboxConversation, 'messages'> | undefined;
+          const directMessages = Array.isArray(directData.messages) ? directData.messages as InboxMessage[] : [];
+          if (directConversation?.channel === 'whatsapp') {
+            const latestMessage = directMessages[directMessages.length - 1];
+            next = [{
+              ...directConversation,
+              messages: latestMessage ? [latestMessage] : [],
+            }, ...next];
+          }
+        }
+      }
+
       setConversations(next);
       setSelectedId((current) => {
-        const nextId = current && next.some((conversation) => conversation.id === current)
-          ? current
-          : next[0]?.id || null;
+        const requestedExists = Boolean(requestedId && next.some((conversation) => conversation.id === requestedId));
+        const nextId = requestedExists
+          ? requestedId
+          : current && next.some((conversation) => conversation.id === current)
+            ? current
+            : next[0]?.id || null;
+        if (requestedExists) requestedConversationIdRef.current = null;
         if (nextId !== current) {
           selectedIdRef.current = nextId;
           setMessages([]);
@@ -238,6 +261,7 @@ export function InboxClient({
   }
 
   useEffect(() => {
+    requestedConversationIdRef.current = new URLSearchParams(window.location.search).get('conversationId')?.trim() || null;
     void loadConversations();
     const timer = window.setInterval(() => void loadConversations(true), 12_000);
     return () => window.clearInterval(timer);
