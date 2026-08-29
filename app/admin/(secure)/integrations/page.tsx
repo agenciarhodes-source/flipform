@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Copy, Loader2, Save } from 'lucide-react';
+import { Copy, Loader2, RefreshCw, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -43,12 +43,33 @@ const presetLabels: Array<[keyof Settings, string]> = [
 
 export default function AdminIntegrationsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [appSecret, setAppSecret] = useState('');
   const [whatsappAdminSystemUserAccessToken, setWhatsappAdminSystemUserAccessToken] = useState('');
   const [whatsappSystemUserAccessToken, setWhatsappSystemUserAccessToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  useEffect(() => { fetch('/api/admin/integrations/meta', { cache: 'no-store' }).then(async r => { const p = await r.json(); if (!r.ok) throw new Error(p.error); setSettings(p.settings); }).catch(e => setMessage(e.message)); }, []);
+
+  async function loadSettings() {
+    setSettingsLoading(true);
+    setSettingsLoadError(null);
+    try {
+      const response = await fetch('/api/admin/integrations/meta', { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar a configuração da Meta.');
+      if (!payload.settings) throw new Error('A configuração da Meta não foi retornada pelo servidor.');
+      setSettings(payload.settings);
+    } catch (error: any) {
+      setSettings(null);
+      setSettingsLoadError(error.message || 'Não foi possível carregar a configuração da Meta.');
+    } finally {
+      setSettingsLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadSettings(); }, []);
+
   async function save() {
     if (!settings) return;
     setBusy(true); setMessage(null);
@@ -76,8 +97,20 @@ export default function AdminIntegrationsPage() {
   }
   return <div className="p-8 space-y-6 max-w-5xl">
     <div><h1 className="font-heading text-2xl font-bold">Integrações da Plataforma</h1><p className="text-sm text-muted-foreground">Configure as integrações universais de Ads e WhatsApp utilizadas pelos clientes do FlipForm.</p></div>
-    {!settings ? <Card className="p-6 text-sm"><Loader2 className="inline w-4 h-4 mr-2 animate-spin" />Carregando configuração...</Card> :
-    <Card className="p-6 space-y-6">
+
+    {settingsLoading && <Card className="p-6 text-sm"><Loader2 className="inline w-4 h-4 mr-2 animate-spin" />Carregando configuração...</Card>}
+
+    {!settingsLoading && settingsLoadError && <Card className="p-6 space-y-3 border-red-200 bg-red-50">
+      <div>
+        <p className="font-medium text-red-900">Não foi possível carregar a configuração da plataforma.</p>
+        <p className="mt-1 text-sm text-red-800">{settingsLoadError}</p>
+      </div>
+      <Button type="button" variant="outline" onClick={() => void loadSettings()}>
+        <RefreshCw className="w-4 h-4 mr-2" />Tentar novamente
+      </Button>
+    </Card>}
+
+    {!settingsLoading && settings && <Card className="p-6 space-y-6">
       <div className="flex justify-between gap-4"><div><p className="text-xs font-semibold text-blue-600">META</p><h2 className="font-heading text-xl font-semibold">Ads e WhatsApp da plataforma</h2><p className="text-sm text-muted-foreground">As configurações abaixo preservam a integração Meta Ads existente e concentram o onboarding do WhatsApp Business.</p></div><div className="flex flex-wrap gap-2"><Badge variant={settings.baseConfigured ? 'secondary' : 'outline'}>{settings.baseConfigured ? 'Base Meta configurada' : 'Base Meta pendente'}</Badge><Badge variant={settings.businessLoginConfigured ? 'secondary' : 'outline'}>{settings.businessLoginConfigured ? 'Ads Login configurado' : 'Ads Login pendente'}</Badge><Badge variant={settings.whatsappEmbeddedSignupConfigured ? 'secondary' : 'outline'}>{settings.whatsappEmbeddedSignupConfigured ? 'WhatsApp Signup configurado' : 'WhatsApp Signup pendente'}</Badge></div></div>
       <div className="grid md:grid-cols-2 gap-4">
         <div className="space-y-2"><Label htmlFor="appId">Meta App ID — Ads/WhatsApp</Label><Input id="appId" maxLength={128} value={settings.appId || ''} onChange={e => setSettings({ ...settings, appId: e.target.value })} /></div>
