@@ -55,8 +55,8 @@ def test_universal_preflight_is_admin_only_read_only_and_secret_safe():
     ):
         assert forbidden not in combined
 
-    # Secrets are consumed server-side but never returned by the preflight DTO.
-    returned_section = preflight.split('return {', 1)[1]
+    # Secrets are consumed before the DTO is assembled and never returned to the browser.
+    returned_section = preflight.split('const checks = [', 1)[1]
     assert 'accessToken:' not in returned_section
     assert 'appSecret:' not in returned_section
 
