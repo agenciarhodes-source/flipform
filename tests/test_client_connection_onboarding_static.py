@@ -41,7 +41,9 @@ def test_onboarding_focuses_flipform_on_whatsapp_only():
 
     assert "href: '#whatsapp-connection'" in onboarding
     assert 'WhatsApp Business' in onboarding
-    assert 'Cloud API oficial' in onboarding
+    assert 'Cloud API oficial' not in onboarding
+    assert 'Embedded Signup' not in onboarding
+    assert 'WABA' not in onboarding
     assert 'Instagram' not in onboarding
     assert 'payload.error' not in onboarding
 

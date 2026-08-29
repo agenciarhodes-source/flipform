@@ -54,7 +54,7 @@ function ensureFacebookSdk(appId: string, version: string) {
       script.addEventListener('load', done, { once: true });
       script.addEventListener('error', () => {
         window.clearTimeout(timeout);
-        reject(new Error('Não foi possível carregar o SDK da Meta.'));
+        reject(new Error('Não foi possível carregar a Meta.'));
       }, { once: true });
       if (!existing) {
         script.id = 'facebook-jssdk';
@@ -122,7 +122,7 @@ export function WhatsAppEmbeddedSignupCard() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a conexão do WhatsApp.');
       setPin('');
-      toast.success('WhatsApp conectado ao FlipForm. Agora registre o número para concluir a ativação da Cloud API.');
+      toast.success('WhatsApp conectado. Agora finalize a ativação do número.');
       await loadConnection();
       notifyWhatsAppConnectionChanged();
     } catch (error: any) {
@@ -148,7 +148,7 @@ export function WhatsAppEmbeddedSignupCard() {
         const wabaId = String(payload.data?.waba_id || '');
         const phoneNumberId = String(payload.data?.phone_number_id || '');
         if (!/^\d+$/.test(wabaId) || !/^\d+$/.test(phoneNumberId)) {
-          toast.error('A Meta não retornou os ativos do WhatsApp esperados.');
+          toast.error('A Meta não retornou os dados necessários para conectar o WhatsApp.');
           setConnecting(false);
           return;
         }
@@ -165,7 +165,7 @@ export function WhatsAppEmbeddedSignupCard() {
         codeRef.current = null;
         sessionRef.current = null;
         setConnecting(false);
-        toast.error('A Meta informou um erro no Embedded Signup.');
+        toast.error('A Meta informou um erro ao conectar o WhatsApp.');
       }
     };
     window.addEventListener('message', handler);
@@ -182,7 +182,7 @@ export function WhatsAppEmbeddedSignupCard() {
     try {
       const response = await fetch('/api/integrations/whatsapp/embedded-signup/config', { method: 'POST' });
       const config = await response.json() as SignupConfig & { error?: string };
-      if (!response.ok) throw new Error(config.error || 'Não foi possível iniciar o WhatsApp Embedded Signup.');
+      if (!response.ok) throw new Error(config.error || 'Não foi possível iniciar a conexão do WhatsApp.');
       await ensureFacebookSdk(config.appId, config.graphApiVersion);
       stateRef.current = config.state;
 
@@ -191,7 +191,7 @@ export function WhatsAppEmbeddedSignupCard() {
         if (typeof code !== 'string' || !code) {
           stateRef.current = null;
           setConnecting(false);
-          toast.error('A Meta não retornou o código de autorização do WhatsApp.');
+          toast.error('A Meta não concluiu a autorização do WhatsApp.');
           return;
         }
         codeRef.current = code;
@@ -228,20 +228,20 @@ export function WhatsAppEmbeddedSignupCard() {
         body: JSON.stringify({ pin }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível registrar o número.');
+      if (!response.ok) throw new Error(data.error || 'Não foi possível ativar o número.');
       setPin('');
-      toast.success('Número registrado na WhatsApp Cloud API.');
+      toast.success('Número ativado com sucesso.');
       await loadConnection();
       notifyWhatsAppConnectionChanged();
     } catch (error: any) {
-      toast.error(error.message || 'Não foi possível registrar o número.');
+      toast.error(error.message || 'Não foi possível ativar o número.');
     } finally {
       setRegistering(false);
     }
   }
 
   async function disconnect() {
-    if (!confirm('Desconectar o WhatsApp deste tenant? O vínculo será revogado no FlipForm e o histórico será preservado.')) return;
+    if (!confirm('Desconectar o WhatsApp desta empresa? O histórico de conversas será preservado.')) return;
     setDisconnecting(true);
     try {
       const response = await fetch('/api/integrations/whatsapp/connection', { method: 'DELETE' });
@@ -264,34 +264,32 @@ export function WhatsAppEmbeddedSignupCard() {
     <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-lg">WhatsApp Cloud API</h2>
-          <p className="text-sm text-muted-foreground">Conexão oficial via Meta Embedded Signup. O WABA e o número ficam vinculados exclusivamente a esta empresa.</p>
+          <h2 className="font-semibold text-lg">Conectar WhatsApp</h2>
+          <p className="text-sm text-muted-foreground">Entre com a conta Meta responsável pelo WhatsApp Business e conecte o número oficial desta empresa.</p>
         </div>
-        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? registered ? 'Ativo' : 'Registro pendente' : 'Não conectado'}</span>
+        <span className="rounded-full border bg-white px-2 py-1 text-xs">{loading ? 'Carregando' : connected ? registered ? 'Conectado' : 'Ativação pendente' : 'Não conectado'}</span>
       </div>
 
-      {connected && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Número</p><p className="text-sm font-medium">{connection?.displayPhoneNumber || 'Número conectado'}</p></div>
-        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Nome verificado</p><p className="text-sm font-medium">{connection?.verifiedName || '-'}</p></div>
-        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">WABA</p><p className="text-sm font-medium">{connection?.wabaName || 'Conta WhatsApp Business'}</p></div>
-        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Qualidade</p><p className="text-sm font-medium">{connection?.qualityRating || '-'}</p></div>
+      {connected && <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Número conectado</p><p className="text-sm font-medium">{connection?.displayPhoneNumber || 'Número conectado'}</p></div>
+        <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Nome da empresa</p><p className="text-sm font-medium">{connection?.verifiedName || connection?.wabaName || 'WhatsApp Business'}</p></div>
       </div>}
 
-      {!loading && !connected && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">O Embedded Signup ainda precisa ser configurado pelo Super Admin do FlipForm.</div>}
-      {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Conecte a conta oficial de WhatsApp Business desta empresa. O FlipForm validará o WABA e o número diretamente na Meta antes de salvar.</p>}
-      {!loading && connected && !runtimeAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A credencial de runtime do WhatsApp precisa ser configurada pelo Super Admin para registrar ou operar este número.</div>}
+      {!loading && !connected && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A conexão com o WhatsApp ainda está sendo preparada pela plataforma. Tente novamente mais tarde ou fale com o suporte.</div>}
+      {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Clique em <strong>Conectar WhatsApp</strong>, faça login na Meta e escolha a conta e o número que pertencem a esta empresa.</p>}
+      {!loading && connected && !runtimeAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A autorização foi recebida. A ativação do número ainda está sendo finalizada pela plataforma.</div>}
 
       {connected && <div className={`rounded-md border p-4 ${registered ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className={`text-sm font-medium ${registered ? 'text-emerald-900' : 'text-amber-900'}`}>Registro do número na Cloud API: {registered ? 'concluído' : 'pendente'}</p>
+            <p className={`text-sm font-medium ${registered ? 'text-emerald-900' : 'text-amber-900'}`}>Ativação do número: {registered ? 'concluída' : 'pendente'}</p>
             <p className={`mt-1 text-xs ${registered ? 'text-emerald-800' : 'text-amber-800'}`}>
               {registered
-                ? 'O número está registrado para operação pela Cloud API. Você pode informar outro PIN abaixo apenas se precisar registrar novamente ou atualizar a verificação em duas etapas.'
-                : 'Escolha um PIN de 6 dígitos para a verificação em duas etapas e conclua o registro. Guarde esse PIN em local seguro: o FlipForm não salva o PIN.'}
+                ? 'Seu número está pronto para atendimento no FlipForm. Só altere o PIN se precisar atualizar a verificação em duas etapas.'
+                : 'Crie um PIN de 6 dígitos para concluir a ativação. Guarde esse PIN em local seguro: o FlipForm não salva o PIN.'}
             </p>
           </div>
-          {registered && connection?.registeredAt && <span className="text-[11px] text-emerald-800">Registrado em {new Date(connection.registeredAt).toLocaleString('pt-BR')}</span>}
+          {registered && connection?.registeredAt && <span className="text-[11px] text-emerald-800">Ativado em {new Date(connection.registeredAt).toLocaleString('pt-BR')}</span>}
         </div>
         <div className="mt-3 flex max-w-md flex-wrap gap-2">
           <input
@@ -313,7 +311,7 @@ export function WhatsAppEmbeddedSignupCard() {
             onClick={registerPhone}
             disabled={registering || connecting || disconnecting || !runtimeAvailable || pin.length !== 6}
           >
-            {registering ? 'Registrando...' : registered ? 'Registrar novamente' : 'Registrar número'}
+            {registering ? 'Ativando...' : registered ? 'Atualizar PIN' : 'Ativar número'}
           </button>
         </div>
       </div>}
@@ -322,7 +320,7 @@ export function WhatsAppEmbeddedSignupCard() {
         {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={connect} disabled={connecting || disconnecting || registering}>{connecting ? 'Conectando...' : connected ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}</button>}
         {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting || registering}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
-      <p className="text-xs text-muted-foreground">As credenciais técnicas permanecem somente no servidor da plataforma. O PIN é enviado à Meta apenas no momento do registro e não é persistido pelo FlipForm. Inbox, webhook e envio usam exclusivamente o vínculo de número validado no servidor.</p>
+      <p className="text-xs text-muted-foreground">A conexão é feita com segurança pela Meta. Credenciais técnicas ficam protegidas no servidor e não são exibidas neste painel.</p>
     </div>
   </div>;
 }
