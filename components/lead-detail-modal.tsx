@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
-import { buildWhatsAppUrl } from '@/lib/whatsapp-link';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
 import { CityCombobox } from '@/components/city-combobox';
@@ -113,6 +112,26 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     onClose();
   };
 
+  const openWhatsAppConversation = async () => {
+    try {
+      const response = await fetch(`/api/inbox/leads/${encodeURIComponent(leadId)}/whatsapp-conversation`, {
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 422) {
+          toast.info(data.error || 'Ainda não há conversa do WhatsApp para este lead.');
+          return;
+        }
+        throw new Error(data.error || 'Não foi possível abrir a conversa do WhatsApp.');
+      }
+      if (!data.conversationId) throw new Error('A conversa do WhatsApp não foi encontrada.');
+      window.location.assign(`/inbox?conversationId=${encodeURIComponent(data.conversationId)}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível abrir a conversa do WhatsApp.');
+    }
+  };
+
   const finalStageId = stages.at(-1)?.id;
   const isFinalStage = Boolean(finalStageId && lead?.stageId === finalStageId) || lead?.status === 'won';
 
@@ -124,8 +143,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     );
   }
 
-  const whatsappUrl = buildWhatsAppUrl(lead.phone);
-
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
@@ -136,22 +153,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 {lead.name}
                 <Badge style={{ backgroundColor: lead.stage.color }} className="text-white border-0">{lead.stage.name}</Badge>
                 {isFinalStage && <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Fechamento</Badge>}
-                {lead.canContactWhatsApp && whatsappUrl && (
+                {lead.canContactWhatsApp && lead.phone && (
                   <Button
-                    asChild
                     size="icon"
                     variant="outline"
-                    title="Conversar pelo WhatsApp"
+                    title="Abrir conversa no WhatsApp"
                     className="h-8 w-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                    onClick={() => void openWhatsAppConversation()}
+                    aria-label={`Abrir conversa do WhatsApp de ${lead.name}`}
                   >
-                    <a
-                      href={whatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Conversar com ${lead.name} pelo WhatsApp`}
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                    </a>
+                    <MessageCircle className="h-4 w-4" />
                   </Button>
                 )}
               </DialogTitle>
