@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -57,8 +57,10 @@ export function WhatsAppTemplatesCard() {
   const [header, setHeader] = useState('');
   const [body, setBody] = useState('');
   const [footer, setFooter] = useState('');
+  const requestSequence = useRef(0);
 
   const load = useCallback(async (options: { append?: boolean; cursor?: string | null; silent?: boolean } = {}) => {
+    const requestId = ++requestSequence.current;
     const append = Boolean(options.append);
     if (append) setLoadingMore(true);
     else if (!options.silent) setState('loading');
@@ -68,6 +70,8 @@ export function WhatsAppTemplatesCard() {
       if (options.cursor) url.searchParams.set('after', options.cursor);
       const response = await fetch(url.toString(), { cache: 'no-store' });
       const data = await response.json();
+
+      if (requestId !== requestSequence.current) return;
 
       if (response.status === 409) {
         setState('not_connected');
@@ -88,16 +92,17 @@ export function WhatsAppTemplatesCard() {
       setNextCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null);
       setState('ready');
     } catch (error: any) {
+      if (requestId !== requestSequence.current) return;
       setState('error');
       toast.error(error.message || 'Não foi possível carregar os modelos do WhatsApp.');
     } finally {
-      setLoadingMore(false);
+      if (requestId === requestSequence.current) setLoadingMore(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
-    const handleConnectionChange = () => void load({ silent: true });
+    const handleConnectionChange = () => void load();
     window.addEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, handleConnectionChange);
     return () => window.removeEventListener(WHATSAPP_CONNECTION_CHANGED_EVENT, handleConnectionChange);
   }, [load]);
@@ -178,10 +183,11 @@ export function WhatsAppTemplatesCard() {
 
       {state === 'ready' && <>
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Aprovados</p><p className="text-xl font-semibold">{counters.approved}</p></div>
-          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Em análise</p><p className="text-xl font-semibold">{counters.pending}</p></div>
-          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Rejeitados</p><p className="text-xl font-semibold">{counters.rejected}</p></div>
+          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Aprovados{nextCursor ? ' carregados' : ''}</p><p className="text-xl font-semibold">{counters.approved}</p></div>
+          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Em análise{nextCursor ? ' carregados' : ''}</p><p className="text-xl font-semibold">{counters.pending}</p></div>
+          <div className="rounded-md border bg-slate-50 p-3"><p className="text-xs text-muted-foreground">Rejeitados{nextCursor ? ' carregados' : ''}</p><p className="text-xl font-semibold">{counters.rejected}</p></div>
         </div>
+        {nextCursor && <p className="text-xs text-muted-foreground">Contagens dos modelos carregados nesta tela. Use “Carregar mais” para incluir as próximas páginas da conta.</p>}
 
         <div className="space-y-2">
           {templates.length === 0 && <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Nenhum modelo encontrado nesta conta. Você pode criar o primeiro modelo abaixo.</div>}
