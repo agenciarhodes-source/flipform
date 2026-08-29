@@ -39,8 +39,8 @@ function whatsappDisconnected(): ChannelSummary {
   return {
     level: 'not_connected',
     label: 'Não conectado',
-    detail: 'WhatsApp Business é opcional. Conecte somente se quiser usar mensagens e automações deste canal.',
-    actionLabel: 'Ver WhatsApp',
+    detail: 'Conecte o WhatsApp Business da sua empresa para atender clientes, visualizar conversas e usar automações no FlipForm.',
+    actionLabel: 'Conectar WhatsApp',
     href: '#whatsapp-connection',
     usable: false,
   };
@@ -56,7 +56,7 @@ function whatsappSummary(payload: any): ChannelSummary {
     return {
       level: 'action_required',
       label: 'Conexão precisa de atenção',
-      detail: `${phone}. O canal está conectado, mas ainda não está pronto para operar.`,
+      detail: `${phone}. A conexão foi autorizada, mas ainda está sendo finalizada pela plataforma.`,
       actionLabel: 'Ver conexão',
       href: '#whatsapp-connection',
       usable: false,
@@ -67,7 +67,7 @@ function whatsappSummary(payload: any): ChannelSummary {
     return {
       level: 'action_required',
       label: 'Ativação pendente',
-      detail: `${phone}. Falta concluir a ativação para usar a Cloud API.`,
+      detail: `${phone}. Falta concluir a ativação para começar a usar o WhatsApp no FlipForm.`,
       actionLabel: 'Concluir ativação',
       href: '#whatsapp-connection',
       usable: false,
@@ -89,7 +89,7 @@ function whatsappSummary(payload: any): ChannelSummary {
     return {
       level: 'attention',
       label: payload.health?.label || 'Conectado com atenção',
-      detail: `${phone}. ${payload.health?.summary || 'A conexão existe, mas vale revalidar a saúde do canal.'}`,
+      detail: `${phone}. ${payload.health?.summary || 'A conexão está ativa, mas precisa ser verificada.'}`,
       actionLabel: 'Ver conexão',
       href: '#whatsapp-connection',
       usable: true,
@@ -99,7 +99,7 @@ function whatsappSummary(payload: any): ChannelSummary {
   return {
     level: 'ready',
     label: payload.health?.label || 'Pronto',
-    detail: `${phone}. O número está conectado, registrado e pronto para a Cloud API.`,
+    detail: `${phone}. O número está conectado e pronto para atendimento no FlipForm.`,
     actionLabel: 'Ver conexão',
     href: '#whatsapp-connection',
     usable: true,
@@ -109,7 +109,7 @@ function whatsappSummary(payload: any): ChannelSummary {
 const LOADING_SUMMARY: ChannelSummary = {
   level: 'loading',
   label: 'Verificando...',
-  detail: 'Consultando o estado atual deste canal.',
+  detail: 'Consultando o estado atual do WhatsApp.',
   actionLabel: 'Aguarde',
   href: '#',
   usable: false,
@@ -148,7 +148,7 @@ export function ClientConnectionOnboarding() {
               <p className="text-sm font-medium text-brand-700">Canal de atendimento</p>
               <h2 id="connection-onboarding-title" className="mt-1 text-2xl font-semibold tracking-tight">WhatsApp Business</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Conecte o WhatsApp oficial da sua empresa para usar atendimento, Inbox e automações no FlipForm. A configuração técnica da plataforma permanece centralizada e sua empresa autoriza apenas o próprio número.
+                Conecte o número oficial da sua empresa para atender clientes diretamente pelo FlipForm. As configurações técnicas ficam protegidas e são administradas pela plataforma.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -171,7 +171,7 @@ export function ClientConnectionOnboarding() {
           <article className="rounded-xl border bg-background p-4 sm:p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cloud API oficial</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Integração oficial</p>
                 <h3 className="mt-1 text-lg font-semibold">WhatsApp</h3>
               </div>
               <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${badgeClass(whatsapp.level)}`}>
