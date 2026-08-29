@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
+import { WhatsAppPlatformPreflightCard } from './whatsapp-platform-preflight-card';
 
 type Settings = {
   appId: string | null;
@@ -119,15 +120,15 @@ export default function AdminIntegrationsPage() {
       <div className="space-y-2"><Label htmlFor="businessLoginConfigId">Facebook Login for Business — Configuration ID de Ads</Label><Input id="businessLoginConfigId" maxLength={128} value={settings.businessLoginConfigId || ''} onChange={e => setSettings({ ...settings, businessLoginConfigId: e.target.value })} /><p className="text-xs text-muted-foreground">Configuração utilizada pelo fluxo de autorização de anúncios e Pixel/Dataset.</p></div>
 
       <div className="border-t pt-5 space-y-4">
-        <div><h3 className="font-medium">WhatsApp Embedded Signup</h3><p className="text-xs text-muted-foreground">Credenciais de plataforma usadas para atribuir o System User do FlipForm ao WABA do cliente. Os tokens ficam criptografados e nunca são enviados ao tenant.</p></div>
+        <div><h3 className="font-medium">WhatsApp Embedded Signup</h3><p className="text-xs text-muted-foreground">Credenciais universais da plataforma usadas automaticamente no onboarding dos clientes. Cada tenant só autoriza a própria empresa e o próprio número; os dados técnicos abaixo são configurados uma única vez no FlipForm.</p></div>
         <div className="grid md:grid-cols-2 gap-4">
           <div className="space-y-2"><Label htmlFor="whatsappEmbeddedSignupConfigId">Embedded Signup — Configuration ID</Label><Input id="whatsappEmbeddedSignupConfigId" maxLength={128} value={settings.whatsappEmbeddedSignupConfigId || ''} onChange={e => setSettings({ ...settings, whatsappEmbeddedSignupConfigId: e.target.value })} /></div>
           <div className="space-y-2"><Label htmlFor="whatsappBusinessId">Business ID da plataforma</Label><Input id="whatsappBusinessId" maxLength={128} value={settings.whatsappBusinessId || ''} onChange={e => setSettings({ ...settings, whatsappBusinessId: e.target.value })} /></div>
           <div className="space-y-2"><Label htmlFor="whatsappSystemUserId">System User ID do FlipForm</Label><Input id="whatsappSystemUserId" maxLength={128} value={settings.whatsappSystemUserId || ''} onChange={e => setSettings({ ...settings, whatsappSystemUserId: e.target.value })} /></div>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <div className="space-y-2"><Label htmlFor="whatsappAdminSystemUserAccessToken">Admin System User Access Token</Label><Input id="whatsappAdminSystemUserAccessToken" type="password" maxLength={8192} autoComplete="new-password" value={whatsappAdminSystemUserAccessToken} onChange={e => setWhatsappAdminSystemUserAccessToken(e.target.value)} placeholder={settings.whatsappAdminSystemUserAccessTokenConfigured ? settings.whatsappAdminSystemUserAccessTokenMasked || 'Token salvo' : 'Informe o token administrativo'} /><p className="text-xs text-muted-foreground">Usado somente no backend para atribuir o System User ao WABA. Deixe vazio para preservar o token salvo.</p></div>
-          <div className="space-y-2"><Label htmlFor="whatsappSystemUserAccessToken">System User Access Token de runtime</Label><Input id="whatsappSystemUserAccessToken" type="password" maxLength={8192} autoComplete="new-password" value={whatsappSystemUserAccessToken} onChange={e => setWhatsappSystemUserAccessToken(e.target.value)} placeholder={settings.whatsappSystemUserAccessTokenConfigured ? settings.whatsappSystemUserAccessTokenMasked || 'Token salvo' : 'Informe o token de runtime'} /><p className="text-xs text-muted-foreground">Usado no backend para validar ativos, assinar o WABA e operar a Cloud API.</p></div>
+          <div className="space-y-2"><Label htmlFor="whatsappAdminSystemUserAccessToken">Admin System User Access Token</Label><Input id="whatsappAdminSystemUserAccessToken" type="password" maxLength={8192} autoComplete="new-password" value={whatsappAdminSystemUserAccessToken} onChange={e => setWhatsappAdminSystemUserAccessToken(e.target.value)} placeholder={settings.whatsappAdminSystemUserAccessTokenConfigured ? settings.whatsappAdminSystemUserAccessTokenMasked || 'Token salvo' : 'Informe o token administrativo'} /><p className="text-xs text-muted-foreground">Usado somente no backend para atribuir automaticamente o System User do FlipForm ao WABA autorizado pelo cliente. Deixe vazio para preservar o token salvo.</p></div>
+          <div className="space-y-2"><Label htmlFor="whatsappSystemUserAccessToken">System User Access Token de runtime</Label><Input id="whatsappSystemUserAccessToken" type="password" maxLength={8192} autoComplete="new-password" value={whatsappSystemUserAccessToken} onChange={e => setWhatsappSystemUserAccessToken(e.target.value)} placeholder={settings.whatsappSystemUserAccessTokenConfigured ? settings.whatsappSystemUserAccessTokenMasked || 'Token salvo' : 'Informe o token de runtime'} /><p className="text-xs text-muted-foreground">Usado somente no backend para validar ativos, assinar o WABA e operar mensagens depois que cada cliente autoriza o próprio WhatsApp.</p></div>
         </div>
       </div>
 
@@ -138,6 +139,7 @@ export default function AdminIntegrationsPage() {
       <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar Ads/WhatsApp e padrões'}</Button>
     </Card>}
 
+    <WhatsAppPlatformPreflightCard />
     <MetaPlatformReadinessPanel />
     <TenantMetaBindingManager />
   </div>;
