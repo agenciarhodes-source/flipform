@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
@@ -64,14 +64,14 @@ function TaskBadge({ ind }: { ind: TaskIndicator | undefined }) {
   );
 }
 
-function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndicator; onClick: () => void }) {
+function LeadCard({ lead, taskInd, onClick, onOpenConversation }: { lead: Lead; taskInd?: TaskIndicator; onClick: () => void; onOpenConversation: () => void }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      onClick={(e) => { if (!isDragging) onClick(); }}
+      onClick={() => { if (!isDragging) onClick(); }}
       className={`bg-card border rounded-md p-3 mb-2 cursor-grab active:cursor-grabbing hover:shadow-sm transition ${isDragging ? 'opacity-50' : ''} ${taskInd && taskInd.overdue > 0 ? 'border-l-2 border-l-red-500' : ''}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -88,6 +88,21 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
           <TaskBadge ind={taskInd} />
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {lead.phone && (
+            <button
+              type="button"
+              title="Abrir conversa no WhatsApp"
+              aria-label={`Abrir conversa do WhatsApp de ${lead.name}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenConversation();
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MessageCircle className="h-4 w-4" />
+            </button>
+          )}
           {lead.assignedUser && <div className="flex items-center gap-1 text-[10px] text-muted-foreground"><UserIcon className="w-3 h-3" />{lead.assignedUser.name.split(' ')[0]}</div>}
         </div>
       </div>
@@ -96,7 +111,7 @@ function LeadCard({ lead, taskInd, onClick }: { lead: Lead; taskInd?: TaskIndica
   );
 }
 
-function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void }) {
+function Column({ stage, leads, taskInds, onCardClick, onOpenConversation }: { stage: Stage; leads: Lead[]; taskInds: Record<string, TaskIndicator>; onCardClick: (id: string) => void; onOpenConversation: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
     <div className="flex-none w-[360px] min-w-[360px] max-w-[360px] h-full shrink-0 flex flex-col bg-muted/40 rounded-md">
@@ -108,7 +123,7 @@ function Column({ stage, leads, taskInds, onCardClick }: { stage: Stage; leads: 
         <Badge variant="secondary" className="text-xs h-5">{leads.length}</Badge>
       </div>
       <div ref={setNodeRef} className={`flex-1 min-h-0 p-2 overflow-y-auto scrollbar-thin transition ${isOver ? 'bg-brand-50/60' : ''}`}>
-        {leads.map((l) => <LeadCard key={l.id} lead={l} taskInd={taskInds[l.id]} onClick={() => onCardClick(l.id)} />)}
+        {leads.map((l) => <LeadCard key={l.id} lead={l} taskInd={taskInds[l.id]} onClick={() => onCardClick(l.id)} onOpenConversation={() => onOpenConversation(l.id)} />)}
         {leads.length === 0 && <div className="text-xs text-muted-foreground text-center py-8">Sem leads</div>}
       </div>
     </div>
@@ -147,6 +162,26 @@ export default function KanbanPage() {
     const data = await fetch(url).then((r) => r.json());
     setLeads(data.leads || []);
     setLoading(false);
+  };
+
+  const openWhatsAppConversation = async (leadId: string) => {
+    try {
+      const response = await fetch(`/api/inbox/leads/${encodeURIComponent(leadId)}/whatsapp-conversation`, {
+        cache: 'no-store',
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 422) {
+          toast.info(data.error || 'Ainda não há conversa do WhatsApp para este lead.');
+          return;
+        }
+        throw new Error(data.error || 'Não foi possível abrir a conversa do WhatsApp.');
+      }
+      if (!data.conversationId) throw new Error('A conversa do WhatsApp não foi encontrada.');
+      window.location.assign(`/inbox?conversationId=${encodeURIComponent(data.conversationId)}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível abrir a conversa do WhatsApp.');
+    }
   };
 
   useEffect(() => { loadPipelines(); }, []);
@@ -258,6 +293,7 @@ export default function KanbanPage() {
                   leads={leads.filter((l) => l.stageId === s.id)}
                   taskInds={taskInds}
                   onCardClick={(id) => setSelectedLeadId(id)}
+                  onOpenConversation={(id) => void openWhatsAppConversation(id)}
                 />
                 ))}
               </div>
