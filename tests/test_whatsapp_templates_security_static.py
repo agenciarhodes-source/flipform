@@ -40,3 +40,17 @@ def test_integrations_page_exposes_templates_next_to_official_signup():
     assert "WhatsAppEmbeddedSignupCard" in PAGE
     assert "WhatsAppTemplatesCard" in PAGE
     assert 'id="whatsapp-templates"' in PAGE
+
+
+def test_template_client_ignores_superseded_requests_after_connection_changes():
+    assert "const requestSequence = useRef(0);" in CLIENT
+    assert "const requestId = ++requestSequence.current;" in CLIENT
+    assert "if (requestId !== requestSequence.current) return;" in CLIENT
+    assert "const handleConnectionChange = () => void load();" in CLIENT
+
+
+def test_template_status_counters_are_explicit_when_pagination_is_incomplete():
+    assert "Aprovados{nextCursor ? ' carregados' : ''}" in CLIENT
+    assert "Em análise{nextCursor ? ' carregados' : ''}" in CLIENT
+    assert "Rejeitados{nextCursor ? ' carregados' : ''}" in CLIENT
+    assert "Contagens dos modelos carregados nesta tela." in CLIENT
