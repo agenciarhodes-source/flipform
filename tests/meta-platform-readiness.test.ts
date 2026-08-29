@@ -144,3 +144,36 @@ test('Meta readiness rejects localhost as a production callback base', async () 
     ?.checks.find(check => check.key === 'public_app_url');
   assert.equal(publicUrlCheck?.status, 'fail');
 });
+
+test('Ads and WhatsApp rollout is not blocked by optional Instagram diagnostics', async () => {
+  const { buildMetaPlatformReadiness } = await import('../lib/meta/platform-readiness');
+  const { buildMetaRolloutReadiness } = await import('../lib/meta/platform-rollout-readiness');
+  const settings = configuredSettings();
+  settings.instagramAppId = '';
+  settings.instagramAppSecretConfigured = false;
+  settings.instagramLoginConfigured = false;
+
+  const diagnostics = buildMetaPlatformReadiness(
+    settings as any,
+    {
+      ...readableProbes,
+      instagramLoginReadable: false,
+      instagramWebhookSecretReadable: false,
+    },
+    {
+      nodeEnv: 'production',
+      appUrl: 'https://app.flipform.com.br',
+      instagramWebhookVerifyTokenConfigured: false,
+      whatsappWebhookVerifyTokenConfigured: true,
+    },
+  );
+  const rollout = buildMetaRolloutReadiness(diagnostics);
+
+  assert.equal(diagnostics.status, 'action_required');
+  assert.equal(rollout.status, 'ready_for_external_validation');
+  assert.match(rollout.summary, /Ads e WhatsApp/);
+  assert.match(rollout.components.find(component => component.key === 'instagram')?.label || '', /opcional/i);
+  assert.equal(rollout.components.find(component => component.key === 'instagram')?.status, 'action_required');
+  assert.equal(rollout.components.find(component => component.key === 'whatsapp')?.status, 'ready');
+  assert.equal(rollout.components.find(component => component.key === 'whatsapp_webhook')?.status, 'ready');
+});
