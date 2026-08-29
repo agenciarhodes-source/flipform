@@ -4,7 +4,6 @@ import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { IntegrationsClient } from './integrations-client';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
-import { WhatsAppConnectionHealthCard } from './whatsapp-connection-health-card';
 
 export default async function IntegrationsPage() {
   const session = await getSession();
@@ -15,7 +14,6 @@ export default async function IntegrationsPage() {
     <IntegrationsClient />
     <div id="whatsapp-connection" className="scroll-mt-24">
       <WhatsAppEmbeddedSignupCard />
-      <WhatsAppConnectionHealthCard />
     </div>
   </>;
 }
