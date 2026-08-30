@@ -4,11 +4,11 @@ import {
   getPlatformMetaSettingsForAdmin,
   getPlatformWhatsAppEmbeddedSignupCredentials,
 } from './platform-settings';
+import { verifyWhatsAppPlatformSystemUser } from './whatsapp';
 import {
-  validateWhatsAppPlatformAdminToken,
-  validateWhatsAppPlatformRuntimeToken,
-  verifyWhatsAppPlatformSystemUser,
-} from './whatsapp';
+  validateWhatsAppPlatformAdminTokenForPreflight,
+  validateWhatsAppPlatformRuntimeTokenForPreflight,
+} from './whatsapp-platform-token-preflight';
 
 export type WhatsAppPlatformPreflightCheck = {
   key: 'configuration' | 'admin_token' | 'runtime_token' | 'system_user';
@@ -63,13 +63,15 @@ export async function getWhatsAppPlatformPreflightForAdmin(): Promise<WhatsAppPl
 
   if (credentials) {
     [adminTokenReady, runtimeTokenReady] = await Promise.all([
-      probe(() => validateWhatsAppPlatformAdminToken({
+      probe(() => validateWhatsAppPlatformAdminTokenForPreflight({
         accessToken: credentials.adminSystemUserAccessToken,
         appId: credentials.appId,
+        appSecret: credentials.appSecret,
       })),
-      probe(() => validateWhatsAppPlatformRuntimeToken({
+      probe(() => validateWhatsAppPlatformRuntimeTokenForPreflight({
         accessToken: credentials.systemUserAccessToken,
         appId: credentials.appId,
+        appSecret: credentials.appSecret,
       })),
     ]);
 
