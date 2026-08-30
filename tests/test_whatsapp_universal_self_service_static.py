@@ -30,16 +30,23 @@ def test_tenant_onboarding_uses_one_universal_platform_box():
 def test_universal_preflight_is_admin_only_read_only_and_secret_safe():
     route = read('app/api/admin/integrations/meta/whatsapp/preflight/route.ts')
     preflight = read('lib/meta/whatsapp-platform-preflight.ts')
+    token_preflight = read('lib/meta/whatsapp-platform-token-preflight.ts')
     helper = read('lib/meta/whatsapp.ts')
-    combined = '\n'.join((route, preflight))
+    combined = '\n'.join((route, preflight, token_preflight))
 
     assert 'withPlatformAdmin' in route
     assert "method: 'POST'" not in preflight
-    assert 'validateWhatsAppPlatformAdminToken' in preflight
-    assert 'validateWhatsAppPlatformRuntimeToken' in preflight
+    assert 'validateWhatsAppPlatformAdminTokenForPreflight' in preflight
+    assert 'validateWhatsAppPlatformRuntimeTokenForPreflight' in preflight
     assert 'verifyWhatsAppPlatformSystemUser' in preflight
     assert '/system_users' in helper
     assert "fields: 'id,name,role'" in helper
+
+    # Platform token inspection must be authorized by the app itself instead of
+    # asking a System User token to inspect itself.
+    assert 'const appAccessToken = `${input.appId}|${input.appSecret}`' in token_preflight
+    assert 'Authorization: `Bearer ${appAccessToken}`' in token_preflight
+    assert 'Authorization: `Bearer ${input.accessToken}`' not in token_preflight
 
     for forbidden in (
         'prisma.',
