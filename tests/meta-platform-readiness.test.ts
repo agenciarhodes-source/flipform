@@ -203,6 +203,58 @@ test('universal WhatsApp runtime token validation enforces FlipForm app and mess
   }
 });
 
+test('universal WhatsApp preflight inspects platform tokens with the app access token', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ token: string | null; authorization: string | null }> = [];
+  try {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url);
+      const token = url.searchParams.get('input_token');
+      const headers = new Headers(init?.headers);
+      calls.push({ token, authorization: headers.get('Authorization') });
+
+      const scopes = token === 'admin-token-placeholder'
+        ? ['business_management']
+        : ['whatsapp_business_management', 'whatsapp_business_messaging'];
+
+      return new Response(JSON.stringify({
+        data: {
+          is_valid: true,
+          app_id: '123456789',
+          scopes,
+          granular_scopes: [],
+        },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch;
+
+    const {
+      validateWhatsAppPlatformAdminTokenForPreflight,
+      validateWhatsAppPlatformRuntimeTokenForPreflight,
+    } = await import('../lib/meta/whatsapp-platform-token-preflight');
+
+    const admin = await validateWhatsAppPlatformAdminTokenForPreflight({
+      accessToken: 'admin-token-placeholder',
+      appId: '123456789',
+      appSecret: 'app-secret-placeholder',
+    });
+    const runtime = await validateWhatsAppPlatformRuntimeTokenForPreflight({
+      accessToken: 'runtime-token-placeholder',
+      appId: '123456789',
+      appSecret: 'app-secret-placeholder',
+    });
+
+    assert.equal(admin.grantedScopes.includes('business_management'), true);
+    assert.equal(runtime.grantedScopes.includes('whatsapp_business_management'), true);
+    assert.equal(runtime.grantedScopes.includes('whatsapp_business_messaging'), true);
+    assert.deepEqual(calls, [
+      { token: 'admin-token-placeholder', authorization: 'Bearer 123456789|app-secret-placeholder' },
+      { token: 'runtime-token-placeholder', authorization: 'Bearer 123456789|app-secret-placeholder' },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('universal WhatsApp system user validation checks membership in FlipForm Business without writes', async () => {
   const originalFetch = globalThis.fetch;
   try {
