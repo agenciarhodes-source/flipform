@@ -1,10 +1,7 @@
 import 'server-only';
 
 import { getEffectiveGrantedScopes, META_PLATFORM_GRAPH_API_VERSION } from './oauth';
-import {
-  WHATSAPP_PLATFORM_ADMIN_REQUIRED_SCOPES,
-  WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES,
-} from './whatsapp';
+import { WHATSAPP_SYSTEM_USER_REQUIRED_SCOPES } from './whatsapp';
 
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
@@ -20,9 +17,9 @@ async function inspectPlatformSystemUserToken(input: PlatformTokenPreflightInput
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/debug_token`);
   url.search = new URLSearchParams({ input_token: input.accessToken }).toString();
 
-  // For platform-level preflight, use the app access token as the inspector.
-  // This keeps the token being inspected separate from the credential that
-  // authorizes /debug_token and avoids self-inspection failures from Meta.
+  // Runtime token inspection is authorized by the app itself. The administrative
+  // credential is intentionally validated by its real read-only Business capability
+  // in whatsapp-platform-preflight.ts instead of relying on /debug_token scopes.
   const appAccessToken = `${input.appId}|${input.appSecret}`;
   let response: Response;
   try {
@@ -61,17 +58,6 @@ async function inspectPlatformSystemUserToken(input: PlatformTokenPreflightInput
   if (missingScopes.length > 0) throw new Error('Meta WhatsApp platform token missing required scopes');
 
   return { grantedScopes };
-}
-
-export async function validateWhatsAppPlatformAdminTokenForPreflight(input: {
-  accessToken: string;
-  appId: string;
-  appSecret: string;
-}) {
-  return inspectPlatformSystemUserToken({
-    ...input,
-    requiredScopes: WHATSAPP_PLATFORM_ADMIN_REQUIRED_SCOPES,
-  });
 }
 
 export async function validateWhatsAppPlatformRuntimeTokenForPreflight(input: {

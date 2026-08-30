@@ -36,17 +36,21 @@ def test_universal_preflight_is_admin_only_read_only_and_secret_safe():
 
     assert 'withPlatformAdmin' in route
     assert "method: 'POST'" not in preflight
-    assert 'validateWhatsAppPlatformAdminTokenForPreflight' in preflight
+    assert 'validateWhatsAppPlatformAdminTokenForPreflight' not in preflight
     assert 'validateWhatsAppPlatformRuntimeTokenForPreflight' in preflight
     assert 'verifyWhatsAppPlatformSystemUser' in preflight
+    assert 'adminTokenReady = adminCapability.ok' in preflight
+    assert 'systemUserReady = adminCapability.ok && adminCapability.value === true' in preflight
     assert '/system_users' in helper
     assert "fields: 'id,name,role'" in helper
 
-    # Platform token inspection must be authorized by the app itself instead of
-    # asking a System User token to inspect itself.
+    # Runtime token inspection is authorized by the app itself instead of asking
+    # a System User token to inspect itself. The admin token is validated by the
+    # real read-only Business /system_users capability instead.
     assert 'const appAccessToken = `${input.appId}|${input.appSecret}`' in token_preflight
     assert 'Authorization: `Bearer ${appAccessToken}`' in token_preflight
     assert 'Authorization: `Bearer ${input.accessToken}`' not in token_preflight
+    assert 'WHATSAPP_PLATFORM_ADMIN_REQUIRED_SCOPES' not in token_preflight
 
     for forbidden in (
         'prisma.',

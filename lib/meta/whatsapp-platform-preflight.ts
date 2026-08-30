@@ -5,10 +5,7 @@ import {
   getPlatformWhatsAppEmbeddedSignupCredentials,
 } from './platform-settings';
 import { verifyWhatsAppPlatformSystemUser } from './whatsapp';
-import {
-  validateWhatsAppPlatformAdminTokenForPreflight,
-  validateWhatsAppPlatformRuntimeTokenForPreflight,
-} from './whatsapp-platform-token-preflight';
+import { validateWhatsAppPlatformRuntimeTokenForPreflight } from './whatsapp-platform-token-preflight';
 
 export type WhatsAppPlatformPreflightCheck = {
   key: 'configuration' | 'admin_token' | 'runtime_token' | 'system_user';
@@ -42,6 +39,14 @@ async function probe(loader: () => Promise<unknown>) {
   }
 }
 
+async function probeResult<T>(loader: () => Promise<T>) {
+  try {
+    return { ok: true as const, value: await loader() };
+  } catch {
+    return { ok: false as const, value: null };
+  }
+}
+
 /**
  * Performs a read-only validation of the universal WhatsApp platform box.
  * It never reads or mutates tenants, WABAs from customers, leads, conversations,
@@ -62,11 +67,15 @@ export async function getWhatsAppPlatformPreflightForAdmin(): Promise<WhatsAppPl
   let systemUserReady = false;
 
   if (credentials) {
-    [adminTokenReady, runtimeTokenReady] = await Promise.all([
-      probe(() => validateWhatsAppPlatformAdminTokenForPreflight({
-        accessToken: credentials.adminSystemUserAccessToken,
-        appId: credentials.appId,
+    // The administrative credential is validated against the exact read-only
+    // Business capability FlipForm needs during onboarding. This is more
+    // authoritative than relying on how /debug_token represents business scopes.
+    const [adminCapability, runtimeReady] = await Promise.all([
+      probeResult(() => verifyWhatsAppPlatformSystemUser({
+        adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
         appSecret: credentials.appSecret,
+        businessId: credentials.businessId,
+        systemUserId: credentials.systemUserId,
       })),
       probe(() => validateWhatsAppPlatformRuntimeTokenForPreflight({
         accessToken: credentials.systemUserAccessToken,
@@ -75,14 +84,9 @@ export async function getWhatsAppPlatformPreflightForAdmin(): Promise<WhatsAppPl
       })),
     ]);
 
-    if (adminTokenReady) {
-      systemUserReady = await probe(() => verifyWhatsAppPlatformSystemUser({
-        adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
-        appSecret: credentials.appSecret,
-        businessId: credentials.businessId,
-        systemUserId: credentials.systemUserId,
-      }));
-    }
+    adminTokenReady = adminCapability.ok;
+    systemUserReady = adminCapability.ok && adminCapability.value === true;
+    runtimeTokenReady = runtimeReady;
   }
 
   const checks = [
@@ -97,8 +101,8 @@ export async function getWhatsAppPlatformPreflightForAdmin(): Promise<WhatsAppPl
       'admin_token',
       'Token administrativo',
       adminTokenReady,
-      'A Meta reconheceu o token administrativo do App FlipForm com o acesso necessário.',
-      'O token administrativo não pôde ser validado com a Meta ou não possui o acesso esperado.',
+      'A credencial administrativa conseguiu consultar os System Users do Business do FlipForm.',
+      'A credencial administrativa não conseguiu consultar os System Users do Business. Confirme business_management e o vínculo do app ao Business.',
     ),
     check(
       'runtime_token',
@@ -112,7 +116,9 @@ export async function getWhatsAppPlatformPreflightForAdmin(): Promise<WhatsAppPl
       'System User da plataforma',
       systemUserReady,
       'O System User configurado pertence ao Business do FlipForm e pode ser usado no onboarding automático.',
-      'O System User configurado não foi localizado no Business do FlipForm com a credencial administrativa informada.',
+      adminTokenReady
+        ? 'A consulta ao Business funcionou, mas o System User configurado não foi localizado nesse Business.'
+        : 'O System User só pode ser confirmado depois que a credencial administrativa consultar o Business com sucesso.',
     ),
   ];
 
