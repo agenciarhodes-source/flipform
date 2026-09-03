@@ -4,7 +4,7 @@ import { isAdminHostname } from '@/lib/host-routing';
 
 const COOKIE = 'flipform_token';
 
-const PROTECTED = ['/dashboard', '/kanban', '/leads', '/forms', '/pipelines', '/reports', '/settings', '/users', '/billing', '/domains', '/integrations', '/whatsapp-funnel'];
+const PROTECTED = ['/dashboard', '/team', '/kanban', '/leads', '/forms', '/pipelines', '/reports', '/settings', '/users', '/billing', '/domains', '/integrations', '/whatsapp-funnel'];
 const CUSTOM_DOMAIN_BLOCKED = [...PROTECTED, '/admin', '/login'];
 const ADMIN = ['/admin'];
 
