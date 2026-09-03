@@ -22,6 +22,7 @@ export type TeamHierarchyEdge = {
 export type TeamHierarchySnapshot = {
   schemaReady: boolean;
   hierarchyConfigured: boolean;
+  hierarchyEnabled: boolean;
   members: TeamHierarchyMember[];
   edges: TeamHierarchyEdge[];
 };
@@ -32,6 +33,8 @@ type EdgeRow = {
   subordinate_tenant_user_id: string;
   created_at: Date;
 };
+
+type SettingsRow = { enabled: boolean };
 
 export class TeamHierarchyError extends Error {
   constructor(public code: 'HIERARCHY_SCHEMA_NOT_READY' | 'MEMBER_NOT_FOUND' | 'FORBIDDEN_SCOPE' | 'INVALID_HIERARCHY' | 'FORBIDDEN', message: string) {
@@ -48,7 +51,7 @@ function isMissingHierarchyTable(error: any): boolean {
   if (error?.code !== 'P2010') return false;
   const providerCode = String(error?.meta?.code || '');
   const providerMessage = String(error?.meta?.message || '').toLowerCase();
-  return providerCode === '42P01' || providerMessage.includes('tenant_user_hierarchy') || providerMessage.includes('does not exist');
+  return providerCode === '42P01' || providerMessage.includes('tenant_user_hierarchy') || providerMessage.includes('tenant_team_hierarchy_settings') || providerMessage.includes('does not exist');
 }
 
 function sanitizeEdges(edges: TeamHierarchyEdge[], memberIds: Set<string>) {
@@ -73,12 +76,20 @@ export async function getTeamHierarchySnapshot(db: Db, tenantId: string): Promis
     }));
 
   try {
-    const rows = await db.$queryRaw<EdgeRow[]>(Prisma.sql`
-      SELECT id, superior_tenant_user_id, subordinate_tenant_user_id, created_at
-      FROM tenant_user_hierarchy
-      WHERE tenant_id = ${tenantId}
-      ORDER BY created_at ASC
-    `);
+    const [rows, settings] = await Promise.all([
+      db.$queryRaw<EdgeRow[]>(Prisma.sql`
+        SELECT id, superior_tenant_user_id, subordinate_tenant_user_id, created_at
+        FROM tenant_user_hierarchy
+        WHERE tenant_id = ${tenantId}
+        ORDER BY created_at ASC
+      `),
+      db.$queryRaw<SettingsRow[]>(Prisma.sql`
+        SELECT enabled
+        FROM tenant_team_hierarchy_settings
+        WHERE tenant_id = ${tenantId}
+        LIMIT 1
+      `),
+    ]);
     const memberIds = new Set(members.map((member) => member.tenantUserId));
     const edges = sanitizeEdges(rows.map((row) => ({
       id: row.id,
@@ -86,11 +97,17 @@ export async function getTeamHierarchySnapshot(db: Db, tenantId: string): Promis
       subordinateTenantUserId: row.subordinate_tenant_user_id,
       createdAt: row.created_at,
     })), memberIds);
-    return { schemaReady: true, hierarchyConfigured: edges.length > 0, members, edges };
+    return {
+      schemaReady: true,
+      hierarchyConfigured: edges.length > 0,
+      hierarchyEnabled: settings[0]?.enabled === true,
+      members,
+      edges,
+    };
   } catch (error) {
     if (!isMissingHierarchyTable(error)) throw error;
     // Safe compatibility mode: deployment can precede the explicit additive schema repair.
-    return { schemaReady: false, hierarchyConfigured: false, members, edges: [] };
+    return { schemaReady: false, hierarchyConfigured: false, hierarchyEnabled: false, members, edges: [] };
   }
 }
 
@@ -124,15 +141,14 @@ export async function resolveOperationalScope(db: Db, input: {
   if (!actor) throw new TeamHierarchyError('MEMBER_NOT_FOUND', 'Usuário não pertence a esta empresa.');
 
   const role = isRoleName(input.role) ? input.role : actor.role;
-  const legacyMode = !snapshot.schemaReady || !snapshot.hierarchyConfigured;
+  const legacyMode = !snapshot.schemaReady || !snapshot.hierarchyEnabled;
   let actorVisibleIds = new Set<string>([actor.tenantUserId]);
 
   if (role === 'owner') {
     actorVisibleIds = new Set(snapshot.members.map((member) => member.tenantUserId));
   } else if (role === 'admin' || role === 'manager') {
     if (legacyMode) {
-      // Backward compatibility: until the tenant starts configuring hierarchy,
-      // admins/managers keep exactly the broad tenant view they already had.
+      // Backward compatibility: hierarchy can be drafted without changing any current view.
       actorVisibleIds = new Set(snapshot.members.map((member) => member.tenantUserId));
     } else {
       for (const descendantId of descendantIds(actor.tenantUserId, snapshot.edges)) actorVisibleIds.add(descendantId);
@@ -226,6 +242,42 @@ export async function replaceHierarchyParents(db: PrismaClient, input: {
       `);
     }
   });
+
+  return getTeamHierarchySnapshot(db, input.tenantId);
+}
+
+export async function setHierarchyEnabled(db: PrismaClient, input: {
+  tenantId: string;
+  actorUserId: string;
+  actorRole: string;
+  enabled: boolean;
+}) {
+  if (!['owner', 'admin'].includes(input.actorRole)) {
+    throw new TeamHierarchyError('FORBIDDEN', 'Somente Dono ou Administrador pode ativar a hierarquia.');
+  }
+
+  const snapshot = await getTeamHierarchySnapshot(db, input.tenantId);
+  if (!snapshot.schemaReady) {
+    throw new TeamHierarchyError('HIERARCHY_SCHEMA_NOT_READY', 'A estrutura de hierarquia ainda não foi instalada.');
+  }
+
+  if (input.enabled) {
+    if (!snapshot.hierarchyConfigured) {
+      throw new TeamHierarchyError('INVALID_HIERARCHY', 'Cadastre os vínculos da equipe antes de ativar a hierarquia.');
+    }
+    const linkedSubordinates = new Set(snapshot.edges.map((edge) => edge.subordinateTenantUserId));
+    const missing = snapshot.members.filter((member) => ['manager', 'agent'].includes(member.role) && !linkedSubordinates.has(member.tenantUserId));
+    if (missing.length) {
+      throw new TeamHierarchyError('INVALID_HIERARCHY', `Antes de ativar, vincule um superior para: ${missing.map((member) => member.name).join(', ')}.`);
+    }
+  }
+
+  await db.$executeRaw(Prisma.sql`
+    INSERT INTO tenant_team_hierarchy_settings (tenant_id, enabled, updated_by, updated_at)
+    VALUES (${input.tenantId}, ${input.enabled}, ${input.actorUserId}, CURRENT_TIMESTAMP)
+    ON CONFLICT (tenant_id)
+    DO UPDATE SET enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP
+  `);
 
   return getTeamHierarchySnapshot(db, input.tenantId);
 }
