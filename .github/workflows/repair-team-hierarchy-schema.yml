@@ -1,0 +1,38 @@
+name: Repair Team Hierarchy Schema
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair-team-hierarchy-schema:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Apply additive hierarchy SQL only
+        run: npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260903003000_add_tenant_user_hierarchy/migration.sql
+
+      - name: Report Prisma migration history (informational)
+        continue-on-error: true
+        run: npx prisma migrate status
+
+      - name: Confirm hierarchy schema repair
+        run: echo "Team hierarchy schema repair completed. No prisma migrate deploy was executed."
