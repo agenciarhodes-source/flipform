@@ -15,29 +15,34 @@ A relação é muitos-para-muitos e tenant-scoped:
 - Gestor → Atendentes;
 - um subordinado pode possuir mais de um superior quando a operação exigir supervisão compartilhada.
 
-Os vínculos ficam exclusivamente em `tenant_user_hierarchy`. Nenhum campo de Lead, Form, Pipeline, Inbox, Conversation, WhatsApp ou integração é reutilizado para guardar hierarquia.
+Os vínculos ficam exclusivamente em `tenant_user_hierarchy`. O estado de ativação fica em `tenant_team_hierarchy_settings`. Nenhum campo de Lead, Form, Pipeline, Inbox, Conversation, WhatsApp ou integração é reutilizado para guardar hierarquia.
 
 ## Escopo
 
 O backend sempre parte de `session.tenantId` e `session.userId`.
 
+Com a hierarquia ativa:
+
 - Dono: visão de toda a empresa;
-- Administrador/Gestor com hierarquia configurada: usuário atual + descendentes;
+- Administrador/Gestor: usuário atual + descendentes;
 - Atendente: somente a própria operação;
 - seleção de outra visão só é aceita quando o alvo pertence ao conjunto autorizado do usuário logado.
 
 O navegador envia apenas `scopeTenantUserId`. O tenant nunca vem do browser como fonte de autoridade.
 
-## Compatibilidade
+## Compatibilidade e ativação segura
 
-A atualização é fail-safe:
+A atualização é fail-safe e draft-first:
 
-1. se a tabela ainda não existir, a leitura entra em modo legado;
-2. se a tabela existir mas o tenant ainda não tiver nenhum vínculo, o comportamento legado é preservado;
-3. ao cadastrar o primeiro vínculo, Administradores/Gestores passam a usar o escopo hierárquico;
-4. o Dono mantém visão total.
+1. se as tabelas ainda não existirem, a leitura entra em modo legado;
+2. depois do reparo, a hierarquia nasce **desativada** por padrão;
+3. Dono/Administrador pode montar todos os vínculos sem mudar a visão atual de ninguém;
+4. ativar exige que Gestores e Atendentes ativos tenham ao menos um superior cadastrado;
+5. somente após a ativação Administradores/Gestores passam a usar o escopo hierárquico;
+6. o Dono mantém visão total;
+7. a hierarquia pode ser desativada para restaurar imediatamente a visão ampla legada, sem apagar vínculos.
 
-Assim, deploy e reparo de schema podem ocorrer separadamente sem remover acesso dos clientes existentes.
+Assim, deploy, reparo de schema, configuração e ativação podem ocorrer separadamente sem remover acesso durante a montagem da árvore.
 
 ## Schema
 
@@ -76,9 +81,10 @@ A visão consolidada somente lê leads, compras e responsáveis já existentes.
 2. confirmar Vercel Production READY;
 3. executar manualmente `Repair Team Hierarchy Schema`;
 4. abrir **Visão da equipe** como Dono/Admin;
-5. cadastrar primeiro uma estrutura controlada (ex.: Gestor Imperatriz → Atendentes Imperatriz);
-6. validar a visão do Gestor;
-7. cadastrar os demais vínculos;
-8. comparar os totais da visão consolidada com a operação esperada.
+5. montar toda a estrutura em modo rascunho (ex.: Administrador → Gestores → Atendentes);
+6. conferir na tabela se Gestores/Atendentes possuem superior;
+7. clicar **Ativar hierarquia**;
+8. validar a visão de cada Gestor/Administrador;
+9. comparar os totais da visão consolidada com a operação esperada.
 
-O primeiro vínculo ativa o escopo hierárquico para Administradores/Gestores daquele tenant, portanto a estrutura deve ser cadastrada de forma consciente.
+Nenhum vínculo isolado altera o escopo enquanto a hierarquia estiver desativada.
