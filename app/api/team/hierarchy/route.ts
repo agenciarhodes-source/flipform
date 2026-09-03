@@ -3,12 +3,21 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
-import { getTeamHierarchySnapshot, replaceHierarchyParents, resolveOperationalScope, TeamHierarchyError } from '@/lib/team-hierarchy';
+import { getTeamHierarchySnapshot, replaceHierarchyParents, resolveOperationalScope, setHierarchyEnabled, TeamHierarchyError } from '@/lib/team-hierarchy';
 
 const hierarchyUpdateSchema = z.object({
   subordinateTenantUserId: z.string().uuid(),
   superiorTenantUserIds: z.array(z.string().uuid()).max(10),
 });
+const activationSchema = z.object({ enabled: z.boolean() });
+
+function hierarchyErrorResponse(error: TeamHierarchyError) {
+  const status = error.code === 'HIERARCHY_SCHEMA_NOT_READY' ? 503
+    : error.code === 'MEMBER_NOT_FOUND' ? 404
+      : error.code === 'INVALID_HIERARCHY' ? 400
+        : 403;
+  return NextResponse.json({ error: error.message, code: error.code }, { status });
+}
 
 export const GET = withPermission('DASHBOARD_VIEW', async (_req, session) => {
   try {
@@ -24,6 +33,7 @@ export const GET = withPermission('DASHBOARD_VIEW', async (_req, session) => {
     return NextResponse.json({
       schemaReady: snapshot.schemaReady,
       hierarchyConfigured: snapshot.hierarchyConfigured,
+      hierarchyEnabled: snapshot.hierarchyEnabled,
       legacyMode: scope.legacyMode,
       actorTenantUserId: scope.actor.tenantUserId,
       canManage,
@@ -70,13 +80,40 @@ export const PUT = withPermission('USERS_EDIT', async (req, session) => {
       metadata: { superiorTenantUserIds: parsed.data.superiorTenantUserIds },
     });
 
-    return NextResponse.json({ ok: true, hierarchyConfigured: snapshot.hierarchyConfigured });
+    return NextResponse.json({ ok: true, hierarchyConfigured: snapshot.hierarchyConfigured, hierarchyEnabled: snapshot.hierarchyEnabled });
   } catch (error: any) {
-    if (error instanceof TeamHierarchyError) {
-      const status = error.code === 'HIERARCHY_SCHEMA_NOT_READY' ? 503 : error.code === 'MEMBER_NOT_FOUND' ? 404 : 403;
-      return NextResponse.json({ error: error.message, code: error.code }, { status });
-    }
+    if (error instanceof TeamHierarchyError) return hierarchyErrorResponse(error);
     console.error('team.hierarchy.update error', error);
     return NextResponse.json({ error: 'Não foi possível atualizar a hierarquia.' }, { status: 500 });
+  }
+});
+
+export const PATCH = withPermission('USERS_EDIT', async (req, session) => {
+  try {
+    const body = await req.json();
+    const parsed = activationSchema.safeParse(body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+
+    const snapshot = await setHierarchyEnabled(prisma, {
+      tenantId: session.tenantId,
+      actorUserId: session.userId,
+      actorRole: session.role,
+      enabled: parsed.data.enabled,
+    });
+
+    await logAudit({
+      tenantId: session.tenantId,
+      userId: session.userId,
+      entityType: 'team_hierarchy',
+      entityId: session.tenantId,
+      action: parsed.data.enabled ? 'team.hierarchy_enabled' : 'team.hierarchy_disabled',
+      metadata: { enabled: parsed.data.enabled },
+    });
+
+    return NextResponse.json({ ok: true, hierarchyEnabled: snapshot.hierarchyEnabled });
+  } catch (error: any) {
+    if (error instanceof TeamHierarchyError) return hierarchyErrorResponse(error);
+    console.error('team.hierarchy.activation error', error);
+    return NextResponse.json({ error: 'Não foi possível alterar a ativação da hierarquia.' }, { status: 500 });
   }
 });
