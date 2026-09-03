@@ -34,6 +34,7 @@ import {
   MessageCircle,
   MessagesSquare,
   Globe2,
+  Network,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -46,6 +47,7 @@ type NavItem = {
 };
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/team", label: "Visão da equipe", icon: Network, permission: "DASHBOARD_VIEW", show: (role) => ['owner', 'admin', 'manager'].includes(role) },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
