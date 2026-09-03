@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Trash2, GripVertical, Plus, Eye, Save, ChevronRight, ArrowLeft, Workflow, AlertTriangle } from 'lucide-react';
 import { PublicFormPreview } from './public-form-preview';
 import { FormLogoPicker } from './form-builder/form-logo-picker';
+import { FormCoverImagePicker } from './form-builder/form-cover-image-picker';
 import { FORM_LEAD_SOURCES } from '@/lib/leads';
 import { cleanOptionObjects, cleanOptions, defaultSelectionModeFor, isFlow, isQualifier, normalizeOptionObjects, normalizeOptions, normalizeQualificationMode, normalizeSelectionMode, validateChoiceOptions } from '@/lib/form-field-validation';
 
@@ -541,7 +542,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                   </div>
                 </div>
                 <FormLogoPicker value={formLogoUrl} onChange={setFormLogoUrl} />
-                <div><Label>Imagem de capa (URL opcional)</Label><Input value={coverImageUrl} onChange={(e) => setCoverImageUrl(e.target.value)} placeholder="https://..." /></div>
+                <FormCoverImagePicker value={coverImageUrl} onChange={setCoverImageUrl} />
               </div>
             </Card>
 
