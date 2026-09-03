@@ -3,6 +3,7 @@ import { FORM_LEAD_SOURCE_VALUES, MANUAL_LEAD_SOURCE_VALUES } from './leads';
 import { isValidBrazilCity, isValidBrazilState, normalizeBrazilCity, normalizeBrazilState } from './brazil-locations';
 import { isFutureDateOnly, isValidDateOnly } from './date-only';
 import { isValidFormLogoValue } from './form-logo';
+import { isValidFormCoverImageValue } from './form-cover-image';
 
 export const registerSchema = z.object({
   companyName: z.string().min(2, 'Nome da empresa muito curto'),
@@ -62,7 +63,7 @@ export const formCreateSchema = z.object({
   buttonColor: z.string().optional().nullable(),
   textColor: z.string().optional().nullable(),
   theme: z.enum(['light', 'dark']).optional(),
-  coverImageUrl: z.string().optional().nullable(),
+  coverImageUrl: z.string().refine(isValidFormCoverImageValue, 'Imagem de capa inválida. Envie PNG, JPG ou WebP de até 150 KB.').optional().nullable(),
   logoUrl: z.string().refine(isValidFormLogoValue, 'Logo inválida. Envie PNG, JPG ou WebP de até 150 KB.').optional().nullable(),
   successMessage: z.string().optional(),
   disqualificationSettings: z.object({
