@@ -19,13 +19,23 @@ type AllowedUserItem = {
   subscription: { status: string; paymentRequired: boolean } | null;
 };
 
+type TenantOption = {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  planId?: string | null;
+};
+
 type Toast = { type: 'success' | 'error'; message: string };
+type TenantMode = 'existing' | 'new';
 
 const ROLES = ['owner', 'admin', 'manager', 'agent', 'viewer'];
 const PLANS = ['starter', 'growth', 'pro'];
 
 export default function AllowedUsersPage() {
   const [items, setItems] = useState<AllowedUserItem[]>([]);
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -36,6 +46,8 @@ export default function AllowedUsersPage() {
   const [password, setPassword] = useState('');
   const [planSlug, setPlanSlug] = useState('growth');
   const [role, setRole] = useState('owner');
+  const [tenantMode, setTenantMode] = useState<TenantMode>('existing');
+  const [tenantId, setTenantId] = useState('');
 
   function showToast(type: 'success' | 'error', message: string) {
     setToast({ type, message });
@@ -52,6 +64,7 @@ export default function AllowedUsersPage() {
       if (!data) throw new Error('Resposta vazia do servidor.');
       if (!res.ok || data.ok === false) throw new Error(data.error || 'Falha ao carregar acessos.');
       setItems(Array.isArray(data.data?.items) ? data.data.items : []);
+      setTenants(Array.isArray(data.data?.tenants) ? data.data.tenants : []);
     } catch (e: unknown) {
       setLoadError(e instanceof Error ? e.message : 'Falha ao carregar acessos.');
     } finally {
@@ -64,13 +77,23 @@ export default function AllowedUsersPage() {
   const create = async () => {
     if (!email.trim()) { showToast('error', 'E-mail é obrigatório.'); return; }
     if (!password || password.length < 8) { showToast('error', 'Senha deve ter no mínimo 8 caracteres.'); return; }
+    if (tenantMode === 'existing' && !tenantId) { showToast('error', 'Selecione a empresa existente onde o acesso será criado.'); return; }
 
     try {
       setCreating(true);
       const res = await fetch('/api/admin/allowed-users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password, planSlug, role, status: 'active', active: true, mode: 'direct' }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+          planSlug,
+          role,
+          status: 'active',
+          active: true,
+          mode: 'direct',
+          tenantId: tenantMode === 'existing' ? tenantId : null,
+        }),
       });
       const text = await res.text();
       const data = text.trim() ? JSON.parse(text) : null;
@@ -81,13 +104,15 @@ export default function AllowedUsersPage() {
         return;
       }
 
-      const userReused = Boolean(data.data?.user && data.data.user.id);
       const reusedMsg = data.data?.userReused ? ' Usuário já existia no sistema.' : '';
-      showToast('success', `Acesso criado com sucesso.${reusedMsg}`);
+      const tenantMsg = tenantMode === 'existing' ? ' Acesso vinculado à empresa selecionada.' : ' Nova empresa criada.';
+      showToast('success', `Acesso criado com sucesso.${tenantMsg}${reusedMsg}`);
       setEmail('');
       setPassword('');
       setPlanSlug('growth');
       setRole('owner');
+      setTenantMode('existing');
+      setTenantId('');
       await load();
     } catch (e: unknown) {
       showToast('error', e instanceof Error ? e.message : 'Erro inesperado.');
@@ -108,7 +133,6 @@ export default function AllowedUsersPage() {
         </Button>
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className={`flex items-start gap-2 p-3 rounded-md text-sm border ${toast.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
           {toast.type === 'success' ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
@@ -116,9 +140,12 @@ export default function AllowedUsersPage() {
         </div>
       )}
 
-      {/* Formulário de criação */}
       <Card className="p-5 space-y-4">
-        <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Adicionar acesso direto</h2>
+        <div>
+          <h2 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Adicionar acesso direto</h2>
+          <p className="text-xs text-muted-foreground mt-1">Por segurança, o padrão é vincular o novo acesso a uma empresa que já existe.</p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Input
             placeholder="email@empresa.com"
@@ -134,15 +161,51 @@ export default function AllowedUsersPage() {
             onChange={(e) => setPassword(e.target.value)}
             disabled={creating}
           />
+
           <select
+            aria-label="Destino do acesso"
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-            value={planSlug}
-            onChange={(e) => setPlanSlug(e.target.value)}
+            value={tenantMode}
+            onChange={(e) => {
+              const nextMode = e.target.value as TenantMode;
+              setTenantMode(nextMode);
+              if (nextMode === 'new') setTenantId('');
+            }}
             disabled={creating}
           >
-            {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="existing">Vincular a empresa existente</option>
+            <option value="new">Criar nova empresa</option>
           </select>
+
+          {tenantMode === 'existing' ? (
+            <select
+              aria-label="Empresa existente"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={tenantId}
+              onChange={(e) => setTenantId(e.target.value)}
+              disabled={creating || loading}
+            >
+              <option value="">Selecione a empresa existente</option>
+              {tenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name} ({tenant.slug}){tenant.status !== 'active' ? ` — ${tenant.status}` : ''}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              aria-label="Plano da nova empresa"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              value={planSlug}
+              onChange={(e) => setPlanSlug(e.target.value)}
+              disabled={creating}
+            >
+              {PLANS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+
           <select
+            aria-label="Papel do usuário"
             className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             value={role}
             onChange={(e) => setRole(e.target.value)}
@@ -151,12 +214,22 @@ export default function AllowedUsersPage() {
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <Button onClick={create} disabled={creating || !email || !password}>
-          {creating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Criando...</> : 'Criar acesso'}
+
+        {tenantMode === 'existing' ? (
+          <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+            O acesso será criado dentro da empresa selecionada. Nenhuma nova empresa será criada e o plano atual do tenant será preservado.
+          </div>
+        ) : (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Atenção: esta opção cria um novo tenant. Use somente quando a empresa ainda não existir no FlipForm.
+          </div>
+        )}
+
+        <Button onClick={create} disabled={creating || !email || !password || (tenantMode === 'existing' && !tenantId)}>
+          {creating ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Criando...</> : tenantMode === 'existing' ? 'Criar acesso na empresa selecionada' : 'Criar acesso e nova empresa'}
         </Button>
       </Card>
 
-      {/* Listagem */}
       <Card className="p-0 overflow-hidden">
         {loading && (
           <div className="p-6 text-sm text-muted-foreground flex items-center gap-2">
@@ -165,8 +238,7 @@ export default function AllowedUsersPage() {
         )}
         {!loading && loadError && (
           <div className="p-4 text-sm text-rose-800 bg-rose-50 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />{loadError}
-          </div>
+            <AlertCircle className="w-4 h-4 shrink-0" />{loadError}</div>
         )}
         {!loading && !loadError && items.length === 0 && (
           <div className="p-6 text-sm text-muted-foreground">Nenhum acesso cadastrado ainda.</div>
