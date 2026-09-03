@@ -82,7 +82,7 @@ def test_schema_change_is_additive_and_never_auto_migrate_deploy():
     assert 'TRUNCATE' not in migration.upper()
     assert '\nUPDATE ' not in migration.upper()
     assert 'prisma db execute' in workflow
-    assert 'prisma migrate deploy' not in workflow
+    assert 'run: npx prisma migrate deploy' not in workflow
     assert 'workflow_dispatch' in workflow
 
 
