@@ -32,14 +32,18 @@ export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
 
     const group = await createBusinessGroup(prisma, { name: parsed.data.name, actorUserId: session.userId });
-    await logPlatformAudit({
-      tenantId: null,
-      userId: session.userId,
-      entityType: 'business_group',
-      entityId: group.id,
-      action: 'business_group.created',
-      metadata: { name: group.name, slug: group.slug },
-    });
+    try {
+      await logPlatformAudit({
+        tenantId: null,
+        userId: session.userId,
+        entityType: 'business_group',
+        entityId: group.id,
+        action: 'business_group.created',
+        metadata: { name: group.name, slug: group.slug },
+      });
+    } catch (auditError) {
+      console.error('[admin.business-groups][audit]', auditError);
+    }
     return NextResponse.json({ ok: true, group });
   } catch (error) {
     return errorResponse(error);
