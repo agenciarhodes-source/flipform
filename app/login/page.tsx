@@ -30,6 +30,8 @@ export default function LoginPage() {
       toast.success('Bem-vindo!');
       if (data.platformAdmin) {
         router.push('/admin');
+      } else if (data.businessGroupAccess) {
+        router.push('/group');
       } else {
         router.push('/dashboard');
       }
