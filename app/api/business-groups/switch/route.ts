@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { withAuth, setSessionCookie } from '@/lib/auth';
+import { getSessionFromRequest, setSessionCookie } from '@/lib/auth';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import {
   getBusinessGroupAccessesForUser,
@@ -16,7 +16,12 @@ const bodySchema = z.object({
   tenantId: z.string().uuid(),
 });
 
-export const POST = withAuth(async (req: NextRequest, session) => {
+export async function POST(req: NextRequest) {
+  const session = getSessionFromRequest(req);
+  if (!session || session.globalRole === 'platform_admin') {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+
   try {
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
@@ -97,4 +102,4 @@ export const POST = withAuth(async (req: NextRequest, session) => {
     console.error('business-groups.switch error', error);
     return NextResponse.json({ error: 'Não foi possível abrir esta empresa.' }, { status: 500 });
   }
-});
+}
