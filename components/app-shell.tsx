@@ -35,6 +35,7 @@ import {
   MessagesSquare,
   Globe2,
   Network,
+  Building2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -109,10 +110,14 @@ export function AppShell({
   children,
   session,
   tenant,
+  businessGroups = [],
+  hasCurrentTenantMembership = true,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
   tenant: TenantBrand | null;
+  businessGroups?: Array<{ id: string; name: string; role: string }>;
+  hasCurrentTenantMembership?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -123,6 +128,16 @@ export function AppShell({
     router.push("/login");
     router.refresh();
   };
+
+  const groupNav: NavItem[] = businessGroups.length
+    ? [{ href: "/group", label: "Visão do grupo", icon: Building2 }]
+    : [];
+  const navItems = [NAV[0], ...groupNav, ...NAV.slice(1)].filter(
+    (item) =>
+      (!item.permission || can(session.role, item.permission))
+      && (!item.show || item.show(session.role))
+      && !(item.href === "/team" && !hasCurrentTenantMembership),
+  );
 
   const brandColor = tenant?.primaryColor || "#2563EB";
   const tenantName = tenant?.name || "FlipForm";
@@ -179,32 +194,36 @@ export function AppShell({
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
-          {NAV.filter((item) => (!item.permission || can(session.role, item.permission)) && (!item.show || item.show(session.role))).map(
-            (item) => {
-              const active = pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    active
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-foreground/70 hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
-                  {item.label}
-                </Link>
-              );
-            },
-          )}
+          {navItems.map((item) => {
+            const active = pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  active
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-foreground/70 hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
-        <div className="p-3 border-t border-sidebar-border">
+        <div className="p-3 border-t border-sidebar-border space-y-2">
+          {businessGroups.length > 0 && (
+            <div className="px-3 py-2 rounded-md bg-brand-50/60 border border-brand-100">
+              <div className="text-xs text-muted-foreground">Grupo empresarial</div>
+              <div className="text-sm font-medium truncate">{businessGroups[0].name}</div>
+            </div>
+          )}
           <div className="px-3 py-2 rounded-md bg-muted/50">
-            <div className="text-xs text-muted-foreground">Empresa</div>
+            <div className="text-xs text-muted-foreground">Empresa atual</div>
             <div className="text-sm font-medium truncate">
               {tenant?.slug || session.tenantSlug}
             </div>
@@ -235,7 +254,7 @@ export function AppShell({
             </Button>
             <div>
               <div className="font-heading font-semibold">
-                {NAV.find((n) => pathname.startsWith(n.href))?.label ||
+                {navItems.find((n) => pathname.startsWith(n.href))?.label ||
                   "FlipForm"}
               </div>
             </div>
@@ -270,6 +289,12 @@ export function AppShell({
                   {session.email}
                 </div>
               </DropdownMenuLabel>
+              {businessGroups.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild><Link href="/group"><Building2 className="w-4 h-4 mr-2" />Visão do grupo</Link></DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-destructive">
                 <LogOut className="w-4 h-4 mr-2" /> Sair
