@@ -139,9 +139,11 @@ export function AppShell({
       && !(item.href === "/team" && !hasCurrentTenantMembership),
   );
 
+  const inGroupView = pathname === "/group" || pathname.startsWith("/group/");
   const brandColor = tenant?.primaryColor || "#2563EB";
   const tenantName = tenant?.name || "FlipForm";
-  const tenantInitials = tenantName
+  const displayName = inGroupView && businessGroups.length > 0 ? businessGroups[0].name : tenantName;
+  const displayInitials = displayName
     .split(" ")
     .map((p) => p[0])
     .slice(0, 2)
@@ -164,10 +166,10 @@ export function AppShell({
         )}
       >
         <div className="h-16 flex items-center gap-2 px-5 border-b border-sidebar-border">
-          {tenant?.logoUrl ? (
+          {!inGroupView && tenant?.logoUrl ? (
             <img
               src={tenant.logoUrl}
-              alt={tenantName}
+              alt={displayName}
               className="w-9 h-9 rounded-md object-contain bg-white border"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -178,18 +180,18 @@ export function AppShell({
               className="w-9 h-9 rounded-md flex items-center justify-center text-white font-bold text-sm"
               style={{ backgroundColor: brandColor }}
             >
-              {tenantInitials || <Zap className="w-4 h-4" />}
+              {displayInitials || <Zap className="w-4 h-4" />}
             </div>
           )}
           <div className="min-w-0">
             <div
               className="font-heading font-bold leading-tight truncate"
-              title={tenantName}
+              title={displayName}
             >
-              {tenantName}
+              {displayName}
             </div>
             <div className="text-xs text-muted-foreground -mt-0.5">
-              via FlipForm
+              {inGroupView ? "Visão consolidada" : "via FlipForm"}
             </div>
           </div>
         </div>
@@ -222,12 +224,19 @@ export function AppShell({
               <div className="text-sm font-medium truncate">{businessGroups[0].name}</div>
             </div>
           )}
-          <div className="px-3 py-2 rounded-md bg-muted/50">
-            <div className="text-xs text-muted-foreground">Empresa atual</div>
-            <div className="text-sm font-medium truncate">
-              {tenant?.slug || session.tenantSlug}
+          {inGroupView && businessGroups.length > 0 ? (
+            <div className="px-3 py-2 rounded-md bg-muted/50">
+              <div className="text-xs text-muted-foreground">Escopo atual</div>
+              <div className="text-sm font-medium truncate">Visão consolidada</div>
             </div>
-          </div>
+          ) : (
+            <div className="px-3 py-2 rounded-md bg-muted/50">
+              <div className="text-xs text-muted-foreground">Empresa atual</div>
+              <div className="text-sm font-medium truncate">
+                {tenant?.slug || session.tenantSlug}
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -302,7 +311,7 @@ export function AppShell({
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        {tenant?.status === "past_due" && (
+        {!inGroupView && tenant?.status === "past_due" && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2.5 text-sm text-amber-900 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
               <span className="font-medium">⚠ Pagamento pendente.</span>
