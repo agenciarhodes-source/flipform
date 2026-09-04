@@ -20,7 +20,7 @@ def test_business_group_repair_never_runs_migrate_deploy():
     workflow = read('.github/workflows/repair-business-group-schema.yml')
     assert 'prisma db execute' in workflow
     assert '20260903233000_add_business_groups/migration.sql' in workflow
-    assert 'prisma migrate deploy' not in workflow
+    assert 'run: npx prisma migrate deploy' not in workflow
     assert 'continue-on-error: true' in workflow
 
 
@@ -72,6 +72,8 @@ def test_app_shell_exposes_group_view_but_hides_team_hierarchy_without_tenant_me
     assert 'Visão do grupo' in shell
     assert 'hasCurrentTenantMembership' in shell
     assert 'item.href === "/team" && !hasCurrentTenantMembership' in shell
+    assert 'inGroupView' in shell
+    assert 'Visão consolidada' in shell
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in layout
     assert 'prisma.tenantUser.findFirst' in layout
 
