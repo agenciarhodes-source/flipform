@@ -16,6 +16,7 @@ export default async function AppGroupLayout({
 
   const pathname = headers().get("x-pathname") || "";
   const isBillingRoute = pathname === "/billing" || pathname.startsWith("/billing/");
+  const isGroupRoute = pathname === "/group" || pathname.startsWith("/group/");
 
   const [tenant, groupState, currentTenantMembership] = await Promise.all([
     prisma.tenant.findUnique({
@@ -37,8 +38,21 @@ export default async function AppGroupLayout({
     }),
   ]);
 
+  const hasBusinessGroupAccess = groupState.accesses.length > 0;
+  const currentTenantIsGroupTenant = groupState.accesses.some((group) =>
+    group.tenants.some((groupTenant) => groupTenant.id === session.tenantId),
+  );
+
+  // O tenant técnico serve apenas como âncora de autenticação. Usuários de grupo
+  // não devem operar nele nem enxergá-lo como uma unidade de negócio.
+  if (hasBusinessGroupAccess && !currentTenantIsGroupTenant && !isGroupRoute) {
+    redirect("/group");
+  }
+
   const billingAccess = await requireBillingAccess(session);
-  if (!billingAccess.allowAccess && !isBillingRoute) {
+  // A visão do grupo precisa continuar acessível mesmo se a unidade atual ficar
+  // bloqueada, para permitir que o responsável escolha outra unidade autorizada.
+  if (!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute) {
     redirect("/billing/blocked");
   }
 
