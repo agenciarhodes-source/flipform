@@ -33,6 +33,14 @@ function errorResponse(error: unknown) {
   return NextResponse.json({ error: 'Falha ao atualizar grupo empresarial.' }, { status: 500 });
 }
 
+async function safeAudit(params: Parameters<typeof logPlatformAudit>[0]) {
+  try {
+    await logPlatformAudit(params);
+  } catch (auditError) {
+    console.error('[admin.business-groups.update][audit]', auditError);
+  }
+}
+
 export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { params: { id: string } }) => {
   try {
     const parsed = updateSchema.safeParse(await req.json().catch(() => ({})));
@@ -44,7 +52,7 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
         tenantIds: parsed.data.tenantIds,
         actorUserId: session.userId,
       });
-      await logPlatformAudit({
+      await safeAudit({
         tenantId: null,
         userId: session.userId,
         entityType: 'business_group',
@@ -62,7 +70,7 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
         status: parsed.data.member.status,
         actorUserId: session.userId,
       });
-      await logPlatformAudit({
+      await safeAudit({
         tenantId: null,
         userId: session.userId,
         entityType: 'business_group',
