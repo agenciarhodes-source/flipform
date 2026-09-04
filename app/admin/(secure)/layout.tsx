@@ -11,6 +11,7 @@ import {
   Shield,
   Users,
   Plug,
+  Network,
 } from "lucide-react";
 
 export default async function AdminLayout({
@@ -42,6 +43,7 @@ export default async function AdminLayout({
         <nav className="flex-1 p-3 space-y-1">
           <AdminLink href="/admin" icon={LayoutDashboard} label="Visão geral" />
           <AdminLink href="/admin/tenants" icon={Building2} label="Clientes" />
+          <AdminLink href="/admin/groups" icon={Network} label="Grupos empresariais" />
           <AdminLink href="/admin/domains" icon={Globe2} label="Domínios" />
           <AdminLink
             href="/admin/billing"
