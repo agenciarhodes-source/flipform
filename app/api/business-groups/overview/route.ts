@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { withAuth } from '@/lib/auth';
+import { getSessionFromRequest } from '@/lib/auth';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import { getBusinessGroupAccessesForUser, BusinessGroupError } from '@/lib/business-groups';
 
@@ -25,7 +25,12 @@ function percent(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 1000) / 10 : 0;
 }
 
-export const GET = withAuth(async (req: NextRequest, session) => {
+export async function GET(req: NextRequest) {
+  const session = getSessionFromRequest(req);
+  if (!session || session.globalRole === 'platform_admin') {
+    return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
+  }
+
   try {
     const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
@@ -166,4 +171,4 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     console.error('business-groups.overview error', error);
     return NextResponse.json({ error: 'Não foi possível carregar a visão consolidada do grupo.' }, { status: 500 });
   }
-});
+}
