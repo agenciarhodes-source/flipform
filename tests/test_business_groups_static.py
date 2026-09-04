@@ -33,8 +33,10 @@ def test_group_access_is_server_authoritative_and_schema_safe():
     assert "Esta empresa não pertence ao seu grupo empresarial" in source
 
 
-def test_group_switch_validates_membership_and_billing_before_cookie():
+def test_group_switch_validates_signed_session_membership_and_target_billing_before_cookie():
     route = read('app/api/business-groups/switch/route.ts')
+    assert 'getSessionFromRequest(req)' in route
+    assert 'withAuth' not in route
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in route
     assert 'findAuthorizedBusinessGroupTenant(state, parsed.data)' in route
     assert 'evaluateBillingAccess' in route
@@ -45,8 +47,10 @@ def test_group_switch_validates_membership_and_billing_before_cookie():
     assert "action: 'business_group.tenant_switched'" in route
 
 
-def test_group_overview_is_read_only_for_operational_data():
+def test_group_overview_is_read_only_and_not_trapped_by_current_tenant_billing():
     route = read('app/api/business-groups/overview/route.ts')
+    assert 'getSessionFromRequest(req)' in route
+    assert 'withAuth' not in route
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in route
     assert 'tenantId: { in: tenantIds }' in route
     assert 'prisma.lead.findMany' in route
@@ -66,7 +70,7 @@ def test_login_redirects_group_users_without_changing_existing_membership_gate()
     assert "router.push('/group')" in login_page
 
 
-def test_app_shell_exposes_group_view_but_hides_team_hierarchy_without_tenant_membership():
+def test_app_shell_and_layout_hide_anchor_tenant_and_keep_group_route_recoverable():
     shell = read('components/app-shell.tsx')
     layout = read('app/(app)/layout.tsx')
     assert 'Visão do grupo' in shell
@@ -76,6 +80,9 @@ def test_app_shell_exposes_group_view_but_hides_team_hierarchy_without_tenant_me
     assert 'Visão consolidada' in shell
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in layout
     assert 'prisma.tenantUser.findFirst' in layout
+    assert 'currentTenantIsGroupTenant' in layout
+    assert 'hasBusinessGroupAccess && !currentTenantIsGroupTenant && !isGroupRoute' in layout
+    assert '!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute' in layout
 
 
 def test_platform_admin_controls_groups_and_existing_users_only():
