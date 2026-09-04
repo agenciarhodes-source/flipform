@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyPassword, setSessionCookie } from '@/lib/auth';
 import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
+import { getBusinessGroupAccessesForUser } from '@/lib/business-groups';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
@@ -97,6 +98,8 @@ export async function POST(req: Request) {
     }
 
     const selectedAllowedUser = allowedByTenant.get(selectedMembership.tenantId);
+    const groupState = await getBusinessGroupAccessesForUser(prisma, user.id);
+    const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0;
 
     await setSessionCookie({
       userId: user.id,
@@ -114,7 +117,12 @@ export async function POST(req: Request) {
       await logAudit({
         tenantId: selectedMembership.tenantId, userId: user.id,
         entityType: 'session', entityId: user.id, action: 'auth.login',
-        metadata: { email: user.email, role: selectedMembership.role, allowedUserId: (selectedAllowedUser as AllowedRow | undefined)?.id },
+        metadata: {
+          email: user.email,
+          role: selectedMembership.role,
+          allowedUserId: (selectedAllowedUser as AllowedRow | undefined)?.id,
+          businessGroupAccess,
+        },
       });
     } catch (auditError) {
       const err = auditError as { message?: string; code?: string; meta?: unknown; stack?: string };
@@ -126,8 +134,15 @@ export async function POST(req: Request) {
       });
     }
 
-    logLogin('success', { ip, email: normalizedEmail, userId: user.id, tenantId: selectedMembership.tenantId, role: selectedMembership.role });
-    return NextResponse.json({ ok: true, platformAdmin: false });
+    logLogin('success', {
+      ip,
+      email: normalizedEmail,
+      userId: user.id,
+      tenantId: selectedMembership.tenantId,
+      role: selectedMembership.role,
+      businessGroupAccess,
+    });
+    return NextResponse.json({ ok: true, platformAdmin: false, businessGroupAccess });
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string; meta?: unknown; stack?: string };
     console.error('[auth/login][POST]', {

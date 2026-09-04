@@ -1,0 +1,38 @@
+name: Repair Business Group Schema
+
+on:
+  workflow_dispatch:
+
+jobs:
+  repair-business-group-schema:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Apply additive business group SQL only
+        run: npx prisma db execute --schema prisma/schema.prisma --file prisma/migrations/20260903233000_add_business_groups/migration.sql
+
+      - name: Report Prisma migration history (informational)
+        continue-on-error: true
+        run: npx prisma migrate status
+
+      - name: Confirm business group schema repair
+        run: echo "Business group schema repair completed. No prisma migrate deploy was executed."

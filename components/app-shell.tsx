@@ -35,6 +35,7 @@ import {
   MessagesSquare,
   Globe2,
   Network,
+  Building2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
 
@@ -109,10 +110,14 @@ export function AppShell({
   children,
   session,
   tenant,
+  businessGroups = [],
+  hasCurrentTenantMembership = true,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
   tenant: TenantBrand | null;
+  businessGroups?: Array<{ id: string; name: string; role: string }>;
+  hasCurrentTenantMembership?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -124,9 +129,21 @@ export function AppShell({
     router.refresh();
   };
 
+  const groupNav: NavItem[] = businessGroups.length
+    ? [{ href: "/group", label: "Visão do grupo", icon: Building2 }]
+    : [];
+  const navItems = [NAV[0], ...groupNav, ...NAV.slice(1)].filter(
+    (item) =>
+      (!item.permission || can(session.role, item.permission))
+      && (!item.show || item.show(session.role))
+      && !(item.href === "/team" && !hasCurrentTenantMembership),
+  );
+
+  const inGroupView = pathname === "/group" || pathname.startsWith("/group/");
   const brandColor = tenant?.primaryColor || "#2563EB";
   const tenantName = tenant?.name || "FlipForm";
-  const tenantInitials = tenantName
+  const displayName = inGroupView && businessGroups.length > 0 ? businessGroups[0].name : tenantName;
+  const displayInitials = displayName
     .split(" ")
     .map((p) => p[0])
     .slice(0, 2)
@@ -149,10 +166,10 @@ export function AppShell({
         )}
       >
         <div className="h-16 flex items-center gap-2 px-5 border-b border-sidebar-border">
-          {tenant?.logoUrl ? (
+          {!inGroupView && tenant?.logoUrl ? (
             <img
               src={tenant.logoUrl}
-              alt={tenantName}
+              alt={displayName}
               className="w-9 h-9 rounded-md object-contain bg-white border"
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.display = "none";
@@ -163,52 +180,63 @@ export function AppShell({
               className="w-9 h-9 rounded-md flex items-center justify-center text-white font-bold text-sm"
               style={{ backgroundColor: brandColor }}
             >
-              {tenantInitials || <Zap className="w-4 h-4" />}
+              {displayInitials || <Zap className="w-4 h-4" />}
             </div>
           )}
           <div className="min-w-0">
             <div
               className="font-heading font-bold leading-tight truncate"
-              title={tenantName}
+              title={displayName}
             >
-              {tenantName}
+              {displayName}
             </div>
             <div className="text-xs text-muted-foreground -mt-0.5">
-              via FlipForm
+              {inGroupView ? "Visão consolidada" : "via FlipForm"}
             </div>
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
-          {NAV.filter((item) => (!item.permission || can(session.role, item.permission)) && (!item.show || item.show(session.role))).map(
-            (item) => {
-              const active = pathname.startsWith(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                    active
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-foreground/70 hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
-                  {item.label}
-                </Link>
-              );
-            },
-          )}
+          {navItems.map((item) => {
+            const active = pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  active
+                    ? "bg-brand-50 text-brand-700"
+                    : "text-foreground/70 hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
-        <div className="p-3 border-t border-sidebar-border">
-          <div className="px-3 py-2 rounded-md bg-muted/50">
-            <div className="text-xs text-muted-foreground">Empresa</div>
-            <div className="text-sm font-medium truncate">
-              {tenant?.slug || session.tenantSlug}
+        <div className="p-3 border-t border-sidebar-border space-y-2">
+          {businessGroups.length > 0 && (
+            <div className="px-3 py-2 rounded-md bg-brand-50/60 border border-brand-100">
+              <div className="text-xs text-muted-foreground">Grupo empresarial</div>
+              <div className="text-sm font-medium truncate">{businessGroups[0].name}</div>
             </div>
-          </div>
+          )}
+          {inGroupView && businessGroups.length > 0 ? (
+            <div className="px-3 py-2 rounded-md bg-muted/50">
+              <div className="text-xs text-muted-foreground">Escopo atual</div>
+              <div className="text-sm font-medium truncate">Visão consolidada</div>
+            </div>
+          ) : (
+            <div className="px-3 py-2 rounded-md bg-muted/50">
+              <div className="text-xs text-muted-foreground">Empresa atual</div>
+              <div className="text-sm font-medium truncate">
+                {tenant?.slug || session.tenantSlug}
+              </div>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -235,7 +263,7 @@ export function AppShell({
             </Button>
             <div>
               <div className="font-heading font-semibold">
-                {NAV.find((n) => pathname.startsWith(n.href))?.label ||
+                {navItems.find((n) => pathname.startsWith(n.href))?.label ||
                   "FlipForm"}
               </div>
             </div>
@@ -270,6 +298,12 @@ export function AppShell({
                   {session.email}
                 </div>
               </DropdownMenuLabel>
+              {businessGroups.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild><Link href="/group"><Building2 className="w-4 h-4 mr-2" />Visão do grupo</Link></DropdownMenuItem>
+                </>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-destructive">
                 <LogOut className="w-4 h-4 mr-2" /> Sair
@@ -277,7 +311,7 @@ export function AppShell({
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        {tenant?.status === "past_due" && (
+        {!inGroupView && tenant?.status === "past_due" && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2.5 text-sm text-amber-900 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-col gap-0.5 md:flex-row md:items-center md:gap-2">
               <span className="font-medium">⚠ Pagamento pendente.</span>
