@@ -7,20 +7,36 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 
-def test_form_cover_upload_has_expected_dimensions_size_and_types():
+def test_form_cover_upload_accepts_flexible_ratio_with_300kb_limit_and_supported_types():
     helper = read('lib/form-cover-image.ts')
     picker = read('components/form-builder/form-cover-image-picker.tsx')
 
-    assert 'FORM_COVER_IMAGE_MAX_BYTES = FORM_LOGO_MAX_BYTES' in helper
-    assert 'FORM_COVER_IMAGE_WIDTH = 500' in helper
-    assert 'FORM_COVER_IMAGE_HEIGHT = 500' in helper
+    assert 'FORM_COVER_IMAGE_MAX_BYTES = 300 * 1024' in helper
+    assert 'FORM_COVER_IMAGE_WIDTH' not in helper
+    assert 'FORM_COVER_IMAGE_HEIGHT' not in helper
     assert 'file.size > FORM_COVER_IMAGE_MAX_BYTES' in picker
     assert 'isSupportedFormCoverImageMimeType(file.type)' in picker
-    assert 'dimensions.width !== FORM_COVER_IMAGE_WIDTH' in picker
-    assert 'dimensions.height !== FORM_COVER_IMAGE_HEIGHT' in picker
-    assert 'A imagem de capa deve ter exatamente 500 × 500 px.' in picker
-    assert 'A imagem de capa deve ter no máximo 150 KB.' in picker
+    assert 'await validateImageFile(file)' in picker
+    assert 'dimensions.width' not in picker
+    assert 'dimensions.height' not in picker
+    assert '500 × 500' not in picker
+    assert 'A imagem de capa deve ter no máximo 300 KB.' in picker
+    assert 'em qualquer proporção, com até 300 KB' in picker
     assert 'reader.readAsDataURL(file)' in picker
+
+
+def test_form_cover_preview_and_public_render_preserve_entire_artwork():
+    picker = read('components/form-builder/form-cover-image-picker.tsx')
+    public_form = read('components/public-typeform.tsx')
+    css = read('app/globals.css')
+
+    assert 'object-contain' in picker
+    assert 'A proporção original será preservada, sem corte ou distorção.' in picker
+    assert 'bg-cover bg-center' in public_form
+    assert ".bg-cover.bg-center[style*='background-image']" in css
+    assert 'background-size: contain' in css
+    assert 'background-repeat: no-repeat' in css
+    assert 'height: min(34vh, 20rem)' in css
 
 
 def test_form_builder_replaces_cover_url_only_input_with_upload_picker():
@@ -44,6 +60,7 @@ def test_server_revalidates_cover_data_url_without_schema_migration():
 
     assert "import { isValidFormCoverImageValue } from './form-cover-image';" in schema
     assert "coverImageUrl: z.string().refine(isValidFormCoverImageValue" in schema
+    assert 'Imagem de capa inválida. Envie PNG, JPG ou WebP de até 300 KB.' in schema
     assert "if (!value.startsWith('data:')) return true;" in helper
     assert 'size <= FORM_COVER_IMAGE_MAX_BYTES' in helper
     assert 'coverImageUrl     String?' in prisma

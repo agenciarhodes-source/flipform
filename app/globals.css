@@ -101,3 +101,13 @@
   scrollbar-width: auto;
   scrollbar-color: #64748b #e5e7eb;
 }
+
+/* The public form cover is the repository's only bg-cover element. Keep the
+   configured artwork fully visible regardless of portrait/landscape ratio. */
+.bg-cover.bg-center[style*='background-image'] {
+  height: min(34vh, 20rem);
+  min-height: 10rem;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}

@@ -63,7 +63,7 @@ export const formCreateSchema = z.object({
   buttonColor: z.string().optional().nullable(),
   textColor: z.string().optional().nullable(),
   theme: z.enum(['light', 'dark']).optional(),
-  coverImageUrl: z.string().refine(isValidFormCoverImageValue, 'Imagem de capa inválida. Envie PNG, JPG ou WebP de até 150 KB.').optional().nullable(),
+  coverImageUrl: z.string().refine(isValidFormCoverImageValue, 'Imagem de capa inválida. Envie PNG, JPG ou WebP de até 300 KB.').optional().nullable(),
   logoUrl: z.string().refine(isValidFormLogoValue, 'Logo inválida. Envie PNG, JPG ou WebP de até 150 KB.').optional().nullable(),
   successMessage: z.string().optional(),
   disqualificationSettings: z.object({

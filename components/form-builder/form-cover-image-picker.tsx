@@ -7,9 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  FORM_COVER_IMAGE_HEIGHT,
   FORM_COVER_IMAGE_MAX_BYTES,
-  FORM_COVER_IMAGE_WIDTH,
   isSupportedFormCoverImageMimeType,
 } from '@/lib/form-cover-image';
 
@@ -18,15 +16,14 @@ interface FormCoverImagePickerProps {
   onChange: (value: string) => void;
 }
 
-function getImageDimensions(file: File): Promise<{ width: number; height: number }> {
+function validateImageFile(file: File): Promise<void> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
     const image = new Image();
 
     image.onload = () => {
-      const dimensions = { width: image.naturalWidth, height: image.naturalHeight };
       URL.revokeObjectURL(objectUrl);
-      resolve(dimensions);
+      resolve();
     };
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl);
@@ -51,18 +48,13 @@ export function FormCoverImagePicker({ value, onChange }: FormCoverImagePickerPr
     }
 
     if (file.size > FORM_COVER_IMAGE_MAX_BYTES) {
-      toast.error('A imagem de capa deve ter no máximo 150 KB.');
+      toast.error('A imagem de capa deve ter no máximo 300 KB.');
       input.value = '';
       return;
     }
 
     try {
-      const dimensions = await getImageDimensions(file);
-      if (dimensions.width !== FORM_COVER_IMAGE_WIDTH || dimensions.height !== FORM_COVER_IMAGE_HEIGHT) {
-        toast.error('A imagem de capa deve ter exatamente 500 × 500 px.');
-        input.value = '';
-        return;
-      }
+      await validateImageFile(file);
     } catch {
       toast.error('Não foi possível validar a imagem selecionada.');
       input.value = '';
@@ -87,17 +79,17 @@ export function FormCoverImagePicker({ value, onChange }: FormCoverImagePickerPr
     <div className="space-y-2">
       <div>
         <Label>Imagem de capa do formulário</Label>
-        <p className="text-xs text-muted-foreground">Envie PNG, JPG ou WebP em 500 × 500 px, com até 150 KB, ou informe uma URL.</p>
+        <p className="text-xs text-muted-foreground">Envie PNG, JPG ou WebP em qualquer proporção, com até 300 KB, ou informe uma URL.</p>
       </div>
 
       {value && (
         <div className="flex items-center gap-3 rounded-md border bg-background p-3">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded border bg-white">
-            <img src={value} alt="Prévia da imagem de capa do formulário" className="h-full w-full object-cover" />
+          <div className="flex h-24 w-32 shrink-0 items-center justify-center overflow-hidden rounded border bg-white p-1">
+            <img src={value} alt="Prévia da imagem de capa do formulário" className="max-h-full max-w-full object-contain" />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{isUploadedImage ? 'Imagem enviada do computador' : 'Capa configurada por URL'}</p>
-            <p className="text-xs text-muted-foreground">Você pode substituir a imagem abaixo ou removê-la.</p>
+            <p className="text-xs text-muted-foreground">A proporção original será preservada, sem corte ou distorção.</p>
           </div>
           <Button type="button" size="sm" variant="outline" onClick={() => onChange('')}>
             <Trash2 className="mr-1 h-3.5 w-3.5" />Remover
