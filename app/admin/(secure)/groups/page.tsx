@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, Loader2, Plus, RefreshCcw, Save, UserPlus } from 'lucide-react';
+import { Building2, Loader2, Plus, RefreshCcw, Save, Trash2, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ export default function BusinessGroupsAdminPage() {
   const [memberEmail, setMemberEmail] = useState<Record<string, string>>({});
   const [memberRole, setMemberRole] = useState<Record<string, string>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -126,6 +127,30 @@ export default function BusinessGroupsAdminPage() {
     }
   }
 
+  async function deleteGroup(group: Group) {
+    const confirmed = window.confirm(
+      `Excluir definitivamente o grupo empresarial "${group.name}"?\n\n` +
+      `Serão removidos apenas os vínculos do grupo com ${group.tenants.length} empresa(s) e ${group.members.length} responsável(is). ` +
+      'As empresas, usuários, leads, formulários, pipelines, integrações, credenciais e demais dados NÃO serão apagados.',
+    );
+    if (!confirmed) return;
+
+    setDeletingGroup(group.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch(`/api/admin/business-groups/${group.id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Falha ao excluir grupo empresarial.');
+      setSuccess(`Grupo "${group.name}" excluído. As empresas e seus dados foram preservados.`);
+      await load();
+    } catch (e: any) {
+      setError(e.message || 'Falha ao excluir grupo empresarial.');
+    } finally {
+      setDeletingGroup(null);
+    }
+  }
+
   const groups = snapshot?.groups || [];
   const availableTenants = snapshot?.availableTenants || [];
   const statusCount = useMemo(() => availableTenants.filter((tenant) => tenant.status === 'active').length, [availableTenants]);
@@ -174,7 +199,12 @@ export default function BusinessGroupsAdminPage() {
             <Card key={group.id} className="p-5 space-y-5">
               <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div><h2 className="font-heading font-semibold text-lg">{group.name}</h2><div className="text-xs text-muted-foreground">{group.slug}</div></div>
-                <Badge variant="outline">{group.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{group.status}</Badge>
+                  <Button size="sm" variant="outline" className="text-rose-700 hover:text-rose-800" onClick={() => deleteGroup(group)} disabled={deletingGroup === group.id || savingGroup === group.id}>
+                    <Trash2 className="w-4 h-4 mr-1" />{deletingGroup === group.id ? 'Excluindo...' : 'Excluir grupo'}
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-3">
@@ -190,7 +220,7 @@ export default function BusinessGroupsAdminPage() {
                     );
                   })}
                 </div>
-                <Button size="sm" variant="outline" onClick={() => saveTenants(group.id)} disabled={savingGroup === group.id}><Save className="w-4 h-4 mr-2" />Salvar empresas</Button>
+                <Button size="sm" variant="outline" onClick={() => saveTenants(group.id)} disabled={savingGroup === group.id || deletingGroup === group.id}><Save className="w-4 h-4 mr-2" />Salvar empresas</Button>
               </div>
 
               <div className="border-t pt-5 space-y-3">
@@ -200,7 +230,7 @@ export default function BusinessGroupsAdminPage() {
                   <select className="h-9 rounded-md border bg-background px-3 text-sm" value={memberRole[group.id] || 'owner'} onChange={(e) => setMemberRole((current) => ({ ...current, [group.id]: e.target.value }))}>
                     {GROUP_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
                   </select>
-                  <Button onClick={() => saveMember(group.id)} disabled={savingGroup === group.id || !(memberEmail[group.id] || '').trim()}><UserPlus className="w-4 h-4 mr-2" />Adicionar</Button>
+                  <Button onClick={() => saveMember(group.id)} disabled={savingGroup === group.id || deletingGroup === group.id || !(memberEmail[group.id] || '').trim()}><UserPlus className="w-4 h-4 mr-2" />Adicionar</Button>
                 </div>
                 {group.members.length > 0 && (
                   <div className="divide-y rounded-md border">
