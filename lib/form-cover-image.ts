@@ -1,8 +1,6 @@
-import { FORM_LOGO_MAX_BYTES, getFormLogoDataUrlSize, isSupportedFormLogoMimeType } from '@/lib/form-logo';
+import { getFormLogoDataUrlSize, isSupportedFormLogoMimeType } from '@/lib/form-logo';
 
-export const FORM_COVER_IMAGE_MAX_BYTES = FORM_LOGO_MAX_BYTES;
-export const FORM_COVER_IMAGE_WIDTH = 500;
-export const FORM_COVER_IMAGE_HEIGHT = 500;
+export const FORM_COVER_IMAGE_MAX_BYTES = 300 * 1024;
 
 export function isSupportedFormCoverImageMimeType(value: string): boolean {
   return isSupportedFormLogoMimeType(value);
