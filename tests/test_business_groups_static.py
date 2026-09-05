@@ -75,13 +75,18 @@ def test_app_shell_and_layout_hide_anchor_tenant_and_keep_group_route_recoverabl
     layout = read('app/(app)/layout.tsx')
     assert 'Visão do grupo' in shell
     assert 'hasCurrentTenantMembership' in shell
-    assert 'item.href === "/team" && !hasCurrentTenantMembership' in shell
+    assert 'isBusinessGroupAnchor' in shell
+    assert 'isBusinessGroupAnchor ? groupNav : baseNavItems' in shell
+    assert 'GROUP_ROLE_LABELS_PT_BR' in shell
+    assert 'Administrador do grupo' in shell
     assert 'inGroupView' in shell
     assert 'Visão consolidada' in shell
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in layout
     assert 'prisma.tenantUser.findFirst' in layout
     assert 'currentTenantIsGroupTenant' in layout
-    assert 'hasBusinessGroupAccess && !currentTenantIsGroupTenant && !isGroupRoute' in layout
+    assert 'const isBusinessGroupAnchor = hasBusinessGroupAccess && !currentTenantIsGroupTenant' in layout
+    assert 'if (isBusinessGroupAnchor && !isGroupRoute)' in layout
+    assert 'isBusinessGroupAnchor={isBusinessGroupAnchor}' in layout
     assert '!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute' in layout
 
 
