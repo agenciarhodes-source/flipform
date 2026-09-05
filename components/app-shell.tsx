@@ -95,6 +95,12 @@ const NAV: NavItem[] = [
   },
 ];
 
+const GROUP_ROLE_LABELS_PT_BR: Record<string, string> = {
+  owner: "Dono do grupo",
+  admin: "Administrador do grupo",
+  viewer: "Visualizador do grupo",
+};
+
 interface TenantBrand {
   name: string;
   slug: string;
@@ -112,12 +118,14 @@ export function AppShell({
   tenant,
   businessGroups = [],
   hasCurrentTenantMembership = true,
+  isBusinessGroupAnchor = false,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
   tenant: TenantBrand | null;
   businessGroups?: Array<{ id: string; name: string; role: string }>;
   hasCurrentTenantMembership?: boolean;
+  isBusinessGroupAnchor?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -132,7 +140,8 @@ export function AppShell({
   const groupNav: NavItem[] = businessGroups.length
     ? [{ href: "/group", label: "Visão do grupo", icon: Building2 }]
     : [];
-  const navItems = [NAV[0], ...groupNav, ...NAV.slice(1)].filter(
+  const baseNavItems = [NAV[0], ...groupNav, ...NAV.slice(1)];
+  const navItems = (isBusinessGroupAnchor ? groupNav : baseNavItems).filter(
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
@@ -140,9 +149,13 @@ export function AppShell({
   );
 
   const inGroupView = pathname === "/group" || pathname.startsWith("/group/");
+  const activeGroup = businessGroups[0] || null;
   const brandColor = tenant?.primaryColor || "#2563EB";
   const tenantName = tenant?.name || "FlipForm";
-  const displayName = inGroupView && businessGroups.length > 0 ? businessGroups[0].name : tenantName;
+  const displayName = inGroupView && activeGroup ? activeGroup.name : tenantName;
+  const userRoleLabel = inGroupView && activeGroup
+    ? GROUP_ROLE_LABELS_PT_BR[activeGroup.role] || activeGroup.role
+    : ROLE_LABELS_PT_BR[session.role as RoleName] || session.role;
   const displayInitials = displayName
     .split(" ")
     .map((p) => p[0])
@@ -218,25 +231,28 @@ export function AppShell({
           })}
         </nav>
         <div className="p-3 border-t border-sidebar-border space-y-2">
-          {businessGroups.length > 0 && (
+          {activeGroup && (
             <div className="px-3 py-2 rounded-md bg-brand-50/60 border border-brand-100">
               <div className="text-xs text-muted-foreground">Grupo empresarial</div>
-              <div className="text-sm font-medium truncate">{businessGroups[0].name}</div>
+              <div className="text-sm font-medium truncate">{activeGroup.name}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {GROUP_ROLE_LABELS_PT_BR[activeGroup.role] || activeGroup.role}
+              </div>
             </div>
           )}
-          {inGroupView && businessGroups.length > 0 ? (
+          {inGroupView && activeGroup ? (
             <div className="px-3 py-2 rounded-md bg-muted/50">
               <div className="text-xs text-muted-foreground">Escopo atual</div>
               <div className="text-sm font-medium truncate">Visão consolidada</div>
             </div>
-          ) : (
+          ) : !isBusinessGroupAnchor ? (
             <div className="px-3 py-2 rounded-md bg-muted/50">
               <div className="text-xs text-muted-foreground">Empresa atual</div>
               <div className="text-sm font-medium truncate">
                 {tenant?.slug || session.tenantSlug}
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </aside>
 
@@ -284,8 +300,8 @@ export function AppShell({
                   <div className="text-sm font-medium leading-tight">
                     {session.name}
                   </div>
-                  <div className="text-xs text-muted-foreground capitalize">
-                    {ROLE_LABELS_PT_BR[session.role as RoleName] || session.role}
+                  <div className="text-xs text-muted-foreground">
+                    {userRoleLabel}
                   </div>
                 </div>
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />
@@ -297,6 +313,11 @@ export function AppShell({
                 <div className="text-xs text-muted-foreground font-normal">
                   {session.email}
                 </div>
+                {inGroupView && activeGroup && (
+                  <div className="text-xs text-muted-foreground font-normal mt-1">
+                    {userRoleLabel} · {activeGroup.name}
+                  </div>
+                )}
               </DropdownMenuLabel>
               {businessGroups.length > 0 && (
                 <>
