@@ -42,10 +42,11 @@ export default async function AppGroupLayout({
   const currentTenantIsGroupTenant = groupState.accesses.some((group) =>
     group.tenants.some((groupTenant) => groupTenant.id === session.tenantId),
   );
+  const isBusinessGroupAnchor = hasBusinessGroupAccess && !currentTenantIsGroupTenant;
 
   // O tenant técnico serve apenas como âncora de autenticação. Usuários de grupo
   // não devem operar nele nem enxergá-lo como uma unidade de negócio.
-  if (hasBusinessGroupAccess && !currentTenantIsGroupTenant && !isGroupRoute) {
+  if (isBusinessGroupAnchor && !isGroupRoute) {
     redirect("/group");
   }
 
@@ -61,6 +62,7 @@ export default async function AppGroupLayout({
       session={session}
       businessGroups={groupState.accesses.map((group) => ({ id: group.id, name: group.name, role: group.role }))}
       hasCurrentTenantMembership={Boolean(currentTenantMembership)}
+      isBusinessGroupAnchor={isBusinessGroupAnchor}
       tenant={
         tenant
           ? {

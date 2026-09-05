@@ -1,6 +1,7 @@
 
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ function getAdminAccessErrorMessage(raw: any, fallback: string) {
     NO_ACTIVE_PLAN: 'Nenhum plano ativo encontrado.',
     DB_SCHEMA_NOT_READY: 'Banco de dados não está alinhado com o schema. Rode o diagnóstico/migration.',
     ADMIN_SCHEMA_NOT_READY: 'Banco de dados não está alinhado com o schema. Rode o diagnóstico/migration.',
+    ALLOWED_USER_NOT_FOUND: 'Este acesso não existe mais.',
     P2002: 'Este e-mail já possui acesso neste tenant.',
     P2003: 'Falha de vínculo no banco. Rode o diagnóstico/migration.',
   };
@@ -46,6 +48,7 @@ export default function AdminAccessPage() {
   const [newActive, setNewActive] = useState(true);
   const [newTenant, setNewTenant] = useState('auto');
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const query = useMemo(() => { const p = new URLSearchParams(); if (q.trim()) p.set('q', q.trim()); return p.toString(); }, [q]);
 
@@ -90,6 +93,32 @@ export default function AdminAccessPage() {
     finally { setCreating(false); }
   }
 
+  async function deleteAccess(item: any) {
+    const tenantName = item.tenant?.name || item.tenantId || 'empresa vinculada';
+    const confirmed = window.confirm(
+      `Excluir definitivamente o acesso de ${item.email} em ${tenantName}?\n\n` +
+      'Esta ação remove somente a autorização de acesso. O usuário, a empresa, leads, formulários, integrações e demais dados NÃO serão apagados. ' +
+      'Se este for o único acesso ativo desse usuário, ele deixará de conseguir entrar por esse tenant.',
+    );
+    if (!confirmed) return;
+
+    setDeletingId(item.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/allowed-users/${item.id}`, { method: 'DELETE' });
+      const raw = await readJsonSafe(res);
+      if (!raw) throw new Error('Resposta vazia do servidor. Verifique os logs da API.');
+      if (!res.ok || raw.ok === false) throw new Error(getAdminAccessErrorMessage(raw, 'Falha ao excluir acesso.'));
+      setSuccess('Acesso excluído. Usuário, empresa e dados foram preservados.');
+      await load();
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao excluir acesso.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return <div className="p-8 space-y-5">
     <div><h1 className="text-2xl font-bold">Acessos da plataforma</h1><p className="text-sm text-muted-foreground">Adicionar acesso direto</p></div>
     {error && <Card className="p-3 text-sm text-rose-700">{error}</Card>}
@@ -114,7 +143,7 @@ export default function AdminAccessPage() {
     <Card className="p-4 space-y-2">
       <Input placeholder="Buscar por e-mail" value={q} onChange={(e)=>setQ(e.target.value)} />
       {loading ? <div className="text-sm text-muted-foreground">Carregando...</div> : error ? <div className="text-sm text-rose-700">Não foi possível carregar a lista. Corrija o erro acima e tente novamente.</div> : <div className="text-sm">{items.length} acesso(s)</div>}
-      {!loading && !error && items.length > 0 && <div className="divide-y rounded-md border">{items.map((item) => <div key={item.id} className="flex flex-col gap-1 p-3 text-sm md:flex-row md:items-center md:justify-between"><div><div className="font-medium">{item.email}</div><div className="text-xs text-muted-foreground">{item.tenant?.name || item.tenantId} · {item.role} · {item.status}</div></div><div className={item.active ? 'text-emerald-700' : 'text-rose-700'}>{item.active ? 'Ativo' : 'Inativo'}</div></div>)}</div>}
+      {!loading && !error && items.length > 0 && <div className="divide-y rounded-md border">{items.map((item) => <div key={item.id} className="flex flex-col gap-2 p-3 text-sm md:flex-row md:items-center md:justify-between"><div><div className="font-medium">{item.email}</div><div className="text-xs text-muted-foreground">{item.tenant?.name || item.tenantId} · {item.role} · {item.status}</div></div><div className="flex items-center gap-3"><div className={item.active ? 'text-emerald-700' : 'text-rose-700'}>{item.active ? 'Ativo' : 'Inativo'}</div><Button size="sm" variant="outline" className="text-rose-700 hover:text-rose-800" onClick={() => deleteAccess(item)} disabled={deletingId === item.id}><Trash2 className="w-4 h-4 mr-1" />{deletingId === item.id ? 'Excluindo...' : 'Excluir'}</Button></div></div>)}</div>}
     </Card>
   </div>;
 }
