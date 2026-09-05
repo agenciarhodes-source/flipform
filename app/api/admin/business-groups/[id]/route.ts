@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
@@ -83,5 +84,50 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
     return NextResponse.json({ ok: true });
   } catch (error) {
     return errorResponse(error);
+  }
+});
+
+export const DELETE = withPlatformAdmin(async (_req: NextRequest, session, ctx: { params: { id: string } }) => {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ id: string; name: string; slug: string; status: string }>>(Prisma.sql`
+      SELECT id, name, slug, status
+      FROM business_groups
+      WHERE id = ${ctx.params.id}
+      LIMIT 1
+    `);
+    const current = rows[0];
+    if (!current) {
+      return NextResponse.json({ error: 'Grupo empresarial não encontrado.', code: 'BUSINESS_GROUP_NOT_FOUND' }, { status: 404 });
+    }
+
+    // As FKs do schema de grupos usam ON DELETE CASCADE somente para
+    // business_group_tenants e business_group_users. Tenants, usuários e dados
+    // operacionais não são removidos por esta ação.
+    await prisma.$executeRaw(Prisma.sql`
+      DELETE FROM business_groups
+      WHERE id = ${ctx.params.id}
+    `);
+
+    await safeAudit({
+      tenantId: null,
+      userId: session.userId,
+      entityType: 'business_group',
+      entityId: current.id,
+      action: 'business_group.deleted',
+      metadata: {
+        name: current.name,
+        slug: current.slug,
+        previousStatus: current.status,
+        dataDeletion: false,
+      },
+    });
+
+    return NextResponse.json({ ok: true, deletedId: current.id });
+  } catch (error) {
+    if ((error as any)?.code === 'P2010' || (error as any)?.code === 'P2021') {
+      return NextResponse.json({ error: 'Estrutura de grupos empresariais ainda não instalada.', code: 'BUSINESS_GROUP_SCHEMA_NOT_READY' }, { status: 503 });
+    }
+    console.error('[admin.business-groups.delete]', error);
+    return NextResponse.json({ error: 'Falha ao excluir grupo empresarial.' }, { status: 500 });
   }
 });
