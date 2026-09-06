@@ -8,11 +8,17 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
 const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const;
+const GROUP_ROLE_LABELS: Record<string, string> = {
+  owner: 'Dono do grupo',
+  admin: 'Administrador do grupo',
+  viewer: 'Visualizador do grupo',
+};
 
 type Tenant = { id: string; name: string; slug: string; status: string };
 type Member = { id: string; userId: string; name: string; email: string; role: string; status: string };
+type AccessAccount = { userId: string; name: string; email: string };
 type Group = { id: string; name: string; slug: string; status: string; tenants: Tenant[]; members: Member[] };
-type Snapshot = { schemaReady: boolean; groups: Group[]; availableTenants: Tenant[] };
+type Snapshot = { schemaReady: boolean; groups: Group[]; availableTenants: Tenant[]; availableAccesses: AccessAccount[] };
 
 export default function BusinessGroupsAdminPage() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -22,7 +28,7 @@ export default function BusinessGroupsAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tenantDrafts, setTenantDrafts] = useState<Record<string, string[]>>({});
-  const [memberEmail, setMemberEmail] = useState<Record<string, string>>({});
+  const [memberUserId, setMemberUserId] = useState<Record<string, string>>({});
   const [memberRole, setMemberRole] = useState<Record<string, string>>({});
   const [savingGroup, setSavingGroup] = useState<string | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<string | null>(null);
@@ -39,7 +45,7 @@ export default function BusinessGroupsAdminPage() {
       const roles: Record<string, string> = {};
       for (const group of data.groups || []) {
         drafts[group.id] = group.tenants.map((tenant: Tenant) => tenant.id);
-        roles[group.id] = 'owner';
+        roles[group.id] = 'admin';
       }
       setTenantDrafts(drafts);
       setMemberRole(roles);
@@ -66,7 +72,7 @@ export default function BusinessGroupsAdminPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao criar grupo.');
       setNewName('');
-      setSuccess('Grupo empresarial criado. Agora vincule as empresas e os responsáveis.');
+      setSuccess('Grupo criado. Agora selecione as empresas e o acesso responsável.');
       await load();
     } catch (e: any) {
       setError(e.message || 'Falha ao criar grupo.');
@@ -104,8 +110,8 @@ export default function BusinessGroupsAdminPage() {
   }
 
   async function saveMember(groupId: string) {
-    const email = (memberEmail[groupId] || '').trim();
-    if (!email) return;
+    const userId = memberUserId[groupId] || '';
+    if (!userId) return;
     setSavingGroup(groupId);
     setError(null);
     setSuccess(null);
@@ -113,11 +119,11 @@ export default function BusinessGroupsAdminPage() {
       const response = await fetch(`/api/admin/business-groups/${groupId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member: { email, role: memberRole[groupId] || 'owner', status: 'active' } }),
+        body: JSON.stringify({ member: { userId, role: memberRole[groupId] || 'admin', status: 'active' } }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao adicionar responsável.');
-      setMemberEmail((current) => ({ ...current, [groupId]: '' }));
+      setMemberUserId((current) => ({ ...current, [groupId]: '' }));
       setSuccess('Responsável vinculado ao grupo com sucesso.');
       await load();
     } catch (e: any) {
@@ -153,6 +159,7 @@ export default function BusinessGroupsAdminPage() {
 
   const groups = snapshot?.groups || [];
   const availableTenants = snapshot?.availableTenants || [];
+  const availableAccesses = snapshot?.availableAccesses || [];
   const statusCount = useMemo(() => availableTenants.filter((tenant) => tenant.status === 'active').length, [availableTenants]);
 
   return (
@@ -160,7 +167,7 @@ export default function BusinessGroupsAdminPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-2"><Building2 className="w-6 h-6" /><h1 className="text-2xl font-semibold">Grupos empresariais</h1></div>
-          <p className="text-sm text-muted-foreground mt-1">Consolide empresas independentes sem mover leads, formulários ou integrações entre tenants.</p>
+          <p className="text-sm text-muted-foreground mt-1">Crie o grupo, selecione as empresas e escolha um acesso já cadastrado para administrá-lo.</p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading}><RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Atualizar</Button>
       </div>
@@ -177,8 +184,8 @@ export default function BusinessGroupsAdminPage() {
 
       <Card className="p-5 space-y-3">
         <div>
-          <h2 className="font-medium">Criar grupo</h2>
-          <p className="text-xs text-muted-foreground">Exemplo: Belo Norte. Depois você seleciona Parnaíba, Imperatriz e São Luís.</p>
+          <h2 className="font-medium">1. Criar grupo</h2>
+          <p className="text-xs text-muted-foreground">Exemplo: Belo Norte.</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nome do grupo empresarial" disabled={!snapshot?.schemaReady || creating} />
@@ -186,7 +193,7 @@ export default function BusinessGroupsAdminPage() {
             {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}Criar grupo
           </Button>
         </div>
-        <div className="text-xs text-muted-foreground">{availableTenants.length} tenant(s) disponível(is), {statusCount} ativo(s).</div>
+        <div className="text-xs text-muted-foreground">{availableTenants.length} empresa(s) disponível(is), {statusCount} ativa(s) · {availableAccesses.length} acesso(s) cadastrado(s).</div>
       </Card>
 
       {loading ? (
@@ -208,7 +215,7 @@ export default function BusinessGroupsAdminPage() {
               </div>
 
               <div className="space-y-3">
-                <div><div className="font-medium text-sm">Empresas do grupo</div><div className="text-xs text-muted-foreground">Marque somente os tenants que pertencem a este grupo.</div></div>
+                <div><div className="font-medium text-sm">2. Empresas do grupo</div><div className="text-xs text-muted-foreground">Marque somente as empresas que pertencem a este grupo.</div></div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                   {availableTenants.map((tenant) => {
                     const checked = (tenantDrafts[group.id] || []).includes(tenant.id);
@@ -224,20 +231,33 @@ export default function BusinessGroupsAdminPage() {
               </div>
 
               <div className="border-t pt-5 space-y-3">
-                <div><div className="font-medium text-sm">Responsáveis pelo grupo</div><div className="text-xs text-muted-foreground">O e-mail precisa já existir como usuário no FlipForm. Nenhuma senha é alterada.</div></div>
-                <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-2">
-                  <Input value={memberEmail[group.id] || ''} onChange={(e) => setMemberEmail((current) => ({ ...current, [group.id]: e.target.value }))} placeholder="responsavel@empresa.com" />
-                  <select className="h-9 rounded-md border bg-background px-3 text-sm" value={memberRole[group.id] || 'owner'} onChange={(e) => setMemberRole((current) => ({ ...current, [group.id]: e.target.value }))}>
-                    {GROUP_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-                  </select>
-                  <Button onClick={() => saveMember(group.id)} disabled={savingGroup === group.id || deletingGroup === group.id || !(memberEmail[group.id] || '').trim()}><UserPlus className="w-4 h-4 mr-2" />Adicionar</Button>
+                <div>
+                  <div className="font-medium text-sm">3. Administrador / responsável do grupo</div>
+                  <div className="text-xs text-muted-foreground">Selecione um acesso já cadastrado em Acessos da plataforma. Não é necessário criar tenant técnico nem digitar e-mail manualmente.</div>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-2">
+                  <select
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    value={memberUserId[group.id] || ''}
+                    onChange={(e) => setMemberUserId((current) => ({ ...current, [group.id]: e.target.value }))}
+                  >
+                    <option value="">Selecione um acesso cadastrado</option>
+                    {availableAccesses.map((access) => (
+                      <option key={access.userId} value={access.userId}>{access.name} — {access.email}</option>
+                    ))}
+                  </select>
+                  <select className="h-9 rounded-md border bg-background px-3 text-sm" value={memberRole[group.id] || 'admin'} onChange={(e) => setMemberRole((current) => ({ ...current, [group.id]: e.target.value }))}>
+                    {GROUP_ROLES.map((role) => <option key={role} value={role}>{GROUP_ROLE_LABELS[role]}</option>)}
+                  </select>
+                  <Button onClick={() => saveMember(group.id)} disabled={savingGroup === group.id || deletingGroup === group.id || !(memberUserId[group.id] || '')}><UserPlus className="w-4 h-4 mr-2" />Vincular acesso</Button>
+                </div>
+                {availableAccesses.length === 0 && <div className="text-xs text-amber-700">Nenhum acesso cadastrado. Crie primeiro em Acessos da plataforma.</div>}
                 {group.members.length > 0 && (
                   <div className="divide-y rounded-md border">
                     {group.members.map((member) => (
                       <div key={member.id} className="p-3 flex items-center justify-between gap-3 text-sm">
                         <div className="min-w-0"><div className="font-medium truncate">{member.name}</div><div className="text-xs text-muted-foreground truncate">{member.email}</div></div>
-                        <div className="flex items-center gap-2"><Badge variant="outline">{member.role}</Badge><Badge variant={member.status === 'active' ? 'secondary' : 'outline'}>{member.status}</Badge></div>
+                        <div className="flex items-center gap-2"><Badge variant="outline">{GROUP_ROLE_LABELS[member.role] || member.role}</Badge><Badge variant={member.status === 'active' ? 'secondary' : 'outline'}>{member.status}</Badge></div>
                       </div>
                     ))}
                   </div>
