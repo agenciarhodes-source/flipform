@@ -25,7 +25,7 @@ def test_admin_api_already_returns_tenants_for_safe_selection():
     page = read('app/admin/(secure)/allowed-users/page.tsx')
 
     assert 'prisma.tenant.findMany' in route
-    assert 'adminOk({ items, tenants, plans })' in route
+    assert 'adminOk({ items, accounts, tenants, plans })' in route
     assert "setTenants(Array.isArray(data.data?.tenants) ? data.data.tenants : [])" in page
 
 

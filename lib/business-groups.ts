@@ -35,6 +35,12 @@ export type BusinessGroupAdminMember = {
   status: string;
 };
 
+export type BusinessGroupAdminAccess = {
+  userId: string;
+  name: string;
+  email: string;
+};
+
 export type BusinessGroupAdminItem = {
   id: string;
   name: string;
@@ -191,10 +197,19 @@ export async function getBusinessGroupAccessesForUser(db: Db, userId: string): P
 }
 
 export async function getBusinessGroupAdminSnapshot(db: PrismaClient) {
-  const availableTenants = await db.tenant.findMany({
-    select: { id: true, name: true, slug: true, status: true },
-    orderBy: { name: 'asc' },
-  });
+  const [availableTenants, users] = await Promise.all([
+    db.tenant.findMany({
+      select: { id: true, name: true, slug: true, status: true },
+      orderBy: { name: 'asc' },
+    }),
+    db.user.findMany({
+      select: { id: true, name: true, email: true, globalRole: true },
+      orderBy: { email: 'asc' },
+    }),
+  ]);
+  const availableAccesses: BusinessGroupAdminAccess[] = users
+    .filter((user) => user.globalRole !== 'platform_admin')
+    .map((user) => ({ userId: user.id, name: user.name, email: user.email }));
 
   try {
     const [groupRows, tenantRows, memberRows] = await Promise.all([
@@ -255,6 +270,7 @@ export async function getBusinessGroupAdminSnapshot(db: PrismaClient) {
       schemaReady: true,
       groups,
       availableTenants: availableTenants.map((tenant) => ({ ...tenant, status: String(tenant.status) })),
+      availableAccesses,
     };
   } catch (error) {
     if (!isMissingBusinessGroupTable(error)) throw error;
@@ -262,6 +278,7 @@ export async function getBusinessGroupAdminSnapshot(db: PrismaClient) {
       schemaReady: false,
       groups: [] as BusinessGroupAdminItem[],
       availableTenants: availableTenants.map((tenant) => ({ ...tenant, status: String(tenant.status) })),
+      availableAccesses,
     };
   }
 }
@@ -333,7 +350,8 @@ export async function replaceBusinessGroupTenants(db: PrismaClient, input: {
 
 export async function upsertBusinessGroupMember(db: PrismaClient, input: {
   groupId: string;
-  email: string;
+  userId?: string;
+  email?: string;
   role: BusinessGroupRole;
   status?: 'active' | 'revoked';
   actorUserId: string;
@@ -341,10 +359,15 @@ export async function upsertBusinessGroupMember(db: PrismaClient, input: {
   if (!isBusinessGroupRole(input.role)) {
     throw new BusinessGroupError('INVALID_BUSINESS_GROUP_ROLE', 'Papel de grupo inválido.');
   }
-  const email = input.email.trim().toLowerCase();
-  const user = await db.user.findUnique({ where: { email }, select: { id: true, email: true, name: true } });
+
+  const email = input.email?.trim().toLowerCase();
+  const user = input.userId
+    ? await db.user.findUnique({ where: { id: input.userId }, select: { id: true, email: true, name: true } })
+    : email
+      ? await db.user.findUnique({ where: { email }, select: { id: true, email: true, name: true } })
+      : null;
   if (!user) {
-    throw new BusinessGroupError('BUSINESS_GROUP_USER_NOT_FOUND', 'Este e-mail ainda não possui usuário no FlipForm.');
+    throw new BusinessGroupError('BUSINESS_GROUP_USER_NOT_FOUND', 'Selecione um acesso cadastrado no FlipForm.');
   }
 
   try {

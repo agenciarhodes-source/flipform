@@ -4,6 +4,7 @@ import { adminError, adminOk } from '@/lib/api/admin-response';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { createManualAccess } from '@/services/admin/manual-access-service';
+import { createGroupAccessAccount } from '@/services/admin/group-access-account-service';
 
 const ERROR_STATUS: Record<string, number> = {
   INVALID_EMAIL: 400,
@@ -12,6 +13,7 @@ const ERROR_STATUS: Record<string, number> = {
   INVALID_STATUS: 400,
   TENANT_NOT_FOUND: 404,
   NO_ACTIVE_PLAN: 409,
+  ACCESS_ACCOUNT_EXISTS: 409,
   DB_SCHEMA_NOT_READY: 503,
   ADMIN_SCHEMA_NOT_READY: 503,
   P2002: 409,
@@ -67,11 +69,21 @@ export async function GET(req: Request) {
     if (filters.active === 'true') where.active = true;
     if (filters.active === 'false') where.active = false;
 
-    const [allowedUsers, tenants, plans, subscriptions] = await Promise.all([
+    const [allowedUsers, tenants, plans, subscriptions, users] = await Promise.all([
       prisma.allowedUser.findMany({ where, orderBy: { createdAt: 'desc' } }),
       prisma.tenant.findMany({ select: { id: true, name: true, slug: true, status: true, planId: true }, orderBy: { name: 'asc' } }),
       prisma.plan.findMany({ where: { isActive: true }, orderBy: { price: 'asc' } }),
       prisma.subscription.findMany({ select: { id: true, tenantId: true, planId: true, status: true, provider: true, paymentRequired: true, paymentProvider: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } }),
+      prisma.user.findMany({
+        where: filters.q ? {
+          OR: [
+            { email: { contains: filters.q, mode: 'insensitive' } },
+            { name: { contains: filters.q, mode: 'insensitive' } },
+          ],
+        } : undefined,
+        select: { id: true, email: true, name: true, globalRole: true, createdAt: true },
+        orderBy: { email: 'asc' },
+      }),
     ]);
 
     type TenantRow = { id: string; name: string; slug: string; status: string; planId: string | null };
@@ -92,7 +104,22 @@ export async function GET(req: Request) {
       };
     });
 
-    return adminOk({ items, tenants, plans });
+    const directAccessCountByEmail = new Map<string, number>();
+    for (const item of allowedUsers as AllowedUserRow[]) {
+      const key = item.email.toLowerCase();
+      directAccessCountByEmail.set(key, (directAccessCountByEmail.get(key) || 0) + 1);
+    }
+    const accounts = users
+      .filter((user) => user.globalRole !== 'platform_admin')
+      .map((user) => ({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        createdAt: user.createdAt,
+        directAccessCount: directAccessCountByEmail.get(user.email.toLowerCase()) || 0,
+      }));
+
+    return adminOk({ items, accounts, tenants, plans });
   } catch (error: unknown) {
     const details = toErrorDetails(error);
     console.error('[admin/allowed-users][GET]', {
@@ -148,6 +175,20 @@ export async function POST(req: Request) {
       planSlug: String(body.planSlug || 'growth').toLowerCase(),
       mode: String(body.mode || '').toLowerCase(),
     };
+
+    if (payload.mode === 'group_account') {
+      const account = await createGroupAccessAccount({
+        email: payload.email,
+        password: payload.password,
+        adminUserId: session.userId,
+      });
+      logAdminAllowedUsers('group_access_account_created', {
+        adminUserId: session.userId,
+        email: account.email,
+        userId: account.id,
+      });
+      return adminOk({ account });
+    }
 
     if (payload.mode === 'direct' || !payload.tenantId) {
       const manualPayload = { ...payload, status: 'active', active: true, adminUserId: session.userId };
