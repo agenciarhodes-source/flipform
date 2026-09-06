@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { verifyPassword, setSessionCookie } from '@/lib/auth';
 import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
-import { getBusinessGroupAccessesForUser } from '@/lib/business-groups';
+import { logPlatformAudit } from '@/lib/platform-audit';
+import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
@@ -56,6 +57,51 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, platformAdmin: true });
     }
 
+    // Um vínculo ativo com grupo empresarial é uma autorização de login por si só.
+    // O usuário entra no hub do grupo sem depender de AllowedUser/TenantUser técnico.
+    const groupState = await getBusinessGroupAccessesForUser(prisma, user.id);
+    const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0;
+    if (businessGroupAccess) {
+      const primaryGroup = groupState.accesses[0];
+      const groupSessionRole = mapBusinessGroupRoleToTenantRole(primaryGroup.role);
+      await setSessionCookie({
+        userId: user.id,
+        tenantId: '',
+        role: groupSessionRole,
+        email: user.email,
+        name: user.name,
+        tenantSlug: '',
+        globalRole: null,
+      });
+
+      try {
+        await logPlatformAudit({
+          tenantId: null,
+          userId: user.id,
+          entityType: 'session',
+          entityId: user.id,
+          action: 'auth.group_login',
+          metadata: {
+            email: user.email,
+            businessGroupId: primaryGroup.id,
+            businessGroupName: primaryGroup.name,
+            businessGroupRole: primaryGroup.role,
+          },
+        });
+      } catch (auditError) {
+        console.error('[auth/login][POST][group-audit]', auditError);
+      }
+
+      logLogin('group_success', {
+        ip,
+        email: normalizedEmail,
+        userId: user.id,
+        businessGroupId: primaryGroup.id,
+        businessGroupRole: primaryGroup.role,
+      });
+      return NextResponse.json({ ok: true, platformAdmin: false, businessGroupAccess: true });
+    }
+
     const memberships = await prisma.tenantUser.findMany({
       where: { userId: user.id, status: 'active' },
       include: { tenant: true },
@@ -98,8 +144,6 @@ export async function POST(req: Request) {
     }
 
     const selectedAllowedUser = allowedByTenant.get(selectedMembership.tenantId);
-    const groupState = await getBusinessGroupAccessesForUser(prisma, user.id);
-    const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0;
 
     await setSessionCookie({
       userId: user.id,
@@ -121,7 +165,7 @@ export async function POST(req: Request) {
           email: user.email,
           role: selectedMembership.role,
           allowedUserId: (selectedAllowedUser as AllowedRow | undefined)?.id,
-          businessGroupAccess,
+          businessGroupAccess: false,
         },
       });
     } catch (auditError) {
@@ -140,9 +184,9 @@ export async function POST(req: Request) {
       userId: user.id,
       tenantId: selectedMembership.tenantId,
       role: selectedMembership.role,
-      businessGroupAccess,
+      businessGroupAccess: false,
     });
-    return NextResponse.json({ ok: true, platformAdmin: false, businessGroupAccess });
+    return NextResponse.json({ ok: true, platformAdmin: false, businessGroupAccess: false });
   } catch (error: unknown) {
     const err = error as { message?: string; code?: string; meta?: unknown; stack?: string };
     console.error('[auth/login][POST]', {
