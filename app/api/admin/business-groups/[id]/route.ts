@@ -10,13 +10,18 @@ import {
 } from '@/lib/business-groups';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
+const memberSchema = z.object({
+  userId: z.string().uuid().optional(),
+  email: z.string().trim().email().optional(),
+  role: z.enum(['owner', 'admin', 'viewer']),
+  status: z.enum(['active', 'revoked']).default('active'),
+}).refine((value) => Boolean(value.userId || value.email), {
+  message: 'Selecione um acesso cadastrado.',
+});
+
 const updateSchema = z.object({
   tenantIds: z.array(z.string().uuid()).optional(),
-  member: z.object({
-    email: z.string().trim().email(),
-    role: z.enum(['owner', 'admin', 'viewer']),
-    status: z.enum(['active', 'revoked']).default('active'),
-  }).optional(),
+  member: memberSchema.optional(),
 }).refine((value) => value.tenantIds !== undefined || value.member !== undefined, {
   message: 'Nenhuma alteração informada.',
 });
@@ -66,6 +71,7 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
     if (parsed.data.member) {
       const user = await upsertBusinessGroupMember(prisma, {
         groupId: ctx.params.id,
+        userId: parsed.data.member.userId,
         email: parsed.data.member.email,
         role: parsed.data.member.role,
         status: parsed.data.member.status,
