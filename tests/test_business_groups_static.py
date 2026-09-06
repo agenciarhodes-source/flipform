@@ -60,17 +60,29 @@ def test_group_overview_is_read_only_and_not_trapped_by_current_tenant_billing()
         assert token not in route
 
 
-def test_login_redirects_group_users_without_changing_existing_membership_gate():
+def test_login_prioritizes_active_group_access_without_tenant_anchor():
     login_route = read('app/api/auth/login/route.ts')
     login_page = read('app/login/page.tsx')
-    assert "prisma.tenantUser.findMany" in login_route
-    assert "prisma.allowedUser.findMany" in login_route
     assert 'getBusinessGroupAccessesForUser(prisma, user.id)' in login_route
-    assert 'businessGroupAccess' in login_route
+    assert 'const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0' in login_route
+    assert "tenantId: ''" in login_route
+    assert "tenantSlug: ''" in login_route
+    assert "action: 'auth.group_login'" in login_route
+    assert login_route.index('getBusinessGroupAccessesForUser(prisma, user.id)') < login_route.index('prisma.tenantUser.findMany')
+    assert login_route.index('if (businessGroupAccess)') < login_route.index('prisma.allowedUser.findMany')
     assert "router.push('/group')" in login_page
 
 
-def test_app_shell_and_layout_hide_anchor_tenant_and_keep_group_route_recoverable():
+def test_non_group_login_keeps_existing_tenant_and_allowed_user_gate():
+    login_route = read('app/api/auth/login/route.ts')
+    assert 'prisma.tenantUser.findMany' in login_route
+    assert 'prisma.allowedUser.findMany' in login_route
+    assert "status: 'active'" in login_route
+    assert 'active: true' in login_route
+    assert 'selectedMembership' in login_route
+
+
+def test_app_shell_and_layout_hide_group_hub_and_keep_group_route_recoverable():
     shell = read('components/app-shell.tsx')
     layout = read('app/(app)/layout.tsx')
     assert 'Visão do grupo' in shell
@@ -90,12 +102,18 @@ def test_app_shell_and_layout_hide_anchor_tenant_and_keep_group_route_recoverabl
     assert '!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute' in layout
 
 
-def test_platform_admin_controls_groups_and_existing_users_only():
+def test_platform_admin_selects_registered_access_by_user_id():
     route = read('app/api/admin/business-groups/route.ts')
     update = read('app/api/admin/business-groups/[id]/route.ts')
     helper = read('lib/business-groups.ts')
+    page = read('app/admin/(secure)/groups/page.tsx')
     assert 'withPlatformAdmin' in route
     assert 'withPlatformAdmin' in update
-    assert 'db.user.findUnique({ where: { email }' in helper
+    assert 'availableAccesses' in helper
+    assert "user.globalRole !== 'platform_admin'" in helper
+    assert 'userId: z.string().uuid().optional()' in update
+    assert 'userId: parsed.data.member.userId' in update
+    assert 'availableAccesses.map' in page
+    assert "member: { userId" in page
     assert 'passwordHash' not in helper
     assert 'upsertBusinessGroupMember' in update
