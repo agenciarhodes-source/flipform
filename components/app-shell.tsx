@@ -137,18 +137,27 @@ export function AppShell({
     router.refresh();
   };
 
-  const groupNav: NavItem[] = businessGroups.length
+  const inGroupView = pathname === "/group" || pathname.startsWith("/group/");
+  const groupHubNav: NavItem[] = businessGroups.length
     ? [{ href: "/group", label: "Visão do grupo", icon: Building2 }]
     : [];
-  const baseNavItems = [NAV[0], ...groupNav, ...NAV.slice(1)];
-  const navItems = (isBusinessGroupAnchor ? groupNav : baseNavItems).filter(
+  const groupWorkspaceNav: NavItem[] = businessGroups.length
+    ? [
+        { href: "/group", label: "Dashboard", icon: LayoutDashboard },
+        { href: "/group/leads", label: "Leads", icon: Users },
+        { href: "/group/forms", label: "Formulários", icon: FileText },
+        { href: "/group/reports", label: "Relatórios", icon: BarChart3 },
+      ]
+    : [];
+  const baseNavItems = [NAV[0], ...groupHubNav, ...NAV.slice(1)];
+  const navItems = ((inGroupView || isBusinessGroupAnchor) ? groupWorkspaceNav : baseNavItems).filter(
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
       && !(item.href === "/team" && !hasCurrentTenantMembership),
   );
+  const isNavItemActive = (href: string) => href === "/group" ? pathname === "/group" : pathname.startsWith(href);
 
-  const inGroupView = pathname === "/group" || pathname.startsWith("/group/");
   const activeGroup = businessGroups[0] || null;
   const brandColor = tenant?.primaryColor || "#2563EB";
   const tenantName = tenant?.name || "FlipForm";
@@ -210,7 +219,7 @@ export function AppShell({
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
           {navItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+            const active = isNavItemActive(item.href);
             const Icon = item.icon;
             return (
               <Link
@@ -279,7 +288,7 @@ export function AppShell({
             </Button>
             <div>
               <div className="font-heading font-semibold">
-                {navItems.find((n) => pathname.startsWith(n.href))?.label ||
+                {navItems.find((n) => isNavItemActive(n.href))?.label ||
                   "FlipForm"}
               </div>
             </div>
