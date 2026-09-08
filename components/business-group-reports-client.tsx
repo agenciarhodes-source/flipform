@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Building2, ExternalLink, Loader2, RefreshCcw, Users, TrendingUp, CircleDollarSign, Target, Trophy, XCircle } from 'lucide-react';
+import { BarChart3, CircleDollarSign, Loader2, Printer, RefreshCcw, Target, TrendingUp, Trophy, Users, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,15 +48,20 @@ type Overview = {
   }>;
 };
 
-export function BusinessGroupOverviewClient() {
-  const router = useRouter();
+const PERIOD_LABELS: Record<string, string> = {
+  today: 'Hoje',
+  '7d': 'Últimos 7 dias',
+  '30d': 'Últimos 30 dias',
+};
+
+export function BusinessGroupReportsClient() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
   const [groupId, setGroupId] = useState('');
   const [tenantId, setTenantId] = useState('all');
   const [loading, setLoading] = useState(true);
-  const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,12 +71,13 @@ export function BusinessGroupOverviewClient() {
       if (groupId) params.set('groupId', groupId);
       if (tenantId !== 'all') params.set('tenantId', tenantId);
       const response = await fetch(`/api/business-groups/overview?${params.toString()}`, { cache: 'no-store' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erro ao carregar dashboard do grupo.');
-      setOverview(data);
-      if (!groupId) setGroupId(data.group.id);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Erro ao gerar relatório do grupo.');
+      setOverview(payload);
+      setGeneratedAt(new Date());
+      if (!groupId) setGroupId(payload.group.id);
     } catch (e: any) {
-      setError(e.message || 'Erro ao carregar dashboard do grupo.');
+      setError(e.message || 'Erro ao gerar relatório do grupo.');
     } finally {
       setLoading(false);
     }
@@ -80,37 +85,11 @@ export function BusinessGroupOverviewClient() {
 
   useEffect(() => { load(); }, [load]);
 
-  const currentTenant = useMemo(
-    () => overview?.tenantOptions.find((tenant) => tenant.id === tenantId) || null,
-    [overview, tenantId],
-  );
-
   const performanceRows = useMemo(() => {
     if (!overview) return [];
     if (!overview.selectedTenantId) return overview.tenantPerformance;
-    return overview.tenantPerformance.filter((tenant) => tenant.tenantId === overview.selectedTenantId);
+    return overview.tenantPerformance.filter((row) => row.tenantId === overview.selectedTenantId);
   }, [overview]);
-
-  async function openTenant(targetTenantId: string) {
-    if (!overview?.group.id) return;
-    setSwitchingTenantId(targetTenantId);
-    setError(null);
-    try {
-      const response = await fetch('/api/business-groups/switch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ groupId: overview.group.id, tenantId: targetTenantId }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Não foi possível abrir esta unidade.');
-      router.push('/dashboard');
-      router.refresh();
-    } catch (e: any) {
-      setError(e.message || 'Não foi possível abrir esta unidade.');
-    } finally {
-      setSwitchingTenantId(null);
-    }
-  }
 
   const cards = overview ? [
     { label: 'Leads', value: overview.summary.totalLeads, icon: Users },
@@ -122,26 +101,35 @@ export function BusinessGroupOverviewClient() {
   ] : [];
 
   return (
-    <div className="p-4 lg:p-8 space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+    <div className="group-report-page p-4 lg:p-8 space-y-5">
+      <style jsx global>{`
+        @media print {
+          body:has(.group-report-page) aside,
+          body:has(.group-report-page) header,
+          body:has(.group-report-page) .group-report-print-hide { display: none !important; }
+          body:has(.group-report-page) main { overflow: visible !important; }
+          body:has(.group-report-page) .group-report-page { padding: 0 !important; }
+          body:has(.group-report-page) .group-report-print-card { box-shadow: none !important; break-inside: avoid; }
+        }
+      `}</style>
+
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between group-report-print-hide">
         <div>
           <div className="flex items-center gap-2">
-            <Building2 className="w-6 h-6 text-brand-600" />
-            <h1 className="font-heading text-2xl lg:text-3xl font-bold">Dashboard do grupo</h1>
+            <BarChart3 className="w-6 h-6 text-brand-600" />
+            <h1 className="font-heading text-2xl lg:text-3xl font-bold">Relatórios do grupo</h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">Acompanhe toda a operação ou selecione uma empresa para ver seus resultados isoladamente.</p>
+          <p className="text-sm text-muted-foreground mt-1">Gere uma visão consolidada ou filtre uma empresa específica para imprimir ou salvar em PDF.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {overview && overview.groupOptions.length > 1 && (
             <Select value={groupId || overview.group.id} onValueChange={(value) => { setGroupId(value); setTenantId('all'); }}>
               <SelectTrigger className="w-[210px]"><SelectValue placeholder="Grupo" /></SelectTrigger>
-              <SelectContent>
-                {overview.groupOptions.map((group) => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}
-              </SelectContent>
+              <SelectContent>{overview.groupOptions.map((group) => <SelectItem key={group.id} value={group.id}>{group.name}</SelectItem>)}</SelectContent>
             </Select>
           )}
           <Select value={tenantId} onValueChange={setTenantId}>
-            <SelectTrigger className="w-[230px]"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[220px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Toda a operação</SelectItem>
               {overview?.tenantOptions.map((tenant) => (
@@ -151,7 +139,7 @@ export function BusinessGroupOverviewClient() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={period} onValueChange={(value) => setPeriod(value as 'today' | '7d' | '30d')}>
+          <Select value={period} onValueChange={(value) => setPeriod(value as typeof period)}>
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="today">Hoje</SelectItem>
@@ -160,42 +148,56 @@ export function BusinessGroupOverviewClient() {
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={load} disabled={loading}>
-            <RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
+            <RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Gerar relatório
+          </Button>
+          <Button onClick={() => window.print()} disabled={!overview || loading}>
+            <Printer className="w-4 h-4 mr-2" /> Imprimir / Salvar PDF
           </Button>
         </div>
       </div>
 
-      {error && <Card className="p-4 border-rose-200 bg-rose-50 text-rose-800 text-sm">{error}</Card>}
+      {error && <Card className="p-4 border-rose-200 bg-rose-50 text-rose-800 text-sm group-report-print-hide">{error}</Card>}
 
       {loading && !overview ? (
-        <div className="py-16 flex justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" />Carregando dashboard consolidado...</div>
+        <div className="py-16 flex justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" />Gerando relatório...</div>
       ) : overview ? (
         <>
-          <Card className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Visão atual</div>
-              <div className="font-heading font-semibold text-lg">{overview.scopeLabel}</div>
-              <div className="text-xs text-muted-foreground mt-1">{overview.summary.companies} empresa(s) · {overview.summary.agents} atendente(s)</div>
+          <Card className="p-5 group-report-print-card">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Relatório operacional</div>
+                <h2 className="font-heading text-xl font-bold mt-1">{overview.group.name}</h2>
+                <div className="text-sm mt-1">{overview.scopeLabel}</div>
+              </div>
+              <div className="text-xs text-muted-foreground sm:text-right">
+                <div>Período: {PERIOD_LABELS[overview.period]}</div>
+                <div>Gerado em: {generatedAt?.toLocaleString('pt-BR') || '—'}</div>
+                <div>{overview.summary.companies} empresa(s) · {overview.summary.agents} atendente(s)</div>
+              </div>
             </div>
-            {currentTenant?.accessAllowed && (
-              <Button onClick={() => openTenant(currentTenant.id)} disabled={switchingTenantId === currentTenant.id}>
-                {switchingTenantId === currentTenant.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-2" />}
-                Abrir esta unidade
-              </Button>
-            )}
           </Card>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
             {cards.map((card) => {
               const Icon = card.icon;
-              return <Card key={card.label} className="p-4"><div className="flex items-center justify-between gap-2"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-xl lg:text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
+              return (
+                <Card key={card.label} className="p-4 group-report-print-card">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs text-muted-foreground">{card.label}</div>
+                      <div className="font-heading text-xl font-bold mt-1">{card.value}</div>
+                    </div>
+                    <Icon className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                </Card>
+              );
             })}
           </div>
 
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden group-report-print-card">
             <div className="px-4 py-3 border-b">
-              <h2 className="font-heading font-semibold">Performance por empresa</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Os dados permanecem separados por tenant; esta tabela apenas consolida a leitura.</p>
+              <h3 className="font-heading font-semibold">Resultado por empresa</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Os dados permanecem isolados por tenant; o relatório apenas consolida a leitura.</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -209,7 +211,6 @@ export function BusinessGroupOverviewClient() {
                     <th className="text-right px-4 py-3">Conversão</th>
                     <th className="text-right px-4 py-3">Receita</th>
                     <th className="text-right px-4 py-3">Equipe</th>
-                    <th className="text-right px-4 py-3">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -223,14 +224,6 @@ export function BusinessGroupOverviewClient() {
                       <td className="px-4 py-3 text-right">{tenant.conversionRate}%</td>
                       <td className="px-4 py-3 text-right">{formatMoney(tenant.revenueCents)}</td>
                       <td className="px-4 py-3 text-right">{tenant.agents} atend. / {tenant.teamMembers} total</td>
-                      <td className="px-4 py-3 text-right">
-                        {tenant.accessAllowed ? (
-                          <Button size="sm" variant="outline" onClick={() => openTenant(tenant.tenantId)} disabled={switchingTenantId === tenant.tenantId}>
-                            {switchingTenantId === tenant.tenantId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5 mr-1" />}
-                            Abrir
-                          </Button>
-                        ) : <span className="text-xs text-amber-700">Indisponível</span>}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
