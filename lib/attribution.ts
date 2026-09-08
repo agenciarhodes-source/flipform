@@ -52,24 +52,25 @@ export function buildMetaFbcFromFbclid(fbclid: string | null | undefined, create
 }
 
 /**
- * Persist the Meta click identifier as a first-party cookie before submit.
- * Existing _fbc values are authoritative and are never overwritten.
+ * Persist the current Meta click identifier as a first-party cookie before submit.
+ * A cookie for the same click is preserved; a new fbclid refreshes the cookie.
  */
 export function ensureMetaFbcCookie(locationHref: string, createdAtMs = Date.now()): string | null {
   if (typeof document === 'undefined') return null;
-  let fbclid: string | null = null;
+  let rawFbclid: string | null = null;
   try {
-    fbclid = new URL(locationHref).searchParams.get('fbclid');
+    rawFbclid = new URL(locationHref).searchParams.get('fbclid');
   } catch {
     return null;
   }
-  if (!fbclid) return null;
+  const clickId = normalizeAttributionString(rawFbclid, ATTRIBUTION_LIMITS.clickId);
+  if (!clickId) return null;
 
   const existing = parseAttributionCookies(document.cookie).fbc;
-  if (existing) return existing;
+  if (existing?.endsWith(`.${clickId}`)) return existing;
 
-  const fbc = buildMetaFbcFromFbclid(fbclid, createdAtMs);
-  if (!fbc) return null;
+  const fbc = buildMetaFbcFromFbclid(clickId, createdAtMs);
+  if (!fbc) return existing;
   const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = `_fbc=${encodeURIComponent(fbc)}; Path=/; Max-Age=7776000; SameSite=Lax${secure}`;
   return fbc;
