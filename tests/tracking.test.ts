@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { buildMetaFbcFromFbclid } from '../lib/attribution';
 import { buildCustomData, kanbanEventSchema, resolveTrackingEventId } from '../lib/tracking';
-import { fireMetaLeadPixel } from '../lib/tracking/meta-pixel-client';
-import { buildUserData, formatMetaCapiError, hashMetaValue, normalizeMetaCity, normalizeMetaEmail, normalizeMetaPhone } from '../lib/tracking/meta-capi';
-import { buildMetaExternalId, getMetaLeadUserData, splitLeadName } from '../lib/tracking/meta-lead-user-data';
+import { fireMetaLeadPixel, initializeMetaPixel } from '../lib/tracking/meta-pixel-client';
+import { buildUserData, formatMetaCapiError, hashMetaValue, normalizeMetaCity, normalizeMetaCountry, normalizeMetaEmail, normalizeMetaName, normalizeMetaPhone } from '../lib/tracking/meta-capi';
+import { buildMetaExternalId, getMetaLeadUserData, inferMetaCountry, splitLeadName } from '../lib/tracking/meta-lead-user-data';
 import { encryptIntegrationSecret } from '../lib/tracking/crypto';
 import { resolveMetaRuntimeConfig, toPublicMetaPixelConfig } from '../lib/meta/runtime';
 
@@ -14,7 +15,9 @@ test('normaliza e separa os identificadores hashed da Meta deterministicamente',
   assert.equal(normalizeMetaEmail('  MARIA@Example.COM '), 'maria@example.com');
   assert.equal(normalizeMetaEmail('invalido'), '');
   assert.equal(normalizeMetaPhone('+55 (86) 99999-1234'), '5586999991234');
+  assert.equal(normalizeMetaName(' Clara de Sousa '), 'claradesousa');
   assert.equal(normalizeMetaCity(' São Luís '), 'saoluis');
+  assert.equal(normalizeMetaCountry(' BR '), 'br');
   assert.deepEqual(splitLeadName('Diego'), { firstName: 'Diego', lastName: null });
   assert.deepEqual(splitLeadName(' Maria Clara de Sousa '), { firstName: 'Maria', lastName: 'Clara de Sousa' });
   assert.deepEqual(splitLeadName('  '), { firstName: null, lastName: null });
@@ -22,14 +25,15 @@ test('normaliza e separa os identificadores hashed da Meta deterministicamente',
   const externalId = buildMetaExternalId('tenant-a', 'lead-1');
   const data = buildUserData({
     email: '  MARIA@Example.COM ', phone: '+55 (86) 99999-1234', firstName: 'Maria',
-    lastName: 'Clara Sousa', city: 'São Luís', state: 'PI', externalId,
+    lastName: 'Clara Sousa', city: 'São Luís', state: 'PI', country: 'BR', externalId,
   });
   assert.deepEqual(data.em, [hashMetaValue('maria@example.com')]);
   assert.deepEqual(data.ph, [hashMetaValue('5586999991234')]);
   assert.deepEqual(data.fn, [hashMetaValue('maria')]);
-  assert.deepEqual(data.ln, [hashMetaValue('clara sousa')]);
+  assert.deepEqual(data.ln, [hashMetaValue('clarasousa')]);
   assert.deepEqual(data.ct, [hashMetaValue('saoluis')]);
   assert.deepEqual(data.st, [hashMetaValue('pi')]);
+  assert.deepEqual(data.country, [hashMetaValue('br')]);
   assert.deepEqual(data.external_id, [hashMetaValue('tenant-a:lead-1')]);
   assert.deepEqual(buildUserData({ city: 'São Luís' }), buildUserData({ city: 'São Luís' }));
 });
@@ -44,6 +48,12 @@ test('mantém attribution sem hash e omite todos os campos ausentes ou vazios', 
   });
   assert.deepEqual(buildUserData(undefined), {});
   assert.equal(Object.values(data).some((value) => Array.isArray(value) && value.length === 0), false);
+});
+
+test('gera fbc válido a partir do fbclid sem inventar identificador ausente', () => {
+  assert.equal(buildMetaFbcFromFbclid('CLICK-123', 1_725_000_000_123), 'fb.1.1725000000123.CLICK-123');
+  assert.equal(buildMetaFbcFromFbclid(null, 1_725_000_000_123), null);
+  assert.equal(buildMetaFbcFromFbclid('click id inválido', 1_725_000_000_123), null);
 });
 
 test('carrega Lead e attribution com tenant isolation em uma única consulta', async () => {
@@ -62,6 +72,7 @@ test('carrega Lead e attribution com tenant isolation em uma única consulta', a
   assert.equal(result.user.externalId, 'tenant-a:lead-1');
   assert.equal(result.user.firstName, 'Maria');
   assert.equal(result.user.lastName, 'Clara Sousa');
+  assert.equal(result.user.country, 'br');
   assert.equal(result.user.fbc, 'fbc-value');
   assert.equal(result.landingPage, 'https://cliente.example/form');
 });
@@ -78,8 +89,11 @@ test('não usa fallback em tentativa cross-tenant e aceita Lead antigo sem attri
   assert.equal(oldLead.user.email, 'diego@example.com');
   assert.equal(oldLead.user.phone, '5511999999999');
   assert.equal(oldLead.user.firstName, 'Diego');
+  assert.equal(oldLead.user.country, 'br');
   assert.equal(oldLead.user.fbc, undefined);
   assert.equal(oldLead.landingPage, null);
+  assert.equal(inferMetaCountry('5511999999999'), 'br');
+  assert.equal(inferMetaCountry(null), null);
 });
 
 test('permite configurar Meta Purchase sem value fixo', () => {
@@ -146,6 +160,26 @@ test('Meta Lead público usa o event ID do servidor e outros eventos recebem IDs
   assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Purchase' }, context), sharedId);
   assert.notEqual(resolveTrackingEventId({ provider: 'google_ads', eventName: 'Lead' }, context), sharedId);
   assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Lead' }, { source: 'kanban', metaLeadEventId: sharedId }), sharedId);
+});
+
+test('Meta Pixel inicializa no carregamento e registra PageView sem PII', () => {
+  const calls: unknown[][] = [];
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  Object.assign(globalThis, {
+    window: { fbq: (...args: unknown[]) => calls.push(args) },
+    document: {},
+  });
+  try {
+    assert.equal(initializeMetaPixel('777777777'), true);
+    assert.deepEqual(calls, [
+      ['init', '777777777'],
+      ['track', 'PageView'],
+    ]);
+    assert.equal(JSON.stringify(calls).includes('email'), false);
+  } finally {
+    Object.assign(globalThis, { window: previousWindow, document: previousDocument });
+  }
 });
 
 test('Meta Pixel dispara Standard Event Lead com o mesmo eventID, sem PII', () => {

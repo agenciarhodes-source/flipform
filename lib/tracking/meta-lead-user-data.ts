@@ -36,6 +36,11 @@ export function splitLeadName(name: string | null | undefined): { firstName: str
   };
 }
 
+export function inferMetaCountry(phone: string | null | undefined, city?: string | null, state?: string | null): string | null {
+  const digits = phone?.replace(/\D/g, '') || '';
+  return digits.startsWith('55') || Boolean(city?.trim()) || Boolean(state?.trim()) ? 'br' : null;
+}
+
 export function buildMetaExternalId(tenantId: string, leadId: string): string {
   return `${tenantId}:${leadId}`;
 }
@@ -53,7 +58,14 @@ export async function getMetaLeadUserData(params: {
 }): Promise<MetaLeadUserData> {
   if (!params.leadId) {
     const names = splitLeadName(params.fallbackLead?.name);
-    return { user: { ...params.fallbackLead, ...names }, landingPage: null };
+    return {
+      user: {
+        ...params.fallbackLead,
+        ...names,
+        country: inferMetaCountry(params.fallbackLead?.phone),
+      },
+      landingPage: null,
+    };
   }
 
   const query = {
@@ -88,6 +100,7 @@ export async function getMetaLeadUserData(params: {
       ...names,
       city: lead.city,
       state: lead.state,
+      country: inferMetaCountry(lead.phone, lead.city, lead.state),
       externalId: buildMetaExternalId(params.tenantId, lead.id),
       fbc: lead.attribution?.fbc,
       fbp: lead.attribution?.fbp,

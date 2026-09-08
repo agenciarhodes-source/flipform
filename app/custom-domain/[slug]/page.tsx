@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { PublicFormView } from '@/app/f/[slug]/public-form-view';
 import { normalizeHostname } from '@/lib/host-routing';
+import { resolveMetaRuntimeConfig } from '@/lib/meta/runtime';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
@@ -19,17 +20,20 @@ export default async function CustomDomainPublicFormPage({ params }: { params: {
   });
   if (!form || BLOCKED.has(String(form.tenant.status))) return notFound();
 
-  // Match the standard public form route: expose only non-secret GTM runtime config
-  // for the tenant that owns this verified custom domain.
-  const gtmSettings = await prisma.tenantIntegrationSettings.findUnique({
-    where: { tenantId: customDomain.tenantId },
-    select: { gtmEnabled: true, gtmContainerId: true },
-  });
+  // Match the standard public form route and expose only non-secret browser tracking ids.
+  const [gtmSettings, metaRuntime] = await Promise.all([
+    prisma.tenantIntegrationSettings.findUnique({
+      where: { tenantId: customDomain.tenantId },
+      select: { gtmEnabled: true, gtmContainerId: true },
+    }),
+    resolveMetaRuntimeConfig({ tenantId: customDomain.tenantId }),
+  ]);
   const publicGtmContainerId = gtmSettings?.gtmEnabled ? gtmSettings.gtmContainerId : null;
+  const publicMetaPixelId = metaRuntime.pixelEnabled ? metaRuntime.pixelId : null;
 
   const logoUrl = form.logoUrl || form.tenant?.logoUrl || null;
   const primaryColor = form.primaryColor || form.tenant?.primaryColor || '#2563EB';
-  return <PublicFormView gtmContainerId={publicGtmContainerId} form={{
+  return <PublicFormView gtmContainerId={publicGtmContainerId} metaPixelId={publicMetaPixelId} form={{
     slug: form.slug, publicTitle: form.publicTitle, publicDescription: form.publicDescription, primaryColor, bgColor: form.bgColor,
     buttonColor: form.buttonColor, textColor: form.textColor, theme: form.theme, coverImageUrl: form.coverImageUrl, successMessage: form.successMessage,
     disqualificationSettings: form.disqualificationSettings as any,

@@ -34,12 +34,14 @@ def test_universal_runtime_is_tenant_scoped_and_keeps_legacy_only_as_fallback():
     assert RUNTIME.index("source: 'universal'") < RUNTIME.index("tenantIntegrationSettings.findUnique")
 
 
-def test_pixel_runs_only_after_successful_qualified_submit_and_has_no_hostname_dependency():
+def test_pixel_preloads_on_public_form_and_lead_still_uses_server_event_id():
+    assert "initializeMetaPixel(metaPixelId)" in VIEW
+    assert "ensureMetaFbcCookie(window.location.href" in VIEW
     assert VIEW.index("if (!res.ok)") < VIEW.rindex("fireMetaLeadPixel")
     assert "result.qualified === true && result.tracking?.meta" in VIEW
     assert "app.flipform.com.br" not in PIXEL
+    assert "'track', 'PageView'" in PIXEL
     assert "'track', 'Lead', {}, { eventID: eventId }" in PIXEL
-    assert "PageView" not in PIXEL
     for pii in ("email", "phone", "firstName", "lastName"):
         assert pii not in PIXEL
 

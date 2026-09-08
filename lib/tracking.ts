@@ -313,8 +313,9 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         await logTrackingEvent({ ...base, status: 'skipped', reason: 'Google Ads desativado ou sem Conversion ID/Label configurado' });
         return { provider: mapping.provider, eventName, status: 'skipped', eventId };
       }
-      await logTrackingEvent({ ...base, status: 'sent', reason: 'Evento Google Ads preparado para Measurement Protocol/API em PR incremental' });
-      return { provider: mapping.provider, eventName, status: 'sent', eventId };
+      const reason = 'Google Ads server-side ainda não possui transporte implementado; nenhuma conversão foi enviada por este provider.';
+      await logTrackingEvent({ ...base, status: 'not_dispatched', reason });
+      return { provider: mapping.provider, eventName, status: 'not_dispatched', eventId };
     }
 
     if (mapping.provider === 'gtm') {
@@ -322,8 +323,9 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         await logTrackingEvent({ ...base, status: 'skipped', reason: 'GTM desativado ou sem Container ID configurado' });
         return { provider: mapping.provider, eventName, status: 'skipped', eventId };
       }
-      await logTrackingEvent({ ...base, status: 'sent', reason: 'Evento GTM preparado para camada client-side em PR incremental' });
-      return { provider: mapping.provider, eventName, status: 'sent', eventId };
+      const reason = 'Mapeamento GTM server-side não dispara rede; eventos client-side do formulário continuam sendo enviados pelo dataLayer.';
+      await logTrackingEvent({ ...base, status: 'not_dispatched', reason });
+      return { provider: mapping.provider, eventName, status: 'not_dispatched', eventId };
     }
 
     if (mapping.provider === 'ga4') {
@@ -331,8 +333,9 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         await logTrackingEvent({ ...base, status: 'skipped', reason: 'GA4 desativado ou sem Measurement ID/API Secret configurado' });
         return { provider: mapping.provider, eventName, status: 'skipped', eventId };
       }
-      await logTrackingEvent({ ...base, status: 'sent', reason: 'Evento GA4 preparado para Measurement Protocol em PR incremental' });
-      return { provider: mapping.provider, eventName, status: 'sent', eventId };
+      const reason = 'GA4 Measurement Protocol ainda não possui transporte implementado; nenhum evento foi enviado por este provider.';
+      await logTrackingEvent({ ...base, status: 'not_dispatched', reason });
+      return { provider: mapping.provider, eventName, status: 'not_dispatched', eventId };
     }
 
     await logTrackingEvent({ ...base, status: 'skipped', reason: 'Provider não suportado' });

@@ -10,12 +10,13 @@ def read(path: Path) -> str:
     return path.read_text()
 
 
-def test_public_page_exposes_only_non_secret_gtm_runtime_config():
+def test_public_page_exposes_only_non_secret_browser_tracking_config():
     page = read(PAGE)
     assert 'tenantIntegrationSettings.findUnique' in page
     assert 'select: { gtmEnabled: true, gtmContainerId: true }' in page
     assert 'gtmSettings?.gtmEnabled ? gtmSettings.gtmContainerId : null' in page
-    runtime_block = page[page.index('const gtmSettings ='):page.index('// Logo:')]
+    assert 'metaRuntime.pixelEnabled ? metaRuntime.pixelId : null' in page
+    runtime_block = page[page.index('const [gtmSettings, metaRuntime] ='):page.index('// Logo:')]
     for secret in ['metaAccessToken', 'ga4ApiSecret', 'accessToken', 'phone', 'email']:
         assert secret not in runtime_block
 
@@ -54,7 +55,7 @@ def test_gtm_lead_payload_contains_no_pii_or_internal_lead_id():
         assert pii not in event_function
 
 
-def test_meta_pixel_behavior_remains_exactly_on_existing_qualified_guard():
+def test_meta_pixel_conversion_remains_on_existing_qualified_guard():
     view = read(VIEW)
     meta_guard = view.index('if (result.qualified === true && result.tracking?.meta)')
     meta_fire = view.index('fireMetaLeadPixel(result.tracking.meta)', meta_guard)
