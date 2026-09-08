@@ -44,6 +44,37 @@ export function buildPublicAttribution(locationHref: string, referrer: string): 
   };
 }
 
+export function buildMetaFbcFromFbclid(fbclid: string | null | undefined, createdAtMs = Date.now()): string | null {
+  const clickId = normalizeAttributionString(fbclid, ATTRIBUTION_LIMITS.clickId);
+  if (!clickId || clickId.length > 900 || /[\s;]/.test(clickId)) return null;
+  const timestamp = Number.isFinite(createdAtMs) && createdAtMs > 0 ? Math.trunc(createdAtMs) : Date.now();
+  return `fb.1.${timestamp}.${clickId}`;
+}
+
+/**
+ * Persist the Meta click identifier as a first-party cookie before submit.
+ * Existing _fbc values are authoritative and are never overwritten.
+ */
+export function ensureMetaFbcCookie(locationHref: string, createdAtMs = Date.now()): string | null {
+  if (typeof document === 'undefined') return null;
+  let fbclid: string | null = null;
+  try {
+    fbclid = new URL(locationHref).searchParams.get('fbclid');
+  } catch {
+    return null;
+  }
+  if (!fbclid) return null;
+
+  const existing = parseAttributionCookies(document.cookie).fbc;
+  if (existing) return existing;
+
+  const fbc = buildMetaFbcFromFbclid(fbclid, createdAtMs);
+  if (!fbc) return null;
+  const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `_fbc=${encodeURIComponent(fbc)}; Path=/; Max-Age=7776000; SameSite=Lax${secure}`;
+  return fbc;
+}
+
 export function parseAttributionCookies(cookieHeader: string | null): { fbc: string | null; fbp: string | null } {
   const cookies = new Map<string, string>();
   for (const part of (cookieHeader || '').split(';')) {
