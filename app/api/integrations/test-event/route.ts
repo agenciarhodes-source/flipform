@@ -72,6 +72,6 @@ export const POST = withPermission('INTEGRATIONS_TEST', async (req, session) => 
   }
   await logTrackingEvent({ tenantId: session.tenantId, provider: parsed.data.provider, eventName: parsed.data.eventName, status, reason, triggeredById: session.userId, eventId });
   await logPlatformAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'tracking', entityId: eventId, action: 'tracking.test_event_triggered', metadata: { provider: parsed.data.provider, eventName: parsed.data.eventName, status } });
-  const httpStatus = status === 'failed' ? 502 : 200;
-  return NextResponse.json({ ok: status !== 'failed', status, reason, eventId }, { status: httpStatus });
+  const httpStatus = status === 'failed' ? 502 : status === 'not_dispatched' ? 501 : 200;
+  return NextResponse.json({ ok: status !== 'failed' && status !== 'not_dispatched', status, reason, eventId }, { status: httpStatus });
 });
