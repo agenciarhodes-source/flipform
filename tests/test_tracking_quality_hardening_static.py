@@ -26,7 +26,8 @@ def test_fbclid_is_promoted_to_first_party_fbc_before_public_submit():
     assert 'buildMetaFbcFromFbclid' in attribution
     assert 'return `fb.1.${timestamp}.${clickId}`' in attribution
     assert "cookies.get('_fbc')" in attribution
-    assert 'if (existing) return existing' in attribution
+    assert 'existing?.endsWith(`.${clickId}`)' in attribution
+    assert 'document.cookie = `_fbc=' in attribution
     assert 'Max-Age=7776000' in attribution
     assert 'SameSite=Lax' in attribution
     assert 'ensureMetaFbcCookie(window.location.href' in view
