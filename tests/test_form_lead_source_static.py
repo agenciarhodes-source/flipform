@@ -24,7 +24,11 @@ def test_public_submission_uses_persisted_form_source_only():
     route = text('app/api/public/forms/[slug]/submit/route.ts')
     assert "const leadSource = form.leadSource?.trim() || 'formulario';" in route
     assert 'source: leadSource,' in route
-    assert "metadata: { leadId: lead.id, source: 'public_form', leadSource, slug }" in route
+    form_audit = route.split("action: 'form.submitted'", 1)[1].split('});', 1)[0]
+    assert 'leadId: lead.id' in form_audit
+    assert "source: 'public_form'" in form_audit
+    assert 'leadSource' in form_audit
+    assert 'slug' in form_audit
     assert "source: 'public_form'," in route  # tracking remains technical
 
 
