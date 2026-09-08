@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, ExternalLink, Loader2, RefreshCcw, Users, TrendingUp, CircleDollarSign, Target } from 'lucide-react';
+import { Building2, ExternalLink, Loader2, RefreshCcw, Users, TrendingUp, CircleDollarSign, Target, Trophy, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -68,11 +68,11 @@ export function BusinessGroupOverviewClient() {
       if (tenantId !== 'all') params.set('tenantId', tenantId);
       const response = await fetch(`/api/business-groups/overview?${params.toString()}`, { cache: 'no-store' });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Erro ao carregar visão do grupo.');
+      if (!response.ok) throw new Error(data.error || 'Erro ao carregar dashboard do grupo.');
       setOverview(data);
       if (!groupId) setGroupId(data.group.id);
     } catch (e: any) {
-      setError(e.message || 'Erro ao carregar visão do grupo.');
+      setError(e.message || 'Erro ao carregar dashboard do grupo.');
     } finally {
       setLoading(false);
     }
@@ -84,6 +84,12 @@ export function BusinessGroupOverviewClient() {
     () => overview?.tenantOptions.find((tenant) => tenant.id === tenantId) || null,
     [overview, tenantId],
   );
+
+  const performanceRows = useMemo(() => {
+    if (!overview) return [];
+    if (!overview.selectedTenantId) return overview.tenantPerformance;
+    return overview.tenantPerformance.filter((tenant) => tenant.tenantId === overview.selectedTenantId);
+  }, [overview]);
 
   async function openTenant(targetTenantId: string) {
     if (!overview?.group.id) return;
@@ -109,6 +115,8 @@ export function BusinessGroupOverviewClient() {
   const cards = overview ? [
     { label: 'Leads', value: overview.summary.totalLeads, icon: Users },
     { label: 'Em andamento', value: overview.summary.inProgress, icon: TrendingUp },
+    { label: 'Ganhos', value: overview.summary.won, icon: Trophy },
+    { label: 'Perdidos', value: overview.summary.lost, icon: XCircle },
     { label: 'Conversão', value: `${overview.summary.conversionRate}%`, icon: Target },
     { label: 'Receita', value: formatMoney(overview.summary.revenueCents), icon: CircleDollarSign },
   ] : [];
@@ -119,9 +127,9 @@ export function BusinessGroupOverviewClient() {
         <div>
           <div className="flex items-center gap-2">
             <Building2 className="w-6 h-6 text-brand-600" />
-            <h1 className="font-heading text-2xl lg:text-3xl font-bold">Visão do grupo</h1>
+            <h1 className="font-heading text-2xl lg:text-3xl font-bold">Dashboard do grupo</h1>
           </div>
-          <p className="text-sm text-muted-foreground mt-1">Acompanhe todas as empresas vinculadas ao seu grupo sem trocar de login.</p>
+          <p className="text-sm text-muted-foreground mt-1">Acompanhe toda a operação ou selecione uma empresa para ver seus resultados isoladamente.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {overview && overview.groupOptions.length > 1 && (
@@ -160,7 +168,7 @@ export function BusinessGroupOverviewClient() {
       {error && <Card className="p-4 border-rose-200 bg-rose-50 text-rose-800 text-sm">{error}</Card>}
 
       {loading && !overview ? (
-        <div className="py-16 flex justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" />Carregando visão consolidada...</div>
+        <div className="py-16 flex justify-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mr-2" />Carregando dashboard consolidado...</div>
       ) : overview ? (
         <>
           <Card className="p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -177,10 +185,10 @@ export function BusinessGroupOverviewClient() {
             )}
           </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {cards.map((card) => {
               const Icon = card.icon;
-              return <Card key={card.label} className="p-4"><div className="flex items-center justify-between"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
+              return <Card key={card.label} className="p-4"><div className="flex items-center justify-between gap-2"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-xl lg:text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
             })}
           </div>
 
@@ -195,7 +203,9 @@ export function BusinessGroupOverviewClient() {
                   <tr>
                     <th className="text-left px-4 py-3">Empresa</th>
                     <th className="text-right px-4 py-3">Leads</th>
+                    <th className="text-right px-4 py-3">Andamento</th>
                     <th className="text-right px-4 py-3">Ganhos</th>
+                    <th className="text-right px-4 py-3">Perdidos</th>
                     <th className="text-right px-4 py-3">Conversão</th>
                     <th className="text-right px-4 py-3">Receita</th>
                     <th className="text-right px-4 py-3">Equipe</th>
@@ -203,11 +213,13 @@ export function BusinessGroupOverviewClient() {
                   </tr>
                 </thead>
                 <tbody>
-                  {overview.tenantPerformance.map((tenant) => (
+                  {performanceRows.map((tenant) => (
                     <tr key={tenant.tenantId} className="border-t">
                       <td className="px-4 py-3"><div className="font-medium">{tenant.name}</div><div className="text-xs text-muted-foreground">{tenant.slug}</div></td>
                       <td className="px-4 py-3 text-right">{tenant.leads}</td>
+                      <td className="px-4 py-3 text-right">{tenant.inProgress}</td>
                       <td className="px-4 py-3 text-right">{tenant.won}</td>
+                      <td className="px-4 py-3 text-right">{tenant.lost}</td>
                       <td className="px-4 py-3 text-right">{tenant.conversionRate}%</td>
                       <td className="px-4 py-3 text-right">{formatMoney(tenant.revenueCents)}</td>
                       <td className="px-4 py-3 text-right">{tenant.agents} atend. / {tenant.teamMembers} total</td>
