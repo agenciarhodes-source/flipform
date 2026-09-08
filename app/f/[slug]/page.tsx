@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { resolveMetaRuntimeConfig } from '@/lib/meta/runtime';
 import { PublicFormView } from './public-form-view';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
@@ -29,18 +30,22 @@ export default async function PublicFormPage({ params }: { params: { slug: strin
     );
   }
 
-  // Only the non-secret GTM runtime flags are exposed to the public form.
-  const gtmSettings = await prisma.tenantIntegrationSettings.findUnique({
-    where: { tenantId: form.tenantId },
-    select: { gtmEnabled: true, gtmContainerId: true },
-  });
+  // Only public, non-secret tracking identifiers reach the browser.
+  const [gtmSettings, metaRuntime] = await Promise.all([
+    prisma.tenantIntegrationSettings.findUnique({
+      where: { tenantId: form.tenantId },
+      select: { gtmEnabled: true, gtmContainerId: true },
+    }),
+    resolveMetaRuntimeConfig({ tenantId: form.tenantId }),
+  ]);
   const publicGtmContainerId = gtmSettings?.gtmEnabled ? gtmSettings.gtmContainerId : null;
+  const publicMetaPixelId = metaRuntime.pixelEnabled ? metaRuntime.pixelId : null;
 
   // Logo: prioriza form.logoUrl, fallback para tenant.logoUrl
   // Cor: prioriza form.primaryColor, fallback para tenant.primaryColor
   const logoUrl = form.logoUrl || form.tenant?.logoUrl || null;
   const primaryColor = form.primaryColor || form.tenant?.primaryColor || '#2563EB';
-  return <PublicFormView gtmContainerId={publicGtmContainerId} form={{
+  return <PublicFormView gtmContainerId={publicGtmContainerId} metaPixelId={publicMetaPixelId} form={{
     slug: form.slug,
     publicTitle: form.publicTitle,
     publicDescription: form.publicDescription,
