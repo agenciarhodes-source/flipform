@@ -1,16 +1,33 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { PublicTypeform } from '@/components/public-typeform';
-import { buildPublicAttribution } from '@/lib/attribution';
-import { fireMetaLeadPixel, type PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
+import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
+import { fireMetaLeadPixel, initializeMetaPixel, type PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
 import { firePublicGtmLeadEvent, loadPublicGtmContainer } from '@/lib/tracking/gtm-client';
 
-export function PublicFormView({ form, gtmContainerId }: { form: any; gtmContainerId?: string | null }) {
+export function PublicFormView({
+  form,
+  gtmContainerId,
+  metaPixelId,
+}: {
+  form: any;
+  gtmContainerId?: string | null;
+  metaPixelId?: string | null;
+}) {
+  const openedAtMs = useRef(0);
+
   useEffect(() => {
+    if (!openedAtMs.current) openedAtMs.current = Date.now();
+    ensureMetaFbcCookie(window.location.href, openedAtMs.current);
+    initializeMetaPixel(metaPixelId);
     loadPublicGtmContainer(gtmContainerId);
-  }, [gtmContainerId]);
+  }, [gtmContainerId, metaPixelId]);
 
   const submit = async (answers: any) => {
+    // Keep the click cookie available even if the user submits before the initial
+    // tracking scripts finish loading. This does not depend on Meta's script.
+    ensureMetaFbcCookie(window.location.href, openedAtMs.current || Date.now());
+
     let res: Response;
     try {
       res = await fetch(`/api/public/forms/${form.slug}/submit`, {
