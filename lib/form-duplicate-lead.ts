@@ -12,7 +12,7 @@ export class DuplicateFormPhoneError extends Error {
   }
 }
 
-export async function assertPhoneNotUsedInForm({
+export async function findExistingLeadIdByPhoneInForm({
   tx,
   tenantId,
   formId,
@@ -22,16 +22,20 @@ export async function assertPhoneNotUsedInForm({
   tenantId: string;
   formId: string;
   phone: string;
-}) {
+}): Promise<string | null> {
   const digits = String(phone).replace(/\D/g, '');
-  if (!digits) return;
+  if (!digits) return null;
 
   const localDigits = digits.startsWith('55') ? digits.slice(2) : digits;
 
   // Serializa apenas submissões concorrentes do mesmo formulário + telefone.
-  // Não altera schema, leads existentes ou qualquer integração externa.
-  await tx.$queryRaw<Array<{ locked: unknown }>>`
-    SELECT pg_advisory_xact_lock(hashtext(${formId}), hashtext(${digits})) AS locked
+  // O CTE materializado força a execução do lock, mas devolve apenas um inteiro
+  // para evitar que o Prisma tente desserializar o tipo PostgreSQL `void`.
+  await tx.$queryRaw<Array<{ locked: number }>>`
+    WITH lock_guard AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(hashtext(${formId}), hashtext(${digits})) AS acquired
+    )
+    SELECT 1::int AS locked FROM lock_guard
   `;
 
   // Compatível também com telefones históricos que possam ter sido salvos formatados
@@ -48,5 +52,15 @@ export async function assertPhoneNotUsedInForm({
     LIMIT 1
   `;
 
-  if (existing.length > 0) throw new DuplicateFormPhoneError();
+  return existing[0]?.id ?? null;
+}
+
+export async function assertPhoneNotUsedInForm(params: {
+  tx: Prisma.TransactionClient;
+  tenantId: string;
+  formId: string;
+  phone: string;
+}) {
+  const existingLeadId = await findExistingLeadIdByPhoneInForm(params);
+  if (existingLeadId) throw new DuplicateFormPhoneError();
 }

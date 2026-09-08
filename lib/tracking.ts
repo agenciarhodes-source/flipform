@@ -55,6 +55,14 @@ export type TrackingPurchaseContext = {
   currency?: string | null;
 };
 
+export type MetaSubmissionAttribution = {
+  fbc?: string | null;
+  fbp?: string | null;
+  clientIpAddress?: string | null;
+  clientUserAgent?: string | null;
+  landingPage?: string | null;
+};
+
 export type TrackingDispatchContext = {
   tenantId: string;
   leadId?: string | null;
@@ -66,6 +74,8 @@ export type TrackingDispatchContext = {
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
   /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
   metaLeadEventId?: string | null;
+  /** Current public-submission metadata. It enriches CAPI without rewriting stored lead attribution. */
+  metaAttribution?: MetaSubmissionAttribution | null;
   /** Explicit commercial purchase. Purchase tracking never invents revenue from a stage move. */
   purchase?: TrackingPurchaseContext | null;
 };
@@ -92,6 +102,18 @@ export function resolveTrackingEventId(
     return context.metaLeadEventId;
   }
   return crypto.randomUUID();
+}
+
+export function shouldApplyStageDuplicateGuard(
+  mapping: { provider?: string; eventName?: string; customEventName?: string | null },
+  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId'>,
+) {
+  const isPublicMetaLeadSubmission = mapping.provider === 'meta'
+    && mapping.eventName === 'Lead'
+    && !mapping.customEventName
+    && context.source === 'public_form'
+    && Boolean(context.metaLeadEventId);
+  return !isPublicMetaLeadSubmission;
 }
 
 export function serializeIntegrationSettings(settings: any) {
@@ -249,7 +271,7 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
     if (await shouldSkipEventId(mapping.provider, eventId)) {
       return { provider: mapping.provider, eventName, status: 'duplicate', eventId };
     }
-  } else {
+  } else if (shouldApplyStageDuplicateGuard(mapping, context)) {
     const skip = await shouldSkipDuplicate({ tenantId: context.tenantId, leadId: context.leadId, toStageId: context.toStageId || mapping.stageId, provider: mapping.provider, eventName });
     if (skip) {
       await logTrackingEvent({ ...base, status: 'skipped', reason: 'duplicate' });
@@ -321,15 +343,30 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
   }
 }
 
+function applySubmissionMetaAttribution(data: MetaLeadUserData, attribution?: MetaSubmissionAttribution | null): MetaLeadUserData {
+  if (!attribution) return data;
+  const user = { ...data.user };
+  if (attribution.fbc) user.fbc = attribution.fbc;
+  if (attribution.fbp) user.fbp = attribution.fbp;
+  if (attribution.clientIpAddress) user.clientIpAddress = attribution.clientIpAddress;
+  if (attribution.clientUserAgent) user.clientUserAgent = attribution.clientUserAgent;
+  return {
+    user,
+    landingPage: attribution.landingPage || data.landingPage,
+  };
+}
+
 async function resolveMetaLeadData(context: TrackingDispatchContext, mappings: any[]): Promise<MetaLeadUserData> {
   if (!mappings.some((mapping) => mapping.provider === 'meta')) {
     return { user: {}, landingPage: null };
   }
   try {
-    return await getMetaLeadUserData({ tenantId: context.tenantId, leadId: context.leadId, fallbackLead: context.lead });
+    const data = await getMetaLeadUserData({ tenantId: context.tenantId, leadId: context.leadId, fallbackLead: context.lead });
+    return applySubmissionMetaAttribution(data, context.metaAttribution);
   } catch {
     // Enrichment is best-effort: a metadata lookup must not block a CRM operation.
-    return getMetaLeadUserData({ tenantId: context.tenantId, fallbackLead: context.lead });
+    const data = await getMetaLeadUserData({ tenantId: context.tenantId, fallbackLead: context.lead });
+    return applySubmissionMetaAttribution(data, context.metaAttribution);
   }
 }
 

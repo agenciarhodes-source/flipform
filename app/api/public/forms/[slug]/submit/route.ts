@@ -10,7 +10,7 @@ import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@
 import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
-import { assertPhoneNotUsedInForm, DuplicateFormPhoneError, DUPLICATE_FORM_PHONE_CODE } from '@/lib/form-duplicate-lead';
+import { findExistingLeadIdByPhoneInForm } from '@/lib/form-duplicate-lead';
 
 /**
  * Public form submit endpoint.
@@ -205,18 +205,24 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const leadState = locationAnswer?.state || null;
     const leadCity = locationAnswer?.city || null;
 
-    // Cria lead + answers + history dentro de uma transaction para garantir atomicidade.
-    // Quando a proteção está ativa, a verificação acontece antes do rodízio para não gerar
-    // qualquer efeito colateral em uma submissão duplicada.
+    // Cria somente pessoas novas no CRM. Uma nova submissão com telefone já existente
+    // reutiliza o lead atual sem mover etapa, trocar responsável ou sobrescrever dados.
     const assignmentResult = { assignedTo: null as string | null, reason: 'not_started' };
-    const lead = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
+    const leadResult = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       if (protectedPhone) {
-        await assertPhoneNotUsedInForm({
+        const existingLeadId = await findExistingLeadIdByPhoneInForm({
           tx,
           tenantId: form.tenantId,
           formId: form.id,
           phone: protectedPhone,
         });
+        if (existingLeadId) {
+          const existing = await tx.lead.findFirst({
+            where: { id: existingLeadId, tenantId: form.tenantId, formId: form.id },
+            select: { id: true, name: true, email: true, phone: true, assignedTo: true },
+          });
+          if (existing) return { lead: existing, created: false } as const;
+        }
       }
 
       const rotation = await assignLeadByRotation({ tenantId: form.tenantId, formId: form.id, tx });
@@ -250,11 +256,13 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
           },
         },
       });
-      return created;
+      return { lead: created, created: true } as const;
     });
+    const { lead, created: leadCreated } = leadResult;
 
-    // Created only after the Lead exists. It is the server-owned deduplication key
-    // for the browser and CAPI versions of this exact Lead action.
+    // Cada submissão qualificada recebe um ID novo. Pixel e CAPI compartilham esse ID
+    // somente entre si, de modo que uma nova submissão da mesma pessoa vira um novo Lead
+    // para a Meta sem duplicar o card no CRM.
     const metaLeadEventId = crypto.randomUUID();
     let publicMetaTracking: { pixelId: string; eventId: string } | undefined;
     try {
@@ -267,56 +275,70 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       });
     }
 
-    // Attribution is deliberately outside the critical lead transaction. A missing table or
-    // transient metadata failure must not roll back a valid lead, answers, or initial history.
-    try {
-      const publicAttribution = parsed.data.attribution;
-      const { fbc, fbp } = parseAttributionCookies(req.headers.get('cookie'));
-      const requestIp = getClientIp(req);
-      await prisma.leadAttribution.create({
-        data: {
+    const publicAttribution = parsed.data.attribution;
+    const { fbc, fbp } = parseAttributionCookies(req.headers.get('cookie'));
+    const requestIp = getClientIp(req);
+    const clientIpAddress = requestIp === 'unknown' ? null : normalizeAttributionString(requestIp, ATTRIBUTION_LIMITS.serverValue);
+    const clientUserAgent = normalizeAttributionString(req.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue);
+    const submissionMetaAttribution = {
+      fbc,
+      fbp,
+      clientIpAddress,
+      clientUserAgent,
+      landingPage: publicAttribution?.landingPage ?? null,
+    };
+
+    // Attribution persistida pertence ao lead único. Em submissões repetidas não sobrescrevemos
+    // a atribuição histórica; os metadados atuais seguem apenas no evento CAPI desta submissão.
+    if (leadCreated) {
+      try {
+        await prisma.leadAttribution.create({
+          data: {
+            tenantId: form.tenantId,
+            leadId: lead.id,
+            utmSource: publicAttribution?.utmSource ?? null,
+            utmMedium: publicAttribution?.utmMedium ?? null,
+            utmCampaign: publicAttribution?.utmCampaign ?? null,
+            utmContent: publicAttribution?.utmContent ?? null,
+            utmTerm: publicAttribution?.utmTerm ?? null,
+            fbclid: publicAttribution?.fbclid ?? null,
+            fbc,
+            fbp,
+            gclid: publicAttribution?.gclid ?? null,
+            landingPage: publicAttribution?.landingPage ?? null,
+            referrer: publicAttribution?.referrer ?? null,
+            clientIp: clientIpAddress,
+            clientUserAgent,
+          },
+        });
+      } catch (attributionError) {
+        console.error('lead attribution persistence failed', {
           tenantId: form.tenantId,
           leadId: lead.id,
-          utmSource: publicAttribution?.utmSource ?? null,
-          utmMedium: publicAttribution?.utmMedium ?? null,
-          utmCampaign: publicAttribution?.utmCampaign ?? null,
-          utmContent: publicAttribution?.utmContent ?? null,
-          utmTerm: publicAttribution?.utmTerm ?? null,
-          fbclid: publicAttribution?.fbclid ?? null,
-          fbc,
-          fbp,
-          gclid: publicAttribution?.gclid ?? null,
-          landingPage: publicAttribution?.landingPage ?? null,
-          referrer: publicAttribution?.referrer ?? null,
-          clientIp: requestIp === 'unknown' ? null : normalizeAttributionString(requestIp, ATTRIBUTION_LIMITS.serverValue),
-          clientUserAgent: normalizeAttributionString(req.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
-        },
-      });
-    } catch (attributionError) {
-      console.error('lead attribution persistence failed', {
-        tenantId: form.tenantId,
-        leadId: lead.id,
-        error: attributionError instanceof Error ? attributionError.name : 'UnknownError',
-      });
+          error: attributionError instanceof Error ? attributionError.name : 'UnknownError',
+        });
+      }
     }
 
     // Audit logs (fora da transaction para não bloquear retorno em caso de falha de log)
     await logAudit({
       tenantId: form.tenantId, userId: null,
       entityType: 'form', entityId: form.id, action: 'form.submitted',
-      metadata: { leadId: lead.id, source: 'public_form', leadSource, slug },
+      metadata: { leadId: lead.id, source: 'public_form', leadSource, slug, leadCreated, repeatedSubmission: !leadCreated },
     });
-    await logAudit({
-      tenantId: form.tenantId, userId: null,
-      entityType: 'lead', entityId: lead.id, action: 'lead.created',
-      metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: leadSource, assignedTo: lead.assignedTo, assignmentReason: assignmentResult.reason },
-    });
-    if (lead.assignedTo) {
+    if (leadCreated) {
       await logAudit({
         tenantId: form.tenantId, userId: null,
-        entityType: 'lead', entityId: lead.id, action: 'lead.auto_assigned',
-        metadata: { formId: form.id, assignedTo: lead.assignedTo, strategy: 'round_robin', message: 'Lead atribuído automaticamente pelo rodízio do formulário.' },
+        entityType: 'lead', entityId: lead.id, action: 'lead.created',
+        metadata: { formId: form.id, pipelineId: form.pipelineId, stageId: form.initialStageId, source: leadSource, assignedTo: lead.assignedTo, assignmentReason: assignmentResult.reason },
       });
+      if (lead.assignedTo) {
+        await logAudit({
+          tenantId: form.tenantId, userId: null,
+          entityType: 'lead', entityId: lead.id, action: 'lead.auto_assigned',
+          metadata: { formId: form.id, assignedTo: lead.assignedTo, strategy: 'round_robin', message: 'Lead atribuído automaticamente pelo rodízio do formulário.' },
+        });
+      }
     }
 
     try {
@@ -330,6 +352,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         source: 'public_form',
         lead: { email: lead.email, phone: lead.phone, name: lead.name },
         metaLeadEventId,
+        metaAttribution: submissionMetaAttribution,
       });
     } catch (trackingError) {
       console.error('public submit tracking error', trackingError);
@@ -343,12 +366,6 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       ...(publicMetaTracking ? { tracking: { meta: publicMetaTracking } } : {}),
     });
   } catch (e: any) {
-    if (e instanceof DuplicateFormPhoneError) {
-      return NextResponse.json(
-        { error: e.message, code: DUPLICATE_FORM_PHONE_CODE },
-        { status: 409 },
-      );
-    }
     console.error('public submit error', e);
     return NextResponse.json({ error: 'Erro interno ao enviar formulário. Tente novamente.' }, { status: 500 });
   }
