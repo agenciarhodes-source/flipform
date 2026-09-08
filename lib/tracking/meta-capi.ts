@@ -1,6 +1,8 @@
 import 'server-only';
 import crypto from 'crypto';
 
+export const META_GRAPH_API_VERSION = 'v26.0';
+
 export type MetaCapiPayload = {
   pixelId: string;
   accessToken: string;
@@ -16,6 +18,7 @@ export type MetaCapiPayload = {
     lastName?: string | null;
     city?: string | null;
     state?: string | null;
+    country?: string | null;
     externalId?: string | null;
     fbc?: string | null;
     fbp?: string | null;
@@ -45,18 +48,31 @@ export function normalizeMetaEmail(value: string): string {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : '';
 }
 
-export function normalizeMetaCity(value: string): string {
+export function normalizeMetaName(value: string): string {
   return normalizeMetaText(value).replace(/[^a-z0-9]/g, '');
+}
+
+export function normalizeMetaCity(value: string): string {
+  return normalizeMetaName(value);
+}
+
+export function normalizeMetaState(value: string): string {
+  return normalizeMetaName(value);
+}
+
+export function normalizeMetaCountry(value: string): string {
+  return normalizeMetaText(value).replace(/[^a-z]/g, '').slice(0, 2);
 }
 
 export function hashMetaValue(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
-export type MetaUserData = Partial<Record<'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'external_id', string[]>> &
+export type MetaHashedUserDataKey = 'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'country' | 'external_id';
+export type MetaUserData = Partial<Record<MetaHashedUserDataKey, string[]>> &
   Partial<Record<'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent', string>>;
 
-function addHashed(data: MetaUserData, key: 'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'external_id', value: string | null | undefined, normalizer = normalizeMetaText) {
+function addHashed(data: MetaUserData, key: MetaHashedUserDataKey, value: string | null | undefined, normalizer = normalizeMetaText) {
   if (!value) return;
   const normalized = normalizer(value);
   if (normalized) data[key] = [hashMetaValue(normalized)];
@@ -71,10 +87,11 @@ export function buildUserData(user: MetaCapiPayload['user']): MetaUserData {
   const data: MetaUserData = {};
   addHashed(data, 'em', user?.email, normalizeMetaEmail);
   addHashed(data, 'ph', user?.phone, normalizeMetaPhone);
-  addHashed(data, 'fn', user?.firstName);
-  addHashed(data, 'ln', user?.lastName);
+  addHashed(data, 'fn', user?.firstName, normalizeMetaName);
+  addHashed(data, 'ln', user?.lastName, normalizeMetaName);
   addHashed(data, 'ct', user?.city, normalizeMetaCity);
-  addHashed(data, 'st', user?.state);
+  addHashed(data, 'st', user?.state, normalizeMetaState);
+  addHashed(data, 'country', user?.country, normalizeMetaCountry);
   addHashed(data, 'external_id', user?.externalId, (value) => value.trim());
   addPlain(data, 'fbc', user?.fbc);
   addPlain(data, 'fbp', user?.fbp);
@@ -146,7 +163,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaC
     test_event_code: payload.testEventCode || undefined,
   };
 
-  const res = await fetch(`https://graph.facebook.com/v19.0/${encodeURIComponent(payload.pixelId)}/events?access_token=${encodeURIComponent(payload.accessToken)}`, {
+  const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(payload.pixelId)}/events?access_token=${encodeURIComponent(payload.accessToken)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
