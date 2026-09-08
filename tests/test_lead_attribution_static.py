@@ -56,11 +56,13 @@ def test_backend_values_are_server_derived_tenant_safe_and_resilient():
     assert "req.headers.get('user-agent')" in route
     assert "parseAttributionCookies(req.headers.get('cookie'))" in route
     assert "requestIp === 'unknown' ? null" in route
-    critical_end = route.index("// Attribution is deliberately outside")
-    assert route.index("const lead = await prisma.$transaction") < critical_end
+    transaction = route.index("const leadResult = await prisma.$transaction")
+    attribution_capture = route.index("const publicAttribution = parsed.data.attribution")
     persistence = route.index("await prisma.leadAttribution.create")
     tracking = route.index("await dispatchFormSubmissionTracking")
-    assert critical_end < persistence < tracking
+    assert transaction < attribution_capture < persistence < tracking
+    assert route.rfind("if (leadCreated) {", 0, persistence) >= 0
+    assert "metaAttribution: submissionMetaAttribution" in route
     assert "lead attribution persistence failed" in route
     log = route.split("lead attribution persistence failed", 1)[1].split("});", 1)[0]
     for sensitive in ("publicAttribution", "requestIp", "fbc", "fbp", "fbclid", "gclid", "landingPage"):
