@@ -88,7 +88,10 @@ def test_app_shell_and_layout_hide_group_hub_and_keep_group_route_recoverable():
     assert 'Visão do grupo' in shell
     assert 'hasCurrentTenantMembership' in shell
     assert 'isBusinessGroupAnchor' in shell
-    assert 'isBusinessGroupAnchor ? groupNav : baseNavItems' in shell
+    assert 'groupWorkspaceNav' in shell
+    assert '(inGroupView || isBusinessGroupAnchor) ? groupWorkspaceNav : baseNavItems' in shell
+    for label in ['Dashboard', 'Leads', 'Formulários', 'Relatórios']:
+        assert label in shell
     assert 'GROUP_ROLE_LABELS_PT_BR' in shell
     assert 'Administrador do grupo' in shell
     assert 'inGroupView' in shell
