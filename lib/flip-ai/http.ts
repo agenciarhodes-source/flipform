@@ -24,7 +24,7 @@ export function withFlipAiSession<T = unknown>(handler: (req: NextRequest, sessi
     return response;
   };
 }
-export async function readFlipAiBody(req: NextRequest): Promise<unknown> {
+export async function readFlipAiBody(req: NextRequest, maxBytes = 8192): Promise<unknown> {
   if (req.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') throw new FlipAiError('INVALID_BODY', 415, 'Envie os dados em JSON.');
   const reader = req.body?.getReader();
   if (!reader) throw new FlipAiError('INVALID_BODY', 400, 'Dados ausentes.');
@@ -33,7 +33,7 @@ export async function readFlipAiBody(req: NextRequest): Promise<unknown> {
     while (true) {
       const result = await reader.read(); if (result.done) break;
       size += result.value.byteLength;
-      if (size > 8192) { await reader.cancel(); throw new FlipAiError('BODY_TOO_LARGE', 413, 'Dados acima do tamanho permitido.'); }
+      if (size > maxBytes) { await reader.cancel(); throw new FlipAiError('BODY_TOO_LARGE', 413, 'Dados acima do tamanho permitido.'); }
       chunks.push(result.value);
     }
   } finally { reader.releaseLock(); }

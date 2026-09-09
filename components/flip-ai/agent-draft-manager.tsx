@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState, type FormEvent } from 'react';
-import { Bot, Plus } from 'lucide-react';
+import { Bot, BookOpen, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
 
 type Editor = { id?: string; version?: number; requestId: string; input: AgentDraftInput };
@@ -14,6 +15,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [message, setMessage] = useState('');
+  const [knowledgeAgentId, setKnowledgeAgentId] = useState<string | null>(null);
   const stages = workspace.pipelines.find((p) => p.id === editor?.input.pipelineId)?.stages || [];
 
   function createDraft() {
@@ -72,7 +74,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <h1 className="text-2xl font-semibold">Flip AI</h1><p className="mt-1 text-sm text-muted-foreground">Prepare os atendentes virtuais da sua empresa.</p></div>
       <Button onClick={createDraft} disabled={busy || !!editor}><Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo atendente</Button>
     </header>
-    <div className="rounded-lg border bg-muted/40 p-4 text-sm">Nesta etapa, os atendentes ficam em rascunho. A base de conhecimento e a publicação do chat estarão disponíveis nas próximas etapas.</div>
+    <div className="rounded-lg border bg-muted/40 p-4 text-sm">Os atendentes continuam em rascunho. Agora você pode cadastrar o Markdown Mestre; a publicação do chat permanece bloqueada.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
       <Button variant="outline" disabled={busy} onClick={reload}>Atualizar lista</Button></div>
     {editor ? <form onSubmit={save} className="rounded-lg border bg-card p-5">
@@ -94,6 +96,12 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <div className="flex gap-2 sm:col-span-2"><Button type="submit">{busy ? 'Salvando…' : 'Salvar rascunho'}</Button><Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancelar</Button></div>
       </fieldset>
     </form> : null}
+    {knowledgeAgentId ? <KnowledgeMasterEditor
+      agent={workspace.agents.find((agent) => agent.id === knowledgeAgentId)!}
+      onClose={() => setKnowledgeAgentId(null)}
+      onSaved={(knowledge) => setWorkspace((current) => ({ ...current, agents: current.agents.map((agent) =>
+        agent.id === knowledgeAgentId ? { ...agent, knowledge } : agent) }))}
+    /> : null}
     {!workspace.agents.length ? <div className="rounded-lg border border-dashed p-8 text-center"><h2 className="font-medium">Seu primeiro atendente começa aqui</h2>
       <p className="mt-2 text-sm text-muted-foreground">Defina sua identidade e o destino dos futuros leads no Kanban.</p></div> :
       <ul className="grid gap-4 md:grid-cols-2">{workspace.agents.map((agent) => <li key={agent.id} className="rounded-lg border bg-card p-5">
@@ -101,7 +109,13 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
           <div className="min-w-0"><h2 className="truncate font-medium">{agent.name}</h2><span className="text-xs text-muted-foreground">Rascunho</span></div></div>
         {agent.description ? <p className="mt-3 break-words text-sm text-muted-foreground">{agent.description}</p> : null}
         <p className="mt-3 break-all text-xs text-muted-foreground">Endereço reservado: /chat/{agent.slug}</p>
-        <Button className="mt-4" variant="outline" disabled={busy || !!editor} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
+        <p className="mt-2 text-xs text-muted-foreground">{agent.knowledge ? `Markdown Mestre: revisão ${agent.knowledge.revision}` : 'Markdown Mestre ainda não cadastrado'}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
+            <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
+          </Button>
+        </div>
       </li>)}</ul>}
   </section>;
 }

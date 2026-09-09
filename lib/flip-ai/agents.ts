@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import type { SessionPayload } from '@/lib/auth';
 import { FlipAiError, requireFlipAiAccess, type FlipAiDb } from './access';
-import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from './policy';
+import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace, type KnowledgeMasterSummary } from './policy';
 
 async function ensureSchema(db: FlipAiDb) {
   const rows = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -23,8 +23,24 @@ async function selectDrafts(db: FlipAiDb, tenantId: string, id?: string): Promis
       ${id ? Prisma.sql`AND a.id = ${id}` : Prisma.empty}
     ORDER BY a.created_at DESC, a.id DESC
   `);
-  return rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString() }));
+  return rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString(), knowledge: null }));
 }
+async function selectKnowledgeSummaries(db: FlipAiDb, tenantId: string): Promise<Map<string, KnowledgeMasterSummary>> {
+  const ready = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
+    SELECT to_regclass('public.flip_ai_knowledge_bases') IS NOT NULL
+      AND to_regclass('public.flip_ai_knowledge_documents') IS NOT NULL AS ready
+  `);
+  if (!ready[0]?.ready) return new Map();
+  const rows = await db.$queryRaw<Array<{ agentId: string; title: string; revision: number; byteSize: number; contentHash: string; updatedAt: Date }>>(Prisma.sql`
+    SELECT kb.agent_id AS "agentId", d.title, d.current_revision AS revision, d.byte_size AS "byteSize",
+      d.current_hash AS "contentHash", d.updated_at AS "updatedAt"
+    FROM flip_ai_knowledge_bases kb
+    JOIN flip_ai_knowledge_documents d ON d.knowledge_base_id = kb.id AND d.tenant_id = kb.tenant_id
+    WHERE kb.tenant_id = ${tenantId} AND d.source_key = 'master'
+  `);
+  return new Map(rows.map((row) => [row.agentId, { ...row, updatedAt: row.updatedAt.toISOString() }]));
+}
+
 async function validateDestination(db: FlipAiDb, tenantId: string, input: AgentDraftInput) {
   const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     SELECT s.id FROM pipeline_stages s JOIN pipelines p ON p.id = s.pipeline_id
@@ -37,13 +53,14 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
-    const [agents, pipelines] = await Promise.all([
+    const [agents, pipelines, knowledge] = await Promise.all([
       selectDrafts(db, tenantId),
       db.pipeline.findMany({ where: { tenantId, isArchived: false }, orderBy: { name: 'asc' }, select: {
         id: true, name: true, stages: { where: { isArchived: false }, orderBy: { orderIndex: 'asc' }, select: { id: true, name: true } },
       } }),
+      selectKnowledgeSummaries(db, tenantId),
     ]);
-    return { agents, pipelines };
+    return { agents: agents.map((agent) => ({ ...agent, knowledge: knowledge.get(agent.id) || null })), pipelines };
   });
 }
 export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDraftInput,

@@ -126,6 +126,9 @@ model Tenant {
   conversations         Conversation[]
   messages              Message[]
   flipAiAgents          FlipAiAgent[]
+  flipAiKnowledgeBases  FlipAiKnowledgeBase[]
+  flipAiKnowledgeDocuments FlipAiKnowledgeDocument[]
+  flipAiKnowledgeRevisions FlipAiKnowledgeRevision[]
 
   @@map("tenants")
 }
@@ -187,6 +190,7 @@ model User {
   assignedConversations Conversation[] @relation("ConversationAssignee")
   sentConversationMessages Message[] @relation("ConversationMessageSender")
   flipAiAgentsCreated FlipAiAgent[]
+  flipAiKnowledgeRevisionsCreated FlipAiKnowledgeRevision[]
 
   @@map("users")
 }
@@ -1077,6 +1081,7 @@ model FlipAiAgent {
   initialStage PipelineStage @relation(fields: [initialStageId], references: [id], onDelete: Restrict)
   creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   endpoint FlipAiEndpoint?
+  knowledgeBase FlipAiKnowledgeBase?
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@map("flip_ai_agents")
@@ -1093,4 +1098,67 @@ model FlipAiEndpoint {
   @@unique([tenantId, agentId])
   @@index([tenantId])
   @@map("flip_ai_endpoints")
+}
+
+
+model FlipAiKnowledgeBase {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  agentId   String   @unique @map("agent_id")
+  status    String   @default("draft")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent     FlipAiAgent               @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+  documents FlipAiKnowledgeDocument[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, agentId])
+  @@index([tenantId, status])
+  @@map("flip_ai_knowledge_bases")
+}
+
+model FlipAiKnowledgeDocument {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  knowledgeBaseId String   @map("knowledge_base_id")
+  sourceKey       String   @map("source_key")
+  sourceType      String   @default("markdown") @map("source_type")
+  title           String
+  currentRevision Int      @default(1) @map("current_revision")
+  currentHash     String   @map("current_hash")
+  byteSize        Int      @map("byte_size")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  knowledgeBase FlipAiKnowledgeBase       @relation(fields: [tenantId, knowledgeBaseId], references: [tenantId, id], onDelete: Restrict)
+  revisions     FlipAiKnowledgeRevision[]
+
+  @@unique([tenantId, id])
+  @@unique([knowledgeBaseId, sourceKey])
+  @@index([tenantId, updatedAt])
+  @@map("flip_ai_knowledge_documents")
+}
+
+model FlipAiKnowledgeRevision {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  documentId String   @map("document_id")
+  revision   Int
+  title      String
+  content    String
+  contentHash String  @map("content_hash")
+  byteSize   Int      @map("byte_size")
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  document FlipAiKnowledgeDocument @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Restrict)
+  creator  User?                   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([documentId, revision])
+  @@index([tenantId, createdAt])
+  @@map("flip_ai_knowledge_revisions")
 }
