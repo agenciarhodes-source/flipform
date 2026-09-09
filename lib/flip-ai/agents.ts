@@ -78,7 +78,8 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     if (operation.kind === 'create' && existing) {
       const same = Object.entries(input).every(([key, value]) => existing[key as keyof AgentDraft] === value);
       if (!same) throw new FlipAiError('REQUEST_CONFLICT', 409, 'Esta solicitação já foi salva com outros dados. Atualize a lista.');
-      return existing;
+      const knowledge = await selectKnowledgeSummaries(db, tenantId);
+      return { ...existing, knowledge: knowledge.get(existing.id) || null };
     }
     if (operation.kind === 'update' && !existing) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
     await validateDestination(db, tenantId, input);
@@ -102,6 +103,7 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
       action: operation.kind === 'create' ? 'created' : 'updated', metadata: { status: 'draft' } } });
     const saved = (await selectDrafts(db, tenantId, id))[0];
     if (!saved) throw new FlipAiError('AGENT_NOT_FOUND', 500, 'Não foi possível confirmar o rascunho salvo.');
-    return saved;
+    const knowledge = await selectKnowledgeSummaries(db, tenantId);
+    return { ...saved, knowledge: knowledge.get(saved.id) || null };
   });
 }

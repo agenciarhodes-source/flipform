@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma';
 import { getAgentDraftWorkspace, saveAgentDraft } from '../lib/flip-ai/agents';
 import { FlipAiError } from '../lib/flip-ai/access';
 import { getMasterMarkdown, saveMasterMarkdown } from '../lib/flip-ai/knowledge';
+import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch, searchKnowledgeByVector } from '../lib/flip-ai/indexing';
+import { FLIP_AI_EMBEDDING_DIMENSIONS } from '../lib/flip-ai/openai-embeddings';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -24,6 +26,10 @@ async function fixture() {
     input: { name: 'Helena', description: 'CI', primaryColor: '#2563EB', style: 'welcoming' as const, slug: 'helena-' + suffix, pipelineId: pipeline.id, initialStageId: pipeline.stages[0].id } };
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
+  await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiKnowledgeChunk.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiKnowledgeIndexBatch.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiKnowledgeIndex.deleteMany({ where: { tenantId: x.tenant.id } });
   const bases = await prisma.flipAiKnowledgeBase.findMany({ where: { tenantId: x.tenant.id }, select: { id: true } });
   const documents = await prisma.flipAiKnowledgeDocument.findMany({ where: { tenantId: x.tenant.id }, select: { id: true } });
   await prisma.flipAiKnowledgeRevision.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -65,6 +71,22 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       (e: unknown) => e instanceof FlipAiError && e.code === 'KNOWLEDGE_VERSION_CONFLICT');
     await assert.rejects(saveMasterMarkdown(a.session, id, { ...master, content: '界'.repeat(400_000), expectedRevision: 2 }),
       (e: unknown) => e instanceof FlipAiError && e.status === 413);
+    const savedWithKnowledge = await saveAgentDraft(a.session, { ...a.input, name: 'Ana indexada' }, { kind: 'update', id, version: 2 });
+    assert.equal(savedWithKnowledge.knowledge?.revision, 2, 'agent save must preserve its knowledge summary');
+
+    const prepared = await prepareKnowledgeIndex(a.session, id, 2);
+    assert.equal(prepared.status, 'pending');
+    await assert.rejects(prepareKnowledgeIndex(b.session, id, 2), (e: unknown) => e instanceof FlipAiError && e.status === 404);
+    const vector = [1, ...Array(FLIP_AI_EMBEDDING_DIMENSIONS - 1).fill(0)];
+    const indexed = await processNextKnowledgeIndexBatch(a.session, id, prepared.id, false, async (inputs) => ({
+      embeddings: inputs.map(() => vector), model: 'text-embedding-3-small', inputTokens: inputs.length * 5, totalTokens: inputs.length * 5,
+    }));
+    assert.equal(indexed.status, 'completed');
+    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, status: 'confirmed' } }), 1);
+    const hits = await searchKnowledgeByVector(a.session, id, vector, 3);
+    assert.ok(hits.length > 0);
+    assert.equal((await searchKnowledgeByVector(b.session, id, vector, 3)).length, 0, 'retrieval must not cross tenants');
+
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');
 

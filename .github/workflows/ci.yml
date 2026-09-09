@@ -106,7 +106,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -159,6 +159,9 @@ jobs:
       # Smoke tests use an isolated disposable PostgreSQL database and materialize
       # the current Prisma schema directly. Production migrations remain reviewed
       # and applied separately against Neon.
+      - name: Enable pgvector in ephemeral database
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d flipform_ci -c 'CREATE EXTENSION IF NOT EXISTS vector'
+
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
 

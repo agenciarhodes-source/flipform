@@ -129,6 +129,10 @@ model Tenant {
   flipAiKnowledgeBases  FlipAiKnowledgeBase[]
   flipAiKnowledgeDocuments FlipAiKnowledgeDocument[]
   flipAiKnowledgeRevisions FlipAiKnowledgeRevision[]
+  flipAiKnowledgeIndexes FlipAiKnowledgeIndex[]
+  flipAiKnowledgeIndexBatches FlipAiKnowledgeIndexBatch[]
+  flipAiKnowledgeChunks FlipAiKnowledgeChunk[]
+  flipAiUsageEvents FlipAiUsageEvent[]
 
   @@map("tenants")
 }
@@ -1082,6 +1086,8 @@ model FlipAiAgent {
   creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   endpoint FlipAiEndpoint?
   knowledgeBase FlipAiKnowledgeBase?
+  knowledgeIndexes FlipAiKnowledgeIndex[]
+  flipAiUsageEvents FlipAiUsageEvent[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@map("flip_ai_agents")
@@ -1135,6 +1141,7 @@ model FlipAiKnowledgeDocument {
   tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   knowledgeBase FlipAiKnowledgeBase       @relation(fields: [tenantId, knowledgeBaseId], references: [tenantId, id], onDelete: Restrict)
   revisions     FlipAiKnowledgeRevision[]
+  indexes       FlipAiKnowledgeIndex[]
 
   @@unique([tenantId, id])
   @@unique([knowledgeBaseId, sourceKey])
@@ -1157,8 +1164,113 @@ model FlipAiKnowledgeRevision {
   tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   document FlipAiKnowledgeDocument @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Restrict)
   creator  User?                   @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  indexes  FlipAiKnowledgeIndex[]
 
+  @@unique([tenantId, documentId, revision])
   @@unique([documentId, revision])
   @@index([tenantId, createdAt])
   @@map("flip_ai_knowledge_revisions")
+}
+
+
+model FlipAiKnowledgeIndex {
+  id                  String    @id @default(uuid())
+  tenantId            String    @map("tenant_id")
+  agentId             String    @map("agent_id")
+  documentId          String    @map("document_id")
+  revision            Int
+  contentHash         String    @map("content_hash")
+  status              String    @default("pending")
+  embeddingModel      String    @map("embedding_model")
+  embeddingDimensions Int       @map("embedding_dimensions")
+  chunkCount          Int       @map("chunk_count")
+  inputTokens         Int       @default(0) @map("input_tokens")
+  attemptCount        Int       @default(0) @map("attempt_count")
+  lastErrorCode       String?   @map("last_error_code")
+  completedAt         DateTime? @map("completed_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  tenant   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent    FlipAiAgent               @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+  document FlipAiKnowledgeDocument   @relation(fields: [tenantId, documentId], references: [tenantId, id], onDelete: Restrict)
+  sourceRevision FlipAiKnowledgeRevision @relation(fields: [tenantId, documentId, revision], references: [tenantId, documentId, revision], onDelete: Restrict)
+  batches  FlipAiKnowledgeIndexBatch[]
+  chunks   FlipAiKnowledgeChunk[]
+
+  @@unique([tenantId, id])
+  @@unique([documentId, revision, embeddingModel])
+  @@index([tenantId, agentId, status])
+  @@map("flip_ai_knowledge_indexes")
+}
+
+model FlipAiKnowledgeIndexBatch {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  indexId       String    @map("index_id")
+  ordinal       Int
+  status        String    @default("pending")
+  byteSize      Int       @map("byte_size")
+  inputTokens   Int?      @map("input_tokens")
+  attemptCount  Int       @default(0) @map("attempt_count")
+  lastErrorCode String?   @map("last_error_code")
+  startedAt     DateTime? @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  index  FlipAiKnowledgeIndex @relation(fields: [tenantId, indexId], references: [tenantId, id], onDelete: Restrict)
+  chunks FlipAiKnowledgeChunk[]
+
+  @@unique([tenantId, id])
+  @@unique([indexId, ordinal])
+  @@index([tenantId, status, createdAt])
+  @@map("flip_ai_knowledge_index_batches")
+}
+
+model FlipAiKnowledgeChunk {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  indexId       String   @map("index_id")
+  batchId       String   @map("batch_id")
+  ordinal       Int
+  heading       String?
+  content       String
+  contentHash   String   @map("content_hash")
+  byteSize      Int      @map("byte_size")
+  tokenEstimate Int      @map("token_estimate")
+  embedding     Unsupported("vector(1536)")?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  index  FlipAiKnowledgeIndex      @relation(fields: [tenantId, indexId], references: [tenantId, id], onDelete: Restrict)
+  batch  FlipAiKnowledgeIndexBatch @relation(fields: [tenantId, batchId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([indexId, ordinal])
+  @@index([tenantId, indexId])
+  @@map("flip_ai_knowledge_chunks")
+}
+
+model FlipAiUsageEvent {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  agentId      String?  @map("agent_id")
+  requestKey   String   @unique @map("request_key")
+  operation    String
+  provider     String
+  model        String
+  status       String
+  inputTokens  Int?     @map("input_tokens")
+  outputTokens Int?     @map("output_tokens")
+  units        Int      @default(1)
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent  FlipAiAgent? @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, operation, status])
+  @@map("flip_ai_usage_events")
 }
