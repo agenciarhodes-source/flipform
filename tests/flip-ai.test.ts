@@ -6,6 +6,7 @@ import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/
 import type { SessionPayload } from '../lib/auth';
 import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
+import { knowledgePreviewSchema } from '../lib/flip-ai/knowledge-preview';
 
 const plan = { slug: 'premium', isActive: true };
 const allowed = { role: 'owner', tenantStatus: 'active', plan };
@@ -108,4 +109,13 @@ test('PR 269 migration is additive and tenant-scoped', () => {
   assert.match(sql, /flip_ai_usage_events/);
   assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
+});
+
+
+test('knowledge preview payload is strict and requires an idempotency key', () => {
+  const valid = { requestId: 'c166c90d-c862-4e04-9e8b-ad1c43ac6390', query: 'Qual é o horário de atendimento?' };
+  assert.equal(knowledgePreviewSchema.safeParse(valid).success, true);
+  assert.equal(knowledgePreviewSchema.safeParse({ ...valid, tenantId: 'other' }).success, false);
+  assert.equal(knowledgePreviewSchema.safeParse({ ...valid, query: 'x' }).success, false);
+  assert.equal(knowledgePreviewSchema.safeParse({ ...valid, requestId: 'repetir' }).success, false);
 });

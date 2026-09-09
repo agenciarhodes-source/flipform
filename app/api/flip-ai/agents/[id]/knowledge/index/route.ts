@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
-import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch } from '@/lib/flip-ai/indexing';
+import { getCurrentKnowledgeIndexStatus, prepareKnowledgeIndex, processNextKnowledgeIndexBatch } from '@/lib/flip-ai/indexing';
 
 export const dynamic = 'force-dynamic';
 const idSchema = z.string().uuid();
@@ -11,6 +11,12 @@ const bodySchema = z.object({
   indexId: z.string().uuid().optional(),
   confirmAmbiguousRetry: z.boolean().optional().default(false),
 }).strict();
+
+export const GET = withFlipAiSession<{ params: { id: string } }>(async (_request, session, context) => {
+  const agentId = idSchema.safeParse(context.params.id);
+  if (!agentId.success) throw new FlipAiError('INVALID_AGENT', 400, 'Atendente inválido.');
+  return NextResponse.json({ index: await getCurrentKnowledgeIndexStatus(session, agentId.data) });
+});
 
 export const POST = withFlipAiSession<{ params: { id: string } }>(async (request, session, context) => {
   const agentId = idSchema.safeParse(context.params.id);
