@@ -77,8 +77,10 @@ export async function processNextKnowledgeIndexBatch(session: SessionPayload, ag
       include: { document: { select: { currentRevision: true, currentHash: true } }, batches: { orderBy: { ordinal: 'asc' } } } });
     if (!index) throw new FlipAiError('KNOWLEDGE_INDEX_NOT_FOUND', 404, 'Índice não encontrado.');
     if (index.document.currentRevision !== index.revision || index.document.currentHash !== index.contentHash) {
-      await db.flipAiKnowledgeIndex.update({ where: { id: index.id }, data: { status: 'superseded', lastErrorCode: 'REVISION_SUPERSEDED' } });
-      return { blocked: statusOf(index), tenantId, batch: null };
+      const superseded = await db.flipAiKnowledgeIndex.update({ where: { id: index.id },
+        data: { status: 'superseded', lastErrorCode: 'REVISION_SUPERSEDED' },
+        include: { batches: { select: { status: true } } } });
+      return { blocked: statusOf(superseded), tenantId, batch: null };
     }
     const next = index.batches.find((batch) => batch.status !== 'completed');
     if (!next) {

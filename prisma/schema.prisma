@@ -1184,7 +1184,7 @@ model FlipAiKnowledgeIndex {
   embeddingModel      String    @map("embedding_model")
   embeddingDimensions Int       @map("embedding_dimensions")
   chunkCount          Int       @map("chunk_count")
-  inputTokens         Int?      @map("input_tokens")
+  inputTokens         Int       @default(0) @map("input_tokens")
   attemptCount        Int       @default(0) @map("attempt_count")
   lastErrorCode       String?   @map("last_error_code")
   completedAt         DateTime? @map("completed_at")

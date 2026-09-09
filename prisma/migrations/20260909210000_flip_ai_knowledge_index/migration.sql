@@ -10,7 +10,7 @@ CREATE TABLE "flip_ai_knowledge_indexes" (
   "document_id" TEXT NOT NULL, "revision" INTEGER NOT NULL, "content_hash" TEXT NOT NULL,
   "status" TEXT NOT NULL DEFAULT 'pending', "embedding_model" TEXT NOT NULL,
   "embedding_dimensions" INTEGER NOT NULL, "chunk_count" INTEGER NOT NULL,
-  "input_tokens" INTEGER, "attempt_count" INTEGER NOT NULL DEFAULT 0,
+  "input_tokens" INTEGER NOT NULL DEFAULT 0, "attempt_count" INTEGER NOT NULL DEFAULT 0,
   "last_error_code" TEXT, "completed_at" TIMESTAMP(3),
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updated_at" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "flip_ai_knowledge_indexes_pkey" PRIMARY KEY ("id"),
