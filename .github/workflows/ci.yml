@@ -68,6 +68,11 @@ jobs:
       - name: Run Python test suite
         run: python -m pytest tests -q
 
+      - name: Run Flip AI policy tests
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/flip-ai.test.ts
+
       - name: Run tracking unit tests
         env:
           NODE_OPTIONS: --conditions=react-server
@@ -156,6 +161,12 @@ jobs:
       # and applied separately against Neon.
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
+
+      - name: Run Flip AI database isolation tests
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/flip-ai.integration.test.ts
 
       - name: Build
         run: npm run build

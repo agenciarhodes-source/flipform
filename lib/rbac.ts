@@ -50,6 +50,7 @@ export function hasRole(session: { role?: string | null } | null | undefined, ro
 }
 
 export const PERMISSIONS = {
+  FLIP_AI_MANAGE: ['owner', 'admin'],
   DASHBOARD_VIEW_ALL: ['owner', 'admin', 'manager'],
   DASHBOARD_VIEW_OWN: ['agent'],
   DASHBOARD_VIEW_READONLY: ['viewer'],
