@@ -173,7 +173,7 @@ export function KnowledgeMasterEditor({ agent, onClose, onSaved }: {
         <p className="mt-1 text-sm text-muted-foreground">Faça uma pergunta e confira somente os trechos internos recuperados. Nenhuma resposta é gerada nesta etapa.</p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row"><Input required minLength={3} maxLength={500} value={query}
           onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: Qual é o horário de atendimento?" />
-          <Button type="submit" disabled={previewing}>{previewing ? 'Consultando…' : 'Testar recuperação'}</Button></div>
+          <Button type="submit" disabled={previewing || !!retryPreview}>{previewing ? 'Consultando…' : 'Testar recuperação'}</Button></div>
         {retryPreview ? <Button className="mt-2" type="button" variant="destructive" disabled={previewing}
           onClick={() => void runPreview(retryPreview, true)}>Confirmar nova tentativa deste teste</Button> : null}
         {hits.length ? <ol className="mt-4 space-y-3">{hits.map((hit) => <li key={hit.id} className="rounded-md bg-muted/50 p-3">

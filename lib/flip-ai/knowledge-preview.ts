@@ -1,5 +1,5 @@
 import 'server-only';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -19,7 +19,7 @@ type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
 export type KnowledgePreviewHit = { id: string; heading: string | null; content: string; score: number };
 export type KnowledgePreviewResult = { requestId: string; cached: boolean; inputTokens: number; hits: KnowledgePreviewHit[] };
 type StoredMetadata = { queryHash?: string; indexId?: string; attemptStartedAt?: string;
-  results?: Array<{ id: string; score: number }> };
+  attemptToken?: string; results?: Array<{ id: string; score: number }> };
 
 function metadataOf(value: Prisma.JsonValue | null): StoredMetadata {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as unknown as StoredMetadata : {};
@@ -46,6 +46,7 @@ export async function previewKnowledgeRetrieval(session: SessionPayload, agentId
   const input = parsed.data;
   const requestKey = `knowledge-preview:${input.requestId}`;
   const queryHash = createHash('sha256').update(input.query).digest('hex');
+  const attemptToken = randomUUID();
 
   const reservation = await prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
@@ -79,13 +80,21 @@ export async function previewKnowledgeRetrieval(session: SessionPayload, agentId
       if (!input.confirmRetry) return { mode: existing.status === 'ambiguous' ? 'ambiguous' as const : 'failed' as const,
         tenantId, indexId: index.id, eventId: existing.id };
       await db.flipAiUsageEvent.update({ where: { id: existing.id }, data: { status: 'processing', inputTokens: null,
-        metadata: { queryHash, indexId: index.id, attemptStartedAt: new Date().toISOString() } } });
-      return { mode: 'execute' as const, tenantId, indexId: index.id, eventId: existing.id };
+        metadata: { queryHash, indexId: index.id, attemptStartedAt: new Date().toISOString(), attemptToken } } });
+      return { mode: 'execute' as const, tenantId, indexId: index.id, eventId: existing.id, attemptToken };
     }
+    const unresolved = await db.flipAiUsageEvent.findMany({ where: { tenantId, agentId,
+      operation: 'knowledge_preview', status: { in: ['processing', 'ambiguous'] } },
+      orderBy: { createdAt: 'desc' }, take: 20 });
+    if (unresolved.some((event) => {
+      const metadata = metadataOf(event.metadata);
+      return metadata.queryHash === queryHash && metadata.indexId === index.id;
+    })) return { mode: 'ambiguous' as const, tenantId, indexId: index.id, eventId: '' };
     const event = await db.flipAiUsageEvent.create({ data: { tenantId, agentId, requestKey,
       operation: 'knowledge_preview', provider: 'openai', model: FLIP_AI_EMBEDDING_MODEL, status: 'processing',
-      outputTokens: 0, units: 1, metadata: { queryHash, indexId: index.id, attemptStartedAt: new Date().toISOString() } } });
-    return { mode: 'execute' as const, tenantId, indexId: index.id, eventId: event.id };
+      outputTokens: 0, units: 1, metadata: { queryHash, indexId: index.id,
+        attemptStartedAt: new Date().toISOString(), attemptToken } } });
+    return { mode: 'execute' as const, tenantId, indexId: index.id, eventId: event.id, attemptToken };
   });
 
   if (reservation.mode === 'cached') return { requestId: input.requestId, cached: true,
@@ -100,19 +109,21 @@ export async function previewKnowledgeRetrieval(session: SessionPayload, agentId
     const embedded = await embedder([input.query]);
     if (embedded.embeddings.length !== 1) throw new OpenAiEmbeddingError('ambiguous', 'OPENAI_EMBEDDING_INVALID_RESPONSE');
     const hits = await searchKnowledgeByVector(session, agentId, embedded.embeddings[0], 5);
-    const metadata = { queryHash, indexId: reservation.indexId,
+    const metadata = { queryHash, indexId: reservation.indexId, attemptToken: reservation.attemptToken,
       results: hits.map((hit) => ({ id: hit.id, score: hit.score })) };
-    const changed = await prisma.flipAiUsageEvent.updateMany({ where: { id: reservation.eventId,
-      tenantId: reservation.tenantId, status: 'processing' }, data: { status: 'confirmed',
-      inputTokens: embedded.inputTokens, metadata } });
-    if (changed.count !== 1) throw new OpenAiEmbeddingError('ambiguous', 'PREVIEW_PERSISTENCE_AMBIGUOUS');
+    const changed = await prisma.$executeRaw(Prisma.sql`UPDATE flip_ai_usage_events
+      SET status = 'confirmed', input_tokens = ${embedded.inputTokens}, metadata = ${JSON.stringify(metadata)}::jsonb
+      WHERE id = ${reservation.eventId} AND tenant_id = ${reservation.tenantId} AND status = 'processing'
+        AND metadata->>'attemptToken' = ${reservation.attemptToken}`);
+    if (changed !== 1) throw new OpenAiEmbeddingError('ambiguous', 'PREVIEW_PERSISTENCE_AMBIGUOUS');
     return { requestId: input.requestId, cached: false, inputTokens: embedded.inputTokens, hits };
   } catch (error) {
     const failure = error instanceof OpenAiEmbeddingError ? error : new OpenAiEmbeddingError('ambiguous', 'PREVIEW_RESULT_AMBIGUOUS');
-    const current = await prisma.flipAiUsageEvent.findUnique({ where: { id: reservation.eventId }, select: { metadata: true } });
-    await prisma.flipAiUsageEvent.updateMany({ where: { id: reservation.eventId, tenantId: reservation.tenantId, status: 'processing' },
-      data: { status: failure.kind === 'ambiguous' ? 'ambiguous' : 'failed',
-        metadata: { ...metadataOf(current?.metadata || null), errorCode: failure.code } } });
+    const failureStatus = failure.kind === 'ambiguous' ? 'ambiguous' : 'failed';
+    await prisma.$executeRaw(Prisma.sql`UPDATE flip_ai_usage_events
+      SET status = ${failureStatus}, metadata = metadata || jsonb_build_object('errorCode', ${failure.code})
+      WHERE id = ${reservation.eventId} AND tenant_id = ${reservation.tenantId} AND status = 'processing'
+        AND metadata->>'attemptToken' = ${reservation.attemptToken}`);
     throw new FlipAiError(failure.code, failure.code === 'OPENAI_API_KEY_MISSING' ? 503 : 502,
       failure.kind === 'ambiguous' ? 'O resultado da OpenAI ficou incerto. Confirme antes de tentar novamente.'
         : 'A OpenAI recusou o teste. Confirme uma nova tentativa depois de revisar a configuração.');

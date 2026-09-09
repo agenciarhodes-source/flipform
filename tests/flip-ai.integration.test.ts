@@ -119,6 +119,37 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.ok(retried.hits.length > 0);
     assert.equal(ambiguousCalls, 2);
 
+    const lateRequest = { requestId: randomUUID(), query: 'Teste de propriedade da tentativa' };
+    let signalStarted!: () => void;
+    let releaseEmbedding!: () => void;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const lateAttempt = previewKnowledgeRetrieval(a.session, id, lateRequest, async () => {
+      signalStarted();
+      return new Promise((resolve) => { releaseEmbedding = () => resolve({
+        embeddings: [vector], model: 'text-embedding-3-small', inputTokens: 11, totalTokens: 11,
+      }); });
+    });
+    await started;
+    const lateEvent = await prisma.flipAiUsageEvent.findUniqueOrThrow({
+      where: { requestKey: `knowledge-preview:${lateRequest.requestId}` },
+    });
+    await prisma.flipAiUsageEvent.update({ where: { id: lateEvent.id }, data: {
+      metadata: { ...(lateEvent.metadata as Record<string, unknown>), attemptStartedAt: new Date(0).toISOString() } as any,
+    } });
+    await assert.rejects(previewKnowledgeRetrieval(a.session, id, lateRequest, async () => {
+      throw new Error('stale processing must first become ambiguous');
+    }), (error: unknown) => error instanceof FlipAiError && error.code === 'KNOWLEDGE_PREVIEW_AMBIGUOUS');
+    const ownedRetry = await previewKnowledgeRetrieval(a.session, id, { ...lateRequest, confirmRetry: true }, async () => ({
+      embeddings: [vector], model: 'text-embedding-3-small', inputTokens: 13, totalTokens: 13,
+    }));
+    assert.equal(ownedRetry.inputTokens, 13);
+    releaseEmbedding();
+    await assert.rejects(lateAttempt, (error: unknown) =>
+      error instanceof FlipAiError && error.code === 'PREVIEW_PERSISTENCE_AMBIGUOUS');
+    const ownedEvent = await prisma.flipAiUsageEvent.findUniqueOrThrow({ where: { id: lateEvent.id } });
+    assert.equal(ownedEvent.status, 'confirmed');
+    assert.equal(ownedEvent.inputTokens, 13, 'late attempt must not overwrite the confirmed retry');
+
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');
 
