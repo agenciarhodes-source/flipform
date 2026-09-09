@@ -35,7 +35,7 @@ export type KnowledgeMasterSummary = { title: string; revision: number; byteSize
 export type KnowledgeMaster = KnowledgeMasterSummary & { content: string };
 export const knowledgeMasterSchema = z.object({
   title: z.string().trim().min(3).max(120),
-  content: z.string().min(20).max(500_000).refine((value) => !value.includes('\0'), 'Conteúdo inválido'),
+  content: z.string().min(20).refine((value) => !value.includes('\0'), 'Conteúdo inválido'),
   expectedRevision: z.number().int().min(0),
 }).strict();
 export type AgentDraft = AgentDraftInput & { id: string; version: number; status: 'draft'; updatedAt: string; knowledge: KnowledgeMasterSummary | null };

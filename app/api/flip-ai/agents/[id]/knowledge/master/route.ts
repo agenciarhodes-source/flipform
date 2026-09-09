@@ -13,5 +13,5 @@ export const GET = withFlipAiSession<{ params: { id: string } }>(async (_req, se
 export const PUT = withFlipAiSession<{ params: { id: string } }>(async (req, session, ctx) => {
   const id = idSchema.safeParse(ctx.params.id);
   if (!id.success) throw new FlipAiError('INVALID_AGENT', 400, 'Atendente inválido.');
-  return NextResponse.json({ master: await saveMasterMarkdown(session, id.data, await readFlipAiBody(req, 1_100_000)) });
+  return NextResponse.json({ master: await saveMasterMarkdown(session, id.data, await readFlipAiBody(req, 2_100_000)) });
 });

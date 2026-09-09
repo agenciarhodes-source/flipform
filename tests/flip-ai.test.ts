@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { canAccessFlipAi, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
 import type { SessionPayload } from '../lib/auth';
+import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
+import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
 
 const plan = { slug: 'premium', isActive: true };
 const allowed = { role: 'owner', tenantStatus: 'active', plan };
@@ -48,7 +50,7 @@ test('Markdown Mestre payload is strict and bounded', () => {
   assert.equal(knowledgeMasterSchema.safeParse(valid).success, true);
   assert.equal(knowledgeMasterSchema.safeParse({ ...valid, tenantId: 'other' }).success, false);
   assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'curto' }).success, false);
-  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'x'.repeat(500_001) }).success, false);
+  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'x'.repeat(700_000) }).success, true);
   assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'texto válido com nul\0' }).success, false);
 });
 
@@ -58,4 +60,52 @@ test('PR 268 migration keeps Premium plans inactive and has no destructive state
   assert.match(sql, /'Premium Pro'.*'premium-pro'.*1497\.00/s);
   assert.equal((sql.match(/, FALSE, NOW\(\), NOW\(\)/g) || []).length, 2);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+\"?(?:leads|conversations))/i);
+});
+
+
+test('Markdown chunking is deterministic, byte-bounded and batch-bounded', () => {
+  const markdown = '# Empresa\n\n' + 'Informação oficial. '.repeat(900) + '\n\n## Atendimento\n\n' + '界'.repeat(8_000);
+  const first = chunkMasterMarkdown(markdown);
+  const second = chunkMasterMarkdown(markdown);
+  assert.deepEqual(first, second);
+  assert.ok(first.length > 2);
+  assert.ok(first.every((chunk, index) => chunk.ordinal === index &&
+    Buffer.byteLength(chunk.content, 'utf8') <= FLIP_AI_CHUNK_MAX_BYTES && chunk.contentHash.length === 64));
+  const batches = batchKnowledgeChunks(first);
+  assert.ok(batches.every((batch) => batch.chunks.length <= 64 && batch.byteSize <= 100_000));
+});
+
+test('OpenAI embeddings adapter pins model and dimensions without retrying', async () => {
+  let calls = 0;
+  let authorization = '';
+  const result = await createOpenAiEmbeddings(['trecho oficial'], {
+    apiKey: 'server-test-key',
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      authorization = new Headers(init?.headers).get('authorization') || '';
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.model, 'text-embedding-3-small');
+      assert.equal(body.dimensions, FLIP_AI_EMBEDDING_DIMENSIONS);
+      return new Response(JSON.stringify({ data: [{ index: 0, embedding: Array(FLIP_AI_EMBEDDING_DIMENSIONS).fill(0.01) }],
+        model: body.model, usage: { prompt_tokens: 4, total_tokens: 4 } }), { status: 200 });
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(authorization, 'Bearer server-test-key');
+  assert.equal(result.inputTokens, 4);
+  let failedCalls = 0;
+  await assert.rejects(createOpenAiEmbeddings(['trecho'], { apiKey: 'server-test-key', fetchImpl: async () => {
+    failedCalls += 1;
+    throw new TypeError('network');
+  } }), (error: unknown) => error instanceof OpenAiEmbeddingError && error.kind === 'ambiguous');
+  assert.equal(failedCalls, 1, 'adapter must never retry an ambiguous request');
+});
+
+test('PR 269 migration is additive and tenant-scoped', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260909210000_flip_ai_knowledge_index/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /CREATE EXTENSION IF NOT EXISTS vector/);
+  assert.match(sql, /vector\(1536\)/);
+  assert.match(sql, /flip_ai_usage_events/);
+  assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
+  assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });
