@@ -29,6 +29,23 @@ function statusOf(index: { id: string; revision: number; status: string; chunkCo
     totalBatches: index.batches.length, inputTokens: index.inputTokens || 0, lastErrorCode: index.lastErrorCode };
 }
 
+export async function getCurrentKnowledgeIndexStatus(session: SessionPayload,
+  agentId: string): Promise<KnowledgeIndexStatus | null> {
+  return prisma.$transaction(async (db) => {
+    const { tenantId } = await requireFlipAiAccess(db, session);
+    await ensureIndexSchema(db);
+    const document = await db.flipAiKnowledgeDocument.findFirst({ where: {
+      tenantId, sourceKey: 'master', knowledgeBase: { agentId },
+    }, select: { id: true, currentRevision: true, currentHash: true } });
+    if (!document) return null;
+    const index = await db.flipAiKnowledgeIndex.findFirst({ where: {
+      tenantId, agentId, documentId: document.id, revision: document.currentRevision,
+      contentHash: document.currentHash, embeddingModel: FLIP_AI_EMBEDDING_MODEL,
+    }, include: { batches: { select: { status: true } } } });
+    return index ? statusOf(index) : null;
+  });
+}
+
 export async function prepareKnowledgeIndex(session: SessionPayload, agentId: string,
   expectedRevision: number): Promise<KnowledgeIndexStatus> {
   return prisma.$transaction(async (db) => {

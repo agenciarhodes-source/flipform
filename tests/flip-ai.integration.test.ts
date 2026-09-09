@@ -6,7 +6,8 @@ import { getAgentDraftWorkspace, saveAgentDraft } from '../lib/flip-ai/agents';
 import { FlipAiError } from '../lib/flip-ai/access';
 import { getMasterMarkdown, saveMasterMarkdown } from '../lib/flip-ai/knowledge';
 import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch, searchKnowledgeByVector } from '../lib/flip-ai/indexing';
-import { FLIP_AI_EMBEDDING_DIMENSIONS } from '../lib/flip-ai/openai-embeddings';
+import { FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
+import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -86,6 +87,37 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const hits = await searchKnowledgeByVector(a.session, id, vector, 3);
     assert.ok(hits.length > 0);
     assert.equal((await searchKnowledgeByVector(b.session, id, vector, 3)).length, 0, 'retrieval must not cross tenants');
+
+    const previewRequest = { requestId: randomUUID(), query: 'Qual é a informação oficial?' };
+    let previewCalls = 0;
+    const preview = await previewKnowledgeRetrieval(a.session, id, previewRequest, async () => {
+      previewCalls += 1;
+      return { embeddings: [vector], model: 'text-embedding-3-small', inputTokens: 7, totalTokens: 7 };
+    });
+    assert.ok(preview.hits.length > 0);
+    const cachedPreview = await previewKnowledgeRetrieval(a.session, id, previewRequest, async () => {
+      throw new Error('cached request must not call OpenAI again');
+    });
+    assert.equal(cachedPreview.cached, true);
+    assert.equal(previewCalls, 1);
+
+    const ambiguousRequest = { requestId: randomUUID(), query: 'Teste de resultado incerto' };
+    let ambiguousCalls = 0;
+    await assert.rejects(previewKnowledgeRetrieval(a.session, id, ambiguousRequest, async () => {
+      ambiguousCalls += 1;
+      throw new OpenAiEmbeddingError('ambiguous', 'TEST_AMBIGUOUS');
+    }), (error: unknown) => error instanceof FlipAiError && error.code === 'TEST_AMBIGUOUS');
+    await assert.rejects(previewKnowledgeRetrieval(a.session, id, ambiguousRequest, async () => {
+      ambiguousCalls += 1;
+      return { embeddings: [vector], model: 'text-embedding-3-small', inputTokens: 3, totalTokens: 3 };
+    }), (error: unknown) => error instanceof FlipAiError && error.code === 'KNOWLEDGE_PREVIEW_AMBIGUOUS');
+    assert.equal(ambiguousCalls, 1, 'ambiguous preview must not retry without confirmation');
+    const retried = await previewKnowledgeRetrieval(a.session, id, { ...ambiguousRequest, confirmRetry: true }, async () => {
+      ambiguousCalls += 1;
+      return { embeddings: [vector], model: 'text-embedding-3-small', inputTokens: 3, totalTokens: 3 };
+    });
+    assert.ok(retried.hits.length > 0);
+    assert.equal(ambiguousCalls, 2);
 
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');
