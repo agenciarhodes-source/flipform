@@ -1090,6 +1090,7 @@ model FlipAiEndpoint {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   agent FlipAiAgent @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+  @@unique([tenantId, agentId])
   @@index([tenantId])
   @@map("flip_ai_endpoints")
 }

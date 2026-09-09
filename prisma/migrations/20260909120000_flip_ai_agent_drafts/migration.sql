@@ -22,6 +22,7 @@ CREATE TABLE "flip_ai_endpoints" (
   CONSTRAINT "flip_ai_endpoints_tenant_id_agent_id_fkey" FOREIGN KEY ("tenant_id", "agent_id")
     REFERENCES "flip_ai_agents"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
+CREATE UNIQUE INDEX "flip_ai_endpoints_tenant_id_agent_id_key" ON "flip_ai_endpoints"("tenant_id", "agent_id");
 CREATE UNIQUE INDEX "flip_ai_endpoints_agent_id_key" ON "flip_ai_endpoints"("agent_id");
 CREATE UNIQUE INDEX "flip_ai_endpoints_slug_key" ON "flip_ai_endpoints"("slug");
 CREATE INDEX "flip_ai_endpoints_tenant_id_idx" ON "flip_ai_endpoints"("tenant_id");
