@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canAccessFlipAi, createAgentDraftSchema, updateAgentDraftSchema } from '../lib/flip-ai/policy';
+import { readFileSync } from 'node:fs';
+import { canAccessFlipAi, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
 import type { SessionPayload } from '../lib/auth';
 
@@ -40,4 +41,21 @@ test('fresh membership overrides JWT role', async () => {
   await assert.rejects(requireFlipAiAccess(db, session), (e: unknown) => e instanceof FlipAiError && e.status === 403);
   membership = { role: 'admin', status: 'active' };
   assert.deepEqual(await requireFlipAiAccess(db, session), { tenantId: 't', userId: 'u' });
+});
+
+test('Markdown Mestre payload is strict and bounded', () => {
+  const valid = { title: 'Base oficial', content: '# Empresa\n\nConteúdo oficial da empresa.', expectedRevision: 0 };
+  assert.equal(knowledgeMasterSchema.safeParse(valid).success, true);
+  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, tenantId: 'other' }).success, false);
+  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'curto' }).success, false);
+  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'x'.repeat(500_001) }).success, false);
+  assert.equal(knowledgeMasterSchema.safeParse({ ...valid, content: 'texto válido com nul\0' }).success, false);
+});
+
+test('PR 268 migration keeps Premium plans inactive and has no destructive statements', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260909160000_flip_ai_master_knowledge/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /'Premium'.*'premium'.*797\.00/s);
+  assert.match(sql, /'Premium Pro'.*'premium-pro'.*1497\.00/s);
+  assert.equal((sql.match(/, FALSE, NOW\(\), NOW\(\)/g) || []).length, 2);
+  assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+\"?(?:leads|conversations))/i);
 });

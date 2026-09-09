@@ -31,5 +31,12 @@ export const agentDraftSchema = z.object({
 export const createAgentDraftSchema = agentDraftSchema.extend({ requestId: z.string().uuid() });
 export const updateAgentDraftSchema = agentDraftSchema.extend({ version: z.number().int().positive() });
 export type AgentDraftInput = z.infer<typeof agentDraftSchema>;
-export type AgentDraft = AgentDraftInput & { id: string; version: number; status: 'draft'; updatedAt: string };
+export type KnowledgeMasterSummary = { title: string; revision: number; byteSize: number; contentHash: string; updatedAt: string };
+export type KnowledgeMaster = KnowledgeMasterSummary & { content: string };
+export const knowledgeMasterSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  content: z.string().min(20).max(500_000).refine((value) => !value.includes('\0'), 'Conteúdo inválido'),
+  expectedRevision: z.number().int().min(0),
+}).strict();
+export type AgentDraft = AgentDraftInput & { id: string; version: number; status: 'draft'; updatedAt: string; knowledge: KnowledgeMasterSummary | null };
 export type AgentWorkspace = { agents: AgentDraft[]; pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }> };
