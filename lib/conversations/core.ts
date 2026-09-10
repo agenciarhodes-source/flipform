@@ -94,10 +94,8 @@ async function advanceOutboundActivity(tx: Prisma.TransactionClient, conversatio
   return tx.conversation.findUniqueOrThrow({ where: { id: conversationId } });
 }
 
-export type RecordInboundMessageInput = {
+type RecordInboundMessageFields = {
   tenantId: string;
-  channel: ConversationChannel;
-  provider?: ConversationProvider;
   externalUserId: string;
   externalMessageId: string;
   username?: string | null;
@@ -108,7 +106,13 @@ export type RecordInboundMessageInput = {
   type?: MessageType;
   providerTimestamp?: Date | null;
   metadata?: Prisma.InputJsonValue;
+
 };
+
+export type RecordInboundMessageInput = RecordInboundMessageFields & (
+  | { channel: 'web'; provider: 'flip_ai' }
+  | { channel: 'whatsapp' | 'instagram'; provider?: 'meta' }
+);
 
 export type RecordInboundMessageCreatedContext = {
   identityId: string;
