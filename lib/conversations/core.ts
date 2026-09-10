@@ -3,15 +3,17 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
-export type ConversationChannel = 'whatsapp' | 'instagram';
-export type ConversationProvider = 'meta';
+export type ConversationChannel = 'whatsapp' | 'instagram' | 'web';
+export type ConversationProvider = 'meta' | 'flip_ai';
 export type ConversationStatus = 'open' | 'pending' | 'resolved';
 export type MessageDirection = 'inbound' | 'outbound';
 export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'document' | 'sticker' | 'interactive' | 'system' | 'unknown';
 export type MessageStatus = 'received' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
 
-const CHANNELS = new Set<ConversationChannel>(['whatsapp', 'instagram']);
-const PROVIDERS = new Set<ConversationProvider>(['meta']);
+const PROVIDER_CHANNELS: Record<ConversationProvider, ReadonlySet<ConversationChannel>> = {
+  meta: new Set<ConversationChannel>(['whatsapp', 'instagram']),
+  flip_ai: new Set<ConversationChannel>(['web']),
+};
 
 function required(value: string, field: string) {
   const normalized = value.trim();
@@ -24,12 +26,9 @@ function optional(value: string | null | undefined) {
   return normalized ? normalized : undefined;
 }
 
-function assertChannel(channel: string): asserts channel is ConversationChannel {
-  if (!CHANNELS.has(channel as ConversationChannel)) throw new Error('Unsupported conversation channel');
-}
-
-function assertProvider(provider: string): asserts provider is ConversationProvider {
-  if (!PROVIDERS.has(provider as ConversationProvider)) throw new Error('Unsupported conversation provider');
+function assertTransport(provider: string, channel: string): asserts provider is ConversationProvider {
+  const allowed = PROVIDER_CHANNELS[provider as ConversationProvider];
+  if (!allowed?.has(channel as ConversationChannel)) throw new Error('Unsupported conversation transport');
 }
 
 function isUniqueViolation(error: unknown) {
@@ -95,10 +94,8 @@ async function advanceOutboundActivity(tx: Prisma.TransactionClient, conversatio
   return tx.conversation.findUniqueOrThrow({ where: { id: conversationId } });
 }
 
-export type RecordInboundMessageInput = {
+type RecordInboundMessageFields = {
   tenantId: string;
-  channel: ConversationChannel;
-  provider?: ConversationProvider;
   externalUserId: string;
   externalMessageId: string;
   username?: string | null;
@@ -109,7 +106,13 @@ export type RecordInboundMessageInput = {
   type?: MessageType;
   providerTimestamp?: Date | null;
   metadata?: Prisma.InputJsonValue;
+
 };
+
+export type RecordInboundMessageInput = RecordInboundMessageFields & (
+  | { channel: 'web'; provider: 'flip_ai' }
+  | { channel: 'whatsapp' | 'instagram'; provider?: 'meta' }
+);
 
 export type RecordInboundMessageCreatedContext = {
   identityId: string;
@@ -151,8 +154,7 @@ export async function recordInboundMessage(
   const externalMessageId = required(rawInput.externalMessageId, 'externalMessageId');
   const provider = rawInput.provider ?? 'meta';
   const channel = rawInput.channel;
-  assertProvider(provider);
-  assertChannel(channel);
+  assertTransport(provider, channel);
 
   const existing = await getExistingInboundMessage({ tenantId, provider, channel, externalMessageId });
   if (existing) {
