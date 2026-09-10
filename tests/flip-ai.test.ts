@@ -174,7 +174,7 @@ test('Responses adapter streams typed events, disables storage and never retries
     'data: ' + JSON.stringify({ type: 'response.output_text.delta', delta: '!' }),
     'data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'resp_1', model: 'test-model',
       usage: { input_tokens: 9, output_tokens: 2 } } }),
-  ].join('\\n\\n') + '\\n\\n';
+  ].join('\n\n') + '\n\n';
   let streamed = '';
   const result = await streamOpenAiText({ instructions: 'Teste', messages: [{ role: 'user', content: 'Oi' }] },
     (delta) => { streamed += delta; }, { apiKey: 'server-only-key', model: 'test-model', fetchImpl: async (_url, init) => {
