@@ -19,21 +19,29 @@ export type PublicFlipAiAgent = {
   knowledgeRevision: number;
 };
 
+export type PublicFlipAiRuntime = PublicFlipAiAgent & {
+  tenantId: string;
+  description: string;
+  knowledgeIndexId: string;
+};
+
 async function publicSchemaReady(): Promise<boolean> {
   const rows = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
     SELECT to_regclass('public.flip_ai_agents') IS NOT NULL
       AND to_regclass('public.flip_ai_endpoints') IS NOT NULL
       AND to_regclass('public.flip_ai_knowledge_documents') IS NOT NULL
       AND to_regclass('public.flip_ai_knowledge_indexes') IS NOT NULL
+      AND to_regclass('public.flip_ai_conversation_states') IS NOT NULL
+      AND to_regclass('public.flip_ai_usage_events') IS NOT NULL
       AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS ready
   `);
   return Boolean(rows[0]?.ready);
 }
 
-export async function resolvePublicFlipAiAgent(input: {
+export async function resolvePublicFlipAiRuntime(input: {
   slug: string;
   customDomainHost?: string | null;
-}): Promise<PublicFlipAiAgent | null> {
+}): Promise<PublicFlipAiRuntime | null> {
   const slug = input.slug.trim().toLowerCase();
   if (!PUBLIC_SLUG.test(slug) || !(await publicSchemaReady())) return null;
 
@@ -63,6 +71,7 @@ export async function resolvePublicFlipAiAgent(input: {
           id: true,
           status: true,
           name: true,
+          description: true,
           primaryColor: true,
           style: true,
           tenantId: true,
@@ -123,10 +132,31 @@ export async function resolvePublicFlipAiAgent(input: {
     id: endpoint.agent.id,
     slug: endpoint.slug,
     name: endpoint.agent.name,
+    description: endpoint.agent.description,
     primaryColor: endpoint.agent.primaryColor,
     style: endpoint.agent.style,
+    tenantId: endpoint.agent.tenantId,
     tenantName: endpoint.agent.tenant.name,
     tenantLogoUrl: endpoint.agent.tenant.logoUrl,
     knowledgeRevision: document.currentRevision,
+    knowledgeIndexId: index.id,
+  };
+}
+
+export async function resolvePublicFlipAiAgent(input: {
+  slug: string;
+  customDomainHost?: string | null;
+}): Promise<PublicFlipAiAgent | null> {
+  const runtime = await resolvePublicFlipAiRuntime(input);
+  if (!runtime) return null;
+  return {
+    id: runtime.id,
+    slug: runtime.slug,
+    name: runtime.name,
+    primaryColor: runtime.primaryColor,
+    style: runtime.style,
+    tenantName: runtime.tenantName,
+    tenantLogoUrl: runtime.tenantLogoUrl,
+    knowledgeRevision: runtime.knowledgeRevision,
   };
 }
