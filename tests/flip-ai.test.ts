@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { canAccessFlipAi, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
+import { canAccessFlipAi, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
 import type { SessionPayload } from '../lib/auth';
 import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
@@ -118,4 +118,23 @@ test('knowledge preview payload is strict and requires an idempotency key', () =
   assert.equal(knowledgePreviewSchema.safeParse({ ...valid, tenantId: 'other' }).success, false);
   assert.equal(knowledgePreviewSchema.safeParse({ ...valid, query: 'x' }).success, false);
   assert.equal(knowledgePreviewSchema.safeParse({ ...valid, requestId: 'repetir' }).success, false);
+});
+
+
+test('public Flip AI runtime enforces Premium billing without an admin role', () => {
+  assert.equal(canServeFlipAiPublic({ tenantStatus: 'active', plan }), true);
+  assert.equal(canServeFlipAiPublic({ tenantStatus: 'active', plan: { ...plan, slug: 'starter' } }), false);
+  assert.equal(canServeFlipAiPublic({ tenantStatus: 'blocked', plan }), false);
+  assert.equal(canServeFlipAiPublic({
+    tenantStatus: 'active',
+    plan,
+    subscription: { status: 'canceled', plan, gracePeriodEndsAt: null },
+  }), false);
+  const now = new Date('2026-09-10T00:00:00Z');
+  assert.equal(canServeFlipAiPublic({
+    tenantStatus: 'past_due',
+    plan,
+    subscription: { status: 'past_due', plan, gracePeriodEndsAt: new Date(now.getTime() + 1) },
+    now,
+  }), true);
 });
