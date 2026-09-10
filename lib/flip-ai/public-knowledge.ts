@@ -40,3 +40,29 @@ export async function searchPublicKnowledge(input: {
   `);
   return rows.filter((row) => Number.isFinite(row.score) && row.score >= 0.2);
 }
+
+export async function hydratePublicKnowledge(input: {
+  tenantId: string;
+  agentId: string;
+  knowledgeIndexId: string;
+  ids: string[];
+}): Promise<PublicKnowledgeHit[]> {
+  const ids = [...new Set(input.ids)].slice(0, 5);
+  if (!ids.length) return [];
+  const rows = await prisma.$queryRaw<Array<PublicKnowledgeHit & { ordinal: number }>>(Prisma.sql`
+    SELECT c.id, c.heading, c.content, 1::double precision AS score, c.ordinal
+    FROM flip_ai_knowledge_chunks c
+    JOIN flip_ai_knowledge_indexes i
+      ON i.id = c.index_id AND i.tenant_id = c.tenant_id
+    WHERE c.tenant_id = ${input.tenantId}
+      AND i.agent_id = ${input.agentId}
+      AND i.id = ${input.knowledgeIndexId}
+      AND i.status = 'completed'
+      AND c.id IN (${Prisma.join(ids)})
+  `);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [{ id: row.id, heading: row.heading, content: row.content, score: row.score }] : [];
+  });
+}
