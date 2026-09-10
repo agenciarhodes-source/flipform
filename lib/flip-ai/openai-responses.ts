@@ -95,6 +95,10 @@ export async function streamOpenAiText(
       buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
       const blocks = buffer.split(/\r?\n\r?\n/);
       buffer = blocks.pop() || '';
+      if (chunk.done && buffer.trim()) {
+        blocks.push(buffer);
+        buffer = '';
+      }
 
       for (const block of blocks) {
         const payload = dataPayload(block);
