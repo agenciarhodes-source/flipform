@@ -205,7 +205,8 @@ export async function preparePublicChatTurn(
     }
 
     const attemptToken = randomUUID();
-    const { errorCode: _previousError, ...retryMetadata } = metadata;
+    const retryMetadata = { ...metadata };
+    delete retryMetadata.errorCode;
     const nextMetadata: StoredChatMetadata = {
       ...retryMetadata,
       ...binding,
