@@ -5,12 +5,14 @@ type Plan = { slug: string | null; isActive: boolean } | null;
 export function hasFlipAiPlan(plan: Plan): boolean {
   return !!plan?.isActive && FLIP_AI_PLAN_SLUGS.some((slug) => slug === plan.slug);
 }
-export function canAccessFlipAi(input: {
-  role: string | null; tenantStatus: string; plan: Plan;
+type FlipAiBillingInput = {
+  tenantStatus: string;
+  plan: Plan;
   subscription?: { status: string; gracePeriodEndsAt: Date | null; plan: Plan } | null;
   now?: Date;
-}): boolean {
-  if (!['owner', 'admin'].includes(input.role || '')) return false;
+};
+
+export function canServeFlipAiPublic(input: FlipAiBillingInput): boolean {
   if (!['active', 'trial', 'past_due'].includes(input.tenantStatus) || !hasFlipAiPlan(input.plan)) return false;
   const sub = input.subscription;
   if (sub && (!hasFlipAiPlan(sub.plan) || !['active', 'trialing', 'courtesy', 'past_due'].includes(sub.status))) return false;
@@ -18,6 +20,10 @@ export function canAccessFlipAi(input: {
     return !!sub?.gracePeriodEndsAt && sub.gracePeriodEndsAt.getTime() > (input.now || new Date()).getTime();
   }
   return true;
+}
+
+export function canAccessFlipAi(input: FlipAiBillingInput & { role: string | null }): boolean {
+  return ['owner', 'admin'].includes(input.role || '') && canServeFlipAiPublic(input);
 }
 export const agentDraftSchema = z.object({
   name: z.string().trim().min(2).max(80),
