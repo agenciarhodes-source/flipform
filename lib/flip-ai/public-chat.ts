@@ -33,6 +33,8 @@ type StoredChatMetadata = {
   attemptStartedAt?: string;
   phase?: string;
   responseId?: string;
+  inputTokens?: number;
+  outputTokens?: number;
   errorCode?: string;
 };
 type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
@@ -88,17 +90,14 @@ async function recoverConfirmedOutbound(input: {
   eventId: string;
   tenantId: string;
   conversationId: string;
-  text: string;
   metadata: StoredChatMetadata;
 }) {
   const changed = await prisma.flipAiUsageEvent.updateMany({
     where: { id: input.eventId, tenantId: input.tenantId, status: { not: 'confirmed' } },
     data: {
       status: 'confirmed',
-      inputTokens: typeof (input.metadata as Record<string, unknown>).inputTokens === 'number'
-        ? (input.metadata as Record<string, number>).inputTokens : undefined,
-      outputTokens: typeof (input.metadata as Record<string, unknown>).outputTokens === 'number'
-        ? (input.metadata as Record<string, number>).outputTokens : undefined,
+      inputTokens: typeof input.metadata.inputTokens === 'number' ? input.metadata.inputTokens : undefined,
+      outputTokens: typeof input.metadata.outputTokens === 'number' ? input.metadata.outputTokens : undefined,
     },
   });
   if (changed.count) {
@@ -182,7 +181,6 @@ export async function preparePublicChatTurn(
         eventId: existing.id,
         tenantId: runtime.tenantId,
         conversationId: inbound.conversation.id,
-        text: outbound.text,
         metadata: metadataOf(outbound.metadata),
       });
       return { mode: 'replay', text: outbound.text, messageId: input.messageId, conversationId: inbound.conversation.id };
@@ -207,13 +205,13 @@ export async function preparePublicChatTurn(
     }
 
     const attemptToken = randomUUID();
+    const { errorCode: _previousError, ...retryMetadata } = metadata;
     const nextMetadata: StoredChatMetadata = {
-      ...metadata,
+      ...retryMetadata,
       ...binding,
       attemptToken,
       attemptStartedAt: new Date().toISOString(),
       phase: metadata.knowledgeHitIds ? 'response' : 'retrieval',
-      errorCode: undefined,
     };
     const claimed = await prisma.flipAiUsageEvent.updateMany({
       where: { id: existing.id, tenantId: runtime.tenantId, status: { in: ['ambiguous', 'failed'] } },
