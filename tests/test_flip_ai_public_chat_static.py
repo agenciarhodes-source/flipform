@@ -42,10 +42,31 @@ def test_public_chat_reuses_existing_custom_domain_rewrite():
     assert "searchParams" not in custom_page + platform_page
 
 
-def test_public_shell_does_not_start_ai_or_tracking_early():
+def test_public_shell_streams_through_server_without_tracking_or_secrets():
     shell = read("components/flip-ai/public-chat-shell.tsx")
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    adapter = read("lib/flip-ai/openai-responses.ts")
     assert "Assistente virtual" in shell
-    assert "disabled" in shell
-    assert "OPENAI" not in shell
-    assert "fbq(" not in shell
-    assert "dataLayer" not in shell
+    assert "/api/flip-ai/public/" in shell
+    assert "OPENAI_API_KEY" not in shell + route
+    assert "process.env.OPENAI_API_KEY" in adapter
+    assert "store: false" in adapter
+    assert "stream: true" in adapter
+    assert "provider: 'flip_ai'" in engine
+    assert "channel: 'web'" in engine
+    assert "publicChatMessageSchema" in engine
+    assert ".strict()" in engine
+    for forbidden in ["fbq(", "dataLayer", "QualifiedLead", "linkConversationToLead"]:
+        assert forbidden not in shell + route + engine
+
+
+def test_public_chat_is_idempotent_and_has_no_blind_retry():
+    engine = read("lib/flip-ai/public-chat.ts")
+    adapter = read("lib/flip-ai/openai-responses.ts")
+    assert "requestKey" in engine
+    assert "attemptToken" in engine
+    assert "confirmRetry" in engine
+    assert "CHAT_RESULT_AMBIGUOUS" in engine
+    assert "fetchImpl || fetch" in adapter
+    assert "retry" not in adapter.lower()
