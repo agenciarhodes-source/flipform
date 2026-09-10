@@ -14,6 +14,7 @@ def test_flip_ai_web_transport_is_explicit_and_provider_scoped():
     assert "flip_ai: new Set<ConversationChannel>(['web'])" in core
     assert "meta: new Set<ConversationChannel>(['whatsapp', 'instagram'])" in core
     assert "assertTransport(provider, channel)" in core
+    assert "| { channel: 'web'; provider: 'flip_ai' }" in core
 
 
 def test_public_agent_resolution_is_server_authoritative_and_fail_closed():
