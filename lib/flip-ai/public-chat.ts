@@ -91,11 +91,19 @@ type StoredChatMetadata = {
   inputTokens?: number;
   outputTokens?: number;
   errorCode?: string;
+  leadIdentity?: { name: string | null; phone: string | null };
 };
 type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
 
 export type PreparedPublicChatTurn =
-  | { mode: 'replay'; text: string; messageId: string; conversationId: string }
+  | {
+      mode: 'replay';
+      text: string;
+      messageId: string;
+      conversationId: string;
+      identity: { name: string | null; phone: string | null } | null;
+      attribution: PublicChatInput['attribution'];
+    }
   | {
       mode: 'execute';
       tenantId: string;
@@ -119,6 +127,11 @@ function metadataOf(value: Prisma.JsonValue | null): StoredChatMetadata {
 
 function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+function storedLeadIdentity(value: unknown) {
+  const parsed = publicChatDecisionSchema.shape.identity.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 export function getOrCreatePublicSessionToken(raw: string | null | undefined) {
@@ -297,13 +310,21 @@ export async function preparePublicChatTurn(
       select: { text: true, metadata: true },
     });
     if (outbound?.text) {
+      const outboundMetadata = metadataOf(outbound.metadata);
       await recoverConfirmedOutbound({
         eventId: existing.id,
         tenantId: runtime.tenantId,
         conversationId: inbound.conversation.id,
-        metadata: metadataOf(outbound.metadata),
+        metadata: outboundMetadata,
       });
-      return { mode: 'replay', text: outbound.text, messageId: input.messageId, conversationId: inbound.conversation.id };
+      return {
+        mode: 'replay',
+        text: outbound.text,
+        messageId: input.messageId,
+        conversationId: inbound.conversation.id,
+        identity: storedLeadIdentity(outboundMetadata.leadIdentity),
+        attribution: input.attribution,
+      };
     }
     if (existing.status === 'confirmed') {
       throw new FlipAiError('CHAT_RESULT_AMBIGUOUS', 409, 'A resposta anterior não pôde ser reconstruída com segurança.');
@@ -541,6 +562,7 @@ export async function buildPublicChatContext(
 export async function completePublicChatTurn(
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   result: OpenAiTextResult,
+  decision?: z.infer<typeof publicChatDecisionSchema>,
 ) {
   await recordOutboundMessage({
     tenantId: turn.tenantId,
@@ -557,6 +579,7 @@ export async function completePublicChatTurn(
       model: result.model,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      ...(decision ? { leadIdentity: decision.identity } : {}),
     },
   });
 
