@@ -411,6 +411,7 @@ model LeadAssignmentRotation {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   form   Form   @relation(fields: [formId], references: [id], onDelete: Cascade)
   members LeadAssignmentRotationMember[]
+  flipAiAgents FlipAiAgent[]
 
   @@unique([tenantId, formId])
   @@index([tenantId])
@@ -1082,12 +1083,14 @@ model FlipAiAgent {
   version Int @default(1)
   pipelineId String @map("pipeline_id")
   initialStageId String @map("initial_stage_id")
+  rotationId String? @map("rotation_id")
   createdBy String? @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Restrict)
   initialStage PipelineStage @relation(fields: [initialStageId], references: [id], onDelete: Restrict)
+  rotation LeadAssignmentRotation? @relation(fields: [rotationId], references: [id], onDelete: SetNull)
   creator User? @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   endpoint FlipAiEndpoint?
   knowledgeBase FlipAiKnowledgeBase?
@@ -1096,6 +1099,7 @@ model FlipAiAgent {
   conversationStates FlipAiConversationState[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
+  @@index([tenantId, rotationId])
   @@map("flip_ai_agents")
 }
 
