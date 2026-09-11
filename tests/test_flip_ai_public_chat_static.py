@@ -70,3 +70,33 @@ def test_public_chat_is_idempotent_and_has_no_blind_retry():
     assert "CHAT_RESULT_AMBIGUOUS" in engine
     assert "fetchImpl || fetch" in adapter
     assert "retry" not in adapter.lower()
+
+
+def test_public_chat_quota_is_server_scoped_atomic_and_fail_closed():
+    engine = read("lib/flip-ai/public-chat.ts")
+    resolver = read("lib/flip-ai/public-agent.ts")
+    migration = read("prisma/migrations/20260910130000_flip_ai_public_text_runtime/migration.sql")
+    assert "scope: 'tenant'" in engine
+    assert "scope: 'agent'" in engine
+    assert "scope: 'conversation'" in engine
+    assert "ON CONFLICT (tenant_id, scope, scope_key, window_start)" in engine
+    assert "WHERE flip_ai_rate_limit_buckets.request_count <" in engine
+    assert "rejected_count = flip_ai_rate_limit_buckets.rejected_count + 1" in engine
+    assert "flip_ai_rate_limit_buckets" in resolver
+    assert "CREATE TABLE \"flip_ai_rate_limit_buckets\"" in migration
+
+
+def test_inbox_filters_flip_ai_before_pagination():
+    inbox = read("app/api/inbox/conversations/route.ts")
+    where_block = inbox.split("const where =", 1)[1].split("const baseConversations", 1)[0]
+    assert "provider: 'meta'" in where_block
+    assert "{ in: ['whatsapp', 'instagram'] }" in where_block
+    assert "take: 100" in inbox
+
+
+def test_public_chat_route_has_bounded_stage_timeouts():
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    assert "maxDuration = 120" in route
+    assert "timeoutMs: 55_000" in route
+    assert "timeoutMs: 20_000" in engine
