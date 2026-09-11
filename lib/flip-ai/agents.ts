@@ -57,6 +57,7 @@ async function validateDestination(db: FlipAiDb, tenantId: string, input: AgentD
       where: {
         id: input.rotationId,
         tenantId,
+        isEnabled: true,
         form: { tenantId, pipelineId: input.pipelineId, isActive: true },
       },
       select: { id: true },
