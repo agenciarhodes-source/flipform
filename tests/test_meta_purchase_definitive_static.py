@@ -8,7 +8,7 @@ CLIENT = (ROOT / 'app/(app)/integrations/integrations-client.tsx').read_text(enc
 
 
 def test_purchase_is_driven_by_explicit_lead_purchase_not_stage_only():
-    assert "source: 'public_form' | 'kanban' | 'purchase' | 'test'" in TRACKING
+    assert "source: 'public_form' | 'flip_ai' | 'kanban' | 'purchase' | 'test'" in TRACKING
     assert "status: 'awaiting_purchase'" in TRACKING
     assert "select: { id: true, amountCents: true, currency: true }" in TRACKING
     assert 'conversionValue: explicitPurchase.amountCents / 100' in TRACKING
