@@ -88,7 +88,8 @@ async function dispatchQualifiedLeadOnce(input: {
       },
     });
     if (!qualification?.leadId || qualification.lead?.tenantId !== input.tenantId
-      || !qualification.lead.name.trim() || !isValidBrazilianPhone(qualification.lead.phone)) {
+      || !qualification.lead.name.trim() || !qualification.lead.phone
+      || !isValidBrazilianPhone(qualification.lead.phone)) {
       await prisma.flipAiQualification.updateMany({
         where: { id: input.qualificationId, tenantId: input.tenantId, qualifiedLeadTrackingStatus: 'processing' },
         data: { qualifiedLeadTrackingStatus: 'ambiguous', qualifiedLeadDispatchedAt: new Date() },
@@ -180,7 +181,7 @@ export async function finalizeFlipAiQualification(input: {
         where: { id: conversation.lead_id, tenantId: input.runtime.tenantId },
         select: { id: true, name: true, phone: true },
       });
-      if (lead?.name.trim() && isValidBrazilianPhone(lead.phone)) leadId = lead.id;
+      if (lead?.name.trim() && lead.phone && isValidBrazilianPhone(lead.phone)) leadId = lead.id;
     }
     if (parsed.data.classification === 'qualified' && !leadId) return null;
 

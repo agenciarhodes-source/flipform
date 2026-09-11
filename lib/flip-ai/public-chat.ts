@@ -633,7 +633,8 @@ export async function buildPublicChatContext(
 
   return {
     instructions: buildPublicChatInstructions(runtime, hits, state?.summary,
-      Boolean(identity?.lead?.name.trim() && isValidBrazilianPhone(identity.lead.phone))),
+      Boolean(identity?.lead?.name.trim() && identity.lead.phone
+        && isValidBrazilianPhone(identity.lead.phone))),
     messages,
     evidenceMessageIds: history.map((message) => message.id),
   };
