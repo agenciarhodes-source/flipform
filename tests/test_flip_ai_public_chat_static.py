@@ -135,3 +135,25 @@ def test_structured_identity_is_evidence_not_execution_authority():
     assert "isValidBrazilianPhone" in capture
     assert "nameSeen && phoneSeen" in capture
     assert "tenantId: input.runtime.tenantId" in capture
+
+def test_lead_capture_replay_and_runtime_destination_are_fail_closed():
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    resolver = read("lib/flip-ai/public-agent.ts")
+    assert "leadIdentity" in engine
+    assert "storedLeadIdentity" in engine
+    assert "decision: turn.identity" in route
+    assert "endpoint.agent.pipeline.isArchived" in resolver
+    assert "endpoint.agent.initialStage.pipelineId !== endpoint.agent.pipelineId" in resolver
+    assert "endpoint.agent.initialStage.isArchived" in resolver
+
+
+def test_flip_ai_meta_request_is_bounded_without_retry():
+    capture = read("lib/flip-ai/lead-capture.ts")
+    tracking = read("lib/tracking.ts")
+    meta = read("lib/tracking/meta-capi.ts")
+    assert "metaRequestTimeoutMs: 8_000" in capture
+    assert "timeoutMs: context.metaRequestTimeoutMs" in tracking
+    assert "controller.abort()" in meta
+    assert "signal: controller?.signal" in meta
+    assert "retry" not in meta.lower()
