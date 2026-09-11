@@ -8,6 +8,7 @@ import { getMasterMarkdown, saveMasterMarkdown } from '../lib/flip-ai/knowledge'
 import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch, searchKnowledgeByVector } from '../lib/flip-ai/indexing';
 import { FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
 import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
+import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicChatTurn } from '../lib/flip-ai/public-chat';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -28,6 +29,11 @@ async function fixture() {
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiRateLimitBucket.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiConversationState.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.message.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.conversation.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.externalContactIdentity.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiKnowledgeChunk.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiKnowledgeIndexBatch.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiKnowledgeIndex.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -149,6 +155,59 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const ownedEvent = await prisma.flipAiUsageEvent.findUniqueOrThrow({ where: { id: lateEvent.id } });
     assert.equal(ownedEvent.status, 'confirmed');
     assert.equal(ownedEvent.inputTokens, 13, 'late attempt must not overwrite the confirmed retry');
+
+    await prisma.flipAiAgent.update({ where: { id }, data: { status: 'published' } });
+    const chatRuntime = { id, tenantId: a.tenant.id, slug: a.input.slug, name: 'Helena', description: 'Atendimento CI',
+      primaryColor: '#2563EB', style: 'welcoming', tenantName: a.tenant.name, tenantLogoUrl: null,
+      knowledgeRevision: 2, knowledgeIndexId: prepared.id };
+    const anonymous = getOrCreatePublicSessionToken(null).token;
+    const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.' };
+    const turn = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
+    assert.equal(turn.mode, 'execute');
+    if (turn.mode !== 'execute') throw new Error('expected executable chat turn');
+    await completePublicChatTurn(turn, { responseId: 'resp_ci', model: 'test-model', text: 'Claro, me conte o que aconteceu.',
+      inputTokens: 20, outputTokens: 8 });
+    const replay = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
+    assert.equal(replay.mode, 'replay');
+    assert.equal(replay.mode === 'replay' ? replay.text : '', 'Claro, me conte o que aconteceu.');
+    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, operation: 'chat_response' } }), 1);
+    assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' } }), 1);
+    assert.equal(await prisma.flipAiConversationState.count({ where: { tenantId: a.tenant.id, agentId: id, turnCount: 1 } }), 1);
+
+    const chatState = await prisma.flipAiConversationState.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, agentId: id },
+      select: { conversationId: true },
+    });
+    const windowStart = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    await prisma.flipAiRateLimitBucket.upsert({
+      where: { tenantId_scope_scopeKey_windowStart: {
+        tenantId: a.tenant.id,
+        scope: 'conversation',
+        scopeKey: chatState.conversationId,
+        windowStart,
+      } },
+      create: {
+        tenantId: a.tenant.id,
+        scope: 'conversation',
+        scopeKey: chatState.conversationId,
+        windowStart,
+        requestCount: 11,
+      },
+      update: { requestCount: 11 },
+    });
+    const concurrentQuota = await Promise.allSettled([
+      preparePublicChatTurn(chatRuntime, anonymous, {
+        messageId: randomUUID(), text: 'Primeira mensagem concorrente.',
+      }),
+      preparePublicChatTurn(chatRuntime, anonymous, {
+        messageId: randomUUID(), text: 'Segunda mensagem concorrente.',
+      }),
+    ]);
+    assert.equal(concurrentQuota.filter((result) => result.status === 'fulfilled').length, 1,
+      'atomic quota must reserve only one remaining slot');
+    assert.equal(concurrentQuota.filter((result) =>
+      result.status === 'rejected' && result.reason instanceof FlipAiError &&
+      result.reason.code === 'CHAT_RATE_LIMITED').length, 1);
 
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');

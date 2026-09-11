@@ -42,10 +42,61 @@ def test_public_chat_reuses_existing_custom_domain_rewrite():
     assert "searchParams" not in custom_page + platform_page
 
 
-def test_public_shell_does_not_start_ai_or_tracking_early():
+def test_public_shell_streams_through_server_without_tracking_or_secrets():
     shell = read("components/flip-ai/public-chat-shell.tsx")
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    adapter = read("lib/flip-ai/openai-responses.ts")
     assert "Assistente virtual" in shell
-    assert "disabled" in shell
-    assert "OPENAI" not in shell
-    assert "fbq(" not in shell
-    assert "dataLayer" not in shell
+    assert "/api/flip-ai/public/" in shell
+    assert "OPENAI_API_KEY" not in shell + route
+    assert "process.env.OPENAI_API_KEY" in adapter
+    assert "store: false" in adapter
+    assert "stream: true" in adapter
+    assert "provider: 'flip_ai'" in engine
+    assert "channel: 'web'" in engine
+    assert "publicChatMessageSchema" in engine
+    assert ".strict()" in engine
+    for forbidden in ["fbq(", "dataLayer", "QualifiedLead", "linkConversationToLead"]:
+        assert forbidden not in shell + route + engine
+
+
+def test_public_chat_is_idempotent_and_has_no_blind_retry():
+    engine = read("lib/flip-ai/public-chat.ts")
+    adapter = read("lib/flip-ai/openai-responses.ts")
+    assert "requestKey" in engine
+    assert "attemptToken" in engine
+    assert "confirmRetry" in engine
+    assert "CHAT_RESULT_AMBIGUOUS" in engine
+    assert "fetchImpl || fetch" in adapter
+    assert "retry" not in adapter.lower()
+
+
+def test_public_chat_quota_is_server_scoped_atomic_and_fail_closed():
+    engine = read("lib/flip-ai/public-chat.ts")
+    resolver = read("lib/flip-ai/public-agent.ts")
+    migration = read("prisma/migrations/20260910130000_flip_ai_public_text_runtime/migration.sql")
+    assert "scope: 'tenant'" in engine
+    assert "scope: 'agent'" in engine
+    assert "scope: 'conversation'" in engine
+    assert "ON CONFLICT (tenant_id, scope, scope_key, window_start)" in engine
+    assert "WHERE flip_ai_rate_limit_buckets.request_count <" in engine
+    assert "rejected_count = flip_ai_rate_limit_buckets.rejected_count + 1" in engine
+    assert "flip_ai_rate_limit_buckets" in resolver
+    assert "CREATE TABLE \"flip_ai_rate_limit_buckets\"" in migration
+
+
+def test_inbox_filters_flip_ai_before_pagination():
+    inbox = read("app/api/inbox/conversations/route.ts")
+    where_block = inbox.split("const where =", 1)[1].split("const baseConversations", 1)[0]
+    assert "provider: 'meta'" in where_block
+    assert "{ in: ['whatsapp', 'instagram'] }" in where_block
+    assert "take: 100" in inbox
+
+
+def test_public_chat_route_has_bounded_stage_timeouts():
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    assert "maxDuration = 120" in route
+    assert "timeoutMs: 55_000" in route
+    assert "timeoutMs: 20_000" in engine

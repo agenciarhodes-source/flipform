@@ -19,8 +19,11 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
 
   const where = {
     ...getInboxConversationWhere(session),
+    provider: 'meta',
+    channel: ALLOWED_CHANNEL.has(rawChannel)
+      ? rawChannel
+      : { in: ['whatsapp', 'instagram'] },
     ...(ALLOWED_STATUS.has(rawStatus) ? { status: rawStatus } : {}),
-    ...(ALLOWED_CHANNEL.has(rawChannel) ? { channel: rawChannel } : {}),
   };
 
   const baseConversations = await prisma.conversation.findMany({
