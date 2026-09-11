@@ -32,6 +32,7 @@ export const agentDraftSchema = z.object({
   style: z.enum(['welcoming', 'professional', 'direct']),
   pipelineId: z.string().uuid(),
   initialStageId: z.string().uuid(),
+  rotationId: z.string().uuid().nullable().optional().default(null),
   slug: z.string().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
 }).strict();
 export const createAgentDraftSchema = agentDraftSchema.extend({ requestId: z.string().uuid() });
@@ -45,4 +46,8 @@ export const knowledgeMasterSchema = z.object({
   expectedRevision: z.number().int().min(0),
 }).strict();
 export type AgentDraft = AgentDraftInput & { id: string; version: number; status: 'draft'; updatedAt: string; knowledge: KnowledgeMasterSummary | null };
-export type AgentWorkspace = { agents: AgentDraft[]; pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }> };
+export type AgentWorkspace = {
+  agents: AgentDraft[];
+  pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;
+  rotations: Array<{ id: string; name: string; pipelineId: string; enabled: boolean }>;
+};
