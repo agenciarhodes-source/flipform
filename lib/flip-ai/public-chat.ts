@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { isValidBrazilianPhone } from '@/lib/leads';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
 import { FlipAiError } from './access';
 import { createOpenAiEmbeddings, OpenAiEmbeddingError, type EmbeddingResult } from './openai-embeddings';
@@ -474,7 +475,12 @@ function safeReference(value: string) {
   return value.replaceAll('<', '‹').replaceAll('>', '›').slice(0, 6_000);
 }
 
-export function buildPublicChatInstructions(runtime: PublicFlipAiRuntime, hits: PublicKnowledgeHit[], summary?: string | null) {
+export function buildPublicChatInstructions(
+  runtime: PublicFlipAiRuntime,
+  hits: PublicKnowledgeHit[],
+  summary?: string | null,
+  linkedIdentityVerified = false,
+) {
   const style = runtime.style === 'direct' ? 'direta e objetiva'
     : runtime.style === 'professional' ? 'profissional e clara' : 'acolhedora e natural';
   let remaining = 6_000;
@@ -500,11 +506,14 @@ export function buildPublicChatInstructions(runtime: PublicFlipAiRuntime, hits: 
     'A base interna tem prioridade para informações sobre a própria empresa.',
     'Na saída estruturada, reply é somente a resposta natural que será mostrada à pessoa.',
     'Preencha identity apenas com nome e telefone informados espontaneamente pela própria pessoa nesta conversa; nunca deduza, complete ou invente dados.',
+    linkedIdentityVerified
+      ? 'O backend confirma que esta conversa já possui nome e telefone validados e um Lead vinculado. Não peça esses dados novamente.'
+      : 'O backend ainda não confirma nome e telefone validados para esta conversa.',
     'Se apenas um dos dois dados estiver disponível e for natural pedi-lo agora, pergunte somente o dado que falta em reply.',
     'qualification deve ser null enquanto ainda faltarem informações relevantes ou a conversa estiver em andamento.',
     'Finalize qualification somente quando houver evidência suficiente, quando a pessoa encerrar o assunto ou quando for necessário entregar para atendimento humano.',
     'Separe fit de intenção. Use qualified apenas para perfil e momento realmente adequados; nurture para bom perfil ainda sem momento; disqualified para incompatibilidade clara; insufficient quando os dados não sustentam uma decisão.',
-    'Nunca marque qualified sem nome e telefone informados pela própria pessoa. A classificação é apenas uma recomendação: o backend valida e controla qualquer evento externo.',
+    'Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados. A classificação é apenas uma recomendação: o backend revalida o Lead e controla qualquer evento externo.',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -601,7 +610,7 @@ export async function buildPublicChatContext(
     }
   }
 
-  const [state, history] = await Promise.all([
+  const [state, history, identity] = await Promise.all([
     prisma.flipAiConversationState.findFirst({
       where: { tenantId: turn.tenantId, agentId: turn.agentId, conversationId: turn.conversationId },
       select: { summary: true },
@@ -612,6 +621,10 @@ export async function buildPublicChatContext(
       take: 14,
       select: { id: true, direction: true, text: true },
     }),
+    prisma.conversation.findFirst({
+      where: { tenantId: turn.tenantId, id: turn.conversationId, provider: 'flip_ai', channel: 'web' },
+      select: { lead: { select: { name: true, phone: true } } },
+    }),
   ]);
   const messages = history.reverse().flatMap((message) => message.text ? [{
     role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
@@ -619,7 +632,8 @@ export async function buildPublicChatContext(
   }] : []);
 
   return {
-    instructions: buildPublicChatInstructions(runtime, hits, state?.summary),
+    instructions: buildPublicChatInstructions(runtime, hits, state?.summary,
+      Boolean(identity?.lead?.name.trim() && isValidBrazilianPhone(identity.lead.phone))),
     messages,
     evidenceMessageIds: history.map((message) => message.id),
   };

@@ -264,6 +264,21 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(qualifiedRow.qualifiedLeadEventId, `flip-ai-qualified:${identityTurn.conversationId}`);
     assert.equal(qualifiedRow.qualifiedLeadTrackingStatus, 'skipped',
       'without an enabled Meta integration the action is durably skipped, never retried blindly');
+    await prisma.flipAiQualification.update({
+      where: { id: qualifiedRow.id },
+      data: { qualifiedLeadTrackingStatus: 'processing', updatedAt: new Date(0) },
+    });
+    await finalizeFlipAiQualification({
+      runtime: chatRuntime,
+      conversationId: identityTurn.conversationId,
+      decision: finalDecision,
+      model: 'test-model',
+      evidenceMessageIds,
+    });
+    assert.equal((await prisma.flipAiQualification.findUniqueOrThrow({
+      where: { id: qualifiedRow.id },
+    })).qualifiedLeadTrackingStatus, 'ambiguous',
+    'an abandoned processing claim must close without retrying an unknown external outcome');
 
     const chatState = await prisma.flipAiConversationState.findFirstOrThrow({
       where: { tenantId: a.tenant.id, agentId: id },

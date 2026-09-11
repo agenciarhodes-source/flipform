@@ -3,8 +3,11 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { isValidBrazilianPhone } from '@/lib/leads';
 import { dispatchFlipAiQualifiedLeadTracking } from '@/lib/tracking';
 import type { PublicFlipAiRuntime } from './public-agent';
+
+const QUALIFICATION_DISPATCH_STALE_MS = 2 * 60_000;
 
 export const flipAiFinalQualificationSchema = z.object({
   classification: z.enum(['qualified', 'nurture', 'disqualified', 'insufficient']),
@@ -84,7 +87,8 @@ async function dispatchQualifiedLeadOnce(input: {
         },
       },
     });
-    if (!qualification?.leadId || qualification.lead?.tenantId !== input.tenantId) {
+    if (!qualification?.leadId || qualification.lead?.tenantId !== input.tenantId
+      || !qualification.lead.name.trim() || !isValidBrazilianPhone(qualification.lead.phone)) {
       await prisma.flipAiQualification.updateMany({
         where: { id: input.qualificationId, tenantId: input.tenantId, qualifiedLeadTrackingStatus: 'processing' },
         data: { qualifiedLeadTrackingStatus: 'ambiguous', qualifiedLeadDispatchedAt: new Date() },
@@ -174,9 +178,9 @@ export async function finalizeFlipAiQualification(input: {
     if (conversation.lead_id) {
       const lead = await db.lead.findFirst({
         where: { id: conversation.lead_id, tenantId: input.runtime.tenantId },
-        select: { id: true },
+        select: { id: true, name: true, phone: true },
       });
-      leadId = lead?.id || null;
+      if (lead?.name.trim() && isValidBrazilianPhone(lead.phone)) leadId = lead.id;
     }
     if (parsed.data.classification === 'qualified' && !leadId) return null;
 
@@ -237,7 +241,20 @@ export async function finalizeFlipAiQualification(input: {
   });
 
   if (!stored) return null;
-  if (stored.qualifiedLeadEventId && stored.qualifiedLeadTrackingStatus === 'pending') {
+  if (stored.qualifiedLeadEventId && stored.qualifiedLeadTrackingStatus === 'processing'
+    && stored.updatedAt.getTime() < Date.now() - QUALIFICATION_DISPATCH_STALE_MS) {
+    // A terminated serverless invocation leaves delivery outcome unknown. Close the
+    // abandoned claim as ambiguous; never turn a stale lease into an external retry.
+    await prisma.flipAiQualification.updateMany({
+      where: {
+        id: stored.id,
+        tenantId: input.runtime.tenantId,
+        qualifiedLeadTrackingStatus: 'processing',
+        updatedAt: { lt: new Date(Date.now() - QUALIFICATION_DISPATCH_STALE_MS) },
+      },
+      data: { qualifiedLeadTrackingStatus: 'ambiguous', qualifiedLeadDispatchedAt: new Date() },
+    });
+  } else if (stored.qualifiedLeadEventId && stored.qualifiedLeadTrackingStatus === 'pending') {
     await dispatchQualifiedLeadOnce({
       qualificationId: stored.id,
       tenantId: input.runtime.tenantId,

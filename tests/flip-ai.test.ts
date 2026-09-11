@@ -280,3 +280,14 @@ test('PR 274 migration adds tenant-scoped qualification without destructive SQL'
   assert.match(sql, /qualified_lead_event_id/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });
+
+
+test('long chats preserve server-validated identity without putting PII in instructions', () => {
+  const runtime = { id: 'agent', tenantId: 'tenant', slug: 'helena', name: 'Helena', description: '',
+    primaryColor: '#2563EB', style: 'welcoming', tenantName: 'Empresa CI', tenantLogoUrl: null,
+    knowledgeRevision: 1, knowledgeIndexId: 'index', pipelineId: 'pipeline', initialStageId: 'stage', rotationId: null };
+  const prompt = buildPublicChatInstructions(runtime, [], null, true);
+  assert.match(prompt, /backend confirma que esta conversa já possui nome e telefone validados/);
+  assert.match(prompt, /Não peça esses dados novamente/);
+  assert.doesNotMatch(prompt, /5586999998877/);
+});

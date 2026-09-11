@@ -212,3 +212,16 @@ def test_pr274_migration_is_additive_and_runtime_remains_fail_closed():
     upper = migration.upper()
     for forbidden in ["DROP TABLE", "DROP COLUMN", "TRUNCATE", "DELETE FROM", 'UPDATE "LEADS"', 'UPDATE "CONVERSATIONS"']:
         assert forbidden not in upper
+
+
+def test_long_chat_identity_and_abandoned_dispatch_are_recovered_safely():
+    chat = read("lib/flip-ai/public-chat.ts")
+    qualification = read("lib/flip-ai/qualification.ts")
+    assert "linkedIdentityVerified = false" in chat
+    assert "isValidBrazilianPhone(identity.lead.phone)" in chat
+    assert "Não peça esses dados novamente" in chat
+    assert "QUALIFICATION_DISPATCH_STALE_MS" in qualification
+    assert "updatedAt: { lt:" in qualification
+    assert "qualifiedLeadTrackingStatus: 'ambiguous'" in qualification
+    stale_block = qualification.split("A terminated serverless invocation", 1)[1]
+    assert "dispatchFlipAiQualifiedLeadTracking" not in stale_block.split("else if", 1)[0]
