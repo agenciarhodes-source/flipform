@@ -279,13 +279,17 @@ export async function preparePublicChatTurn(
       attemptStartedAt: new Date().toISOString(),
       phase: metadata.knowledgeHitIds ? 'response' : 'retrieval',
     };
-    const claimed = await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
-      conversationId: inbound.conversation.id }, (db) => db.flipAiUsageEvent.updateMany({
-      where: { id: existing.id, tenantId: runtime.tenantId, status: { in: ['ambiguous', 'failed'] } },
-      data: { status: 'processing', model: FLIP_AI_TEXT_MODEL, inputTokens: null, outputTokens: null,
-        metadata: nextMetadata as Prisma.InputJsonValue },
-    }));
-    if (claimed.count !== 1) throw new FlipAiError('CHAT_REQUEST_BUSY', 409, 'Outra tentativa já iniciou.');
+    await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
+      conversationId: inbound.conversation.id }, async (db) => {
+      const claimed = await db.flipAiUsageEvent.updateMany({
+        where: { id: existing.id, tenantId: runtime.tenantId, status: { in: ['ambiguous', 'failed'] } },
+        data: { status: 'processing', model: FLIP_AI_TEXT_MODEL, inputTokens: null, outputTokens: null,
+          metadata: nextMetadata as Prisma.InputJsonValue },
+      });
+      if (claimed.count !== 1) {
+        throw new FlipAiError('CHAT_REQUEST_BUSY', 409, 'Outra tentativa já iniciou.');
+      }
+    });
     return {
       mode: 'execute',
       tenantId: runtime.tenantId,
@@ -376,7 +380,7 @@ export function buildPublicChatInstructions(runtime: PublicFlipAiRuntime, hits: 
 export async function buildPublicChatContext(
   runtime: PublicFlipAiRuntime,
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
-  embedder: Embedder = createOpenAiEmbeddings,
+  embedder: Embedder = (inputs) => createOpenAiEmbeddings(inputs, { timeoutMs: 20_000 }),
 ): Promise<OpenAiConversationInput> {
   const usage = await prisma.flipAiUsageEvent.findFirstOrThrow({
     where: { id: turn.eventId, tenantId: turn.tenantId, conversationId: turn.conversationId },
