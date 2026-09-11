@@ -86,6 +86,8 @@ export async function resolvePublicFlipAiRuntime(input: {
           pipelineId: true,
           initialStageId: true,
           rotationId: true,
+          pipeline: { select: { tenantId: true, isArchived: true } },
+          initialStage: { select: { pipelineId: true, isArchived: true } },
           rotation: {
             select: {
               tenantId: true,
@@ -121,6 +123,12 @@ export async function resolvePublicFlipAiRuntime(input: {
     plan: endpoint.agent.tenant.plan,
     subscription,
   })) return null;
+  if (
+    endpoint.agent.pipeline.tenantId !== endpoint.agent.tenantId
+    || endpoint.agent.pipeline.isArchived
+    || endpoint.agent.initialStage.pipelineId !== endpoint.agent.pipelineId
+    || endpoint.agent.initialStage.isArchived
+  ) return null;
 
   const document = await prisma.flipAiKnowledgeDocument.findFirst({
     where: {
