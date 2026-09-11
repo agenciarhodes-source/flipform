@@ -86,6 +86,13 @@ export async function resolvePublicFlipAiRuntime(input: {
           pipelineId: true,
           initialStageId: true,
           rotationId: true,
+          rotation: {
+            select: {
+              tenantId: true,
+              isEnabled: true,
+              form: { select: { tenantId: true, pipelineId: true, isActive: true } },
+            },
+          },
           tenant: {
             select: {
               name: true,
@@ -153,7 +160,13 @@ export async function resolvePublicFlipAiRuntime(input: {
     knowledgeIndexId: index.id,
     pipelineId: endpoint.agent.pipelineId,
     initialStageId: endpoint.agent.initialStageId,
-    rotationId: endpoint.agent.rotationId,
+    rotationId: endpoint.agent.rotationId
+      && endpoint.agent.rotation?.tenantId === endpoint.agent.tenantId
+      && endpoint.agent.rotation.form.tenantId === endpoint.agent.tenantId
+      && endpoint.agent.rotation.form.pipelineId === endpoint.agent.pipelineId
+      && endpoint.agent.rotation.isEnabled
+      && endpoint.agent.rotation.form.isActive
+      ? endpoint.agent.rotationId : null,
   };
 }
 
