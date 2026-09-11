@@ -10,6 +10,7 @@ import { FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-
 import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
 import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicChatTurn } from '../lib/flip-ai/public-chat';
 import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
+import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -32,6 +33,7 @@ async function fixture() {
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiRateLimitBucket.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiQualification.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiConversationState.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.message.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.conversation.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -187,6 +189,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     }, {
       reply: 'Obrigado, Diego. Como posso continuar?',
       identity: { name: 'Diego', phone: '(86) 99999-8877' },
+      qualification: null,
     });
     const identityReplay = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
     assert.equal(identityReplay.mode, 'replay');
@@ -217,6 +220,50 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       attribution: {},
     }), null, 'a linked conversation must not emit a second media action');
     assert.equal(await prisma.lead.count({ where: { tenantId: a.tenant.id, phone: '5586999998877' } }), 1);
+
+    const evidenceMessageIds = (await prisma.message.findMany({
+      where: { tenantId: a.tenant.id, conversationId: identityTurn.conversationId, type: 'text' },
+      select: { id: true },
+    })).map((message) => message.id);
+    const finalDecision = {
+      classification: 'qualified' as const,
+      fitScore: 88,
+      intentScore: 81,
+      awarenessLevel: 4,
+      journeyStage: 'decision' as const,
+      confidence: 0.93,
+      summary: 'Lead aderente, consciente do problema e pronto para atendimento.',
+      reasons: ['Atende aos critérios internos.', 'Demonstrou intenção de avançar no curto prazo.'],
+      nextAction: 'Atendimento humano deve validar disponibilidade e próximos passos.',
+    };
+    const finalized = await finalizeFlipAiQualification({
+      runtime: chatRuntime,
+      conversationId: identityTurn.conversationId,
+      decision: finalDecision,
+      model: 'test-model',
+      evidenceMessageIds,
+    });
+    assert.equal(finalized?.classification, 'qualified');
+    assert.equal((await prisma.flipAiQualification.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, conversationId: identityTurn.conversationId },
+    })).leadId, capturedLead.id);
+    await finalizeFlipAiQualification({
+      runtime: chatRuntime,
+      conversationId: identityTurn.conversationId,
+      decision: { ...finalDecision, fitScore: 1 },
+      model: 'different-model',
+      evidenceMessageIds,
+    });
+    assert.equal(await prisma.flipAiQualification.count({
+      where: { tenantId: a.tenant.id, conversationId: identityTurn.conversationId },
+    }), 1, 'one conversation must never emit a second final qualification');
+    const qualifiedRow = await prisma.flipAiQualification.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, conversationId: identityTurn.conversationId },
+    });
+    assert.equal(qualifiedRow.fitScore, 88, 'replay must preserve the first server-accepted merit decision');
+    assert.equal(qualifiedRow.qualifiedLeadEventId, `flip-ai-qualified:${identityTurn.conversationId}`);
+    assert.equal(qualifiedRow.qualifiedLeadTrackingStatus, 'skipped',
+      'without an enabled Meta integration the action is durably skipped, never retried blindly');
 
     const chatState = await prisma.flipAiConversationState.findFirstOrThrow({
       where: { tenantId: a.tenant.id, agentId: id },

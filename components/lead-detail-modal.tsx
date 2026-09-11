@@ -9,12 +9,24 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
-import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle } from 'lucide-react';
+import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle, Sparkles } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity, normalizeBrazilState, formatLeadLocation } from '@/lib/brazil-locations';
 
 interface Stage { id: string; name: string; color: string; }
+
+const qualificationLabels: Record<string, string> = {
+  qualified: 'Qualificado',
+  nurture: 'Em maturação',
+  disqualified: 'Não qualificado',
+  insufficient: 'Informação insuficiente',
+};
+const journeyLabels: Record<string, string> = {
+  discovery: 'Descoberta',
+  consideration: 'Consideração',
+  decision: 'Decisão',
+};
 
 export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId: string; stages: Stage[]; onClose: () => void; onChange: () => void }) {
   const [lead, setLead] = useState<any>(null);
@@ -178,9 +190,12 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
         </DialogHeader>
 
         <Tabs defaultValue="info" className="px-6">
-          <TabsList className="my-4">
+          <TabsList className="my-4 h-auto flex-wrap">
             <TabsTrigger value="info">Dados</TabsTrigger>
             <TabsTrigger value="answers">Respostas</TabsTrigger>
+            {lead.flipAiQualifications?.length > 0 && (
+              <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
+            )}
             <TabsTrigger value="history">Histórico</TabsTrigger>
             <TabsTrigger value="notes">Notas ({lead.notes.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tarefas ({lead.tasks?.filter((t: any) => t.status === 'pending').length || 0})</TabsTrigger>
@@ -238,6 +253,63 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div className="text-xs text-muted-foreground mb-1">{a.questionLabel}</div>
                 <div className="font-medium">{typeof a.answer === 'object' ? JSON.stringify(a.answer) : String(a.answer)}</div>
               </div>
+            ))}
+          </TabsContent>
+
+          <TabsContent value="flip-ai" className="pb-6 space-y-4">
+            {lead.flipAiQualifications?.map((qualification: any) => (
+              <section key={qualification.id} className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-violet-700" />
+                      <h3 className="font-heading text-sm font-semibold">{qualification.agent?.name || 'Flip AI'}</h3>
+                      <Badge variant="outline">{qualificationLabels[qualification.classification] || qualification.classification}</Badge>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">{formatDateTime(qualification.createdAt)}</div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Consciência {qualification.awarenessLevel}/5 • {journeyLabels[qualification.journeyStage] || qualification.journeyStage}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Fit Score</div>
+                    <div className="text-2xl font-bold">{qualification.fitScore}</div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Intent Score</div>
+                    <div className="text-2xl font-bold">{qualification.intentScore}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo</div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{qualification.summary}</p>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Motivos</div>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                    {qualification.reasons.map((reason: string, index: number) => <li key={index}>{reason}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-violet-200 bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Próxima ação</div>
+                  <p className="mt-1 text-sm font-medium">{qualification.nextAction}</p>
+                </div>
+                <details className="rounded-lg border bg-white">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Histórico da conversa</summary>
+                  <div className="space-y-2 border-t p-3">
+                    {[...(qualification.conversation?.messages || [])].reverse().map((message: any) => (
+                      <div key={message.id} className={`max-w-[88%] rounded-lg px-3 py-2 text-sm ${message.direction === 'outbound' ? 'ml-auto bg-violet-100' : 'bg-muted'}`}>
+                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+                          {message.direction === 'outbound' ? qualification.agent?.name || 'Flip AI' : 'Lead'} • {formatDateTime(message.createdAt)}
+                        </div>
+                        <div className="whitespace-pre-wrap">{message.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </section>
             ))}
           </TabsContent>
 

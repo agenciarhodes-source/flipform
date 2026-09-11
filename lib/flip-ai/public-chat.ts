@@ -10,6 +10,10 @@ import { createOpenAiEmbeddings, OpenAiEmbeddingError, type EmbeddingResult } fr
 import { FLIP_AI_TEXT_MODEL, OpenAiResponseError, type OpenAiConversationInput, type OpenAiTextResult } from './openai-responses';
 import { hydratePublicKnowledge, searchPublicKnowledge, type PublicKnowledgeHit } from './public-knowledge';
 import type { PublicFlipAiRuntime } from './public-agent';
+import {
+  flipAiFinalQualificationSchema,
+  type FlipAiFinalQualification,
+} from './qualification';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const QUOTA_WINDOW_MS = 60_000;
@@ -42,6 +46,7 @@ export const publicChatDecisionSchema = z.object({
     name: z.string().trim().min(2).max(160).nullable(),
     phone: z.string().trim().min(8).max(40).nullable(),
   }).strict(),
+  qualification: flipAiFinalQualificationSchema.nullable(),
 }).strict();
 
 export const PUBLIC_CHAT_DECISION_FORMAT = {
@@ -51,7 +56,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['reply', 'identity'],
+    required: ['reply', 'identity', 'qualification'],
     properties: {
       reply: { type: 'string' },
       identity: {
@@ -62,6 +67,30 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
           name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
           phone: { anyOf: [{ type: 'string' }, { type: 'null' }] },
         },
+      },
+      qualification: {
+        anyOf: [
+          { type: 'null' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: [
+              'classification', 'fitScore', 'intentScore', 'awarenessLevel',
+              'journeyStage', 'confidence', 'summary', 'reasons', 'nextAction',
+            ],
+            properties: {
+              classification: { type: 'string', enum: ['qualified', 'nurture', 'disqualified', 'insufficient'] },
+              fitScore: { type: 'integer', minimum: 0, maximum: 100 },
+              intentScore: { type: 'integer', minimum: 0, maximum: 100 },
+              awarenessLevel: { type: 'integer', minimum: 1, maximum: 5 },
+              journeyStage: { type: 'string', enum: ['discovery', 'consideration', 'decision'] },
+              confidence: { type: 'number', minimum: 0, maximum: 1 },
+              summary: { type: 'string' },
+              reasons: { type: 'array', minItems: 1, maxItems: 10, items: { type: 'string' } },
+              nextAction: { type: 'string' },
+            },
+          },
+        ],
       },
     },
   },
@@ -92,6 +121,9 @@ type StoredChatMetadata = {
   outputTokens?: number;
   errorCode?: string;
   leadIdentity?: { name: string | null; phone: string | null };
+  finalQualification?: FlipAiFinalQualification;
+  qualificationModel?: string;
+  qualificationEvidenceMessageIds?: string[];
 };
 type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
 
@@ -102,6 +134,9 @@ export type PreparedPublicChatTurn =
       messageId: string;
       conversationId: string;
       identity: { name: string | null; phone: string | null } | null;
+      qualification: FlipAiFinalQualification | null;
+      qualificationModel: string | null;
+      qualificationEvidenceMessageIds: string[];
       attribution: PublicChatInput['attribution'];
     }
   | {
@@ -131,6 +166,11 @@ function isUniqueViolation(error: unknown) {
 
 function storedLeadIdentity(value: unknown) {
   const parsed = publicChatDecisionSchema.shape.identity.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function storedQualification(value: unknown) {
+  const parsed = flipAiFinalQualificationSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
@@ -323,6 +363,12 @@ export async function preparePublicChatTurn(
         messageId: input.messageId,
         conversationId: inbound.conversation.id,
         identity: storedLeadIdentity(outboundMetadata.leadIdentity),
+        qualification: storedQualification(outboundMetadata.finalQualification),
+        qualificationModel: typeof outboundMetadata.qualificationModel === 'string'
+          ? outboundMetadata.qualificationModel : null,
+        qualificationEvidenceMessageIds: Array.isArray(outboundMetadata.qualificationEvidenceMessageIds)
+          ? outboundMetadata.qualificationEvidenceMessageIds.filter((id): id is string => typeof id === 'string').slice(-20)
+          : [],
         attribution: input.attribution,
       };
     }
@@ -455,6 +501,10 @@ export function buildPublicChatInstructions(runtime: PublicFlipAiRuntime, hits: 
     'Na saída estruturada, reply é somente a resposta natural que será mostrada à pessoa.',
     'Preencha identity apenas com nome e telefone informados espontaneamente pela própria pessoa nesta conversa; nunca deduza, complete ou invente dados.',
     'Se apenas um dos dois dados estiver disponível e for natural pedi-lo agora, pergunte somente o dado que falta em reply.',
+    'qualification deve ser null enquanto ainda faltarem informações relevantes ou a conversa estiver em andamento.',
+    'Finalize qualification somente quando houver evidência suficiente, quando a pessoa encerrar o assunto ou quando for necessário entregar para atendimento humano.',
+    'Separe fit de intenção. Use qualified apenas para perfil e momento realmente adequados; nurture para bom perfil ainda sem momento; disqualified para incompatibilidade clara; insufficient quando os dados não sustentam uma decisão.',
+    'Nunca marque qualified sem nome e telefone informados pela própria pessoa. A classificação é apenas uma recomendação: o backend valida e controla qualquer evento externo.',
   ].filter(Boolean).join('\n\n');
 }
 
@@ -462,7 +512,7 @@ export async function buildPublicChatContext(
   runtime: PublicFlipAiRuntime,
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   embedder: Embedder = (inputs) => createOpenAiEmbeddings(inputs, { timeoutMs: 20_000 }),
-): Promise<OpenAiConversationInput> {
+): Promise<OpenAiConversationInput & { evidenceMessageIds: string[] }> {
   const usage = await prisma.flipAiUsageEvent.findFirstOrThrow({
     where: { id: turn.eventId, tenantId: turn.tenantId, conversationId: turn.conversationId },
   });
@@ -478,17 +528,32 @@ export async function buildPublicChatContext(
     });
   } else {
     try {
-      const embedded = await embedder([turn.text]);
-      if (embedded.embeddings.length !== 1) {
+      const embedded = await embedder([
+        turn.text,
+        'Critérios de qualificação, perfil ideal, quem não atendemos, urgência, intenção, timing e próxima ação.',
+      ]);
+      if (embedded.embeddings.length !== 2) {
         throw new OpenAiEmbeddingError('ambiguous', 'OPENAI_EMBEDDING_INVALID_RESPONSE');
       }
-      hits = await searchPublicKnowledge({
-        tenantId: turn.tenantId,
-        agentId: turn.agentId,
-        knowledgeIndexId: turn.knowledgeIndexId,
-        embedding: embedded.embeddings[0],
-        limit: 5,
-      });
+      const [conversationHits, qualificationHits] = await Promise.all([
+        searchPublicKnowledge({
+          tenantId: turn.tenantId,
+          agentId: turn.agentId,
+          knowledgeIndexId: turn.knowledgeIndexId,
+          embedding: embedded.embeddings[0],
+          limit: 5,
+        }),
+        searchPublicKnowledge({
+          tenantId: turn.tenantId,
+          agentId: turn.agentId,
+          knowledgeIndexId: turn.knowledgeIndexId,
+          embedding: embedded.embeddings[1],
+          limit: 4,
+        }),
+      ]);
+      hits = [...conversationHits, ...qualificationHits]
+        .filter((hit, index, all) => all.findIndex((item) => item.id === hit.id) === index)
+        .slice(0, 7);
       const retrievalKey = `chat-retrieval:${turn.requestKey}`;
       await prisma.flipAiUsageEvent.upsert({
         where: { requestKey: retrievalKey },
@@ -545,7 +610,7 @@ export async function buildPublicChatContext(
       where: { tenantId: turn.tenantId, conversationId: turn.conversationId, type: 'text', text: { not: null } },
       orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
       take: 14,
-      select: { direction: true, text: true },
+      select: { id: true, direction: true, text: true },
     }),
   ]);
   const messages = history.reverse().flatMap((message) => message.text ? [{
@@ -556,6 +621,7 @@ export async function buildPublicChatContext(
   return {
     instructions: buildPublicChatInstructions(runtime, hits, state?.summary),
     messages,
+    evidenceMessageIds: history.map((message) => message.id),
   };
 }
 
@@ -563,6 +629,7 @@ export async function completePublicChatTurn(
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   result: OpenAiTextResult,
   decision?: z.infer<typeof publicChatDecisionSchema>,
+  evidenceMessageIds: string[] = [],
 ) {
   await recordOutboundMessage({
     tenantId: turn.tenantId,
@@ -579,7 +646,14 @@ export async function completePublicChatTurn(
       model: result.model,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
-      ...(decision ? { leadIdentity: decision.identity } : {}),
+      ...(decision ? {
+        leadIdentity: decision.identity,
+        ...(decision.qualification ? {
+          finalQualification: decision.qualification,
+          qualificationModel: result.model,
+          qualificationEvidenceMessageIds: [...new Set(evidenceMessageIds)].slice(-20),
+        } : {}),
+      } : {}),
     },
   });
 

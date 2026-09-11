@@ -135,6 +135,7 @@ model Tenant {
   flipAiUsageEvents FlipAiUsageEvent[]
   flipAiConversationStates FlipAiConversationState[]
   flipAiRateLimitBuckets FlipAiRateLimitBucket[]
+  flipAiQualifications FlipAiQualification[]
 
   @@map("tenants")
 }
@@ -350,6 +351,7 @@ model Lead {
   attribution  LeadAttribution?
   externalContactIdentities ExternalContactIdentity[]
   conversations Conversation[]
+  flipAiQualifications FlipAiQualification[]
 
   @@index([tenantId])
   @@index([stageId])
@@ -943,6 +945,7 @@ model Conversation {
   messages                Message[]
   flipAiState             FlipAiConversationState?
   flipAiUsageEvents       FlipAiUsageEvent[]
+  flipAiQualification     FlipAiQualification?
 
   @@unique([tenantId, id])
   @@unique([tenantId, provider, channel, externalContactIdentityId], name: "tenant_provider_channel_identity", map: "conversation_tenant_channel_identity_key")
@@ -1097,6 +1100,7 @@ model FlipAiAgent {
   knowledgeIndexes FlipAiKnowledgeIndex[]
   flipAiUsageEvents FlipAiUsageEvent[]
   conversationStates FlipAiConversationState[]
+  qualifications FlipAiQualification[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
@@ -1207,6 +1211,7 @@ model FlipAiKnowledgeIndex {
   sourceRevision FlipAiKnowledgeRevision @relation(fields: [tenantId, documentId, revision], references: [tenantId, documentId, revision], onDelete: Restrict)
   batches  FlipAiKnowledgeIndexBatch[]
   chunks   FlipAiKnowledgeChunk[]
+  qualifications FlipAiQualification[]
 
   @@unique([tenantId, id])
   @@unique([documentId, revision, embeddingModel])
@@ -1310,6 +1315,46 @@ model FlipAiConversationState {
   @@unique([tenantId, conversationId])
   @@index([tenantId, agentId, status])
   @@map("flip_ai_conversation_states")
+}
+
+
+model FlipAiQualification {
+  id                        String    @id @default(uuid())
+  tenantId                  String    @map("tenant_id")
+  agentId                   String    @map("agent_id")
+  conversationId            String    @unique @map("conversation_id")
+  leadId                    String?   @map("lead_id")
+  knowledgeIndexId          String    @map("knowledge_index_id")
+  classification            String
+  fitScore                  Int       @map("fit_score")
+  intentScore               Int       @map("intent_score")
+  awarenessLevel            Int       @map("awareness_level")
+  journeyStage              String    @map("journey_stage")
+  confidence                Float
+  summary                   String
+  reasons                   String[]
+  nextAction                String    @map("next_action")
+  evidenceMessageIds        String[]  @default([]) @map("evidence_message_ids")
+  model                     String
+  qualifiedLeadEventId      String?   @unique @map("qualified_lead_event_id")
+  qualifiedLeadTrackingStatus String  @default("not_applicable") @map("qualified_lead_tracking_status")
+  qualifiedLeadDispatchedAt DateTime? @map("qualified_lead_dispatched_at")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent          FlipAiAgent          @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+  conversation   Conversation         @relation(fields: [tenantId, conversationId], references: [tenantId, id], onDelete: Restrict)
+  lead           Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  knowledgeIndex FlipAiKnowledgeIndex @relation(fields: [tenantId, knowledgeIndexId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, conversationId])
+  @@index([tenantId, agentId, createdAt])
+  @@index([tenantId, leadId, createdAt])
+  @@index([tenantId, classification, createdAt])
+  @@index([tenantId, qualifiedLeadTrackingStatus])
+  @@map("flip_ai_qualifications")
 }
 
 
