@@ -29,6 +29,7 @@ async function fixture() {
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiRateLimitBucket.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiConversationState.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.message.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.conversation.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -172,6 +173,41 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, operation: 'chat_response' } }), 1);
     assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' } }), 1);
     assert.equal(await prisma.flipAiConversationState.count({ where: { tenantId: a.tenant.id, agentId: id, turnCount: 1 } }), 1);
+
+    const chatState = await prisma.flipAiConversationState.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, agentId: id },
+      select: { conversationId: true },
+    });
+    const windowStart = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    await prisma.flipAiRateLimitBucket.upsert({
+      where: { tenantId_scope_scopeKey_windowStart: {
+        tenantId: a.tenant.id,
+        scope: 'conversation',
+        scopeKey: chatState.conversationId,
+        windowStart,
+      } },
+      create: {
+        tenantId: a.tenant.id,
+        scope: 'conversation',
+        scopeKey: chatState.conversationId,
+        windowStart,
+        requestCount: 11,
+      },
+      update: { requestCount: 11 },
+    });
+    const concurrentQuota = await Promise.allSettled([
+      preparePublicChatTurn(chatRuntime, anonymous, {
+        messageId: randomUUID(), text: 'Primeira mensagem concorrente.',
+      }),
+      preparePublicChatTurn(chatRuntime, anonymous, {
+        messageId: randomUUID(), text: 'Segunda mensagem concorrente.',
+      }),
+    ]);
+    assert.equal(concurrentQuota.filter((result) => result.status === 'fulfilled').length, 1,
+      'atomic quota must reserve only one remaining slot');
+    assert.equal(concurrentQuota.filter((result) =>
+      result.status === 'rejected' && result.reason instanceof FlipAiError &&
+      result.reason.code === 'CHAT_RATE_LIMITED').length, 1);
 
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');
