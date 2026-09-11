@@ -189,7 +189,7 @@ def test_qualification_retrieval_and_output_are_structured_and_bounded():
     assert ".slice(0, 7)" in chat
     assert "evidenceMessageIds: history.map" in chat
     assert "qualificationEvidenceMessageIds" in chat
-    assert "Nunca marque qualified sem nome e telefone" in chat
+    assert "Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados" in chat
 
 
 def test_lead_detail_reuses_existing_crm_surface_for_flip_ai():
