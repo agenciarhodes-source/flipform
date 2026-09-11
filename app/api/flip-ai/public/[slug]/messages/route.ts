@@ -13,7 +13,7 @@ import { OpenAiResponseError, streamOpenAiText } from '@/lib/flip-ai/openai-resp
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const COOKIE_NAME = 'flip_ai_session';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       try {
         const result = await streamOpenAiText(context, (delta) => {
           controller.enqueue(encoder.encode(sseData('delta', { delta })));
-        });
+        }, { timeoutMs: 55_000 });
         await completePublicChatTurn(turn, result);
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,
