@@ -33,6 +33,7 @@ async function publicSchemaReady(): Promise<boolean> {
       AND to_regclass('public.flip_ai_knowledge_indexes') IS NOT NULL
       AND to_regclass('public.flip_ai_conversation_states') IS NOT NULL
       AND to_regclass('public.flip_ai_usage_events') IS NOT NULL
+      AND to_regclass('public.flip_ai_rate_limit_buckets') IS NOT NULL
       AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS ready
   `);
   return Boolean(rows[0]?.ready);
