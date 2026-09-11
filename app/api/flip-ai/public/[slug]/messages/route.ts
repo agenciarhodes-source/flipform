@@ -8,8 +8,13 @@ import {
   failPublicChatTurn,
   getOrCreatePublicSessionToken,
   preparePublicChatTurn,
+  parsePublicChatDecision,
+  PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
 import { OpenAiResponseError, streamOpenAiText } from '@/lib/flip-ai/openai-responses';
+import { captureFlipAiLead } from '@/lib/flip-ai/lead-capture';
+import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -108,10 +113,42 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const result = await streamOpenAiText(context, (delta) => {
-          controller.enqueue(encoder.encode(sseData('delta', { delta })));
-        }, { timeoutMs: 55_000 });
+        const rawResult = await streamOpenAiText(context, () => undefined, {
+          timeoutMs: 55_000,
+          textFormat: PUBLIC_CHAT_DECISION_FORMAT,
+          safetyIdentifier: turn.conversationId,
+          promptCacheKey: turn.agentId,
+        });
+        const decision = parsePublicChatDecision(rawResult.text);
+        const result = { ...rawResult, text: decision.reply };
         await completePublicChatTurn(turn, result);
+        controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
+
+        const cookies = parseAttributionCookies(request.headers.get('cookie'));
+        const browser = turn.attribution;
+        const leadCapture = await captureFlipAiLead({
+          runtime: runtimeContext,
+          conversationId: turn.conversationId,
+          decision: decision.identity,
+          attribution: {
+            utmSource: browser?.utmSource || null,
+            utmMedium: browser?.utmMedium || null,
+            utmCampaign: browser?.utmCampaign || null,
+            utmContent: browser?.utmContent || null,
+            utmTerm: browser?.utmTerm || null,
+            fbclid: browser?.fbclid || null,
+            gclid: browser?.gclid || null,
+            landingPage: browser?.landingPage || null,
+            referrer: browser?.referrer || null,
+            fbc: cookies.fbc,
+            fbp: cookies.fbp,
+            clientIp: normalizeAttributionString(getClientIp(request), ATTRIBUTION_LIMITS.serverValue),
+            clientUserAgent: normalizeAttributionString(request.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
+          },
+        });
+        if (leadCapture?.meta) {
+          controller.enqueue(encoder.encode(sseData('lead', { meta: leadCapture.meta })));
+        }
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,
           responseId: result.responseId,
