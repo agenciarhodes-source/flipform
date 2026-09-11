@@ -76,6 +76,8 @@ export type TrackingDispatchContext = {
   metaLeadEventId?: string | null;
   /** Current public-submission metadata. It enriches CAPI without rewriting stored lead attribution. */
   metaAttribution?: MetaSubmissionAttribution | null;
+  /** Optional deadline for the single Meta request. No retry is performed on timeout. */
+  metaRequestTimeoutMs?: number;
   /** Explicit commercial purchase. Purchase tracking never invents revenue from a stage move. */
   purchase?: TrackingPurchaseContext | null;
 };
@@ -303,6 +305,7 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         eventSourceUrl: context.source === 'public_form' || context.source === 'flip_ai' ? metaLeadData.landingPage : undefined,
         user: metaLeadData.user,
         customData: buildCustomData(mapping, context.source),
+        timeoutMs: context.metaRequestTimeoutMs,
       });
       if (!result.ok) throw new Error(result.reason || 'Falha ao enviar evento Meta');
       await logTrackingEvent({ ...base, status: 'sent' });
