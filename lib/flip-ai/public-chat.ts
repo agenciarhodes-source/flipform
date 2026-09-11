@@ -12,9 +12,10 @@ import { hydratePublicKnowledge, searchPublicKnowledge, type PublicKnowledgeHit 
 import type { PublicFlipAiRuntime } from './public-agent';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
-const CHAT_WINDOW_MS = 60_000;
-const CHAT_WINDOW_LIMIT = 12;
+const QUOTA_WINDOW_MS = 60_000;
 const PROCESSING_STALE_MS = 2 * 60_000;
+const QUOTA_LIMITS = { tenant: 60, agent: 30, conversation: 12 } as const;
+type QuotaScope = keyof typeof QUOTA_LIMITS;
 
 export const publicChatMessageSchema = z.object({
   messageId: z.string().uuid(),
@@ -68,6 +69,70 @@ function isUniqueViolation(error: unknown) {
 export function getOrCreatePublicSessionToken(raw: string | null | undefined) {
   if (raw && SESSION_TOKEN.test(raw)) return { token: raw, created: false };
   return { token: randomBytes(32).toString('base64url'), created: true };
+}
+
+function quotaEntries(input: { tenantId: string; agentId: string; conversationId: string }) {
+  return [
+    { scope: 'tenant' as const, scopeKey: input.tenantId, limit: QUOTA_LIMITS.tenant },
+    { scope: 'agent' as const, scopeKey: input.agentId, limit: QUOTA_LIMITS.agent },
+    { scope: 'conversation' as const, scopeKey: input.conversationId, limit: QUOTA_LIMITS.conversation },
+  ];
+}
+
+async function recordQuotaRejection(input: {
+  tenantId: string;
+  scope: QuotaScope;
+  scopeKey: string;
+  windowStart: Date;
+}) {
+  await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO flip_ai_rate_limit_buckets
+      (id, tenant_id, scope, scope_key, window_start, request_count, rejected_count,
+       last_request_at, created_at, updated_at)
+    VALUES (${randomUUID()}, ${input.tenantId}, ${input.scope}, ${input.scopeKey},
+      ${input.windowStart}, 0, 1, NOW(), NOW(), NOW())
+    ON CONFLICT (tenant_id, scope, scope_key, window_start)
+    DO UPDATE SET rejected_count = flip_ai_rate_limit_buckets.rejected_count + 1,
+      last_request_at = NOW(), updated_at = NOW()
+  `);
+}
+
+async function withPublicQuota<T>(
+  input: { tenantId: string; agentId: string; conversationId: string },
+  action: (db: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  const windowStart = new Date(Math.floor(Date.now() / QUOTA_WINDOW_MS) * QUOTA_WINDOW_MS);
+  let blocked: { scope: QuotaScope; scopeKey: string } | null = null;
+  try {
+    return await prisma.$transaction(async (db) => {
+      for (const quota of quotaEntries(input)) {
+        const reserved = await db.$queryRaw<Array<{ request_count: number }>>(Prisma.sql`
+          INSERT INTO flip_ai_rate_limit_buckets
+            (id, tenant_id, scope, scope_key, window_start, request_count, rejected_count,
+             last_request_at, created_at, updated_at)
+          VALUES (${randomUUID()}, ${input.tenantId}, ${quota.scope}, ${quota.scopeKey},
+            ${windowStart}, 1, 0, NOW(), NOW(), NOW())
+          ON CONFLICT (tenant_id, scope, scope_key, window_start)
+          DO UPDATE SET request_count = flip_ai_rate_limit_buckets.request_count + 1,
+            last_request_at = NOW(), updated_at = NOW()
+          WHERE flip_ai_rate_limit_buckets.request_count < ${quota.limit}
+          RETURNING request_count
+        `);
+        if (!reserved.length) {
+          blocked = { scope: quota.scope, scopeKey: quota.scopeKey };
+          throw new FlipAiError('CHAT_RATE_LIMITED', 429, 'Aguarde um instante antes de enviar outra mensagem.');
+        }
+      }
+      return action(db);
+    });
+  } catch (error) {
+    const rejected = blocked as { scope: QuotaScope; scopeKey: string } | null;
+    if (error instanceof FlipAiError && error.code === 'CHAT_RATE_LIMITED' && rejected) {
+      await recordQuotaRejection({ tenantId: input.tenantId, scope: rejected.scope,
+        scopeKey: rejected.scopeKey, windowStart }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 function digest(value: string) {
@@ -214,11 +279,12 @@ export async function preparePublicChatTurn(
       attemptStartedAt: new Date().toISOString(),
       phase: metadata.knowledgeHitIds ? 'response' : 'retrieval',
     };
-    const claimed = await prisma.flipAiUsageEvent.updateMany({
+    const claimed = await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
+      conversationId: inbound.conversation.id }, (db) => db.flipAiUsageEvent.updateMany({
       where: { id: existing.id, tenantId: runtime.tenantId, status: { in: ['ambiguous', 'failed'] } },
       data: { status: 'processing', model: FLIP_AI_TEXT_MODEL, inputTokens: null, outputTokens: null,
         metadata: nextMetadata as Prisma.InputJsonValue },
-    });
+    }));
     if (claimed.count !== 1) throw new FlipAiError('CHAT_REQUEST_BUSY', 409, 'Outra tentativa já iniciou.');
     return {
       mode: 'execute',
@@ -235,21 +301,10 @@ export async function preparePublicChatTurn(
     };
   }
 
-  const recent = await prisma.flipAiUsageEvent.count({
-    where: {
-      tenantId: runtime.tenantId,
-      conversationId: inbound.conversation.id,
-      operation: 'chat_response',
-      createdAt: { gte: new Date(Date.now() - CHAT_WINDOW_MS) },
-    },
-  });
-  if (recent >= CHAT_WINDOW_LIMIT) {
-    throw new FlipAiError('CHAT_RATE_LIMITED', 429, 'Aguarde um instante antes de enviar outra mensagem.');
-  }
-
   const attemptToken = randomUUID();
   try {
-    const event = await prisma.flipAiUsageEvent.create({
+    const event = await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
+      conversationId: inbound.conversation.id }, (db) => db.flipAiUsageEvent.create({
       data: {
         tenantId: runtime.tenantId,
         agentId: runtime.id,
@@ -267,7 +322,7 @@ export async function preparePublicChatTurn(
           phase: 'retrieval',
         },
       },
-    });
+    }));
     return {
       mode: 'execute',
       tenantId: runtime.tenantId,
