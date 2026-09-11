@@ -106,6 +106,7 @@ export async function captureFlipAiLead(input: {
       lead: { name: outcome.name, phone: outcome.phone },
       metaLeadEventId: eventId,
       metaAttribution,
+      metaRequestTimeoutMs: 8_000,
     });
   } catch {
     // The Tracking Hub records its delivery result. The conversation continues.
