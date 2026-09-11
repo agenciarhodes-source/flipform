@@ -17,20 +17,21 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
   const [message, setMessage] = useState('');
   const [knowledgeAgentId, setKnowledgeAgentId] = useState<string | null>(null);
   const stages = workspace.pipelines.find((p) => p.id === editor?.input.pipelineId)?.stages || [];
+  const rotations = workspace.rotations.filter((rotation) => rotation.pipelineId === editor?.input.pipelineId);
 
   function createDraft() {
     const pipeline = workspace.pipelines.find((p) => p.stages.length);
     setMessage('');
     setEditor({ requestId: crypto.randomUUID(), input: {
       name: '', description: '', primaryColor: '#2563EB', style: 'welcoming',
-      pipelineId: pipeline?.id || '', initialStageId: pipeline?.stages[0]?.id || '', slug: '',
+      pipelineId: pipeline?.id || '', initialStageId: pipeline?.stages[0]?.id || '', rotationId: null, slug: '',
     } });
   }
   function editDraft(agent: AgentDraft) {
     setMessage('');
     setEditor({ id: agent.id, version: agent.version, requestId: crypto.randomUUID(), input: {
       name: agent.name, description: agent.description, primaryColor: agent.primaryColor, style: agent.style,
-      pipelineId: agent.pipelineId, initialStageId: agent.initialStageId, slug: agent.slug,
+      pipelineId: agent.pipelineId, initialStageId: agent.initialStageId, rotationId: agent.rotationId, slug: agent.slug,
     } });
   }
   function change<K extends keyof AgentDraftInput>(key: K, value: AgentDraftInput[K]) {
@@ -88,10 +89,17 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <label className="text-sm" htmlFor="ai-slug">Endereço reservado do chat<Input id="ai-slug" className="mt-1" required minLength={3} maxLength={64} pattern="[a-z0-9]+(-[a-z0-9]+)*" value={editor.input.slug} onChange={(e) => change('slug', e.target.value)} placeholder="helena-empresa" aria-describedby="ai-slug-help" />
           <span id="ai-slug-help" className="mt-1 block text-xs text-muted-foreground">Letras minúsculas, números e hífens. Reservar não publica o chat.</span></label>
         <label className="text-sm" htmlFor="ai-pipeline">Pipeline de destino<select id="ai-pipeline" className={control} required value={editor.input.pipelineId} onChange={(e) => {
-          const pipelineId = e.target.value; setEditor((current) => current ? { ...current, input: { ...current.input, pipelineId, initialStageId: workspace.pipelines.find((p) => p.id === pipelineId)?.stages[0]?.id || '' } } : current);
+          const pipelineId = e.target.value; setEditor((current) => current ? { ...current, input: { ...current.input, pipelineId, initialStageId: workspace.pipelines.find((p) => p.id === pipelineId)?.stages[0]?.id || '', rotationId: null } } : current);
         }}><option value="">Selecione</option>{workspace.pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
         <label className="text-sm" htmlFor="ai-stage">Etapa inicial<select id="ai-stage" className={control} required value={editor.input.initialStageId} onChange={(e) => change('initialStageId', e.target.value)}>
           <option value="">Selecione</option>{stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}</select></label>
+        <label className="text-sm sm:col-span-2" htmlFor="ai-rotation">Rodízio dos novos leads<select id="ai-rotation" className={control}
+          value={editor.input.rotationId || ''} onChange={(e) => change('rotationId', e.target.value || null)}>
+          <option value="">Sem rodízio automático</option>
+          {rotations.map((rotation) => <option key={rotation.id} value={rotation.id} disabled={!rotation.enabled}>
+            {rotation.name}{rotation.enabled ? '' : ' — desativado'}
+          </option>)}
+        </select><span className="mt-1 block text-xs text-muted-foreground">Reutiliza o rodízio já configurado em um formulário do mesmo pipeline.</span></label>
         {!stages.length ? <p className="text-sm text-muted-foreground sm:col-span-2">Configure um pipeline com etapas ativas para salvar o atendente.</p> : null}
         <div className="flex gap-2 sm:col-span-2"><Button type="submit">{busy ? 'Salvando…' : 'Salvar rascunho'}</Button><Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancelar</Button></div>
       </fieldset>

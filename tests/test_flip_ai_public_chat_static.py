@@ -100,3 +100,60 @@ def test_public_chat_route_has_bounded_stage_timeouts():
     assert "maxDuration = 120" in route
     assert "timeoutMs: 55_000" in route
     assert "timeoutMs: 20_000" in engine
+
+
+def test_flip_ai_lead_capture_reuses_crm_rotation_and_tracking():
+    capture = read("lib/flip-ai/lead-capture.ts")
+    service = read("lib/leads/ensure-from-conversation.ts")
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    shell = read("components/flip-ai/public-chat-shell.tsx")
+    tracking = read("lib/tracking.ts")
+    assert "hasUserEvidence" in capture
+    assert "direction: 'inbound'" in capture
+    assert "provider: 'flip_ai'" in capture
+    assert "requireValidPhone: true" in capture
+    assert "ensureLeadFromConversation({" in capture
+    assert "assignLeadByRotationId" in service
+    assert "kind !== 'created' && outcome.kind !== 'linked_existing'" in capture
+    assert "source: 'flip_ai'" in capture
+    assert "metaLeadEventId: eventId" in capture
+    assert "try {" in capture and "dispatchFormSubmissionTracking({" in capture
+    assert "captureFlipAiLead" in route
+    assert "Lead capture is isolated from the valid conversation response" in route
+    assert "fireMetaLeadPixel" in shell
+    assert "firePublicGtmLeadEvent" in shell
+    assert "'flip_ai'" in tracking
+    assert "QualifiedLead" not in capture + route
+
+
+def test_structured_identity_is_evidence_not_execution_authority():
+    engine = read("lib/flip-ai/public-chat.ts")
+    capture = read("lib/flip-ai/lead-capture.ts")
+    assert "PUBLIC_CHAT_DECISION_FORMAT" in engine
+    assert "additionalProperties: false" in engine
+    assert "nunca deduza, complete ou invente dados" in engine
+    assert "isValidBrazilianPhone" in capture
+    assert "nameSeen && phoneSeen" in capture
+    assert "tenantId: input.runtime.tenantId" in capture
+
+def test_lead_capture_replay_and_runtime_destination_are_fail_closed():
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    engine = read("lib/flip-ai/public-chat.ts")
+    resolver = read("lib/flip-ai/public-agent.ts")
+    assert "leadIdentity" in engine
+    assert "storedLeadIdentity" in engine
+    assert "decision: turn.identity" in route
+    assert "endpoint.agent.pipeline.isArchived" in resolver
+    assert "endpoint.agent.initialStage.pipelineId !== endpoint.agent.pipelineId" in resolver
+    assert "endpoint.agent.initialStage.isArchived" in resolver
+
+
+def test_flip_ai_meta_request_is_bounded_without_retry():
+    capture = read("lib/flip-ai/lead-capture.ts")
+    tracking = read("lib/tracking.ts")
+    meta = read("lib/tracking/meta-capi.ts")
+    assert "metaRequestTimeoutMs: 8_000" in capture
+    assert "timeoutMs: context.metaRequestTimeoutMs" in tracking
+    assert "controller.abort()" in meta
+    assert "signal: controller?.signal" in meta
+    assert "retry" not in meta.lower()

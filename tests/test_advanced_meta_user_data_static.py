@@ -35,8 +35,8 @@ def test_enrichment_query_is_tenant_scoped_and_selects_optional_attribution_once
 
 def test_tracking_preserves_action_source_and_only_uses_landing_page_for_public_form():
     tracking = read("lib/tracking.ts")
-    assert "actionSource: context.source === 'public_form' ? 'website' : 'system_generated'" in tracking
-    assert "eventSourceUrl: context.source === 'public_form' ? metaLeadData.landingPage : undefined" in tracking
+    assert "context.source === 'public_form' || context.source === 'flip_ai' ? 'website' : 'system_generated'" in tracking
+    assert "context.source === 'public_form' || context.source === 'flip_ai' ? metaLeadData.landingPage : undefined" in tracking
     assert "user: metaLeadData.user" in tracking
     assert "saleValueCents" not in tracking
 

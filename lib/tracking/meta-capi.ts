@@ -26,6 +26,8 @@ export type MetaCapiPayload = {
     clientUserAgent?: string | null;
   };
   customData?: Record<string, unknown>;
+  /** Optional caller-owned deadline. Aborts the single request; it is never retried here. */
+  timeoutMs?: number;
 };
 
 export type MetaCapiSendResult = {
@@ -163,21 +165,29 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaC
     test_event_code: payload.testEventCode || undefined,
   };
 
-  const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(payload.pixelId)}/events?access_token=${encodeURIComponent(payload.accessToken)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  let responseData: unknown = null;
+  const timeoutMs = payload.timeoutMs && payload.timeoutMs > 0 ? payload.timeoutMs : null;
+  const controller = timeoutMs ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs as number) : null;
   try {
-    responseData = await res.json();
-  } catch {}
+    const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${encodeURIComponent(payload.pixelId)}/events?access_token=${encodeURIComponent(payload.accessToken)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller?.signal,
+    });
 
-  if (!res.ok) {
-    const reason = formatMetaCapiError(responseData, `Meta CAPI HTTP ${res.status}`);
-    return { ok: false, reason };
+    let responseData: unknown = null;
+    try {
+      responseData = await res.json();
+    } catch {}
+
+    if (!res.ok) {
+      const reason = formatMetaCapiError(responseData, `Meta CAPI HTTP ${res.status}`);
+      return { ok: false, reason };
+    }
+
+    return parseMetaCapiSuccess(responseData);
+  } finally {
+    if (timeout) clearTimeout(timeout);
   }
-
-  return parseMetaCapiSuccess(responseData);
 }

@@ -8,8 +8,15 @@ import {
   failPublicChatTurn,
   getOrCreatePublicSessionToken,
   preparePublicChatTurn,
+  parsePublicChatDecision,
+  PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
 import { OpenAiResponseError, streamOpenAiText } from '@/lib/flip-ai/openai-responses';
+import { captureFlipAiLead, type FlipAiIdentityDecision } from '@/lib/flip-ai/lead-capture';
+import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
+import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
+import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,6 +61,46 @@ function sseData(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+type BrowserAttribution = Pick<LeadAttributionSnapshot,
+  'utmSource' | 'utmMedium' | 'utmCampaign' | 'utmContent' | 'utmTerm'
+  | 'fbclid' | 'gclid' | 'landingPage' | 'referrer'>;
+
+async function tryCaptureLead(input: {
+  request: NextRequest;
+  runtime: PublicFlipAiRuntime;
+  conversationId: string;
+  decision: FlipAiIdentityDecision | null;
+  browser?: BrowserAttribution;
+}) {
+  if (!input.decision) return null;
+  const cookies = parseAttributionCookies(input.request.headers.get('cookie'));
+  try {
+    return await captureFlipAiLead({
+      runtime: input.runtime,
+      conversationId: input.conversationId,
+      decision: input.decision,
+      attribution: {
+        utmSource: input.browser?.utmSource || null,
+        utmMedium: input.browser?.utmMedium || null,
+        utmCampaign: input.browser?.utmCampaign || null,
+        utmContent: input.browser?.utmContent || null,
+        utmTerm: input.browser?.utmTerm || null,
+        fbclid: input.browser?.fbclid || null,
+        gclid: input.browser?.gclid || null,
+        landingPage: input.browser?.landingPage || null,
+        referrer: input.browser?.referrer || null,
+        fbc: cookies.fbc,
+        fbp: cookies.fbp,
+        clientIp: normalizeAttributionString(getClientIp(input.request), ATTRIBUTION_LIMITS.serverValue),
+        clientUserAgent: normalizeAttributionString(input.request.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
+      },
+    });
+  } catch {
+    // Lead capture is isolated from the valid conversation response.
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
   const session = getOrCreatePublicSessionToken(request.cookies.get(COOKIE_NAME)?.value);
   const domainHost = customDomainHost(request);
@@ -87,8 +134,18 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   const encoder = new TextEncoder();
   if (turn.mode === 'replay') {
     const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
+      async start(controller) {
         controller.enqueue(encoder.encode(sseData('delta', { delta: turn.text })));
+        const leadCapture = await tryCaptureLead({
+          request,
+          runtime: runtimeContext,
+          conversationId: turn.conversationId,
+          decision: turn.identity,
+          browser: turn.attribution,
+        });
+        if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
+          controller.enqueue(encoder.encode(sseData('lead', leadCapture)));
+        }
         controller.enqueue(encoder.encode(sseData('done', { messageId: turn.messageId, replayed: true })));
         controller.close();
       },
@@ -108,10 +165,27 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const result = await streamOpenAiText(context, (delta) => {
-          controller.enqueue(encoder.encode(sseData('delta', { delta })));
-        }, { timeoutMs: 55_000 });
-        await completePublicChatTurn(turn, result);
+        const rawResult = await streamOpenAiText(context, () => undefined, {
+          timeoutMs: 55_000,
+          textFormat: PUBLIC_CHAT_DECISION_FORMAT,
+          safetyIdentifier: turn.conversationId,
+          promptCacheKey: turn.agentId,
+        });
+        const decision = parsePublicChatDecision(rawResult.text);
+        const result = { ...rawResult, text: decision.reply };
+        await completePublicChatTurn(turn, result, decision);
+        controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
+
+        const leadCapture = await tryCaptureLead({
+          request,
+          runtime: runtimeContext,
+          conversationId: turn.conversationId,
+          decision: decision.identity,
+          browser: turn.attribution,
+        });
+        if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
+          controller.enqueue(encoder.encode(sseData('lead', leadCapture)));
+        }
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,
           responseId: result.responseId,

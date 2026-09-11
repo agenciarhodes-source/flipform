@@ -2,14 +2,13 @@ import { Prisma } from '@prisma/client';
 
 export type LeadAssignmentTx = Prisma.TransactionClient;
 
-export async function assignLeadByRotation({ tenantId, formId, tx }: { tenantId: string; formId: string; tx: LeadAssignmentTx }): Promise<{ assignedTo: string | null; reason: string }> {
-  const locked = await tx.$queryRaw<Array<{ id: string; is_enabled: boolean; current_index: number }>>`
-    SELECT id, is_enabled, current_index
-    FROM public.lead_assignment_rotations
-    WHERE tenant_id = ${tenantId} AND form_id = ${formId}
-    FOR UPDATE
-  `;
-  const row = locked[0];
+type LockedRotation = { id: string; is_enabled: boolean; current_index: number };
+
+async function assignLockedRotation({ tenantId, row, tx }: {
+  tenantId: string;
+  row: LockedRotation | undefined;
+  tx: LeadAssignmentTx;
+}): Promise<{ assignedTo: string | null; reason: string }> {
   if (!row) return { assignedTo: null, reason: 'rotation_not_configured' };
   if (!row.is_enabled) return { assignedTo: null, reason: 'rotation_disabled' };
 
@@ -26,10 +25,38 @@ export async function assignLeadByRotation({ tenantId, formId, tx }: { tenantId:
 
   const index = Math.abs(row.current_index || 0) % members.length;
   const selected = members[index];
-  const nextIndex = (index + 1) % members.length;
   await tx.leadAssignmentRotation.update({
     where: { id: row.id },
-    data: { currentIndex: nextIndex, lastAssignedTo: selected.userId },
+    data: { currentIndex: (index + 1) % members.length, lastAssignedTo: selected.userId },
   });
   return { assignedTo: selected.userId, reason: 'round_robin' };
+}
+
+export async function assignLeadByRotation({ tenantId, formId, tx }: {
+  tenantId: string;
+  formId: string;
+  tx: LeadAssignmentTx;
+}): Promise<{ assignedTo: string | null; reason: string }> {
+  const locked = await tx.$queryRaw<LockedRotation[]>`
+    SELECT id, is_enabled, current_index
+    FROM public.lead_assignment_rotations
+    WHERE tenant_id = ${tenantId} AND form_id = ${formId}
+    FOR UPDATE
+  `;
+  return assignLockedRotation({ tenantId, row: locked[0], tx });
+}
+
+export async function assignLeadByRotationId({ tenantId, rotationId, tx }: {
+  tenantId: string;
+  rotationId: string | null;
+  tx: LeadAssignmentTx;
+}): Promise<{ assignedTo: string | null; reason: string }> {
+  if (!rotationId) return { assignedTo: null, reason: 'rotation_not_configured' };
+  const locked = await tx.$queryRaw<LockedRotation[]>`
+    SELECT id, is_enabled, current_index
+    FROM public.lead_assignment_rotations
+    WHERE tenant_id = ${tenantId} AND id = ${rotationId}
+    FOR UPDATE
+  `;
+  return assignLockedRotation({ tenantId, row: locked[0], tx });
 }

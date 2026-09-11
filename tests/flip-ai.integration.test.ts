@@ -9,6 +9,7 @@ import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch, searchKnowledgeB
 import { FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
 import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
 import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicChatTurn } from '../lib/flip-ai/public-chat';
+import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -25,7 +26,8 @@ async function fixture() {
   await prisma.subscription.create({ data: { tenantId: tenant.id, planId: plan.id, status: 'active' } });
   const pipeline = await prisma.pipeline.create({ data: { tenantId: tenant.id, name: 'Pipeline CI', stages: { create: { name: 'Novo CI', orderIndex: 0 } } }, include: { stages: true } });
   return { tenant, user, pipeline, session: { tenantId: tenant.id, tenantSlug: tenant.slug, userId: user.id, email: user.email, name: user.name, role: 'owner' },
-    input: { name: 'Helena', description: 'CI', primaryColor: '#2563EB', style: 'welcoming' as const, slug: 'helena-' + suffix, pipelineId: pipeline.id, initialStageId: pipeline.stages[0].id } };
+    input: { name: 'Helena', description: 'CI', primaryColor: '#2563EB', style: 'welcoming' as const,
+      slug: 'helena-' + suffix, pipelineId: pipeline.id, initialStageId: pipeline.stages[0].id, rotationId: null } };
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -159,7 +161,8 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     await prisma.flipAiAgent.update({ where: { id }, data: { status: 'published' } });
     const chatRuntime = { id, tenantId: a.tenant.id, slug: a.input.slug, name: 'Helena', description: 'Atendimento CI',
       primaryColor: '#2563EB', style: 'welcoming', tenantName: a.tenant.name, tenantLogoUrl: null,
-      knowledgeRevision: 2, knowledgeIndexId: prepared.id };
+      knowledgeRevision: 2, knowledgeIndexId: prepared.id, pipelineId: a.pipeline.id,
+      initialStageId: a.pipeline.stages[0].id, rotationId: null };
     const anonymous = getOrCreatePublicSessionToken(null).token;
     const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.' };
     const turn = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
@@ -173,6 +176,47 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, operation: 'chat_response' } }), 1);
     assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' } }), 1);
     assert.equal(await prisma.flipAiConversationState.count({ where: { tenantId: a.tenant.id, agentId: id, turnCount: 1 } }), 1);
+
+    const identityInput = { messageId: randomUUID(), text: 'Meu nome é Diego e meu telefone é (86) 99999-8877.' };
+    const identityTurn = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
+    assert.equal(identityTurn.mode, 'execute');
+    if (identityTurn.mode !== 'execute') throw new Error('expected identity turn');
+    await completePublicChatTurn(identityTurn, {
+      responseId: 'resp_identity', model: 'test-model', text: 'Obrigado, Diego. Como posso continuar?',
+      inputTokens: 24, outputTokens: 9,
+    }, {
+      reply: 'Obrigado, Diego. Como posso continuar?',
+      identity: { name: 'Diego', phone: '(86) 99999-8877' },
+    });
+    const identityReplay = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
+    assert.equal(identityReplay.mode, 'replay');
+    assert.deepEqual(identityReplay.mode === 'replay' ? identityReplay.identity : null,
+      { name: 'Diego', phone: '(86) 99999-8877' });
+    const captured = await captureFlipAiLead({
+      runtime: chatRuntime,
+      conversationId: identityTurn.conversationId,
+      decision: { name: 'Diego', phone: '(86) 99999-8877' },
+      attribution: { utmSource: 'meta', utmCampaign: 'ci', landingPage: 'https://leads.example/chat/helena' },
+    });
+    assert.ok(captured);
+    const capturedLead = await prisma.lead.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, phone: '5586999998877' },
+    });
+    assert.equal(capturedLead.pipelineId, a.pipeline.id);
+    assert.equal(capturedLead.stageId, a.pipeline.stages[0].id);
+    assert.equal((await prisma.conversation.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, id: identityTurn.conversationId },
+    })).leadId, capturedLead.id);
+    assert.equal((await prisma.leadAttribution.findUniqueOrThrow({
+      where: { leadId: capturedLead.id },
+    })).utmCampaign, 'ci');
+    assert.equal(await captureFlipAiLead({
+      runtime: chatRuntime,
+      conversationId: identityTurn.conversationId,
+      decision: { name: 'Diego', phone: '5586999998877' },
+      attribution: {},
+    }), null, 'a linked conversation must not emit a second media action');
+    assert.equal(await prisma.lead.count({ where: { tenantId: a.tenant.id, phone: '5586999998877' } }), 1);
 
     const chatState = await prisma.flipAiConversationState.findFirstOrThrow({
       where: { tenantId: a.tenant.id, agentId: id },
@@ -214,6 +258,6 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
 
     await prisma.tenantUser.update({ where: { tenantId_userId: { tenantId: a.tenant.id, userId: a.user.id } }, data: { status: 'inactive' } });
     await assert.rejects(getAgentDraftWorkspace(a.session), (e: unknown) => e instanceof FlipAiError && e.status === 403);
-    assert.equal(await prisma.lead.count(), leads);
+    assert.equal(await prisma.lead.count(), leads + 1);
   } finally { await cleanup(a); await cleanup(b); await prisma.$disconnect(); }
 });

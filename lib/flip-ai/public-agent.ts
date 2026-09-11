@@ -23,6 +23,9 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   tenantId: string;
   description: string;
   knowledgeIndexId: string;
+  pipelineId: string;
+  initialStageId: string;
+  rotationId: string | null;
 };
 
 async function publicSchemaReady(): Promise<boolean> {
@@ -34,6 +37,10 @@ async function publicSchemaReady(): Promise<boolean> {
       AND to_regclass('public.flip_ai_conversation_states') IS NOT NULL
       AND to_regclass('public.flip_ai_usage_events') IS NOT NULL
       AND to_regclass('public.flip_ai_rate_limit_buckets') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'flip_ai_agents' AND column_name = 'rotation_id'
+      )
       AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS ready
   `);
   return Boolean(rows[0]?.ready);
@@ -76,6 +83,18 @@ export async function resolvePublicFlipAiRuntime(input: {
           primaryColor: true,
           style: true,
           tenantId: true,
+          pipelineId: true,
+          initialStageId: true,
+          rotationId: true,
+          pipeline: { select: { tenantId: true, isArchived: true } },
+          initialStage: { select: { pipelineId: true, isArchived: true } },
+          rotation: {
+            select: {
+              tenantId: true,
+              isEnabled: true,
+              form: { select: { tenantId: true, pipelineId: true, isActive: true } },
+            },
+          },
           tenant: {
             select: {
               name: true,
@@ -104,6 +123,12 @@ export async function resolvePublicFlipAiRuntime(input: {
     plan: endpoint.agent.tenant.plan,
     subscription,
   })) return null;
+  if (
+    endpoint.agent.pipeline.tenantId !== endpoint.agent.tenantId
+    || endpoint.agent.pipeline.isArchived
+    || endpoint.agent.initialStage.pipelineId !== endpoint.agent.pipelineId
+    || endpoint.agent.initialStage.isArchived
+  ) return null;
 
   const document = await prisma.flipAiKnowledgeDocument.findFirst({
     where: {
@@ -141,6 +166,15 @@ export async function resolvePublicFlipAiRuntime(input: {
     tenantLogoUrl: endpoint.agent.tenant.logoUrl,
     knowledgeRevision: document.currentRevision,
     knowledgeIndexId: index.id,
+    pipelineId: endpoint.agent.pipelineId,
+    initialStageId: endpoint.agent.initialStageId,
+    rotationId: endpoint.agent.rotationId
+      && endpoint.agent.rotation?.tenantId === endpoint.agent.tenantId
+      && endpoint.agent.rotation.form.tenantId === endpoint.agent.tenantId
+      && endpoint.agent.rotation.form.pipelineId === endpoint.agent.pipelineId
+      && endpoint.agent.rotation.isEnabled
+      && endpoint.agent.rotation.form.isActive
+      ? endpoint.agent.rotationId : null,
   };
 }
 

@@ -10,6 +10,13 @@ export type OpenAiConversationInput = {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>;
 };
 
+export type OpenAiJsonSchemaFormat = {
+  type: 'json_schema';
+  name: string;
+  strict: true;
+  schema: Record<string, unknown>;
+};
+
 export type OpenAiTextResult = {
   responseId: string;
   model: string;
@@ -46,7 +53,15 @@ function dataPayload(block: string): string | null {
 export async function streamOpenAiText(
   input: OpenAiConversationInput,
   onDelta: (delta: string) => void | Promise<void>,
-  options: { apiKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number; model?: string } = {},
+  options: {
+    apiKey?: string;
+    fetchImpl?: typeof fetch;
+    timeoutMs?: number;
+    model?: string;
+    textFormat?: OpenAiJsonSchemaFormat;
+    safetyIdentifier?: string;
+    promptCacheKey?: string;
+  } = {},
 ): Promise<OpenAiTextResult> {
   const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new OpenAiResponseError('definitive', 'OPENAI_API_KEY_MISSING');
@@ -66,6 +81,9 @@ export async function streamOpenAiText(
         max_output_tokens: FLIP_AI_MAX_OUTPUT_TOKENS,
         store: false,
         stream: true,
+        ...(options.textFormat ? { text: { format: options.textFormat } } : {}),
+        ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
+        ...(options.promptCacheKey ? { prompt_cache_key: options.promptCacheKey } : {}),
       }),
       signal: controller.signal,
     });

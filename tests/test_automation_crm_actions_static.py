@@ -20,23 +20,25 @@ def test_crm_action_constants_are_registered_in_central_worker():
     assert 'LEAD_MOVE_STAGE_ACTION' in index
 
 
-def test_lead_ensure_action_is_tenant_scoped_idempotent_and_links_conversation_identity():
+def test_lead_ensure_action_reuses_tenant_scoped_conversation_service():
     handler = read('lib/automation/handlers/lead-ensure-from-conversation.ts')
+    service = read('lib/leads/ensure-from-conversation.ts')
 
     assert "can(preferred.role, 'INTEGRATIONS_EDIT')" in handler
     assert "can(preferred.role, 'LEADS_CREATE')" in handler
-    assert 'WHERE id = ${conversationId}' in handler
-    assert 'AND tenant_id = ${context.tenantId}' in handler
-    assert 'FOR UPDATE' in handler
-    assert 'SELECT id FROM public.tenants WHERE id = ${context.tenantId} FOR UPDATE' in handler
-    assert 'tenantId: context.tenantId, OR: contactOr' in handler
-    assert 'take: 2' in handler
-    assert "kind: 'ambiguous_contact'" in handler
-    assert 'tx.lead.create({' in handler
-    assert 'tx.leadStageHistory.create({' in handler
-    assert 'tx.conversation.update({ where: { id: conversation.id }, data: { leadId } })' in handler
-    assert 'tx.externalContactIdentity.update({ where: { id: identity.id }, data: { leadId } })' in handler
-    assert "action: created ? 'lead.automation_created' : 'lead.automation_linked'" in handler
+    assert 'ensureLeadFromConversation({' in handler
+    assert "createdAction: 'lead.automation_created'" in handler
+    assert "linkedAction: 'lead.automation_linked'" in handler
+    assert 'WHERE id = ${input.conversationId} AND tenant_id = ${input.tenantId}' in service
+    assert 'FOR UPDATE' in service
+    assert 'SELECT id FROM public.tenants WHERE id = ${input.tenantId} FOR UPDATE' in service
+    assert 'where: { tenantId: input.tenantId, OR: contactOr }' in service
+    assert 'take: 2' in service
+    assert "kind: 'ambiguous_contact'" in service
+    assert 'tx.lead.create({' in service
+    assert 'tx.leadStageHistory.create({' in service
+    assert 'tx.conversation.updateMany({' in service
+    assert 'tx.externalContactIdentity.updateMany({' in service
 
 
 def test_lead_move_action_preserves_pipeline_scope_history_and_tracking_retry():

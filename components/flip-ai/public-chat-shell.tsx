@@ -3,6 +3,9 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Bot, LoaderCircle, RotateCcw, Send } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
+import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
+import { fireMetaLeadPixel } from '@/lib/tracking/meta-pixel-client';
+import { firePublicGtmLeadEvent } from '@/lib/tracking/gtm-client';
 
 type ChatMessage = {
   id: string;
@@ -47,6 +50,10 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, error]);
 
+  useEffect(() => {
+    ensureMetaFbcCookie(window.location.href);
+  }, []);
+
   async function sendTurn(messageId: string, text: string, confirmRetry: boolean) {
     const assistantId = `ai:${messageId}`;
     setSending(true);
@@ -66,7 +73,12 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
       const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId, text, confirmRetry }),
+        body: JSON.stringify({
+          messageId,
+          text,
+          confirmRetry,
+          attribution: buildPublicAttribution(window.location.href, document.referrer),
+        }),
       });
       if (!response.ok || !response.body) {
         const problem = await response.json().catch(() => ({})) as { error?: string };
@@ -89,6 +101,17 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
           if (parsed.event === 'delta' && typeof parsed.data.delta === 'string') {
             setMessages((current) => current.map((message) =>
               message.id === assistantId ? { ...message, text: message.text + parsed.data.delta } : message));
+          } else if (parsed.event === 'lead') {
+            const meta = parsed.data.meta;
+            if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+              const candidate = meta as Record<string, unknown>;
+              if (typeof candidate.pixelId === 'string' && typeof candidate.eventId === 'string') {
+                fireMetaLeadPixel({ pixelId: candidate.pixelId, eventId: candidate.eventId });
+              }
+            }
+            if (typeof parsed.data.gtmContainerId === 'string') {
+              firePublicGtmLeadEvent(parsed.data.gtmContainerId);
+            }
           } else if (parsed.event === 'done') {
             completed = true;
             setMessages((current) => current.map((message) =>
