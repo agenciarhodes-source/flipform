@@ -16,7 +16,7 @@ async function ensureSchema(db: FlipAiDb) {
 async function selectDrafts(db: FlipAiDb, tenantId: string, id?: string): Promise<AgentDraft[]> {
   const rows = await db.$queryRaw<Array<Omit<AgentDraft, 'updatedAt'> & { updatedAt: Date }>>(Prisma.sql`
     SELECT a.id, a.name, a.description, a.primary_color AS "primaryColor", a.style,
-      a.pipeline_id AS "pipelineId", a.initial_stage_id AS "initialStageId", e.slug,
+      a.pipeline_id AS "pipelineId", a.initial_stage_id AS "initialStageId", a.rotation_id AS "rotationId", e.slug,
       a.status, a.version, a.updated_at AS "updatedAt"
     FROM flip_ai_agents a JOIN flip_ai_endpoints e ON e.agent_id = a.id AND e.tenant_id = a.tenant_id
     WHERE a.tenant_id = ${tenantId} AND a.status = 'draft'
@@ -48,19 +48,45 @@ async function validateDestination(db: FlipAiDb, tenantId: string, input: AgentD
       AND NOT p.is_archived AND NOT s.is_archived FOR SHARE OF p, s
   `);
   if (!rows.length) throw new FlipAiError('INVALID_DESTINATION', 400, 'Escolha um pipeline e uma etapa ativos desta empresa.');
+  if (input.rotationId) {
+    const rotation = await db.leadAssignmentRotation.findFirst({
+      where: {
+        id: input.rotationId,
+        tenantId,
+        form: { tenantId, pipelineId: input.pipelineId, isActive: true },
+      },
+      select: { id: true },
+    });
+    if (!rotation) throw new FlipAiError('INVALID_ROTATION', 400,
+      'Escolha um rodízio ativo ligado ao mesmo pipeline do atendente.');
+  }
 }
 export async function getAgentDraftWorkspace(session: SessionPayload): Promise<AgentWorkspace> {
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
-    const [agents, pipelines, knowledge] = await Promise.all([
+    const [agents, pipelines, rotations, knowledge] = await Promise.all([
       selectDrafts(db, tenantId),
       db.pipeline.findMany({ where: { tenantId, isArchived: false }, orderBy: { name: 'asc' }, select: {
         id: true, name: true, stages: { where: { isArchived: false }, orderBy: { orderIndex: 'asc' }, select: { id: true, name: true } },
       } }),
+      db.leadAssignmentRotation.findMany({
+        where: { tenantId, form: { tenantId, isActive: true, pipeline: { isArchived: false } } },
+        orderBy: { form: { name: 'asc' } },
+        select: { id: true, isEnabled: true, form: { select: { name: true, pipelineId: true } } },
+      }),
       selectKnowledgeSummaries(db, tenantId),
     ]);
-    return { agents: agents.map((agent) => ({ ...agent, knowledge: knowledge.get(agent.id) || null })), pipelines };
+    return {
+      agents: agents.map((agent) => ({ ...agent, knowledge: knowledge.get(agent.id) || null })),
+      pipelines,
+      rotations: rotations.map((rotation) => ({
+        id: rotation.id,
+        name: rotation.form.name,
+        pipelineId: rotation.form.pipelineId,
+        enabled: rotation.isEnabled,
+      })),
+    };
   });
 }
 export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDraftInput,
@@ -85,15 +111,17 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     await validateDestination(db, tenantId, input);
     if (operation.kind === 'create') {
       await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
-        (id, tenant_id, name, description, primary_color, style, pipeline_id, initial_stage_id, status, version, created_by, created_at, updated_at)
+        (id, tenant_id, name, description, primary_color, style, pipeline_id, initial_stage_id, rotation_id,
+         status, version, created_by, created_at, updated_at)
         VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor}, ${input.style},
-          ${input.pipelineId}, ${input.initialStageId}, 'draft', 1, ${userId}, NOW(), NOW())`);
+          ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
       await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_endpoints (id, tenant_id, agent_id, slug, created_at, updated_at)
         VALUES (${randomUUID()}, ${tenantId}, ${id}, ${input.slug}, NOW(), NOW())`);
     } else {
       const changed = await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
         description = ${input.description}, primary_color = ${input.primaryColor}, style = ${input.style},
-        pipeline_id = ${input.pipelineId}, initial_stage_id = ${input.initialStageId}, version = version + 1, updated_at = NOW()
+        pipeline_id = ${input.pipelineId}, initial_stage_id = ${input.initialStageId},
+        rotation_id = ${input.rotationId}, version = version + 1, updated_at = NOW()
         WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`);
       if (changed !== 1) throw new FlipAiError('VERSION_CONFLICT', 409, 'Este atendente mudou em outra sessão. Atualize a lista antes de editar.');
       await db.$executeRaw(Prisma.sql`UPDATE flip_ai_endpoints SET slug = ${input.slug}, updated_at = NOW()
