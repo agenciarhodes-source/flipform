@@ -23,6 +23,9 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   tenantId: string;
   description: string;
   knowledgeIndexId: string;
+  pipelineId: string;
+  initialStageId: string;
+  rotationId: string | null;
 };
 
 async function publicSchemaReady(): Promise<boolean> {
@@ -76,6 +79,9 @@ export async function resolvePublicFlipAiRuntime(input: {
           primaryColor: true,
           style: true,
           tenantId: true,
+          pipelineId: true,
+          initialStageId: true,
+          rotationId: true,
           tenant: {
             select: {
               name: true,
@@ -141,6 +147,9 @@ export async function resolvePublicFlipAiRuntime(input: {
     tenantLogoUrl: endpoint.agent.tenant.logoUrl,
     knowledgeRevision: document.currentRevision,
     knowledgeIndexId: index.id,
+    pipelineId: endpoint.agent.pipelineId,
+    initialStageId: endpoint.agent.initialStageId,
+    rotationId: endpoint.agent.rotationId,
   };
 }
 
