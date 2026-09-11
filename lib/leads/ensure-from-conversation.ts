@@ -47,7 +47,7 @@ export async function ensureLeadFromConversation(input: {
   requireValidPhone?: boolean;
   identity?: { displayName?: string | null; phone?: string | null; email?: string | null };
   attribution?: LeadAttributionSnapshot | null;
-  audit?: { userId?: string | null; actionPrefix: string; metadata?: Prisma.InputJsonObject };
+  audit?: { userId?: string | null; createdAction: string; linkedAction: string; metadata?: Prisma.InputJsonObject };
 }): Promise<EnsureConversationLeadOutcome> {
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<LockedConversation[]>`
@@ -195,7 +195,7 @@ export async function ensureLeadFromConversation(input: {
           userId: input.audit.userId || null,
           entityType: 'lead',
           entityId: lead.id,
-          action: `${input.audit.actionPrefix}.${created ? 'created' : 'linked'}`,
+          action: created ? input.audit.createdAction : input.audit.linkedAction,
           metadata: { conversationId: conversation.id, ...(input.audit.metadata || {}) },
         },
       });
