@@ -3,7 +3,7 @@ import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { ensureLeadFromConversation, type LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
 import { isValidBrazilianPhone, normalizeBrazilianPhone } from '@/lib/leads';
-import { dispatchFormSubmissionTracking, type MetaSubmissionAttribution } from '@/lib/tracking';
+import { dispatchFormSubmissionTracking, getTrackingConfig, type MetaSubmissionAttribution } from '@/lib/tracking';
 import { resolveMetaRuntimeConfig, toPublicMetaPixelConfig } from '@/lib/meta/runtime';
 import type { PublicFlipAiRuntime } from './public-agent';
 
@@ -54,7 +54,7 @@ export async function captureFlipAiLead(input: {
   conversationId: string;
   decision: FlipAiIdentityDecision;
   attribution: LeadAttributionSnapshot;
-}): Promise<{ meta?: { pixelId: string; eventId: string } } | null> {
+ }): Promise<{ meta?: { pixelId: string; eventId: string }; gtmContainerId?: string } | null> {
   const name = input.decision.name?.trim().slice(0, 160) || '';
   const phone = normalizeBrazilianPhone(input.decision.phone);
   if (!name || !phone || !isValidBrazilianPhone(phone)) return null;
@@ -112,9 +112,14 @@ export async function captureFlipAiLead(input: {
   }
 
   try {
-    const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: input.runtime.tenantId });
+    const [metaRuntime, settings] = await Promise.all([
+      resolveMetaRuntimeConfig({ tenantId: input.runtime.tenantId }),
+      getTrackingConfig(input.runtime.tenantId),
+    ]);
     const meta = toPublicMetaPixelConfig(metaRuntime, eventId);
-    return meta ? { meta } : {};
+    const gtmContainerId = settings?.gtmEnabled && settings.gtmContainerId
+      ? settings.gtmContainerId : undefined;
+    return { ...(meta ? { meta } : {}), ...(gtmContainerId ? { gtmContainerId } : {}) };
   } catch {
     return {};
   }
