@@ -184,7 +184,14 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     await completePublicChatTurn(identityTurn, {
       responseId: 'resp_identity', model: 'test-model', text: 'Obrigado, Diego. Como posso continuar?',
       inputTokens: 24, outputTokens: 9,
+    }, {
+      reply: 'Obrigado, Diego. Como posso continuar?',
+      identity: { name: 'Diego', phone: '(86) 99999-8877' },
     });
+    const identityReplay = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
+    assert.equal(identityReplay.mode, 'replay');
+    assert.deepEqual(identityReplay.mode === 'replay' ? identityReplay.identity : null,
+      { name: 'Diego', phone: '(86) 99999-8877' });
     const captured = await captureFlipAiLead({
       runtime: chatRuntime,
       conversationId: identityTurn.conversationId,
