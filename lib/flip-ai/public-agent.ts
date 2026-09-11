@@ -37,6 +37,10 @@ async function publicSchemaReady(): Promise<boolean> {
       AND to_regclass('public.flip_ai_conversation_states') IS NOT NULL
       AND to_regclass('public.flip_ai_usage_events') IS NOT NULL
       AND to_regclass('public.flip_ai_rate_limit_buckets') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'flip_ai_agents' AND column_name = 'rotation_id'
+      )
       AND EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') AS ready
   `);
   return Boolean(rows[0]?.ready);
