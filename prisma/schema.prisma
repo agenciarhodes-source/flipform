@@ -134,6 +134,7 @@ model Tenant {
   flipAiKnowledgeChunks FlipAiKnowledgeChunk[]
   flipAiUsageEvents FlipAiUsageEvent[]
   flipAiConversationStates FlipAiConversationState[]
+  flipAiRateLimitBuckets FlipAiRateLimitBucket[]
 
   @@map("tenants")
 }
@@ -1305,4 +1306,25 @@ model FlipAiConversationState {
   @@unique([tenantId, conversationId])
   @@index([tenantId, agentId, status])
   @@map("flip_ai_conversation_states")
+}
+
+
+model FlipAiRateLimitBucket {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  scope         String
+  scopeKey      String   @map("scope_key")
+  windowStart   DateTime @map("window_start")
+  requestCount  Int      @default(0) @map("request_count")
+  rejectedCount Int      @default(0) @map("rejected_count")
+  lastRequestAt DateTime @default(now()) @map("last_request_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, scope, scopeKey, windowStart])
+  @@index([tenantId, windowStart])
+  @@index([tenantId, rejectedCount, updatedAt])
+  @@map("flip_ai_rate_limit_buckets")
 }
