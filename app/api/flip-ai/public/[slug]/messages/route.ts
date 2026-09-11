@@ -126,26 +126,31 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
 
         const cookies = parseAttributionCookies(request.headers.get('cookie'));
         const browser = turn.attribution;
-        const leadCapture = await captureFlipAiLead({
-          runtime: runtimeContext,
-          conversationId: turn.conversationId,
-          decision: decision.identity,
-          attribution: {
-            utmSource: browser?.utmSource || null,
-            utmMedium: browser?.utmMedium || null,
-            utmCampaign: browser?.utmCampaign || null,
-            utmContent: browser?.utmContent || null,
-            utmTerm: browser?.utmTerm || null,
-            fbclid: browser?.fbclid || null,
-            gclid: browser?.gclid || null,
-            landingPage: browser?.landingPage || null,
-            referrer: browser?.referrer || null,
-            fbc: cookies.fbc,
-            fbp: cookies.fbp,
-            clientIp: normalizeAttributionString(getClientIp(request), ATTRIBUTION_LIMITS.serverValue),
-            clientUserAgent: normalizeAttributionString(request.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
-          },
-        });
+        let leadCapture: Awaited<ReturnType<typeof captureFlipAiLead>> = null;
+        try {
+          leadCapture = await captureFlipAiLead({
+            runtime: runtimeContext,
+            conversationId: turn.conversationId,
+            decision: decision.identity,
+            attribution: {
+              utmSource: browser?.utmSource || null,
+              utmMedium: browser?.utmMedium || null,
+              utmCampaign: browser?.utmCampaign || null,
+              utmContent: browser?.utmContent || null,
+              utmTerm: browser?.utmTerm || null,
+              fbclid: browser?.fbclid || null,
+              gclid: browser?.gclid || null,
+              landingPage: browser?.landingPage || null,
+              referrer: browser?.referrer || null,
+              fbc: cookies.fbc,
+              fbp: cookies.fbp,
+              clientIp: normalizeAttributionString(getClientIp(request), ATTRIBUTION_LIMITS.serverValue),
+              clientUserAgent: normalizeAttributionString(request.headers.get('user-agent'), ATTRIBUTION_LIMITS.serverValue),
+            },
+          });
+        } catch {
+          // Lead capture is isolated from the valid conversation response.
+        }
         if (leadCapture?.meta) {
           controller.enqueue(encoder.encode(sseData('lead', { meta: leadCapture.meta })));
         }
