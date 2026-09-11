@@ -151,8 +151,8 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         } catch {
           // Lead capture is isolated from the valid conversation response.
         }
-        if (leadCapture?.meta) {
-          controller.enqueue(encoder.encode(sseData('lead', { meta: leadCapture.meta })));
+        if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
+          controller.enqueue(encoder.encode(sseData('lead', leadCapture)));
         }
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,
