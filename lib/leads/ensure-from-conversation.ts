@@ -41,7 +41,7 @@ export async function ensureLeadFromConversation(input: {
   conversationId: string;
   pipelineId: string;
   stageId: string;
-  source: string;
+  source?: string | null;
   temperature?: 'cold' | 'warm' | 'hot';
   rotationId?: string | null;
   requireValidPhone?: boolean;
@@ -160,7 +160,9 @@ export async function ensureLeadFromConversation(input: {
           name,
           email,
           phone,
-          source: input.source.trim().slice(0, 120) || 'customer_service',
+          source: input.source?.trim().slice(0, 120)
+            || (conversation.channel === 'whatsapp' ? 'whatsapp'
+              : conversation.channel === 'instagram' ? 'instagram_direct' : 'customer_service'),
           status: 'open',
           temperature: input.temperature || 'warm',
           enteredAt: new Date(),
