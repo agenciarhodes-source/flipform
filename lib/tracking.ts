@@ -70,7 +70,7 @@ export type TrackingDispatchContext = {
   fromStageId?: string | null;
   toStageId?: string | null;
   triggeredById?: string | null;
-  source: 'public_form' | 'kanban' | 'purchase' | 'test';
+  source: 'public_form' | 'flip_ai' | 'kanban' | 'purchase' | 'test';
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
   /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
   metaLeadEventId?: string | null;
@@ -96,7 +96,7 @@ export function resolveTrackingEventId(
     mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
     && !mapping.customEventName
-    && context.source === 'public_form'
+    && (context.source === 'public_form' || context.source === 'flip_ai')
     && context.metaLeadEventId
   ) {
     return context.metaLeadEventId;
@@ -111,7 +111,7 @@ export function shouldApplyStageDuplicateGuard(
   const isPublicMetaLeadSubmission = mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
     && !mapping.customEventName
-    && context.source === 'public_form'
+    && (context.source === 'public_form' || context.source === 'flip_ai')
     && Boolean(context.metaLeadEventId);
   return !isPublicMetaLeadSubmission;
 }
@@ -213,7 +213,8 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
   const value = decimalToNumber(mapping.conversionValue);
   const data: Record<string, unknown> = {
     content_name: mapping.customEventName || mapping.eventName,
-    content_category: source === 'public_form' ? 'form_submission' : source === 'purchase' ? 'purchase' : 'kanban',
+    content_category: source === 'public_form' ? 'form_submission'
+      : source === 'flip_ai' ? 'flip_ai_conversation' : source === 'purchase' ? 'purchase' : 'kanban',
     currency: mapping.currency || 'BRL',
   };
   if (value !== undefined) data.value = value;
@@ -297,9 +298,9 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         accessToken: metaRuntime.accessToken,
         eventName,
         eventId,
-        actionSource: context.source === 'public_form' ? 'website' : 'system_generated',
+        actionSource: context.source === 'public_form' || context.source === 'flip_ai' ? 'website' : 'system_generated',
         testEventCode: metaRuntime.testEventCode,
-        eventSourceUrl: context.source === 'public_form' ? metaLeadData.landingPage : undefined,
+        eventSourceUrl: context.source === 'public_form' || context.source === 'flip_ai' ? metaLeadData.landingPage : undefined,
         user: metaLeadData.user,
         customData: buildCustomData(mapping, context.source),
       });
