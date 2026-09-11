@@ -9,7 +9,11 @@ import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWork
 async function ensureSchema(db: FlipAiDb) {
   const rows = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
     SELECT to_regclass('public.flip_ai_agents') IS NOT NULL
-      AND to_regclass('public.flip_ai_endpoints') IS NOT NULL AS ready
+      AND to_regclass('public.flip_ai_endpoints') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'flip_ai_agents' AND column_name = 'rotation_id'
+      ) AS ready
   `);
   if (!rows[0]?.ready) throw new FlipAiError('FLIP_AI_SCHEMA_NOT_READY', 503, 'O Flip AI está em preparação. Tente novamente após a ativação.');
 }
