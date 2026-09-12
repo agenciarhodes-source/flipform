@@ -296,7 +296,7 @@ test('long chats preserve server-validated identity without putting PII in instr
 
 test('external source domains are normalized and dangerous targets are rejected', () => {
   assert.equal(normalizeExternalSourceDomain(' WWW.Empresa.COM.BR '), 'www.empresa.com.br');
-  assert.equal(normalizeExternalSourceDomain('informação.empresa.com.br'), 'xn--informao-7wa.empresa.com.br');
+  assert.equal(normalizeExternalSourceDomain('informação.empresa.com.br'), 'xn--informao-xza3b.empresa.com.br');
   for (const domain of [
     'https://empresa.com.br', 'empresa.com.br/pagina', '*.empresa.com.br', 'localhost',
     '127.0.0.1', 'intranet.local', 'com.br', 'empresa.com.br:443',
