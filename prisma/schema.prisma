@@ -136,6 +136,7 @@ model Tenant {
   flipAiConversationStates FlipAiConversationState[]
   flipAiRateLimitBuckets FlipAiRateLimitBucket[]
   flipAiQualifications FlipAiQualification[]
+  flipAiExternalSources FlipAiExternalSource[]
 
   @@map("tenants")
 }
@@ -1101,6 +1102,7 @@ model FlipAiAgent {
   flipAiUsageEvents FlipAiUsageEvent[]
   conversationStates FlipAiConversationState[]
   qualifications FlipAiQualification[]
+  externalSources FlipAiExternalSource[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
@@ -1357,6 +1359,26 @@ model FlipAiQualification {
   @@map("flip_ai_qualifications")
 }
 
+
+model FlipAiExternalSource {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  agentId   String   @map("agent_id")
+  label     String
+  domain    String
+  status    String   @default("active")
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent  FlipAiAgent @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([agentId, domain])
+  @@index([tenantId, agentId, status])
+  @@map("flip_ai_external_sources")
+}
 
 model FlipAiRateLimitBucket {
   id            String   @id @default(uuid())

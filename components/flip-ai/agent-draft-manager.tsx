@@ -1,10 +1,11 @@
 'use client';
 
 import { useRef, useState, type FormEvent } from 'react';
-import { Bot, BookOpen, Plus } from 'lucide-react';
+import { Bot, BookOpen, Globe2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
+import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-editor';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
 
 type Editor = { id?: string; version?: number; requestId: string; input: AgentDraftInput };
@@ -16,6 +17,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
   const inFlight = useRef(false);
   const [message, setMessage] = useState('');
   const [knowledgeAgentId, setKnowledgeAgentId] = useState<string | null>(null);
+  const [externalAgentId, setExternalAgentId] = useState<string | null>(null);
   const stages = workspace.pipelines.find((p) => p.id === editor?.input.pipelineId)?.stages || [];
   const rotations = workspace.rotations.filter((rotation) => rotation.pipelineId === editor?.input.pipelineId);
 
@@ -104,6 +106,10 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <div className="flex gap-2 sm:col-span-2"><Button type="submit">{busy ? 'Salvando…' : 'Salvar rascunho'}</Button><Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancelar</Button></div>
       </fieldset>
     </form> : null}
+    {externalAgentId ? <ExternalSourcesEditor
+      agent={workspace.agents.find((agent) => agent.id === externalAgentId)!}
+      onClose={() => setExternalAgentId(null)}
+    /> : null}
     {knowledgeAgentId ? <KnowledgeMasterEditor
       agent={workspace.agents.find((agent) => agent.id === knowledgeAgentId)!}
       onClose={() => setKnowledgeAgentId(null)}
@@ -119,9 +125,13 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <p className="mt-3 break-all text-xs text-muted-foreground">Endereço reservado: /chat/{agent.slug}</p>
         <p className="mt-2 text-xs text-muted-foreground">{agent.knowledge ? `Markdown Mestre: revisão ${agent.knowledge.revision}` : 'Markdown Mestre ainda não cadastrado'}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
             <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
+          </Button>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId}
+            onClick={() => setExternalAgentId(agent.id)}>
+            <Globe2 className="mr-2 h-4 w-4" aria-hidden="true" />Fontes externas
           </Button>
         </div>
       </li>)}</ul>}

@@ -10,6 +10,7 @@ import { knowledgePreviewSchema } from '../lib/flip-ai/knowledge-preview';
 import { buildPublicChatInstructions, getOrCreatePublicSessionToken, parsePublicChatDecision,
   PUBLIC_CHAT_DECISION_FORMAT, publicChatMessageSchema } from '../lib/flip-ai/public-chat';
 import { streamOpenAiText, OpenAiResponseError } from '../lib/flip-ai/openai-responses';
+import { normalizeExternalSourceDomain } from '../lib/flip-ai/external-sources';
 
 const plan = { slug: 'premium', isActive: true };
 const allowed = { role: 'owner', tenantStatus: 'active', plan };
@@ -290,4 +291,25 @@ test('long chats preserve server-validated identity without putting PII in instr
   assert.match(prompt, /backend confirma que esta conversa já possui nome e telefone validados/);
   assert.match(prompt, /Não peça esses dados novamente/);
   assert.doesNotMatch(prompt, /5586999998877/);
+});
+
+
+test('external source domains are normalized and dangerous targets are rejected', () => {
+  assert.equal(normalizeExternalSourceDomain(' WWW.Empresa.COM.BR '), 'www.empresa.com.br');
+  assert.equal(normalizeExternalSourceDomain('informação.empresa.com.br'), 'xn--informao-7wa.empresa.com.br');
+  for (const domain of [
+    'https://empresa.com.br', 'empresa.com.br/pagina', '*.empresa.com.br', 'localhost',
+    '127.0.0.1', 'intranet.local', 'com.br', 'empresa.com.br:443',
+  ]) {
+    assert.throws(() => normalizeExternalSourceDomain(domain),
+      (error: unknown) => error instanceof FlipAiError && error.code === 'INVALID_EXTERNAL_SOURCE_DOMAIN');
+  }
+});
+
+test('PR 275 migration adds only tenant-scoped external source allowlist', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260912120000_flip_ai_external_sources/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /CREATE TABLE "flip_ai_external_sources"/);
+  assert.match(sql, /UNIQUE INDEX "flip_ai_external_sources_agent_id_domain_key"/);
+  assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
+  assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });
