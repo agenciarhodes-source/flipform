@@ -11,6 +11,7 @@ import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
 import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicChatTurn } from '../lib/flip-ai/public-chat';
 import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
+import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -31,6 +32,7 @@ async function fixture() {
       slug: 'helena-' + suffix, pipelineId: pipeline.id, initialStageId: pipeline.stages[0].id, rotationId: null } };
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
+  await prisma.flipAiExternalSource.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiRateLimitBucket.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiQualification.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -68,6 +70,25 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const updated = await saveAgentDraft(a.session, { ...a.input, name: 'Ana' }, { kind: 'update', id, version: 1 });
     assert.equal(updated.version, 2);
     await assert.rejects(saveAgentDraft(a.session, a.input, { kind: 'update', id, version: 1 }), (e: unknown) => e instanceof FlipAiError && e.code === 'VERSION_CONFLICT');
+
+    const sourceRequest = { requestId: randomUUID(), label: 'Site oficial', domain: 'WWW.Empresa.COM.BR' };
+    const source = await createExternalSource(a.session, id, sourceRequest);
+    const repeatedSource = await createExternalSource(a.session, id, sourceRequest);
+    assert.equal(source.id, repeatedSource.id, 'external source create must be idempotent');
+    assert.equal(source.domain, 'www.empresa.com.br');
+    assert.equal((await listExternalSources(a.session, id)).length, 1);
+    await assert.rejects(listExternalSources(b.session, id),
+      (e: unknown) => e instanceof FlipAiError && e.status === 404);
+    await assert.rejects(updateExternalSource(b.session, id, source.id,
+      { label: source.label, status: 'inactive', version: source.version }),
+      (e: unknown) => e instanceof FlipAiError && e.status === 404);
+    const inactiveSource = await updateExternalSource(a.session, id, source.id,
+      { label: source.label, status: 'inactive', version: source.version });
+    assert.equal(inactiveSource.status, 'inactive');
+    assert.equal(inactiveSource.version, source.version + 1);
+    await assert.rejects(updateExternalSource(a.session, id, source.id,
+      { label: source.label, status: 'active', version: source.version }),
+      (e: unknown) => e instanceof FlipAiError && e.code === 'VERSION_CONFLICT');
     const master = { title: 'Empresa CI', content: '# Empresa CI\n\nInformações oficiais para atendimento.', expectedRevision: 0 };
     const first = await saveMasterMarkdown(a.session, id, master);
     const repeated = await saveMasterMarkdown(a.session, id, master);
