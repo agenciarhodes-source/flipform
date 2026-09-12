@@ -57,8 +57,10 @@ def test_public_shell_streams_through_server_without_tracking_or_secrets():
     assert "channel: 'web'" in engine
     assert "publicChatMessageSchema" in engine
     assert ".strict()" in engine
-    for forbidden in ["fbq(", "dataLayer", "QualifiedLead", "linkConversationToLead"]:
+    for forbidden in ["fbq(", "dataLayer", "linkConversationToLead"]:
         assert forbidden not in shell + route + engine
+    assert "QualifiedLead" not in shell
+    assert "dispatchFlipAiQualifiedLeadTracking" not in shell + route + engine
 
 
 def test_public_chat_is_idempotent_and_has_no_blind_retry():
@@ -157,3 +159,69 @@ def test_flip_ai_meta_request_is_bounded_without_retry():
     assert "controller.abort()" in meta
     assert "signal: controller?.signal" in meta
     assert "retry" not in meta.lower()
+
+
+def test_qualification_engine_is_server_authoritative_tenant_scoped_and_idempotent():
+    engine = read("lib/flip-ai/qualification.ts")
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    tracking = read("lib/tracking.ts")
+    assert "flipAiFinalQualificationSchema" in engine
+    assert "classification: z.enum(['qualified', 'nurture', 'disqualified', 'insufficient'])" in engine
+    assert "tenantId: input.runtime.tenantId" in engine
+    assert "parsed.data.classification === 'qualified' && !leadId" in engine
+    assert "`flip-ai-qualified:${input.conversationId}`" in engine
+    assert "qualifiedLeadTrackingStatus: 'pending'" in engine
+    assert "qualifiedLeadTrackingStatus: 'processing'" in engine
+    assert "qualifiedLeadTrackingStatus: 'ambiguous'" in engine
+    assert "dispatchFlipAiQualifiedLeadTracking" in engine + tracking
+    assert "finalizeFlipAiQualification" in route
+    assert "Qualification persistence/tracking never invalidates a confirmed reply or Lead" in route
+    for forbidden in ["lead.update(", "assignedToId:"]:
+        assert forbidden not in engine
+
+
+def test_qualification_retrieval_and_output_are_structured_and_bounded():
+    chat = read("lib/flip-ai/public-chat.ts")
+    assert "required: ['reply', 'identity', 'qualification']" in chat
+    assert "qualification: flipAiFinalQualificationSchema.nullable()" in chat
+    assert "Critérios de qualificação, perfil ideal" in chat
+    assert "embeddings.length !== 2" in chat
+    assert ".slice(0, 7)" in chat
+    assert "evidenceMessageIds: history.map" in chat
+    assert "qualificationEvidenceMessageIds" in chat
+    assert "Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados" in chat
+
+
+def test_lead_detail_reuses_existing_crm_surface_for_flip_ai():
+    api = read("app/api/leads/[id]/route.ts")
+    modal = read("components/lead-detail-modal.tsx")
+    assert "flipAiQualifications" in api
+    assert "tenantId" in api
+    assert "Flip AI" in modal
+    assert "Fit" in modal and "Intent" in modal
+    assert "Histórico da conversa" in modal
+
+
+def test_pr274_migration_is_additive_and_runtime_remains_fail_closed():
+    migration = read("prisma/migrations/20260911160000_flip_ai_qualification_engine/migration.sql")
+    resolver = read("lib/flip-ai/public-agent.ts")
+    assert 'CREATE TABLE "flip_ai_qualifications"' in migration
+    assert 'FOREIGN KEY ("tenant_id", "conversation_id")' in migration
+    assert '"qualified_lead_event_id"' in migration
+    assert 'flip_ai_qualifications' in resolver
+    upper = migration.upper()
+    for forbidden in ["DROP TABLE", "DROP COLUMN", "TRUNCATE", "DELETE FROM", 'UPDATE "LEADS"', 'UPDATE "CONVERSATIONS"']:
+        assert forbidden not in upper
+
+
+def test_long_chat_identity_and_abandoned_dispatch_are_recovered_safely():
+    chat = read("lib/flip-ai/public-chat.ts")
+    qualification = read("lib/flip-ai/qualification.ts")
+    assert "linkedIdentityVerified = false" in chat
+    assert "isValidBrazilianPhone(identity.lead.phone)" in chat
+    assert "Não peça esses dados novamente" in chat
+    assert "QUALIFICATION_DISPATCH_STALE_MS" in qualification
+    assert "updatedAt: { lt:" in qualification
+    assert "qualifiedLeadTrackingStatus: 'ambiguous'" in qualification
+    stale_block = qualification.split("A terminated serverless invocation", 1)[1]
+    assert "dispatchFlipAiQualifiedLeadTracking" not in stale_block.split("else if", 1)[0]

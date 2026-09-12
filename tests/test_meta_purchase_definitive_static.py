@@ -17,7 +17,8 @@ def test_purchase_is_driven_by_explicit_lead_purchase_not_stage_only():
 
 def test_each_explicit_purchase_has_stable_meta_event_id_and_is_idempotent():
     assert "return `meta-purchase:${context.purchase.id}`" in TRACKING
-    assert 'async function shouldSkipEventId(provider: string, eventId: string)' in TRACKING
+    assert 'async function shouldSkipEventId(tenantId: string, provider: string, eventId: string)' in TRACKING
+    assert 'where: { tenantId, provider, eventId' in TRACKING
     assert "status: { in: ['pending', 'sent'] }" in TRACKING
     assert "status: 'duplicate'" in TRACKING
 

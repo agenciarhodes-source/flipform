@@ -162,6 +162,14 @@ test('Meta Lead público usa o event ID do servidor e outros eventos recebem IDs
   assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Lead' }, { source: 'kanban', metaLeadEventId: sharedId }), sharedId);
 });
 
+test('Flip AI QualifiedLead uses one deterministic server-owned event ID', () => {
+  const eventId = 'flip-ai-qualified:conversation-1';
+  const context = { source: 'flip_ai' as const, metaQualifiedLeadEventId: eventId };
+  assert.equal(resolveTrackingEventId({ provider: 'meta', eventName: 'QualifiedLead' }, context), eventId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'meta', eventName: 'Lead' }, context), eventId);
+  assert.notEqual(resolveTrackingEventId({ provider: 'google_ads', eventName: 'QualifiedLead' }, context), eventId);
+});
+
 test('Meta Pixel inicializa no carregamento e registra PageView sem PII', () => {
   const calls: unknown[][] = [];
   const previousWindow = globalThis.window;

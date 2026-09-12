@@ -74,6 +74,10 @@ export type TrackingDispatchContext = {
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
   /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
   metaLeadEventId?: string | null;
+  /** Server-owned ID for the single QualifiedLead action of a Flip AI conversation. */
+  metaQualifiedLeadEventId?: string | null;
+  /** Conversation that caused this tracking action. */
+  conversationId?: string | null;
   /** Current public-submission metadata. It enriches CAPI without rewriting stored lead attribution. */
   metaAttribution?: MetaSubmissionAttribution | null;
   /** Optional deadline for the single Meta request. No retry is performed on timeout. */
@@ -84,7 +88,7 @@ export type TrackingDispatchContext = {
 
 export function resolveTrackingEventId(
   mapping: { provider?: string; eventName?: string; customEventName?: string | null },
-  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId' | 'purchase'>,
+  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId' | 'metaQualifiedLeadEventId' | 'purchase'>,
 ) {
   if (
     mapping.provider === 'meta'
@@ -103,19 +107,33 @@ export function resolveTrackingEventId(
   ) {
     return context.metaLeadEventId;
   }
+  if (
+    mapping.provider === 'meta'
+    && mapping.eventName === 'QualifiedLead'
+    && !mapping.customEventName
+    && context.source === 'flip_ai'
+    && context.metaQualifiedLeadEventId
+  ) {
+    return context.metaQualifiedLeadEventId;
+  }
   return crypto.randomUUID();
 }
 
 export function shouldApplyStageDuplicateGuard(
   mapping: { provider?: string; eventName?: string; customEventName?: string | null },
-  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId'>,
+  context: Pick<TrackingDispatchContext, 'source' | 'metaLeadEventId' | 'metaQualifiedLeadEventId'>,
 ) {
   const isPublicMetaLeadSubmission = mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
     && !mapping.customEventName
     && (context.source === 'public_form' || context.source === 'flip_ai')
     && Boolean(context.metaLeadEventId);
-  return !isPublicMetaLeadSubmission;
+  const isFlipAiQualifiedLead = mapping.provider === 'meta'
+    && mapping.eventName === 'QualifiedLead'
+    && !mapping.customEventName
+    && context.source === 'flip_ai'
+    && Boolean(context.metaQualifiedLeadEventId);
+  return !isPublicMetaLeadSubmission && !isFlipAiQualifiedLead;
 }
 
 export function serializeIntegrationSettings(settings: any) {
@@ -169,7 +187,7 @@ export async function logTrackingEvent(data: {
 }) {
   if (data.eventId) {
     const existing = await prisma.trackingEventLog.findFirst({
-      where: { provider: data.provider, eventId: data.eventId },
+      where: { tenantId: data.tenantId, provider: data.provider, eventId: data.eventId },
       select: { id: true },
     });
     if (existing) {
@@ -195,9 +213,9 @@ export async function shouldSkipDuplicate(params: { tenantId: string; leadId?: s
   return Boolean(exists);
 }
 
-async function shouldSkipEventId(provider: string, eventId: string) {
+async function shouldSkipEventId(tenantId: string, provider: string, eventId: string) {
   const exists = await prisma.trackingEventLog.findFirst({
-    where: { provider, eventId, status: { in: ['pending', 'sent'] } },
+    where: { tenantId, provider, eventId, status: { in: ['pending', 'sent'] } },
     select: { id: true },
   });
   return Boolean(exists);
@@ -259,6 +277,7 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
     triggeredById: context.triggeredById || null,
     eventId,
     source: context.source,
+    conversationId: context.conversationId || null,
   };
 
   if (mapping.provider === 'meta' && mapping.eventName === 'Purchase' && explicitPurchase) {
@@ -271,7 +290,17 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
 
     // One deterministic event per purchase. Re-entering the stage, retrying a UI
     // request or registering the same purchase path cannot duplicate a sent event.
-    if (await shouldSkipEventId(mapping.provider, eventId)) {
+    if (await shouldSkipEventId(context.tenantId, mapping.provider, eventId)) {
+      return { provider: mapping.provider, eventName, status: 'duplicate', eventId };
+    }
+  } else if (
+    mapping.provider === 'meta'
+    && mapping.eventName === 'QualifiedLead'
+    && !mapping.customEventName
+    && context.source === 'flip_ai'
+    && context.metaQualifiedLeadEventId
+  ) {
+    if (await shouldSkipEventId(context.tenantId, mapping.provider, eventId)) {
       return { provider: mapping.provider, eventName, status: 'duplicate', eventId };
     }
   } else if (shouldApplyStageDuplicateGuard(mapping, context)) {
@@ -411,6 +440,33 @@ export async function dispatchLeadPurchaseTracking(
   const results = [];
   for (const mapping of mappings) results.push(await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData));
   return results;
+}
+
+export async function dispatchFlipAiQualifiedLeadTracking(context: TrackingDispatchContext) {
+  if (!context.toStageId || !context.leadId || !context.metaQualifiedLeadEventId) return [];
+  const settings = await getTrackingConfig(context.tenantId);
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId: context.tenantId, legacySettings: settings });
+  const configured = await prisma.kanbanStageTrackingEvent.findFirst({
+    where: {
+      tenantId: context.tenantId,
+      stageId: context.toStageId,
+      enabled: true,
+      provider: 'meta',
+      eventName: 'QualifiedLead',
+      customEventName: null,
+    },
+  });
+  if (!configured && !metaRuntime.pixelEnabled && !metaRuntime.capiEnabled) return [];
+  const mapping = configured || {
+    provider: 'meta',
+    eventName: 'QualifiedLead',
+    customEventName: null,
+    pipelineId: context.pipelineId,
+    stageId: context.toStageId,
+    currency: 'BRL',
+  };
+  const metaLeadData = await resolveMetaLeadData(context, [mapping]);
+  return [await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData)];
 }
 
 export async function dispatchFormSubmissionTracking(context: TrackingDispatchContext) {

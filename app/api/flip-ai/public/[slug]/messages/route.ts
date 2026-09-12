@@ -13,6 +13,7 @@ import {
 } from '@/lib/flip-ai/public-chat';
 import { OpenAiResponseError, streamOpenAiText } from '@/lib/flip-ai/openai-responses';
 import { captureFlipAiLead, type FlipAiIdentityDecision } from '@/lib/flip-ai/lead-capture';
+import { finalizeFlipAiQualification } from '@/lib/flip-ai/qualification';
 import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
 import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
@@ -146,6 +147,17 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
           controller.enqueue(encoder.encode(sseData('lead', leadCapture)));
         }
+        try {
+          await finalizeFlipAiQualification({
+            runtime: runtimeContext,
+            conversationId: turn.conversationId,
+            decision: turn.qualification,
+            model: turn.qualificationModel || 'unknown',
+            evidenceMessageIds: turn.qualificationEvidenceMessageIds,
+          });
+        } catch {
+          // Qualification persistence/tracking never invalidates a confirmed reply or Lead.
+        }
         controller.enqueue(encoder.encode(sseData('done', { messageId: turn.messageId, replayed: true })));
         controller.close();
       },
@@ -173,7 +185,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         });
         const decision = parsePublicChatDecision(rawResult.text);
         const result = { ...rawResult, text: decision.reply };
-        await completePublicChatTurn(turn, result, decision);
+        await completePublicChatTurn(turn, result, decision, context.evidenceMessageIds);
         controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
 
         const leadCapture = await tryCaptureLead({
@@ -185,6 +197,17 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         });
         if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
           controller.enqueue(encoder.encode(sseData('lead', leadCapture)));
+        }
+        try {
+          await finalizeFlipAiQualification({
+            runtime: runtimeContext,
+            conversationId: turn.conversationId,
+            decision: decision.qualification,
+            model: result.model,
+            evidenceMessageIds: context.evidenceMessageIds,
+          });
+        } catch {
+          // Qualification persistence/tracking never invalidates a confirmed reply or Lead.
         }
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,

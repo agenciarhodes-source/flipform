@@ -181,12 +181,14 @@ test('structured public turn validates reply and identity without extra fields',
   assert.deepEqual(parsePublicChatDecision(JSON.stringify({
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
+    qualification: null,
   })), {
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
+    qualification: null,
   });
   assert.throws(() => parsePublicChatDecision(JSON.stringify({
-    reply: 'Oi', identity: { name: null, phone: null }, tenantId: 'other',
+    reply: 'Oi', identity: { name: null, phone: null }, qualification: null, tenantId: 'other',
   })), (error: unknown) => error instanceof OpenAiResponseError && error.kind === 'ambiguous');
 });
 
@@ -239,4 +241,53 @@ test('PR 273 migration only adds optional Flip AI rotation binding', () => {
   assert.match(sql, /ADD COLUMN "rotation_id" TEXT/);
   assert.match(sql, /REFERENCES "lead_assignment_rotations"\("id"\)/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
+});
+
+
+test('Flip AI final qualification is strict, bounded and separates merit dimensions', () => {
+  const decision = parsePublicChatDecision(JSON.stringify({
+    reply: 'Vou encaminhar seu contexto para o atendimento.',
+    identity: { name: 'Diego', phone: '5586999998877' },
+    qualification: {
+      classification: 'qualified',
+      fitScore: 84,
+      intentScore: 76,
+      awarenessLevel: 4,
+      journeyStage: 'decision',
+      confidence: 0.91,
+      summary: 'Perfil aderente e buscando atendimento no curto prazo.',
+      reasons: ['Perfil atende aos critérios internos.', 'Há intenção explícita de avançar.'],
+      nextAction: 'Atendimento humano deve confirmar disponibilidade.',
+    },
+  }));
+  assert.equal(decision.qualification?.classification, 'qualified');
+  assert.equal(decision.qualification?.fitScore, 84);
+  assert.throws(() => parsePublicChatDecision(JSON.stringify({
+    ...decision,
+    qualification: { ...decision.qualification, fitScore: 101 },
+  })), (error: unknown) => error instanceof OpenAiResponseError && error.kind === 'ambiguous');
+  assert.throws(() => parsePublicChatDecision(JSON.stringify({
+    ...decision,
+    qualification: { ...decision.qualification, tenantId: 'other' },
+  })), (error: unknown) => error instanceof OpenAiResponseError && error.kind === 'ambiguous');
+});
+
+test('PR 274 migration adds tenant-scoped qualification without destructive SQL', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260911160000_flip_ai_qualification_engine/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /CREATE TABLE "flip_ai_qualifications"/);
+  assert.match(sql, /UNIQUE INDEX "flip_ai_qualifications_conversation_id_key"/);
+  assert.match(sql, /FOREIGN KEY \("tenant_id", "conversation_id"\)/);
+  assert.match(sql, /qualified_lead_event_id/);
+  assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
+});
+
+
+test('long chats preserve server-validated identity without putting PII in instructions', () => {
+  const runtime = { id: 'agent', tenantId: 'tenant', slug: 'helena', name: 'Helena', description: '',
+    primaryColor: '#2563EB', style: 'welcoming', tenantName: 'Empresa CI', tenantLogoUrl: null,
+    knowledgeRevision: 1, knowledgeIndexId: 'index', pipelineId: 'pipeline', initialStageId: 'stage', rotationId: null };
+  const prompt = buildPublicChatInstructions(runtime, [], null, true);
+  assert.match(prompt, /backend confirma que esta conversa já possui nome e telefone validados/);
+  assert.match(prompt, /Não peça esses dados novamente/);
+  assert.doesNotMatch(prompt, /5586999998877/);
 });

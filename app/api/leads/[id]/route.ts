@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPermission, canDeleteLead, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
 import { can } from '@/lib/rbac';
@@ -6,6 +7,9 @@ import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
+  const qualificationSchemaReady = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
+    SELECT to_regclass('public.flip_ai_qualifications') IS NOT NULL AS ready
+  `).then((rows) => rows[0]?.ready === true).catch(() => false);
   const lead = await prisma.lead.findFirst({
     where: { id: ctx.params.id, tenantId: session.tenantId },
     include: {
@@ -18,6 +22,26 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
         orderBy: { createdAt: 'asc' },
       },
       notes: { include: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: 'desc' } },
+      ...(qualificationSchemaReady ? {
+        flipAiQualifications: {
+          orderBy: { createdAt: 'desc' as const },
+          take: 5,
+          include: {
+            agent: { select: { id: true, name: true } },
+            conversation: {
+              select: {
+                id: true,
+                messages: {
+                  where: { type: 'text', text: { not: null } },
+                  orderBy: [{ providerTimestamp: 'desc' as const }, { createdAt: 'desc' as const }],
+                  take: 30,
+                  select: { id: true, direction: true, text: true, createdAt: true },
+                },
+              },
+            },
+          },
+        },
+      } : {}),
       tasks: {
         include: {
           assignee: { select: { id: true, name: true } },
@@ -35,7 +59,9 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     orderBy: { createdAt: 'asc' },
     select: { id: true, userId: true, metadata: true, createdAt: true },
   });
-  return NextResponse.json({ lead: { ...lead, saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
+  return NextResponse.json({ lead: { ...lead,
+    flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
+    saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {
