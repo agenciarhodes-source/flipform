@@ -35,6 +35,7 @@ export class OpenAiWebSearchError extends Error {
 
 const responseSchema = z.object({
   id: z.string().min(1),
+  status: z.literal('completed'),
   model: z.string().min(1),
   output: z.array(z.unknown()),
   usage: z.object({
