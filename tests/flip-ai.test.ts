@@ -8,7 +8,7 @@ import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } fr
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
 import { knowledgePreviewSchema } from '../lib/flip-ai/knowledge-preview';
 import { buildPublicChatInstructions, getOrCreatePublicSessionToken, parsePublicChatDecision,
-  PUBLIC_CHAT_DECISION_FORMAT, publicChatMessageSchema } from '../lib/flip-ai/public-chat';
+  PUBLIC_CHAT_DECISION_FORMAT, publicChatMessageSchema, restoreCurrentQueryKnowledgeHits } from '../lib/flip-ai/public-chat';
 import { streamOpenAiText, OpenAiResponseError } from '../lib/flip-ai/openai-responses';
 import { normalizeExternalSourceDomain } from '../lib/flip-ai/external-sources';
 import {
@@ -328,6 +328,12 @@ test('external search trigger preserves internal priority and detects freshness'
   assert.equal(shouldSearchExternalKnowledge('Qual é o valor atual?', strong), true);
   assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', weak), true);
   assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', []), true);
+  const restoredCurrentQuery = restoreCurrentQueryKnowledgeHits([
+    { id: 'qualification', heading: null, content: 'perfil ideal', score: 1 },
+    { id: 'current', heading: null, content: 'resposta fraca', score: 1 },
+  ], [{ id: 'current', score: 0.3 }]);
+  assert.deepEqual(restoredCurrentQuery.map((hit) => [hit.id, hit.score]), [['current', 0.3]]);
+  assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', restoredCurrentQuery), true);
   const sanitized = sanitizeExternalSearchQuery('Meu email é pessoa@example.com e telefone +55 (86) 99999-8877. Qual o valor atual?');
   assert.doesNotMatch(sanitized, /pessoa@example\.com|99999/);
   assert.match(sanitized, /valor atual/);
@@ -350,6 +356,7 @@ test('OpenAI web search uses only the server allowlist, exposes verified sources
       assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer server-only-key');
       return new Response(JSON.stringify({
         id: 'resp_search_1',
+        status: 'completed',
         model: 'test-search-model',
         usage: { input_tokens: 12, output_tokens: 7 },
         output: [
@@ -367,6 +374,24 @@ test('OpenAI web search uses only the server allowlist, exposes verified sources
   assert.equal(result.text, 'Síntese factual.');
   assert.equal(result.sources.length, 1);
   assert.equal(result.sources[0].domain, 'www.empresa.com.br');
+
+  await assert.rejects(searchOpenAiWeb('Consulta atual', ['empresa.com.br'], {
+    apiKey: 'server-only-key',
+    fetchImpl: async () => new Response(JSON.stringify({
+      id: 'resp_incomplete',
+      status: 'incomplete',
+      model: 'test-search-model',
+      usage: { input_tokens: 12, output_tokens: 7 },
+      output: [
+        { type: 'web_search_call', action: { sources: [
+          { url: 'https://empresa.com.br/parcial', title: 'Resultado parcial' },
+        ] } },
+        { type: 'message', content: [{ type: 'output_text', text: 'Síntese parcial.',
+          annotations: [{ type: 'url_citation', url: 'https://empresa.com.br/parcial',
+            title: 'Resultado parcial' }] }] },
+      ],
+    }), { status: 200 }),
+  }), (error: unknown) => error instanceof OpenAiWebSearchError && error.kind === 'ambiguous');
 
   let failedCalls = 0;
   await assert.rejects(searchOpenAiWeb('Consulta', ['empresa.com.br'], {
