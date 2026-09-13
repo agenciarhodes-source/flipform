@@ -12,7 +12,7 @@ export const FLIP_AI_WEB_SEARCH_MODEL = process.env.OPENAI_FLIP_AI_SEARCH_MODEL 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
 const SEARCH_TIMEOUT_MS = 20_000;
 const SEARCH_LIMIT_PER_AGENT_MINUTE = 10;
-const FRESHNESS = /\b(agora|atual|atuais|atualizado|atualizada|hoje|mudou|mudança|novidade|recente|recentes|último|última|últimos|últimas|prazo vigente|valor vigente|202[5-9])\b/i;
+const FRESHNESS = /(?:^|[^\p{L}\p{N}_])(agora|atual|atuais|atualizado|atualizada|hoje|mudou|mudança|novidade|recente|recentes|último|última|últimos|últimas|prazo vigente|valor vigente|202[5-9])(?=$|[^\p{L}\p{N}_])/iu;
 
 export type ExternalWebSource = {
   title: string;
@@ -52,7 +52,9 @@ function digest(value: string) {
 }
 function hostAllowed(host: string, domains: string[]) {
   const normalized = domainToASCII(host.toLowerCase().replace(/\.$/, ''));
-  return domains.some((domain) => normalized === domain || normalized.endsWith(`.${domain}`));
+  // Exact matching prevents an allowlisted shared-hosting apex from authorizing attacker subdomains.
+  // Owners must explicitly allowlist every host that the assistant may consult.
+  return domains.includes(normalized);
 }
 function safeSource(rawUrl: unknown, rawTitle: unknown, domains: string[], consultedAt: string): ExternalWebSource | null {
   if (typeof rawUrl !== 'string' || rawUrl.length > 2_048) return null;
@@ -172,6 +174,23 @@ const sourceListSchema = z.array(z.object({
   consultedAt: z.string().datetime(),
 }).strict()).max(10);
 
+async function pruneExpiredSearchCache(tenantId: string, agentId: string) {
+  await prisma.$executeRaw(Prisma.sql`
+    DELETE FROM flip_ai_external_search_cache AS cache
+    WHERE cache.tenant_id = ${tenantId}
+      AND cache.agent_id = ${agentId}
+      AND cache.id IN (
+        SELECT expired.id
+        FROM flip_ai_external_search_cache AS expired
+        WHERE expired.tenant_id = ${tenantId}
+          AND expired.agent_id = ${agentId}
+          AND expired.expires_at <= NOW()
+        ORDER BY expired.expires_at ASC
+        LIMIT 100
+      )
+  `);
+}
+
 async function reserveSearchQuota(tenantId: string, agentId: string) {
   const windowStart = new Date(Math.floor(Date.now() / 60_000) * 60_000);
   const rows = await prisma.$queryRaw<Array<{ request_count: number }>>(Prisma.sql`
@@ -209,6 +228,7 @@ export async function getExternalKnowledgeContext(input: {
   if (query.length < 4) return null;
   const queryHash = digest(query.toLowerCase());
   const allowlistHash = digest(domains.join('\n'));
+  await pruneExpiredSearchCache(input.tenantId, input.agentId).catch(() => undefined);
   const cached = await prisma.flipAiExternalSearchCache.findFirst({
     where: { tenantId: input.tenantId, agentId: input.agentId, queryHash, allowlistHash, expiresAt: { gt: new Date() } },
     select: { resultText: true, sources: true },
