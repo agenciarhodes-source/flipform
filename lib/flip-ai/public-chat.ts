@@ -119,6 +119,7 @@ type StoredChatMetadata = {
   inputHash?: string;
   knowledgeIndexId?: string;
   knowledgeHitIds?: string[];
+  currentQueryKnowledgeHits?: Array<{ id: string; score: number }>;
   attemptToken?: string;
   attemptStartedAt?: string;
   phase?: string;
@@ -170,6 +171,22 @@ function metadataOf(value: Prisma.JsonValue | null): StoredChatMetadata {
 
 function isUniqueViolation(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
+
+export function restoreCurrentQueryKnowledgeHits(
+  hits: PublicKnowledgeHit[],
+  stored: unknown,
+): PublicKnowledgeHit[] {
+  if (!Array.isArray(stored)) return [];
+  const byId = new Map(hits.map((hit) => [hit.id, hit]));
+  return stored.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+    const value = candidate as Record<string, unknown>;
+    if (typeof value.id !== 'string' || typeof value.score !== 'number'
+      || !Number.isFinite(value.score) || value.score < 0 || value.score > 1) return [];
+    const hit = byId.get(value.id);
+    return hit ? [{ ...hit, score: value.score }] : [];
+  }).slice(0, 5);
 }
 
 function storedLeadIdentity(value: unknown) {
@@ -557,6 +574,7 @@ export async function buildPublicChatContext(
   });
   const metadata = metadataOf(usage.metadata);
   let hits: PublicKnowledgeHit[];
+  let currentQueryHits: PublicKnowledgeHit[];
 
   if (metadata.knowledgeHitIds?.length) {
     hits = await hydratePublicKnowledge({
@@ -565,6 +583,7 @@ export async function buildPublicChatContext(
       knowledgeIndexId: turn.knowledgeIndexId,
       ids: metadata.knowledgeHitIds,
     });
+    currentQueryHits = restoreCurrentQueryKnowledgeHits(hits, metadata.currentQueryKnowledgeHits);
   } else {
     try {
       const embedded = await embedder([
@@ -590,6 +609,7 @@ export async function buildPublicChatContext(
           limit: 4,
         }),
       ]);
+      currentQueryHits = conversationHits;
       hits = [...conversationHits, ...qualificationHits]
         .filter((hit, index, all) => all.findIndex((item) => item.id === hit.id) === index)
         .slice(0, 7);
@@ -622,6 +642,7 @@ export async function buildPublicChatContext(
         SET metadata = metadata || ${JSON.stringify({
           phase: 'response',
           knowledgeHitIds: hits.map((hit) => hit.id),
+          currentQueryKnowledgeHits: currentQueryHits.map((hit) => ({ id: hit.id, score: hit.score })),
         })}::jsonb
         WHERE id = ${turn.eventId}
           AND tenant_id = ${turn.tenantId}
@@ -646,7 +667,7 @@ export async function buildPublicChatContext(
     conversationId: turn.conversationId,
     chatRequestKey: turn.requestKey,
     query: turn.text,
-    hits,
+    hits: currentQueryHits,
   }).catch(() => null);
 
   const [state, history, identity] = await Promise.all([
