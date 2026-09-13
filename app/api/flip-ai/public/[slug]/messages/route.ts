@@ -158,6 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         } catch {
           // Qualification persistence/tracking never invalidates a confirmed reply or Lead.
         }
+        if (turn.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: turn.sources })));
         controller.enqueue(encoder.encode(sseData('done', { messageId: turn.messageId, replayed: true })));
         controller.close();
       },
@@ -185,8 +186,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         });
         const decision = parsePublicChatDecision(rawResult.text);
         const result = { ...rawResult, text: decision.reply };
-        await completePublicChatTurn(turn, result, decision, context.evidenceMessageIds);
+        await completePublicChatTurn(turn, result, decision, context.evidenceMessageIds, context.sources);
         controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
+        if (context.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: context.sources })));
 
         const leadCapture = await tryCaptureLead({
           request,

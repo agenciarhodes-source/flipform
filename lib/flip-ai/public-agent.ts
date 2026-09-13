@@ -38,6 +38,8 @@ async function publicSchemaReady(): Promise<boolean> {
       AND to_regclass('public.flip_ai_usage_events') IS NOT NULL
       AND to_regclass('public.flip_ai_rate_limit_buckets') IS NOT NULL
       AND to_regclass('public.flip_ai_qualifications') IS NOT NULL
+      AND to_regclass('public.flip_ai_external_sources') IS NOT NULL
+      AND to_regclass('public.flip_ai_external_search_cache') IS NOT NULL
       AND EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'flip_ai_agents' AND column_name = 'rotation_id'

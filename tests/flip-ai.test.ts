@@ -11,6 +11,12 @@ import { buildPublicChatInstructions, getOrCreatePublicSessionToken, parsePublic
   PUBLIC_CHAT_DECISION_FORMAT, publicChatMessageSchema } from '../lib/flip-ai/public-chat';
 import { streamOpenAiText, OpenAiResponseError } from '../lib/flip-ai/openai-responses';
 import { normalizeExternalSourceDomain } from '../lib/flip-ai/external-sources';
+import {
+  sanitizeExternalSearchQuery,
+  searchOpenAiWeb,
+  shouldSearchExternalKnowledge,
+  OpenAiWebSearchError,
+} from '../lib/flip-ai/external-web-search';
 
 const plan = { slug: 'premium', isActive: true };
 const allowed = { role: 'owner', tenantStatus: 'active', plan };
@@ -311,5 +317,69 @@ test('PR 275 migration adds only tenant-scoped external source allowlist', () =>
   assert.match(sql, /CREATE TABLE "flip_ai_external_sources"/);
   assert.match(sql, /UNIQUE INDEX "flip_ai_external_sources_agent_id_domain_key"/);
   assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
+  assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
+});
+
+
+test('external search trigger preserves internal priority and detects freshness', () => {
+  const strong = [{ id: '1', heading: null, content: 'interno', score: 0.8 }];
+  const weak = [{ id: '1', heading: null, content: 'interno', score: 0.3 }];
+  assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', strong), false);
+  assert.equal(shouldSearchExternalKnowledge('Qual é o valor atual?', strong), true);
+  assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', weak), true);
+  assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', []), true);
+  const sanitized = sanitizeExternalSearchQuery('Meu email é pessoa@example.com e telefone +55 (86) 99999-8877. Qual o valor atual?');
+  assert.doesNotMatch(sanitized, /pessoa@example\.com|99999/);
+  assert.match(sanitized, /valor atual/);
+});
+
+test('OpenAI web search uses only the server allowlist, exposes verified sources and never retries', async () => {
+  let calls = 0;
+  const result = await searchOpenAiWeb('Qual é a regra atual?', ['empresa.com.br'], {
+    apiKey: 'server-only-key',
+    model: 'test-search-model',
+    safetyIdentifier: 'conversation-id',
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body.tools, [{ type: 'web_search', filters: { allowed_domains: ['empresa.com.br'] } }]);
+      assert.equal(body.tool_choice, 'required');
+      assert.deepEqual(body.include, ['web_search_call.action.sources']);
+      assert.equal(body.store, false);
+      assert.equal(body.safety_identifier, 'conversation-id');
+      assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer server-only-key');
+      return new Response(JSON.stringify({
+        id: 'resp_search_1',
+        model: 'test-search-model',
+        usage: { input_tokens: 12, output_tokens: 7 },
+        output: [
+          { type: 'web_search_call', action: { type: 'search', sources: [
+            { type: 'url', url: 'https://www.empresa.com.br/regra', title: 'Regra oficial' },
+            { type: 'url', url: 'https://evil.invalid/injecao', title: 'Não autorizada' },
+          ] } },
+          { type: 'message', content: [{ type: 'output_text', text: 'Síntese factual.',
+            annotations: [{ type: 'url_citation', url: 'https://www.empresa.com.br/regra', title: 'Regra oficial' }] }] },
+        ],
+      }), { status: 200 });
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(result.text, 'Síntese factual.');
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0].domain, 'www.empresa.com.br');
+
+  let failedCalls = 0;
+  await assert.rejects(searchOpenAiWeb('Consulta', ['empresa.com.br'], {
+    apiKey: 'server-only-key',
+    fetchImpl: async () => { failedCalls += 1; throw new TypeError('network'); },
+  }), (error: unknown) => error instanceof OpenAiWebSearchError && error.kind === 'ambiguous');
+  assert.equal(failedCalls, 1);
+});
+
+test('PR 276 migration adds tenant-scoped external search cache without destructive SQL', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260913120000_flip_ai_external_search_cache/migration.sql', import.meta.url), 'utf8');
+  assert.match(sql, /CREATE TABLE "flip_ai_external_search_cache"/);
+  assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
+  assert.match(sql, /tenant_agent_query_allowlist_key/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });

@@ -137,6 +137,7 @@ model Tenant {
   flipAiRateLimitBuckets FlipAiRateLimitBucket[]
   flipAiQualifications FlipAiQualification[]
   flipAiExternalSources FlipAiExternalSource[]
+  flipAiExternalSearchCaches FlipAiExternalSearchCache[]
 
   @@map("tenants")
 }
@@ -1103,6 +1104,7 @@ model FlipAiAgent {
   conversationStates FlipAiConversationState[]
   qualifications FlipAiQualification[]
   externalSources FlipAiExternalSource[]
+  externalSearchCaches FlipAiExternalSearchCache[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
@@ -1378,6 +1380,30 @@ model FlipAiExternalSource {
   @@unique([agentId, domain])
   @@index([tenantId, agentId, status])
   @@map("flip_ai_external_sources")
+}
+
+model FlipAiExternalSearchCache {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  agentId       String   @map("agent_id")
+  queryHash     String   @map("query_hash")
+  allowlistHash String   @map("allowlist_hash")
+  resultText    String   @map("result_text")
+  sources       Json
+  model         String
+  responseId    String   @map("response_id")
+  searchedAt    DateTime @map("searched_at")
+  expiresAt     DateTime @map("expires_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent  FlipAiAgent @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, agentId, queryHash, allowlistHash])
+  @@index([tenantId, agentId, expiresAt])
+  @@map("flip_ai_external_search_cache")
 }
 
 model FlipAiRateLimitBucket {
