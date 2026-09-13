@@ -7,11 +7,13 @@ import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
 import { fireMetaLeadPixel } from '@/lib/tracking/meta-pixel-client';
 import { firePublicGtmLeadEvent } from '@/lib/tracking/gtm-client';
 
+type ChatSource = { title: string; url: string; domain: string; consultedAt: string };
 type ChatMessage = {
   id: string;
   role: 'assistant' | 'user';
   text: string;
   streaming?: boolean;
+  sources?: ChatSource[];
 };
 
 type RetryTurn = { messageId: string; text: string };
@@ -101,6 +103,21 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
           if (parsed.event === 'delta' && typeof parsed.data.delta === 'string') {
             setMessages((current) => current.map((message) =>
               message.id === assistantId ? { ...message, text: message.text + parsed.data.delta } : message));
+          } else if (parsed.event === 'sources' && Array.isArray(parsed.data.sources)) {
+            const sources = parsed.data.sources.flatMap((raw) => {
+              if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+              const source = raw as Record<string, unknown>;
+              if (typeof source.title !== 'string' || typeof source.url !== 'string'
+                || typeof source.domain !== 'string' || typeof source.consultedAt !== 'string') return [];
+              try {
+                const url = new URL(source.url);
+                if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== source.domain.toLowerCase()) return [];
+              } catch { return []; }
+              return [{ title: source.title.slice(0, 200), url: source.url,
+                domain: source.domain.slice(0, 253), consultedAt: source.consultedAt }];
+            }).slice(0, 10);
+            setMessages((current) => current.map((message) =>
+              message.id === assistantId ? { ...message, sources } : message));
           } else if (parsed.event === 'lead') {
             const meta = parsed.data.meta;
             if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
@@ -168,6 +185,13 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
                 : 'max-w-[85%] rounded-2xl rounded-bl-md border bg-white px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm'}
               style={message.role === 'user' ? { backgroundColor: color } : undefined}>
               {message.text}
+              {message.sources?.length ? <ul className="mt-3 space-y-1 border-t pt-2 text-xs">
+                {message.sources.map((source) => <li key={source.url}>
+                  <a className="font-medium underline underline-offset-2" href={source.url}
+                    target="_blank" rel="noopener noreferrer">{source.title}</a>
+                  <span className="ml-1 text-slate-500">({source.domain})</span>
+                </li>)}
+              </ul> : null}
               {message.streaming && <LoaderCircle className="h-4 w-4 animate-spin" aria-label="Respondendo" />}
             </div>
           ))}
