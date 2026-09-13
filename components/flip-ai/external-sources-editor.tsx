@@ -13,6 +13,7 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState('');
   const inFlight = useRef(false);
+  const createAttempt = useRef<{ key: string; requestId: string } | null>(null);
 
   async function load() {
     if (inFlight.current) return;
@@ -30,15 +31,21 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
   async function create(event: FormEvent) {
     event.preventDefault();
     if (inFlight.current) return;
+    const input = { label: label.trim(), domain: domain.trim() };
+    const key = JSON.stringify(input);
+    const attempt = createAttempt.current?.key === key
+      ? createAttempt.current : { key, requestId: crypto.randomUUID() };
+    createAttempt.current = attempt;
     inFlight.current = true; setBusy(true); setMessage('');
     try {
       const response = await fetch(`/api/flip-ai/agents/${agent.id}/external-sources`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: crypto.randomUUID(), label: label.trim(), domain: domain.trim() }),
+        body: JSON.stringify({ requestId: attempt.requestId, ...input }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível cadastrar a fonte.');
       setSources((current) => [...current.filter((item) => item.id !== data.source.id), data.source]);
+      createAttempt.current = null;
       setLabel(''); setDomain(''); setMessage('Domínio autorizado salvo.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão.'); }
     finally { inFlight.current = false; setBusy(false); }
