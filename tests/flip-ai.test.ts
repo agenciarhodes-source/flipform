@@ -326,6 +326,7 @@ test('external search trigger preserves internal priority and detects freshness'
   const weak = [{ id: '1', heading: null, content: 'interno', score: 0.3 }];
   assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', strong), false);
   assert.equal(shouldSearchExternalKnowledge('Qual é o valor atual?', strong), true);
+  assert.equal(shouldSearchExternalKnowledge('Qual foi o último reajuste?', strong), true);
   assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', weak), true);
   assert.equal(shouldSearchExternalKnowledge('Qual é o serviço?', []), true);
   const restoredCurrentQuery = restoreCurrentQueryKnowledgeHits([
@@ -341,14 +342,14 @@ test('external search trigger preserves internal priority and detects freshness'
 
 test('OpenAI web search uses only the server allowlist, exposes verified sources and never retries', async () => {
   let calls = 0;
-  const result = await searchOpenAiWeb('Qual é a regra atual?', ['empresa.com.br'], {
+  const result = await searchOpenAiWeb('Qual é a regra atual?', ['www.empresa.com.br'], {
     apiKey: 'server-only-key',
     model: 'test-search-model',
     safetyIdentifier: 'conversation-id',
     fetchImpl: async (_url, init) => {
       calls += 1;
       const body = JSON.parse(String(init?.body));
-      assert.deepEqual(body.tools, [{ type: 'web_search', filters: { allowed_domains: ['empresa.com.br'] } }]);
+      assert.deepEqual(body.tools, [{ type: 'web_search', filters: { allowed_domains: ['www.empresa.com.br'] } }]);
       assert.equal(body.tool_choice, 'required');
       assert.deepEqual(body.include, ['web_search_call.action.sources']);
       assert.equal(body.store, false);
@@ -393,6 +394,24 @@ test('OpenAI web search uses only the server allowlist, exposes verified sources
     }), { status: 200 }),
   }), (error: unknown) => error instanceof OpenAiWebSearchError && error.kind === 'ambiguous');
 
+  await assert.rejects(searchOpenAiWeb('Consulta', ['github.io'], {
+    apiKey: 'server-only-key',
+    fetchImpl: async () => new Response(JSON.stringify({
+      id: 'resp_shared_host',
+      status: 'completed',
+      model: 'test-search-model',
+      usage: { input_tokens: 12, output_tokens: 7 },
+      output: [
+        { type: 'web_search_call', action: { sources: [
+          { url: 'https://attacker.github.io/injecao', title: 'Tenant não autorizado' },
+        ] } },
+        { type: 'message', content: [{ type: 'output_text', text: 'Conteúdo não autorizado.',
+          annotations: [{ type: 'url_citation', url: 'https://attacker.github.io/injecao',
+            title: 'Tenant não autorizado' }] }] },
+      ],
+    }), { status: 200 }),
+  }), (error: unknown) => error instanceof OpenAiWebSearchError && error.kind === 'ambiguous');
+
   let failedCalls = 0;
   await assert.rejects(searchOpenAiWeb('Consulta', ['empresa.com.br'], {
     apiKey: 'server-only-key',
@@ -406,5 +425,8 @@ test('PR 276 migration adds tenant-scoped external search cache without destruct
   assert.match(sql, /CREATE TABLE "flip_ai_external_search_cache"/);
   assert.match(sql, /FOREIGN KEY \("tenant_id", "agent_id"\)/);
   assert.match(sql, /tenant_agent_query_allowlist_key/);
+  const implementation = readFileSync(new URL('../lib/flip-ai/external-web-search.ts', import.meta.url), 'utf8');
+  assert.match(implementation, /DELETE FROM flip_ai_external_search_cache AS cache[\s\S]*LIMIT 100/);
+  assert.match(implementation, /cache\.tenant_id = \$\{tenantId\}[\s\S]*cache\.agent_id = \$\{agentId\}/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });
