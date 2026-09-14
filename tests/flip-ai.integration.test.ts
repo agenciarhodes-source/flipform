@@ -12,6 +12,7 @@ import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicCha
 import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
+import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -187,6 +188,33 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       knowledgeRevision: 2, knowledgeIndexId: prepared.id, pipelineId: a.pipeline.id,
       initialStageId: a.pipeline.stages[0].id, rotationId: null };
     const anonymous = getOrCreatePublicSessionToken(null).token;
+    const realtimeRequest = { requestId: randomUUID() };
+    let realtimeCalls = 0;
+    const realtime = await issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, async () => {
+      realtimeCalls += 1;
+      return { value: 'ek_ci_ephemeral_secret', expiresAt: Math.floor(Date.now() / 1_000) + 60, model: 'realtime-test' };
+    });
+    assert.equal(realtime.clientSecret, 'ek_ci_ephemeral_secret');
+    assert.equal(realtimeCalls, 1);
+    const realtimeConversation = await prisma.conversation.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' },
+    });
+    assert.equal(await prisma.message.count({
+      where: { tenantId: a.tenant.id, conversationId: realtimeConversation.id },
+    }), 0, 'Realtime credential issuance must not create a fake message');
+    await assert.rejects(
+      issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, async () => {
+        realtimeCalls += 1;
+        throw new Error('idempotent replay must not call OpenAI');
+      }),
+      (error: unknown) => error instanceof FlipAiError
+        && error.code === 'REALTIME_SESSION_ALREADY_REQUESTED',
+    );
+    assert.equal(realtimeCalls, 1, 'the same Realtime request must never retry externally');
+    assert.equal(await prisma.flipAiUsageEvent.count({
+      where: { tenantId: a.tenant.id, operation: 'realtime_session', status: 'confirmed' },
+    }), 1);
+
     const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.' };
     const turn = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
     assert.equal(turn.mode, 'execute');
