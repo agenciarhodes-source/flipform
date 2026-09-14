@@ -527,9 +527,16 @@ test('OpenAI Realtime secret creation never retries ambiguous results', async ()
 test('PR 277 Realtime foundation is migration-free and keeps the permanent key server-side', () => {
   const adapter = readFileSync(new URL('../lib/flip-ai/openai-realtime.ts', import.meta.url), 'utf8');
   const route = readFileSync(new URL('../app/api/flip-ai/public/[slug]/realtime/session/route.ts', import.meta.url), 'utf8');
+  const sessionIssuer = readFileSync(new URL('../lib/flip-ai/realtime-session.ts', import.meta.url), 'utf8');
   assert.match(adapter, /process\.env\.OPENAI_API_KEY/);
   assert.match(adapter, /\/v1\/realtime\/client_secrets/);
   assert.doesNotMatch(route, /OPENAI_API_KEY|Authorization/);
   assert.match(route, /Cache-Control', 'private, no-store/);
   assert.match(adapter, /create_response: false/);
+  assert.match(sessionIssuer, /scope: 'realtime_tenant'/);
+  assert.match(sessionIssuer, /scope: 'realtime_agent'/);
+  assert.match(sessionIssuer, /scope: 'realtime_ip'/);
+  assert.ok(sessionIssuer.indexOf('await consumeStableQuotas')
+    < sessionIssuer.indexOf('const ensured = await ensureConversation'));
+  assert.match(route, /clientIp: getClientIp\(request\)/);
 });
