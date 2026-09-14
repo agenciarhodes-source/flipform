@@ -12,6 +12,11 @@ import { buildPublicChatInstructions, getOrCreatePublicSessionToken, parsePublic
 import { streamOpenAiText, OpenAiResponseError } from '../lib/flip-ai/openai-responses';
 import { normalizeExternalSourceDomain } from '../lib/flip-ai/external-sources';
 import {
+  createOpenAiRealtimeClientSecret,
+  OpenAiRealtimeError,
+} from '../lib/flip-ai/openai-realtime';
+import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
+import {
   sanitizeExternalSearchQuery,
   searchOpenAiWeb,
   shouldSearchExternalKnowledge,
@@ -429,4 +434,102 @@ test('PR 276 migration adds tenant-scoped external search cache without destruct
   assert.match(implementation, /DELETE FROM flip_ai_external_search_cache AS cache[\s\S]*LIMIT 100/);
   assert.match(implementation, /cache\.tenant_id = \$\{tenantId\}[\s\S]*cache\.agent_id = \$\{agentId\}/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
+});
+
+
+test('Realtime session request accepts only a client UUID and rejects security overrides', () => {
+  assert.equal(realtimeSessionRequestSchema.safeParse({
+    requestId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  }).success, true);
+  for (const injected of [
+    { tenantId: 'other-tenant' },
+    { agentId: 'other-agent' },
+    { apiKey: 'browser-key' },
+    { model: 'attacker-model' },
+    { voice: 'attacker-voice' },
+  ]) {
+    assert.equal(realtimeSessionRequestSchema.safeParse({
+      requestId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+      ...injected,
+    }).success, false);
+  }
+});
+
+test('OpenAI Realtime secret uses server policy, safety identifier and no legacy beta header', async () => {
+  let calls = 0;
+  const result = await createOpenAiRealtimeClientSecret({
+    instructions: 'Instruções server-side.',
+    safetyIdentifier: 'conversation-private-id',
+  }, {
+    apiKey: 'server-only-key',
+    model: 'realtime-test-model',
+    voice: 'marin',
+    now: () => 1_000_000,
+    fetchImpl: async (url, init) => {
+      calls += 1;
+      assert.equal(url, 'https://api.openai.com/v1/realtime/client_secrets');
+      const headers = new Headers(init?.headers);
+      assert.equal(headers.get('authorization'), 'Bearer server-only-key');
+      assert.equal(headers.get('openai-beta'), null);
+      assert.match(headers.get('openai-safety-identifier') || '', /^[a-f0-9]{64}$/);
+      assert.doesNotMatch(headers.get('openai-safety-identifier') || '', /conversation-private-id/);
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.session.type, 'realtime');
+      assert.equal(body.session.model, 'realtime-test-model');
+      assert.equal(body.session.instructions, 'Instruções server-side.');
+      assert.equal(body.session.audio.output.voice, 'marin');
+      assert.equal(body.session.audio.input.turn_detection.create_response, false);
+      return new Response(JSON.stringify({
+        value: 'ek_test_secret_value_123456789',
+        expires_at: 2_000,
+      }), { status: 200 });
+    },
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(result, {
+    value: 'ek_test_secret_value_123456789',
+    expiresAt: 2_000,
+    model: 'realtime-test-model',
+  });
+});
+
+test('OpenAI Realtime secret creation never retries ambiguous results', async () => {
+  let calls = 0;
+  await assert.rejects(createOpenAiRealtimeClientSecret({
+    instructions: 'Instruções.',
+    safetyIdentifier: 'conversation-id',
+  }, {
+    apiKey: 'server-only-key',
+    fetchImpl: async () => {
+      calls += 1;
+      throw new TypeError('network');
+    },
+  }), (error: unknown) => error instanceof OpenAiRealtimeError
+    && error.kind === 'ambiguous'
+    && error.code === 'OPENAI_REALTIME_TRANSPORT_AMBIGUOUS');
+  assert.equal(calls, 1);
+
+  await assert.rejects(createOpenAiRealtimeClientSecret({
+    instructions: 'Instruções.',
+    safetyIdentifier: 'conversation-id',
+  }, {
+    apiKey: 'server-only-key',
+    now: () => 1_000_000,
+    fetchImpl: async () => new Response(JSON.stringify({
+      value: 'ek_expired_secret_value_123456',
+      expires_at: 1_004,
+    }), { status: 200 }),
+  }), (error: unknown) => error instanceof OpenAiRealtimeError
+    && error.kind === 'ambiguous'
+    && error.code === 'OPENAI_REALTIME_INVALID_RESPONSE');
+});
+
+test('PR 277 Realtime foundation is migration-free and keeps the permanent key server-side', () => {
+  const adapter = readFileSync(new URL('../lib/flip-ai/openai-realtime.ts', import.meta.url), 'utf8');
+  const route = readFileSync(new URL('../app/api/flip-ai/public/[slug]/realtime/session/route.ts', import.meta.url), 'utf8');
+  assert.match(adapter, /process\.env\.OPENAI_API_KEY/);
+  assert.match(adapter, /\/v1\/realtime\/client_secrets/);
+  assert.doesNotMatch(route, /OPENAI_API_KEY|Authorization/);
+  assert.match(route, /Cache-Control', 'private, no-store/);
+  assert.match(adapter, /create_response: false/);
 });
