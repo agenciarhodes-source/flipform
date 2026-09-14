@@ -4,6 +4,7 @@ import { FlipAiError } from '@/lib/flip-ai/access';
 import { resolvePublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { getOrCreatePublicSessionToken } from '@/lib/flip-ai/public-chat';
 import { issuePublicRealtimeSession } from '@/lib/flip-ai/realtime-session';
+import { getClientIp } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -91,7 +92,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   }
 
   try {
-    const result = await issuePublicRealtimeSession(runtimeContext, session.token, body);
+    const result = await issuePublicRealtimeSession(runtimeContext, session.token, body, {
+      clientIp: getClientIp(request),
+    });
     return attachSessionCookie(secureJson(result), session.token, session.created);
   } catch (error) {
     return jsonError(error, session.token, session.created);
