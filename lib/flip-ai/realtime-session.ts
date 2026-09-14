@@ -17,7 +17,12 @@ import {
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const WINDOW_MS = 60_000;
-const SESSION_LIMIT = 4;
+const QUOTA_LIMITS = {
+  tenant: 60,
+  agent: 30,
+  ip: 8,
+  conversation: 4,
+} as const;
 
 export const realtimeSessionRequestSchema = z.object({
   requestId: z.string().uuid(),
@@ -27,24 +32,33 @@ type ClientSecretCreator = (
   input: { instructions: string; safetyIdentifier: string },
 ) => Promise<OpenAiRealtimeClientSecret>;
 
+type RealtimeRequestContext = {
+  clientIp?: string | null;
+};
+
 function digest(value: string) {
   return createHash('sha256').update(value).digest('hex');
 }
 
-async function consumeRealtimeQuota(tenantId: string, conversationId: string) {
+async function consumeRealtimeQuota(input: {
+  tenantId: string;
+  scope: string;
+  scopeKey: string;
+  limit: number;
+}) {
   const windowStart = new Date(Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS);
   const rows = await prisma.$queryRaw<Array<{ request_count: number }>>(Prisma.sql`
     INSERT INTO flip_ai_rate_limit_buckets
       (id, tenant_id, scope, scope_key, window_start, request_count, rejected_count,
        last_request_at, created_at, updated_at)
-    VALUES (${randomUUID()}, ${tenantId}, 'realtime_session', ${conversationId},
+    VALUES (${randomUUID()}, ${input.tenantId}, ${input.scope}, ${input.scopeKey},
       ${windowStart}, 1, 0, NOW(), NOW(), NOW())
     ON CONFLICT (tenant_id, scope, scope_key, window_start)
     DO UPDATE SET
       request_count = flip_ai_rate_limit_buckets.request_count + 1,
       last_request_at = NOW(),
       updated_at = NOW()
-    WHERE flip_ai_rate_limit_buckets.request_count < ${SESSION_LIMIT}
+    WHERE flip_ai_rate_limit_buckets.request_count < ${input.limit}
     RETURNING request_count
   `);
   if (rows.length) return;
@@ -52,19 +66,47 @@ async function consumeRealtimeQuota(tenantId: string, conversationId: string) {
   await prisma.$executeRaw(Prisma.sql`
     UPDATE flip_ai_rate_limit_buckets
     SET rejected_count = rejected_count + 1, last_request_at = NOW(), updated_at = NOW()
-    WHERE tenant_id = ${tenantId}
-      AND scope = 'realtime_session'
-      AND scope_key = ${conversationId}
+    WHERE tenant_id = ${input.tenantId}
+      AND scope = ${input.scope}
+      AND scope_key = ${input.scopeKey}
       AND window_start = ${windowStart}
   `);
   throw new FlipAiError('REALTIME_SESSION_RATE_LIMITED', 429,
     'Aguarde um instante antes de iniciar outra sessão de voz.');
 }
 
+async function consumeStableQuotas(
+  runtime: PublicFlipAiRuntime,
+  context: RealtimeRequestContext,
+) {
+  await consumeRealtimeQuota({
+    tenantId: runtime.tenantId,
+    scope: 'realtime_tenant',
+    scopeKey: runtime.tenantId,
+    limit: QUOTA_LIMITS.tenant,
+  });
+  await consumeRealtimeQuota({
+    tenantId: runtime.tenantId,
+    scope: 'realtime_agent',
+    scopeKey: runtime.id,
+    limit: QUOTA_LIMITS.agent,
+  });
+  const clientIp = context.clientIp?.trim();
+  if (clientIp) {
+    await consumeRealtimeQuota({
+      tenantId: runtime.tenantId,
+      scope: 'realtime_ip',
+      scopeKey: digest(`${runtime.tenantId}:realtime-ip:${clientIp}`),
+      limit: QUOTA_LIMITS.ip,
+    });
+  }
+}
+
 export async function issuePublicRealtimeSession(
   runtime: PublicFlipAiRuntime,
   sessionToken: string,
   rawInput: unknown,
+  context: RealtimeRequestContext = {},
   createClientSecret: ClientSecretCreator = createOpenAiRealtimeClientSecret,
 ) {
   const parsed = realtimeSessionRequestSchema.safeParse(rawInput);
@@ -77,6 +119,22 @@ export async function issuePublicRealtimeSession(
   }
 
   const sessionHash = digest(sessionToken);
+  const requestKey =
+    `realtime-session:${runtime.tenantId}:${runtime.id}:${sessionHash}:${parsed.data.requestId}`;
+  const existing = await prisma.flipAiUsageEvent.findUnique({ where: { requestKey } });
+  if (existing) {
+    if (existing.tenantId !== runtime.tenantId || existing.agentId !== runtime.id
+      || existing.operation !== 'realtime_session') {
+      throw new FlipAiError('REALTIME_SESSION_REQUEST_CONFLICT', 409,
+        'Esta solicitação pertence a outro contexto.');
+    }
+    throw new FlipAiError('REALTIME_SESSION_ALREADY_REQUESTED', 409,
+      'Crie uma nova solicitação explícita para iniciar outra sessão de voz.');
+  }
+
+  // These server-controlled quotas run before any identity/conversation row or billable secret is created.
+  await consumeStableQuotas(runtime, context);
+
   const externalUserId = `agent:${runtime.id}:session:${sessionHash}`;
   const ensured = await ensureConversation({
     tenantId: runtime.tenantId,
@@ -101,21 +159,12 @@ export async function issuePublicRealtimeSession(
       'A sessão não pertence a este atendente.');
   }
 
-  const requestKey =
-    `realtime-session:${runtime.tenantId}:${runtime.id}:${sessionHash}:${parsed.data.requestId}`;
-  const existing = await prisma.flipAiUsageEvent.findUnique({ where: { requestKey } });
-  if (existing) {
-    if (existing.tenantId !== runtime.tenantId || existing.agentId !== runtime.id
-      || existing.conversationId !== ensured.conversation.id
-      || existing.operation !== 'realtime_session') {
-      throw new FlipAiError('REALTIME_SESSION_REQUEST_CONFLICT', 409,
-        'Esta solicitação pertence a outro contexto.');
-    }
-    throw new FlipAiError('REALTIME_SESSION_ALREADY_REQUESTED', 409,
-      'Crie uma nova solicitação explícita para iniciar outra sessão de voz.');
-  }
-
-  await consumeRealtimeQuota(runtime.tenantId, ensured.conversation.id);
+  await consumeRealtimeQuota({
+    tenantId: runtime.tenantId,
+    scope: 'realtime_conversation',
+    scopeKey: ensured.conversation.id,
+    limit: QUOTA_LIMITS.conversation,
+  });
 
   let event;
   try {
