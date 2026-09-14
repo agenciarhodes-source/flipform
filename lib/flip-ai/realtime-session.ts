@@ -79,18 +79,7 @@ async function consumeStableQuotas(
   runtime: PublicFlipAiRuntime,
   context: RealtimeRequestContext,
 ) {
-  await consumeRealtimeQuota({
-    tenantId: runtime.tenantId,
-    scope: 'realtime_tenant',
-    scopeKey: runtime.tenantId,
-    limit: QUOTA_LIMITS.tenant,
-  });
-  await consumeRealtimeQuota({
-    tenantId: runtime.tenantId,
-    scope: 'realtime_agent',
-    scopeKey: runtime.id,
-    limit: QUOTA_LIMITS.agent,
-  });
+  // Consume the narrowest bucket first so already-blocked callers cannot drain broader quotas.
   const clientIp = context.clientIp?.trim();
   if (clientIp) {
     await consumeRealtimeQuota({
@@ -100,6 +89,18 @@ async function consumeStableQuotas(
       limit: QUOTA_LIMITS.ip,
     });
   }
+  await consumeRealtimeQuota({
+    tenantId: runtime.tenantId,
+    scope: 'realtime_agent',
+    scopeKey: runtime.id,
+    limit: QUOTA_LIMITS.agent,
+  });
+  await consumeRealtimeQuota({
+    tenantId: runtime.tenantId,
+    scope: 'realtime_tenant',
+    scopeKey: runtime.tenantId,
+    limit: QUOTA_LIMITS.tenant,
+  });
 }
 
 export async function issuePublicRealtimeSession(
