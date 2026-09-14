@@ -190,7 +190,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const anonymous = getOrCreatePublicSessionToken(null).token;
     const realtimeRequest = { requestId: randomUUID() };
     let realtimeCalls = 0;
-    const realtime = await issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, async () => {
+    const realtime = await issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, {}, async () => {
       realtimeCalls += 1;
       return { value: 'ek_ci_ephemeral_secret', expiresAt: Math.floor(Date.now() / 1_000) + 60, model: 'realtime-test' };
     });
@@ -203,7 +203,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       where: { tenantId: a.tenant.id, conversationId: realtimeConversation.id },
     }), 0, 'Realtime credential issuance must not create a fake message');
     await assert.rejects(
-      issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, async () => {
+      issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, {}, async () => {
         realtimeCalls += 1;
         throw new Error('idempotent replay must not call OpenAI');
       }),
@@ -214,6 +214,31 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(await prisma.flipAiUsageEvent.count({
       where: { tenantId: a.tenant.id, operation: 'realtime_session', status: 'confirmed' },
     }), 1);
+
+    const realtimeWindow = new Date(Math.floor(Date.now() / 60_000) * 60_000);
+    await prisma.flipAiRateLimitBucket.update({
+      where: { tenantId_scope_scopeKey_windowStart: {
+        tenantId: a.tenant.id,
+        scope: 'realtime_agent',
+        scopeKey: id,
+        windowStart: realtimeWindow,
+      } },
+      data: { requestCount: 30 },
+    });
+    const conversationsBeforeRotatedCookie = await prisma.conversation.count({
+      where: { tenantId: a.tenant.id },
+    });
+    await assert.rejects(issuePublicRealtimeSession(
+      chatRuntime,
+      getOrCreatePublicSessionToken(null).token,
+      { requestId: randomUUID() },
+      {},
+      async () => { throw new Error('stable quota must reject before OpenAI'); },
+    ), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'REALTIME_SESSION_RATE_LIMITED');
+    assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id } }),
+      conversationsBeforeRotatedCookie,
+      'rotating the anonymous cookie must not create rows after the stable agent quota is exhausted');
 
     const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.' };
     const turn = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
