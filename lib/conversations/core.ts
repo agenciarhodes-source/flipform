@@ -94,6 +94,84 @@ async function advanceOutboundActivity(tx: Prisma.TransactionClient, conversatio
   return tx.conversation.findUniqueOrThrow({ where: { id: conversationId } });
 }
 
+type EnsureConversationFields = {
+  tenantId: string;
+  externalUserId: string;
+  username?: string | null;
+  displayName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  metadata?: Prisma.InputJsonValue;
+  seenAt?: Date | null;
+};
+
+export type EnsureConversationInput = EnsureConversationFields & (
+  | { channel: 'web'; provider: 'flip_ai' }
+  | { channel: 'whatsapp' | 'instagram'; provider?: 'meta' }
+);
+
+export async function ensureConversation(rawInput: EnsureConversationInput) {
+  const tenantId = required(rawInput.tenantId, 'tenantId');
+  const externalUserId = required(rawInput.externalUserId, 'externalUserId');
+  const provider = rawInput.provider ?? 'meta';
+  const channel = rawInput.channel;
+  assertTransport(provider, channel);
+  const timestamp = rawInput.seenAt ?? new Date();
+
+  return prisma.$transaction(async (tx) => {
+    const identity = await tx.externalContactIdentity.upsert({
+      where: {
+        tenant_provider_channel_external_user: {
+          tenantId,
+          provider,
+          channel,
+          externalUserId,
+        },
+      },
+      create: {
+        tenantId,
+        provider,
+        channel,
+        externalUserId,
+        username: optional(rawInput.username),
+        displayName: optional(rawInput.displayName),
+        phone: optional(rawInput.phone),
+        email: optional(rawInput.email),
+        metadata: rawInput.metadata,
+        lastSeenAt: timestamp,
+      },
+      update: {
+        username: optional(rawInput.username),
+        displayName: optional(rawInput.displayName),
+        phone: optional(rawInput.phone),
+        email: optional(rawInput.email),
+        ...(rawInput.metadata === undefined ? {} : { metadata: rawInput.metadata }),
+      },
+    });
+    const updatedIdentity = await advanceIdentityLastSeen(tx, identity.id, timestamp);
+    const conversation = await tx.conversation.upsert({
+      where: {
+        tenant_provider_channel_identity: {
+          tenantId,
+          provider,
+          channel,
+          externalContactIdentityId: identity.id,
+        },
+      },
+      create: {
+        tenantId,
+        provider,
+        channel,
+        externalContactIdentityId: identity.id,
+        status: 'open',
+        startedAt: timestamp,
+      },
+      update: {},
+    });
+    return { identity: updatedIdentity, conversation };
+  });
+}
+
 type RecordInboundMessageFields = {
   tenantId: string;
   externalUserId: string;
