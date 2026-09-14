@@ -536,6 +536,10 @@ test('PR 277 Realtime foundation is migration-free and keeps the permanent key s
   assert.match(sessionIssuer, /scope: 'realtime_tenant'/);
   assert.match(sessionIssuer, /scope: 'realtime_agent'/);
   assert.match(sessionIssuer, /scope: 'realtime_ip'/);
+  assert.ok(sessionIssuer.indexOf("scope: 'realtime_ip'")
+    < sessionIssuer.indexOf("scope: 'realtime_agent'"));
+  assert.ok(sessionIssuer.indexOf("scope: 'realtime_agent'")
+    < sessionIssuer.indexOf("scope: 'realtime_tenant'"));
   assert.ok(sessionIssuer.indexOf('await consumeStableQuotas')
     < sessionIssuer.indexOf('const ensured = await ensureConversation'));
   assert.match(route, /clientIp: getClientIp\(request\)/);
