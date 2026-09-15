@@ -40,7 +40,10 @@ test('approved backend reply is spoken out of band with no tools or conversation
   assert.deepEqual(parseFlipAiRealtimeServerEvent({
     type: 'response.done',
     response: { status: 'completed', metadata: event.response.metadata },
-  }), { kind: 'approved_reply_done', turnId: 'turn-1' });
+  }), { kind: 'approved_reply_generated', turnId: 'turn-1' });
+  assert.deepEqual(parseFlipAiRealtimeServerEvent({
+    type: 'output_audio_buffer.stopped',
+  }), { kind: 'audio_stopped' });
 });
 
 test('Realtime session enables Portuguese transcription but never auto-responds', async () => {
