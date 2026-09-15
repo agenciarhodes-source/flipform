@@ -18,7 +18,8 @@ export type FlipAiRealtimeServerEvent =
   | { kind: 'transcript'; itemId: string; transcript: string }
   | { kind: 'speech_started' }
   | { kind: 'speech_stopped' }
-  | { kind: 'approved_reply_done'; turnId: string }
+  | { kind: 'approved_reply_generated'; turnId: string }
+  | { kind: 'audio_stopped' }
   | { kind: 'error'; message: string }
   | { kind: 'ignored' };
 
@@ -38,6 +39,7 @@ export function parseFlipAiRealtimeServerEvent(raw: unknown): FlipAiRealtimeServ
   }
   if (event.type === 'input_audio_buffer.speech_started') return { kind: 'speech_started' };
   if (event.type === 'input_audio_buffer.speech_stopped') return { kind: 'speech_stopped' };
+  if (event.type === 'output_audio_buffer.stopped') return { kind: 'audio_stopped' };
   if (event.type === 'response.done') {
     const response = event.response;
     if (response && typeof response === 'object' && !Array.isArray(response)) {
@@ -46,7 +48,7 @@ export function parseFlipAiRealtimeServerEvent(raw: unknown): FlipAiRealtimeServ
         const record = metadata as Record<string, unknown>;
         if (record.flip_ai_kind === 'approved_reply' && typeof record.turn_id === 'string') {
           return (response as Record<string, unknown>).status === 'completed'
-            ? { kind: 'approved_reply_done', turnId: record.turn_id }
+            ? { kind: 'approved_reply_generated', turnId: record.turn_id }
             : { kind: 'error', message: 'A resposta por voz não pôde ser concluída.' };
         }
       }
@@ -110,6 +112,7 @@ export class FlipAiRealtimeVoiceClient {
   private audio: HTMLAudioElement | null = null;
   private seenTranscripts = new Set<string>();
   private pendingSpeechTurn: string | null = null;
+  private pendingSpeechResolve: (() => void) | null = null;
   private speechTimer: ReturnType<typeof setTimeout> | null = null;
   private stopped = false;
 
@@ -226,18 +229,21 @@ export class FlipAiRealtimeVoiceClient {
       this.setState('listening');
     } else if (event.kind === 'speech_stopped') {
       this.setState('processing');
-    } else if (event.kind === 'approved_reply_done' && event.turnId === this.pendingSpeechTurn) {
+    } else if (event.kind === 'audio_stopped' && this.pendingSpeechTurn) {
       this.finishSpeech();
+    } else if (event.kind === 'approved_reply_generated' && event.turnId === this.pendingSpeechTurn) {
+      // Generation has finished, but WebRTC may still have buffered audio to play.
+      // The microphone remains muted until output_audio_buffer.stopped.
     } else if (event.kind === 'error') {
       this.fail(new Error(event.message));
     }
   }
 
-  speak(turnId: string, text: string) {
+  speak(turnId: string, text: string): Promise<void> {
     const channel = this.channel;
     if (!text.trim() || !channel || channel.readyState !== 'open' || this.stopped) {
       this.resumeListening();
-      return;
+      return Promise.resolve();
     }
     this.pendingSpeechTurn = turnId;
     this.setMicrophoneEnabled(false);
@@ -245,12 +251,15 @@ export class FlipAiRealtimeVoiceClient {
     channel.send(JSON.stringify(buildApprovedReplySpeechEvent(turnId, text)));
     if (this.speechTimer) clearTimeout(this.speechTimer);
     this.speechTimer = setTimeout(() => this.finishSpeech(), 60_000);
+    return new Promise<void>((resolve) => { this.pendingSpeechResolve = resolve; });
   }
 
   private finishSpeech() {
     if (this.speechTimer) clearTimeout(this.speechTimer);
     this.speechTimer = null;
     this.pendingSpeechTurn = null;
+    this.pendingSpeechResolve?.();
+    this.pendingSpeechResolve = null;
     this.resumeListening();
   }
 
@@ -264,6 +273,8 @@ export class FlipAiRealtimeVoiceClient {
     if (this.stopped) return;
     this.stopped = true;
     if (this.speechTimer) clearTimeout(this.speechTimer);
+    this.pendingSpeechResolve?.();
+    this.pendingSpeechResolve = null;
     this.microphone?.getTracks().forEach((track) => track.stop());
     this.channel?.close();
     this.peer?.close();
