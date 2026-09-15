@@ -50,6 +50,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
   const voiceRef = useRef<FlipAiRealtimeVoiceClient | null>(null);
+  const voiceTurnQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: 'greeting',
     role: 'assistant',
@@ -165,7 +166,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
         if (chunk.done) break;
       }
       if (!completed) throw new Error(streamError || 'A resposta não pôde ser confirmada.');
-      if (speakReply) voiceRef.current?.speak(messageId, assistantText);
+      if (speakReply && voiceRef.current) await voiceRef.current.speak(messageId, assistantText);
     } catch (failure) {
       setMessages((current) => current.map((message) =>
         message.id === assistantId ? { ...message, streaming: false } : message));
@@ -195,10 +196,14 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     const client = new FlipAiRealtimeVoiceClient({
       slug: agent.slug,
       onStateChange: setVoiceState,
-      onError: setError,
+      onError: (message) => {
+        setError(message);
+        voiceRef.current = null;
+      },
       onTranscript: ({ transcript }) => {
-        if (sendingRef.current) return;
-        void sendTurn(crypto.randomUUID(), transcript, false, true);
+        voiceTurnQueueRef.current = voiceTurnQueueRef.current.then(() =>
+          sendTurn(crypto.randomUUID(), transcript, false, true));
+        return voiceTurnQueueRef.current;
       },
     });
     voiceRef.current = client;
