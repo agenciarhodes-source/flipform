@@ -32,9 +32,9 @@ def test_test_binding_uses_backend_universal_credentials_without_browser_tokens(
 
 def test_test_binding_validates_and_subscribes_before_persisting():
     route = read(ROUTE)
-    validation = route.index('validateWhatsAppWabaPhoneSelection')
-    subscription = route.index('subscribeAppToWhatsAppWaba')
-    transaction = route.index('prisma.$transaction')
+    validation = route.index('const selection = await validateWhatsAppWabaPhoneSelection')
+    subscription = route.index('await subscribeAppToWhatsAppWaba')
+    transaction = route.index('const connection = await prisma.$transaction')
     assert validation < subscription < transaction
     assert 'validateWhatsAppSystemUserToken' in route
     assert 'ensureSystemUserAssignedToWhatsAppWaba' in route
