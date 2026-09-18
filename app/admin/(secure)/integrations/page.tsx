@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
+import { WhatsAppMetaTestBindingCard } from './whatsapp-meta-test-binding-card';
 import { WhatsAppPlatformPreflightCard } from './whatsapp-platform-preflight-card';
 
 type Settings = {
@@ -140,6 +141,7 @@ export default function AdminIntegrationsPage() {
     </Card>}
 
     <WhatsAppPlatformPreflightCard />
+    <WhatsAppMetaTestBindingCard />
     <MetaPlatformReadinessPanel />
     <TenantMetaBindingManager />
   </div>;
