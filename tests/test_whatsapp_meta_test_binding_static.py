@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Keep this smoke-binding contract deterministic so GitHub/Vercel validate the PR head.
 ROOT = Path(__file__).resolve().parents[1]
 ROUTE = ROOT / 'app/api/admin/integrations/whatsapp/test-binding/route.ts'
 CARD = ROOT / 'app/admin/(secure)/integrations/whatsapp-meta-test-binding-card.tsx'
