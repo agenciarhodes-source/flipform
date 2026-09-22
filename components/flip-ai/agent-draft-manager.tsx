@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
-import { Bot, BookOpen, Globe2, Plus } from 'lucide-react';
+import { BarChart3, Bot, BookOpen, Globe2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
@@ -75,7 +76,12 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><div className="mb-2 flex items-center gap-2 text-sm text-brand-600"><Bot className="h-5 w-5" aria-hidden="true" /> Premium</div>
         <h1 className="text-2xl font-semibold">Flip AI</h1><p className="mt-1 text-sm text-muted-foreground">Prepare os atendentes virtuais da sua empresa.</p></div>
-      <Button onClick={createDraft} disabled={busy || !!editor}><Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo atendente</Button>
+      <div className="flex flex-wrap gap-2">
+        <Link href="/flip-ai/usage" className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted">
+          <BarChart3 className="h-4 w-4" aria-hidden="true" />Consumo
+        </Link>
+        <Button onClick={createDraft} disabled={busy || !!editor}><Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo atendente</Button>
+      </div>
     </header>
     <div className="rounded-lg border bg-muted/40 p-4 text-sm">Os atendentes continuam em rascunho. Agora você pode cadastrar o Markdown Mestre; a publicação do chat permanece bloqueada.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
