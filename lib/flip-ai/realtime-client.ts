@@ -16,6 +16,7 @@ type RealtimeSessionResponse = {
 
 export type FlipAiRealtimeServerEvent =
   | { kind: 'transcript'; itemId: string; transcript: string }
+  | { kind: 'transcription_failed'; message: string }
   | { kind: 'speech_started' }
   | { kind: 'speech_stopped' }
   | { kind: 'approved_reply_generated'; turnId: string }
@@ -35,7 +36,10 @@ export function parseFlipAiRealtimeServerEvent(raw: unknown): FlipAiRealtimeServ
     const transcript = event.transcript.trim();
     return transcript
       ? { kind: 'transcript', itemId: event.item_id, transcript }
-      : { kind: 'ignored' };
+      : { kind: 'transcription_failed', message: 'Não consegui entender esse trecho. Pode falar novamente?' };
+  }
+  if (event.type === 'conversation.item.input_audio_transcription.failed') {
+    return { kind: 'transcription_failed', message: 'Não consegui transcrever esse trecho. Pode falar novamente?' };
   }
   if (event.type === 'input_audio_buffer.speech_started') return { kind: 'speech_started' };
   if (event.type === 'input_audio_buffer.speech_stopped') return { kind: 'speech_stopped' };
@@ -229,6 +233,9 @@ export class FlipAiRealtimeVoiceClient {
       this.setState('listening');
     } else if (event.kind === 'speech_stopped') {
       this.setState('processing');
+    } else if (event.kind === 'transcription_failed') {
+      this.options.onError(event.message);
+      this.resumeListening();
     } else if (event.kind === 'audio_stopped' && this.pendingSpeechTurn) {
       this.finishSpeech();
     } else if (event.kind === 'approved_reply_generated' && event.turnId === this.pendingSpeechTurn) {

@@ -198,7 +198,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
       onStateChange: setVoiceState,
       onError: (message) => {
         setError(message);
-        voiceRef.current = null;
+        if (voiceRef.current === client) voiceRef.current = null;
       },
       onTranscript: ({ transcript }) => {
         voiceTurnQueueRef.current = voiceTurnQueueRef.current.then(() =>
@@ -207,7 +207,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
       },
     });
     voiceRef.current = client;
-    if (!await client.connect()) voiceRef.current = null;
+    if (!await client.connect() && voiceRef.current === client) voiceRef.current = null;
   }
 
   return (

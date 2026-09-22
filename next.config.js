@@ -50,6 +50,11 @@ const nextConfig = {
         headers: commonHeaders,
       },
       {
+        // Voice is intentionally available only on the public Flip AI chat surface.
+        source: '/chat/:path*',
+        headers: [{ key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' }],
+      },
+      {
         source: '/(.*)',
         has: [{ type: 'header', key: 'x-forwarded-proto', value: 'https' }],
         headers: [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }],

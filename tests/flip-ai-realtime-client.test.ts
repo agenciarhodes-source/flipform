@@ -22,6 +22,13 @@ test('Realtime transcript parser accepts only completed, identified audio turns'
     item_id: 'item_voice_1',
     delta: 'Preciso',
   })), { kind: 'ignored' });
+  assert.deepEqual(parseFlipAiRealtimeServerEvent({
+    type: 'conversation.item.input_audio_transcription.failed',
+    item_id: 'item_voice_1',
+  }), {
+    kind: 'transcription_failed',
+    message: 'Não consegui transcrever esse trecho. Pode falar novamente?',
+  });
   assert.deepEqual(parseFlipAiRealtimeServerEvent('{invalid'), { kind: 'ignored' });
 });
 
@@ -80,4 +87,13 @@ test('browser voice bridge contains no permanent OpenAI key or business side eff
   assert.doesNotMatch(client, /QualifiedLead|fireMeta|captureFlipAiLead|prisma/);
   assert.match(client, /\/api\/flip-ai\/public\/\$\{encodeURIComponent\(this\.options\.slug\)\}\/realtime\/session/);
   assert.match(client, /https:\/\/api\.openai\.com\/v1\/realtime\/calls/);
+});
+
+test('public chat alone receives microphone permission and stale clients cannot clear a newer client', () => {
+  const nextConfig = readFileSync(new URL('../next.config.js', import.meta.url), 'utf8');
+  const shell = readFileSync(new URL('../components/flip-ai/public-chat-shell.tsx', import.meta.url), 'utf8');
+  assert.match(nextConfig, /source: '\/chat\/:path\*'/);
+  assert.match(nextConfig, /microphone=\(self\)/);
+  assert.match(nextConfig, /camera=\(\), microphone=\(\), geolocation=\(\)/);
+  assert.match(shell, /voiceRef\.current === client/);
 });
