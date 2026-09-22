@@ -95,12 +95,17 @@ export async function createOpenAiRealtimeClientSecret(
           type: 'realtime',
           model,
           instructions: input.instructions,
+          max_output_tokens: 1_200,
+          tool_choice: 'none',
+          tools: [],
           audio: {
             input: {
+              noise_reduction: { type: 'near_field' },
+              transcription: { model: 'gpt-4o-mini-transcribe', language: 'pt' },
               turn_detection: {
                 type: 'server_vad',
                 create_response: false,
-                interrupt_response: true,
+                interrupt_response: false,
               },
             },
             output: { voice },
