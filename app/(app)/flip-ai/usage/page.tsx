@@ -23,12 +23,13 @@ const STATUS_LABELS: Record<string, string> = {
   processing: 'Em processamento',
   ambiguous: 'Resultado incerto',
   failed: 'Falhou',
+  definitive: 'Falhou',
 };
 
 function statusClass(status: string) {
   if (status === 'confirmed') return 'bg-emerald-50 text-emerald-700';
   if (status === 'ambiguous') return 'bg-amber-50 text-amber-800';
-  if (status === 'failed') return 'bg-red-50 text-red-700';
+  if (status === 'failed' || status === 'definitive') return 'bg-red-50 text-red-700';
   return 'bg-slate-100 text-slate-700';
 }
 

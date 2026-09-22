@@ -218,6 +218,18 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
 
     await prisma.flipAiUsageEvent.create({
       data: {
+        tenantId: a.tenant.id,
+        agentId: id,
+        requestKey: `usage-definitive:${randomUUID()}`,
+        operation: 'knowledge_embedding',
+        provider: 'openai',
+        model: 'embedding-test',
+        status: 'definitive',
+        outputTokens: 0,
+      },
+    });
+    await prisma.flipAiUsageEvent.create({
+      data: {
         tenantId: b.tenant.id,
         requestKey: `usage-isolation:${randomUUID()}`,
         operation: 'other_tenant_probe',
@@ -231,6 +243,8 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const usageA = await getFlipAiUsageDashboard(a.session, 30);
     const usageB = await getFlipAiUsageDashboard(b.session, 30);
     assert.equal(usageA.totals.realtimeSessions, 1);
+    assert.equal(usageA.totals.failedOperations, 1,
+      'definitive provider failures must be reported as failed');
     assert.equal(usageA.operations.some((operation) => operation.operation === 'other_tenant_probe'), false,
       'usage dashboard must not include another tenant');
     const tenantProbe = usageB.operations.find((operation) => operation.operation === 'other_tenant_probe');

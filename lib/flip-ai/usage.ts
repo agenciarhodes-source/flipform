@@ -147,7 +147,7 @@ export async function getFlipAiUsageDashboard(
           COUNT(*) FILTER (WHERE status = 'confirmed') AS "confirmedEvents",
           COUNT(*) FILTER (WHERE status = 'ambiguous') AS "ambiguousEvents",
           COUNT(*) FILTER (WHERE status = 'processing') AS "processingEvents",
-          COUNT(*) FILTER (WHERE status = 'failed') AS "failedEvents",
+          COUNT(*) FILTER (WHERE status IN ('failed', 'definitive')) AS "failedEvents",
           COALESCE(SUM(input_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "inputTokens",
           COALESCE(SUM(output_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "outputTokens",
           COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units
