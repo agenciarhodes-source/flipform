@@ -13,6 +13,7 @@ import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
+import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -214,6 +215,42 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(await prisma.flipAiUsageEvent.count({
       where: { tenantId: a.tenant.id, operation: 'realtime_session', status: 'confirmed' },
     }), 1);
+
+    await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId: a.tenant.id,
+        agentId: id,
+        requestKey: `usage-definitive:${randomUUID()}`,
+        operation: 'knowledge_embedding',
+        provider: 'openai',
+        model: 'embedding-test',
+        status: 'definitive',
+        outputTokens: 0,
+      },
+    });
+    await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId: b.tenant.id,
+        requestKey: `usage-isolation:${randomUUID()}`,
+        operation: 'other_tenant_probe',
+        provider: 'openai',
+        model: 'other-tenant-model',
+        status: 'confirmed',
+        inputTokens: 900,
+        outputTokens: 800,
+      },
+    });
+    const usageA = await getFlipAiUsageDashboard(a.session, 30);
+    const usageB = await getFlipAiUsageDashboard(b.session, 30);
+    assert.equal(usageA.totals.realtimeSessions, 1);
+    assert.equal(usageA.totals.failedOperations, 1,
+      'definitive provider failures must be reported as failed');
+    assert.equal(usageA.operations.some((operation) => operation.operation === 'other_tenant_probe'), false,
+      'usage dashboard must not include another tenant');
+    const tenantProbe = usageB.operations.find((operation) => operation.operation === 'other_tenant_probe');
+    assert.equal(tenantProbe?.inputTokens, 900);
+    assert.equal(tenantProbe?.outputTokens, 800);
+    assert.equal(usageA.recent.some((event) => event.operation === 'realtime_session'), true);
 
     const realtimeWindow = new Date(Math.floor(Date.now() / 60_000) * 60_000);
     await prisma.flipAiRateLimitBucket.update({
