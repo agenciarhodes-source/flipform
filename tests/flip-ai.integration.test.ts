@@ -13,6 +13,7 @@ import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
+import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 
 function assertDisposableDatabase() {
@@ -21,6 +22,16 @@ function assertDisposableDatabase() {
     throw new Error('Flip AI fixtures require CI=true and local disposable flipform_ci database.');
   }
 }
+
+test('schema readiness catalog inspection executes read-only against disposable PostgreSQL', async () => {
+  assertDisposableDatabase();
+  const readiness = await inspectFlipAiSchema();
+  assert.equal(readiness.ready, false, 'db push is not the approved migration rollout');
+  assert.equal(readiness.missingTables.length, 0);
+  assert.ok(Array.isArray(readiness.incompatibleIndexes));
+  assert.ok(Array.isArray(readiness.incompatibleConstraints));
+});
+
 async function fixture() {
   const suffix = randomUUID();
   const plan = await prisma.plan.upsert({ where: { slug: 'premium' }, update: {}, create: { name: 'Premium CI', slug: 'premium', price: 797 } });
