@@ -142,11 +142,18 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         pg_catalog.pg_get_expr(defaults.adbin, defaults.adrelid, TRUE) AS "defaultDefinition",
         attributes.attidentity::text AS "identity",
         attributes.attgenerated::text AS "generated",
-        attributes.attcollation <> types.typcollation AS "customCollation"
+        attributes.attcollation <> 0
+          AND (
+            collations.collname IS DISTINCT FROM 'default'
+            OR collation_namespaces.nspname IS DISTINCT FROM 'pg_catalog'
+          ) AS "customCollation"
       FROM pg_catalog.pg_attribute AS attributes
       JOIN pg_catalog.pg_class AS tables ON tables.oid = attributes.attrelid
       JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
-      JOIN pg_catalog.pg_type AS types ON types.oid = attributes.atttypid
+      LEFT JOIN pg_catalog.pg_collation AS collations
+        ON collations.oid = attributes.attcollation
+      LEFT JOIN pg_catalog.pg_namespace AS collation_namespaces
+        ON collation_namespaces.oid = collations.collnamespace
       LEFT JOIN pg_catalog.pg_attrdef AS defaults
         ON defaults.adrelid = attributes.attrelid
         AND defaults.adnum = attributes.attnum

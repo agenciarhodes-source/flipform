@@ -323,6 +323,8 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /pg_get_expr/);
   assert.match(source, /attidentity/);
   assert.match(source, /attgenerated/);
+  assert.match(source, /pg_collation/);
+  assert.match(source, /collation_namespaces/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);
   assert.match(source, /indnullsnotdistinct/);
@@ -333,6 +335,13 @@ test('Flip AI production schema diagnostic remains read-only', () => {
     'the rollout gate must reject Premium plans that are already active');
   assert.doesNotMatch(source, /\$(?:executeRaw|queryRawUnsafe)/);
   assert.doesNotMatch(source, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i);
+});
+
+test('Flip AI schema contract treats equivalent PostgreSQL empty text-array defaults equally', () => {
+  assert.equal(
+    canonicalizeFlipAiDefaultDefinition("'{}'::text[]"),
+    canonicalizeFlipAiDefaultDefinition('ARRAY[]::TEXT[]'),
+  );
 });
 
 test('Flip AI schema contract covers every object declared by the rollout migrations', () => {

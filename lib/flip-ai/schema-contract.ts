@@ -58,6 +58,7 @@ export function canonicalizeFlipAiDefaultDefinition(definition: string) {
     .replace(/::text(?!\[)/g, '')
     .replace(/::integer/g, '')
     .replace(/\((-?\d+(?:\.\d+)?)\)/g, '$1');
+  if (normalized === "'{}'::text[]") return 'array[]::text[]';
   return normalized === 'now()' ? 'current_timestamp' : normalized;
 }
 
