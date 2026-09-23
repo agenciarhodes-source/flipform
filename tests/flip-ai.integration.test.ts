@@ -36,6 +36,7 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_qualifications.evidence_message_ids',
     'flip_ai_qualifications.reasons',
   ], 'db push intentionally differs on @updatedAt defaults and scalar-list nullability');
+  assert.deepEqual(readiness.unexpectedColumns, []);
   // These migration-only indexes are intentionally absent from the Prisma db-push rehearsal.
   assert.deepEqual(readiness.missingIndexes, [
     'flip_ai_external_search_cache_tenant_agent_expires_idx',

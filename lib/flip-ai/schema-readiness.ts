@@ -82,6 +82,7 @@ export type FlipAiSchemaReadiness = {
   incompatibleConstraints: string[];
   missingColumns: string[];
   incompatibleColumns: string[];
+  unexpectedColumns: string[];
   vectorReady: boolean;
   premiumPlanCount: number;
   configuredPremiumPlanCount: number;
@@ -255,6 +256,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
 
   const columnByKey = new Map(columns.map((column) =>
     [`${column.tableName}.${column.columnName}`, column]));
+  const requiredColumnKeys = new Set(FLIP_AI_REQUIRED_COLUMN_SPECS
+    .map(([tableName, columnName]) => `${tableName}.${columnName}`));
   const missingColumns: string[] = [];
   const incompatibleColumns: string[] = [];
   for (const [tableName, columnName, postgresType, notNull, expectedDefault] of
@@ -280,6 +283,9 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
 
   missingColumns.sort();
   incompatibleColumns.sort();
+  const unexpectedColumns = [...columnByKey.keys()]
+    .filter((key) => !requiredColumnKeys.has(key))
+    .sort();
 
   const indexByName = new Map(indexes.map((index) => [index.indexName, index]));
   const missingIndexes: string[] = [];
@@ -360,6 +366,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     && incompatibleConstraints.length === 0
     && missingColumns.length === 0
     && incompatibleColumns.length === 0
+    && unexpectedColumns.length === 0
     && row.vectorReady;
   const catalogReady = premiumPlanCount === 2
     && configuredPremiumPlanCount === 2
@@ -376,6 +383,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     incompatibleConstraints,
     missingColumns,
     incompatibleColumns,
+    unexpectedColumns,
     vectorReady: row.vectorReady,
     premiumPlanCount,
     configuredPremiumPlanCount,

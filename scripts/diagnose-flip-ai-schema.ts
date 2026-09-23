@@ -24,6 +24,7 @@ async function main() {
   list('Constraints incompatíveis', readiness.incompatibleConstraints);
   list('Colunas ausentes', readiness.missingColumns);
   list('Tipos incompatíveis', readiness.incompatibleColumns);
+  list('Colunas inesperadas', readiness.unexpectedColumns);
   console.log('===========================================');
   console.log(`Resultado: ${readiness.ready ? 'OK' : 'FAIL'}`);
   if (!readiness.ready) process.exitCode = 1;
