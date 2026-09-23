@@ -19,7 +19,9 @@ async function main() {
   console.log(`Planos Premium ativos: ${readiness.activePremiumPlanCount}`);
   list('Tabelas ausentes', readiness.missingTables);
   list('Índices ausentes', readiness.missingIndexes);
+  list('Índices incompatíveis', readiness.incompatibleIndexes);
   list('Constraints ausentes', readiness.missingConstraints);
+  list('Constraints incompatíveis', readiness.incompatibleConstraints);
   list('Colunas ausentes', readiness.missingColumns);
   list('Tipos incompatíveis', readiness.incompatibleColumns);
   console.log('===========================================');

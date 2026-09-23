@@ -23,8 +23,11 @@ import {
   OpenAiWebSearchError,
 } from '../lib/flip-ai/external-web-search';
 import {
+  canonicalizeFlipAiCheckDefinition,
   FLIP_AI_REQUIRED_COLUMN_SPECS,
+  FLIP_AI_REQUIRED_CONSTRAINT_SPECS,
   FLIP_AI_REQUIRED_CONSTRAINTS,
+  FLIP_AI_REQUIRED_INDEX_SPECS,
   FLIP_AI_REQUIRED_INDEXES,
   FLIP_AI_REQUIRED_TABLES,
 } from '../lib/flip-ai/schema-contract';
@@ -311,7 +314,13 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /SELECT/);
   assert.match(source, /FLIP_AI_REQUIRED_COLUMN_SPECS/);
   assert.match(source, /missingConstraints/);
+  assert.match(source, /incompatibleIndexes/);
+  assert.match(source, /incompatibleConstraints/);
   assert.match(source, /incompatibleColumns/);
+  assert.match(source, /indisvalid/);
+  assert.match(source, /indclass/);
+  assert.match(source, /convalidated/);
+  assert.match(source, /pg_get_constraintdef/);
   assert.match(source, /activePremiumPlanCount === 0/,
     'the rollout gate must reject Premium plans that are already active');
   assert.doesNotMatch(source, /\$(?:executeRaw|queryRawUnsafe)/);
@@ -329,6 +338,10 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     .map(([table, column, type]) => `${table}.${column}:${type}`));
   const indexes = new Set(FLIP_AI_REQUIRED_INDEXES);
   const constraints = new Set(FLIP_AI_REQUIRED_CONSTRAINTS);
+  const indexSpecs = new Map(FLIP_AI_REQUIRED_INDEX_SPECS
+    .map((spec) => [spec.indexName, spec]));
+  const constraintSpecs = new Map(FLIP_AI_REQUIRED_CONSTRAINT_SPECS
+    .map((spec) => [spec.constraintName, spec]));
   const postgresType = (type: string) => {
     const normalized = type.toUpperCase().replace(/\s+/g, ' ');
     if (normalized === 'TEXT') return 'text';
@@ -364,10 +377,134 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   for (const match of migrationSql.matchAll(/CONSTRAINT\s+"([^"]+)"/gi)) {
     assert.equal(constraints.has(match[1]), true, `schema contract is missing constraint ${match[1]}`);
   }
+
+  const typeToOpclass: Record<string, string> = {
+    text: 'text_ops',
+    integer: 'int4_ops',
+    'timestamp(3) without time zone': 'timestamp_ops',
+  };
+  const columnTypes = new Map(FLIP_AI_REQUIRED_COLUMN_SPECS
+    .map(([table, column, type]) => [`${table}.${column}`, type]));
+  columnTypes.set('conversations.tenant_id', 'text');
+  columnTypes.set('conversations.id', 'text');
+  const parsedIndexes = new Set<string>();
+  const indexPattern = /CREATE\s+(UNIQUE\s+)?INDEX\s+"([^"]+)"\s+ON\s+"([^"]+)"(?:\s+USING\s+([a-z0-9_]+))?\s*\(([^;]+?)\)\s*;/gi;
+  for (const match of migrationSql.matchAll(indexPattern)) {
+    const [, unique, indexName, tableName, method = 'btree', keySql] = match;
+    const spec = indexSpecs.get(indexName);
+    assert.ok(spec, `schema contract is missing index definition ${indexName}`);
+    const parsedKeys = [...keySql.matchAll(/"([^"]+)"(?:\s+([a-z0-9_]+))?/gi)];
+    const parsedColumns = parsedKeys.map((key) => key[1]);
+    const parsedOpclasses = parsedKeys.map((key) => {
+      if (key[2]) return key[2].toLowerCase();
+      const type = columnTypes.get(`${tableName}.${key[1]}`);
+      const opclass = type && typeToOpclass[type];
+      assert.ok(opclass, `cannot derive opclass for ${tableName}.${key[1]}`);
+      return opclass;
+    });
+    assert.deepEqual({
+      tableName: spec.tableName,
+      unique: spec.unique,
+      method: spec.method,
+      columns: [...spec.columns],
+      opclasses: [...spec.opclasses],
+    }, {
+      tableName,
+      unique: Boolean(unique),
+      method: method.toLowerCase(),
+      columns: parsedColumns,
+      opclasses: parsedOpclasses,
+    }, `index definition drifted: ${indexName}`);
+    parsedIndexes.add(indexName);
+  }
+  assert.equal(parsedIndexes.size, FLIP_AI_REQUIRED_INDEX_SPECS.length);
+
+  const parsedConstraints = new Map<string, { tableName: string; definition: string }>();
+  for (const tableMatch of migrationSql.matchAll(/CREATE TABLE\s+"([^"]+)"\s*\(([\s\S]*?)\n\);/g)) {
+    const [, tableName, body] = tableMatch;
+    if (!tableName.startsWith('flip_ai_')) continue;
+    const starts = [...body.matchAll(/CONSTRAINT\s+"([^"]+)"\s+/g)];
+    starts.forEach((start, index) => {
+      const definitionStart = (start.index || 0) + start[0].length;
+      const definitionEnd = starts[index + 1]?.index ?? body.length;
+      const definition = body.slice(definitionStart, definitionEnd).trim().replace(/,\s*$/, '');
+      parsedConstraints.set(start[1], { tableName, definition });
+    });
+  }
+  for (const match of migrationSql.matchAll(/ALTER TABLE\s+"([^"]+)"\s+ADD CONSTRAINT\s+"([^"]+)"\s+([\s\S]*?);/gi)) {
+    parsedConstraints.set(match[2], { tableName: match[1], definition: match[3].trim() });
+  }
+  const quotedColumns = (value: string) => [...value.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  const actionCodes: Record<string, string> = {
+    'NO ACTION': 'a', RESTRICT: 'r', CASCADE: 'c', 'SET NULL': 'n', 'SET DEFAULT': 'd',
+  };
+  const actionCode = (action: string | undefined) => actionCodes[action || 'NO ACTION'];
+  for (const spec of FLIP_AI_REQUIRED_CONSTRAINT_SPECS) {
+    const parsed = parsedConstraints.get(spec.constraintName);
+    assert.ok(parsed, `schema contract has no migration constraint ${spec.constraintName}`);
+    assert.equal(parsed.tableName, spec.tableName, `constraint owner drifted: ${spec.constraintName}`);
+    if (spec.type === 'p') {
+      const primaryMatch = parsed.definition.match(/PRIMARY KEY\s*\(([^)]+)\)/i);
+      assert.ok(primaryMatch, `constraint type drifted: ${spec.constraintName}`);
+      assert.deepEqual(quotedColumns(primaryMatch[1]), [...spec.columns]);
+    } else if (spec.type === 'f') {
+      const foreignMatch = parsed.definition.match(/FOREIGN KEY\s*\(([^)]+)\)\s+REFERENCES\s+"([^"]+)"\s*\(([^)]+)\)([\s\S]*)/i);
+      assert.ok(foreignMatch, `constraint type drifted: ${spec.constraintName}`);
+      const update = foreignMatch[4].match(/ON UPDATE\s+(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)/i)?.[1].toUpperCase();
+      const remove = foreignMatch[4].match(/ON DELETE\s+(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)/i)?.[1].toUpperCase();
+      assert.deepEqual({
+        columns: quotedColumns(foreignMatch[1]),
+        referencedTable: foreignMatch[2],
+        referencedColumns: quotedColumns(foreignMatch[3]),
+        updateAction: actionCode(update),
+        deleteAction: actionCode(remove),
+      }, {
+        columns: [...spec.columns],
+        referencedTable: spec.referencedTable,
+        referencedColumns: [...spec.referencedColumns],
+        updateAction: spec.updateAction,
+        deleteAction: spec.deleteAction,
+      }, `foreign key definition drifted: ${spec.constraintName}`);
+    } else {
+      assert.match(parsed.definition, /^CHECK\s*\(/i, `constraint type drifted: ${spec.constraintName}`);
+      assert.equal(canonicalizeFlipAiCheckDefinition(parsed.definition), spec.checkSignature,
+        `check definition drifted: ${spec.constraintName}`);
+      const referencedColumns = spec.columns.filter((column) =>
+        new RegExp(`"${column}"|\\b${column}\\b`, 'i').test(parsed.definition));
+      assert.deepEqual(referencedColumns, [...spec.columns], `check columns drifted: ${spec.constraintName}`);
+    }
+  }
+  assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 14);
   assert.equal(columns.size, 167);
   assert.equal(indexes.size, 52);
   assert.equal(constraints.size, 57);
+});
+
+test('qualification check signatures survive PostgreSQL deparsing without losing boolean structure', () => {
+  const definitions: Record<string, string> = {
+    flip_ai_qualifications_scores_check: `CHECK (((fit_score >= 0) AND (fit_score <= 100)
+      AND (intent_score >= 0) AND (intent_score <= 100)
+      AND (awareness_level >= 1) AND (awareness_level <= 5)
+      AND (confidence >= (0)::double precision) AND (confidence <= (1)::double precision)))`,
+    flip_ai_qualifications_classification_check: `CHECK ((classification = ANY
+      (ARRAY['qualified'::text, 'nurture'::text, 'disqualified'::text, 'insufficient'::text])))`,
+    flip_ai_qualifications_journey_check: `CHECK ((journey_stage = ANY
+      (ARRAY['discovery'::text, 'consideration'::text, 'decision'::text])))`,
+    flip_ai_qualifications_tracking_status_check: `CHECK ((qualified_lead_tracking_status = ANY
+      (ARRAY['not_applicable'::text, 'pending'::text, 'processing'::text, 'sent'::text,
+        'skipped'::text, 'ambiguous'::text])))`,
+    flip_ai_qualifications_merit_execution_check: `CHECK ((((classification = 'qualified'::text)
+      AND (qualified_lead_event_id IS NOT NULL)
+      AND (qualified_lead_tracking_status <> 'not_applicable'::text))
+      OR ((classification <> 'qualified'::text) AND (qualified_lead_event_id IS NULL)
+      AND (qualified_lead_tracking_status = 'not_applicable'::text))))`,
+  };
+  for (const [constraintName, definition] of Object.entries(definitions)) {
+    const expected = FLIP_AI_REQUIRED_CONSTRAINT_SPECS
+      .find((spec) => spec.constraintName === constraintName)?.checkSignature;
+    assert.equal(canonicalizeFlipAiCheckDefinition(definition), expected, constraintName);
+  }
 });
 
 test('long chats preserve server-validated identity without putting PII in instructions', () => {
