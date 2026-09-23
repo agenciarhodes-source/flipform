@@ -2,58 +2,24 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import {
+  FLIP_AI_REQUIRED_COLUMN_SPECS,
+  FLIP_AI_REQUIRED_CONSTRAINTS,
+  FLIP_AI_REQUIRED_INDEXES,
+  FLIP_AI_REQUIRED_TABLES,
+} from './schema-contract';
 
-export const FLIP_AI_REQUIRED_TABLES = [
-  'flip_ai_agents',
-  'flip_ai_endpoints',
-  'flip_ai_knowledge_bases',
-  'flip_ai_knowledge_documents',
-  'flip_ai_knowledge_revisions',
-  'flip_ai_knowledge_indexes',
-  'flip_ai_knowledge_index_batches',
-  'flip_ai_knowledge_chunks',
-  'flip_ai_usage_events',
-  'flip_ai_conversation_states',
-  'flip_ai_rate_limit_buckets',
-  'flip_ai_qualifications',
-  'flip_ai_external_sources',
-  'flip_ai_external_search_cache',
-] as const;
-
-const REQUIRED_INDEXES = [
-  'conversations_tenant_id_id_key',
-  'flip_ai_agents_tenant_id_id_key',
-  'flip_ai_usage_events_request_key_key',
-  'flip_ai_knowledge_chunks_embedding_hnsw_idx',
-  'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_start_key',
-  'flip_ai_qualifications_conversation_id_key',
-  'flip_ai_external_sources_agent_id_domain_key',
-  'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
-] as const;
-
-const QUALIFICATION_TEXT_COLUMNS = [
-  'id',
-  'tenant_id',
-  'agent_id',
-  'conversation_id',
-  'lead_id',
-  'knowledge_index_id',
-] as const;
-
-const REQUIRED_COLUMNS = [
-  ['flip_ai_agents', 'rotation_id'],
-  ['flip_ai_usage_events', 'conversation_id'],
-  ...QUALIFICATION_TEXT_COLUMNS.map((column) =>
-    ['flip_ai_qualifications', column] as const),
-] as const;
+export { FLIP_AI_REQUIRED_TABLES } from './schema-contract';
 
 type ReadinessRow = {
   missingTables: string[];
   missingIndexes: string[];
+  missingConstraints: string[];
   missingColumns: string[];
-  incompatibleQualificationColumns: string[];
+  incompatibleColumns: string[];
   vectorReady: boolean;
   premiumPlanCount: bigint | number | string;
+  configuredPremiumPlanCount: bigint | number | string;
   activePremiumPlanCount: bigint | number | string;
 };
 
@@ -63,10 +29,12 @@ export type FlipAiSchemaReadiness = {
   catalogReady: boolean;
   missingTables: string[];
   missingIndexes: string[];
+  missingConstraints: string[];
   missingColumns: string[];
-  incompatibleQualificationColumns: string[];
+  incompatibleColumns: string[];
   vectorReady: boolean;
   premiumPlanCount: number;
+  configuredPremiumPlanCount: number;
   activePremiumPlanCount: number;
 };
 
@@ -77,17 +45,17 @@ function safeCount(value: bigint | number | string) {
 
 export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const tableValues = Prisma.join(FLIP_AI_REQUIRED_TABLES.map((table) => Prisma.sql`(${table})`));
-  const indexValues = Prisma.join(REQUIRED_INDEXES.map((index) => Prisma.sql`(${index})`));
-  const columnValues = Prisma.join(REQUIRED_COLUMNS.map(([table, column]) =>
-    Prisma.sql`(${table}, ${column})`));
-  const qualificationValues = Prisma.join(QUALIFICATION_TEXT_COLUMNS.map((column) =>
-    Prisma.sql`(${column}, 'text')`));
+  const indexValues = Prisma.join(FLIP_AI_REQUIRED_INDEXES.map((index) => Prisma.sql`(${index})`));
+  const constraintValues = Prisma.join(FLIP_AI_REQUIRED_CONSTRAINTS.map((constraint) =>
+    Prisma.sql`(${constraint})`));
+  const columnValues = Prisma.join(FLIP_AI_REQUIRED_COLUMN_SPECS.map(([table, column, type]) =>
+    Prisma.sql`(${table}, ${column}, ${type})`));
 
   const rows = await prisma.$queryRaw<ReadinessRow[]>(Prisma.sql`
     WITH required_tables(table_name) AS (VALUES ${tableValues}),
     required_indexes(index_name) AS (VALUES ${indexValues}),
-    required_columns(table_name, column_name) AS (VALUES ${columnValues}),
-    qualification_types(column_name, expected_type) AS (VALUES ${qualificationValues})
+    required_constraints(constraint_name) AS (VALUES ${constraintValues}),
+    required_columns(table_name, column_name, expected_udt_name) AS (VALUES ${columnValues})
     SELECT
       ARRAY(
         SELECT table_name
@@ -102,6 +70,17 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         ORDER BY index_name
       ) AS "missingIndexes",
       ARRAY(
+        SELECT constraint_name
+        FROM required_constraints
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE connamespace = 'public'::regnamespace
+            AND conname = required_constraints.constraint_name
+        )
+        ORDER BY constraint_name
+      ) AS "missingConstraints",
+      ARRAY(
         SELECT required_columns.table_name || '.' || required_columns.column_name
         FROM required_columns
         WHERE NOT EXISTS (
@@ -114,21 +93,29 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         ORDER BY required_columns.table_name, required_columns.column_name
       ) AS "missingColumns",
       ARRAY(
-        SELECT columns.column_name || ':' || columns.data_type
+        SELECT columns.table_name || '.' || columns.column_name || ':' || columns.udt_name
         FROM information_schema.columns AS columns
-        JOIN qualification_types
-          ON qualification_types.column_name = columns.column_name
+        JOIN required_columns
+          ON required_columns.table_name = columns.table_name
+          AND required_columns.column_name = columns.column_name
         WHERE columns.table_schema = 'public'
-          AND columns.table_name = 'flip_ai_qualifications'
-          AND columns.data_type <> qualification_types.expected_type
-        ORDER BY columns.column_name
-      ) AS "incompatibleQualificationColumns",
+          AND columns.udt_name <> required_columns.expected_udt_name
+        ORDER BY columns.table_name, columns.column_name
+      ) AS "incompatibleColumns",
       EXISTS (
         SELECT 1 FROM pg_extension WHERE extname = 'vector'
       ) AS "vectorReady",
       (
         SELECT COUNT(*) FROM plans WHERE slug IN ('premium', 'premium-pro')
       ) AS "premiumPlanCount",
+      (
+        SELECT COUNT(*) FROM plans
+        WHERE billing_cycle = 'monthly'
+          AND (
+            (slug = 'premium' AND price = 797.00)
+            OR (slug = 'premium-pro' AND price = 1497.00)
+          )
+      ) AS "configuredPremiumPlanCount",
       (
         SELECT COUNT(*) FROM plans
         WHERE slug IN ('premium', 'premium-pro') AND is_active = TRUE
@@ -138,13 +125,17 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   if (!row) throw new Error('FLIP_AI_SCHEMA_DIAGNOSTIC_EMPTY');
 
   const premiumPlanCount = safeCount(row.premiumPlanCount);
+  const configuredPremiumPlanCount = safeCount(row.configuredPremiumPlanCount);
   const activePremiumPlanCount = safeCount(row.activePremiumPlanCount);
   const schemaReady = row.missingTables.length === 0
     && row.missingIndexes.length === 0
+    && row.missingConstraints.length === 0
     && row.missingColumns.length === 0
-    && row.incompatibleQualificationColumns.length === 0
+    && row.incompatibleColumns.length === 0
     && row.vectorReady;
-  const catalogReady = premiumPlanCount === 2 && activePremiumPlanCount === 0;
+  const catalogReady = premiumPlanCount === 2
+    && configuredPremiumPlanCount === 2
+    && activePremiumPlanCount === 0;
 
   return {
     ready: schemaReady && catalogReady,
@@ -152,10 +143,12 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     catalogReady,
     missingTables: row.missingTables,
     missingIndexes: row.missingIndexes,
+    missingConstraints: row.missingConstraints,
     missingColumns: row.missingColumns,
-    incompatibleQualificationColumns: row.incompatibleQualificationColumns,
+    incompatibleColumns: row.incompatibleColumns,
     vectorReady: row.vectorReady,
     premiumPlanCount,
+    configuredPremiumPlanCount,
     activePremiumPlanCount,
   };
 }

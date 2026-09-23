@@ -1,0 +1,156 @@
+export const FLIP_AI_REQUIRED_TABLES = [
+  'flip_ai_agents',
+  'flip_ai_endpoints',
+  'flip_ai_knowledge_bases',
+  'flip_ai_knowledge_documents',
+  'flip_ai_knowledge_revisions',
+  'flip_ai_knowledge_indexes',
+  'flip_ai_knowledge_index_batches',
+  'flip_ai_knowledge_chunks',
+  'flip_ai_usage_events',
+  'flip_ai_conversation_states',
+  'flip_ai_rate_limit_buckets',
+  'flip_ai_qualifications',
+  'flip_ai_external_sources',
+  'flip_ai_external_search_cache',
+] as const;
+
+type FlipAiRequiredTable = (typeof FLIP_AI_REQUIRED_TABLES)[number];
+
+const COLUMN_SPECS_BY_TABLE = {
+  flip_ai_agents: 'id:text tenant_id:text name:text description:text primary_color:text style:text status:text version:int4 pipeline_id:text initial_stage_id:text created_by:text created_at:timestamp updated_at:timestamp rotation_id:text',
+  flip_ai_endpoints: 'id:text tenant_id:text agent_id:text slug:text created_at:timestamp updated_at:timestamp',
+  flip_ai_knowledge_bases: 'id:text tenant_id:text agent_id:text status:text created_at:timestamp updated_at:timestamp',
+  flip_ai_knowledge_documents: 'id:text tenant_id:text knowledge_base_id:text source_key:text source_type:text title:text current_revision:int4 current_hash:text byte_size:int4 created_at:timestamp updated_at:timestamp',
+  flip_ai_knowledge_revisions: 'id:text tenant_id:text document_id:text revision:int4 title:text content:text content_hash:text byte_size:int4 created_by:text created_at:timestamp',
+  flip_ai_knowledge_indexes: 'id:text tenant_id:text agent_id:text document_id:text revision:int4 content_hash:text status:text embedding_model:text embedding_dimensions:int4 chunk_count:int4 input_tokens:int4 attempt_count:int4 last_error_code:text completed_at:timestamp created_at:timestamp updated_at:timestamp',
+  flip_ai_knowledge_index_batches: 'id:text tenant_id:text index_id:text ordinal:int4 status:text byte_size:int4 input_tokens:int4 attempt_count:int4 last_error_code:text started_at:timestamp completed_at:timestamp created_at:timestamp updated_at:timestamp',
+  flip_ai_knowledge_chunks: 'id:text tenant_id:text index_id:text batch_id:text ordinal:int4 heading:text content:text content_hash:text byte_size:int4 token_estimate:int4 embedding:vector created_at:timestamp',
+  flip_ai_usage_events: 'id:text tenant_id:text agent_id:text request_key:text operation:text provider:text model:text status:text input_tokens:int4 output_tokens:int4 units:int4 metadata:jsonb created_at:timestamp conversation_id:text',
+  flip_ai_conversation_states: 'id:text tenant_id:text agent_id:text conversation_id:text status:text turn_count:int4 summary:text summary_updated_at:timestamp last_response_id:text created_at:timestamp updated_at:timestamp',
+  flip_ai_rate_limit_buckets: 'id:text tenant_id:text scope:text scope_key:text window_start:timestamp request_count:int4 rejected_count:int4 last_request_at:timestamp created_at:timestamp updated_at:timestamp',
+  flip_ai_qualifications: 'id:text tenant_id:text agent_id:text conversation_id:text lead_id:text knowledge_index_id:text classification:text fit_score:int4 intent_score:int4 awareness_level:int4 journey_stage:text confidence:float8 summary:text reasons:_text next_action:text evidence_message_ids:_text model:text qualified_lead_event_id:text qualified_lead_tracking_status:text qualified_lead_dispatched_at:timestamp created_at:timestamp updated_at:timestamp',
+  flip_ai_external_sources: 'id:text tenant_id:text agent_id:text label:text domain:text status:text version:int4 created_at:timestamp updated_at:timestamp',
+  flip_ai_external_search_cache: 'id:text tenant_id:text agent_id:text query_hash:text allowlist_hash:text result_text:text sources:jsonb model:text response_id:text searched_at:timestamp expires_at:timestamp created_at:timestamp updated_at:timestamp',
+} satisfies Record<FlipAiRequiredTable, string>;
+
+export const FLIP_AI_REQUIRED_COLUMN_SPECS = Object.entries(COLUMN_SPECS_BY_TABLE)
+  .flatMap(([table, specs]) => specs.split(' ').map((spec) => {
+    const separator = spec.lastIndexOf(':');
+    return [table, spec.slice(0, separator), spec.slice(separator + 1)] as const;
+  }));
+
+export const FLIP_AI_REQUIRED_INDEXES = `
+flip_ai_agents_tenant_id_id_key
+flip_ai_agents_tenant_id_status_created_at_idx
+flip_ai_endpoints_tenant_id_agent_id_key
+flip_ai_endpoints_agent_id_key
+flip_ai_endpoints_slug_key
+flip_ai_endpoints_tenant_id_idx
+flip_ai_knowledge_bases_agent_id_key
+flip_ai_knowledge_bases_tenant_id_id_key
+flip_ai_knowledge_bases_tenant_id_agent_id_key
+flip_ai_knowledge_bases_tenant_id_status_idx
+flip_ai_knowledge_documents_tenant_id_id_key
+flip_ai_knowledge_documents_knowledge_base_id_source_key_key
+flip_ai_knowledge_documents_tenant_id_updated_at_idx
+flip_ai_knowledge_revisions_document_id_revision_key
+flip_ai_knowledge_revisions_tenant_id_created_at_idx
+flip_ai_knowledge_revisions_tenant_id_document_id_revision_key
+flip_ai_knowledge_indexes_tenant_id_id_key
+flip_ai_knowledge_indexes_document_id_revision_embedding_model_key
+flip_ai_knowledge_indexes_tenant_id_agent_id_status_idx
+flip_ai_knowledge_index_batches_tenant_id_id_key
+flip_ai_knowledge_index_batches_index_id_ordinal_key
+flip_ai_knowledge_index_batches_tenant_id_status_created_at_idx
+flip_ai_knowledge_chunks_index_id_ordinal_key
+flip_ai_knowledge_chunks_tenant_id_index_id_idx
+flip_ai_knowledge_chunks_embedding_hnsw_idx
+flip_ai_usage_events_request_key_key
+flip_ai_usage_events_tenant_id_created_at_idx
+flip_ai_usage_events_tenant_id_operation_status_idx
+conversations_tenant_id_id_key
+flip_ai_conversation_states_conversation_id_key
+flip_ai_conversation_states_tenant_id_id_key
+flip_ai_conversation_states_tenant_id_conversation_id_key
+flip_ai_conversation_states_tenant_id_agent_id_status_idx
+flip_ai_usage_events_tenant_id_conversation_id_created_at_idx
+flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_start_key
+flip_ai_rate_limit_buckets_tenant_id_window_start_idx
+flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_at_idx
+flip_ai_agents_tenant_id_rotation_id_idx
+flip_ai_qualifications_conversation_id_key
+flip_ai_qualifications_qualified_lead_event_id_key
+flip_ai_qualifications_tenant_id_id_key
+flip_ai_qualifications_tenant_id_conversation_id_key
+flip_ai_qualifications_tenant_id_agent_id_created_at_idx
+flip_ai_qualifications_tenant_id_lead_id_created_at_idx
+flip_ai_qualifications_tenant_id_classification_created_at_idx
+flip_ai_qualifications_tenant_id_qualified_lead_tracking_status_idx
+flip_ai_external_sources_tenant_id_id_key
+flip_ai_external_sources_agent_id_domain_key
+flip_ai_external_sources_tenant_id_agent_id_status_idx
+flip_ai_external_search_cache_tenant_id_id_key
+flip_ai_external_search_cache_tenant_agent_query_allowlist_key
+flip_ai_external_search_cache_tenant_agent_expires_idx
+`.trim().split(/\s+/);
+
+export const FLIP_AI_REQUIRED_CONSTRAINTS = `
+flip_ai_agents_pkey
+flip_ai_agents_tenant_id_fkey
+flip_ai_agents_pipeline_id_fkey
+flip_ai_agents_initial_stage_id_fkey
+flip_ai_agents_created_by_fkey
+flip_ai_endpoints_pkey
+flip_ai_endpoints_tenant_id_agent_id_fkey
+flip_ai_knowledge_bases_pkey
+flip_ai_knowledge_bases_tenant_id_fkey
+flip_ai_knowledge_bases_tenant_id_agent_id_fkey
+flip_ai_knowledge_documents_pkey
+flip_ai_knowledge_documents_tenant_id_fkey
+flip_ai_knowledge_documents_tenant_id_knowledge_base_id_fkey
+flip_ai_knowledge_revisions_pkey
+flip_ai_knowledge_revisions_tenant_id_fkey
+flip_ai_knowledge_revisions_tenant_id_document_id_fkey
+flip_ai_knowledge_revisions_created_by_fkey
+flip_ai_knowledge_indexes_pkey
+flip_ai_knowledge_indexes_tenant_id_fkey
+flip_ai_knowledge_indexes_tenant_id_agent_id_fkey
+flip_ai_knowledge_indexes_tenant_id_document_id_fkey
+flip_ai_knowledge_indexes_source_revision_fkey
+flip_ai_knowledge_index_batches_pkey
+flip_ai_knowledge_index_batches_tenant_id_fkey
+flip_ai_knowledge_index_batches_tenant_id_index_id_fkey
+flip_ai_knowledge_chunks_pkey
+flip_ai_knowledge_chunks_tenant_id_fkey
+flip_ai_knowledge_chunks_tenant_id_index_id_fkey
+flip_ai_knowledge_chunks_tenant_id_batch_id_fkey
+flip_ai_usage_events_pkey
+flip_ai_usage_events_tenant_id_fkey
+flip_ai_usage_events_tenant_id_agent_id_fkey
+flip_ai_conversation_states_pkey
+flip_ai_conversation_states_tenant_id_fkey
+flip_ai_conversation_states_tenant_id_agent_id_fkey
+flip_ai_conversation_states_tenant_id_conversation_id_fkey
+flip_ai_usage_events_tenant_id_conversation_id_fkey
+flip_ai_rate_limit_buckets_pkey
+flip_ai_rate_limit_buckets_tenant_id_fkey
+flip_ai_agents_rotation_id_fkey
+flip_ai_qualifications_pkey
+flip_ai_qualifications_scores_check
+flip_ai_qualifications_classification_check
+flip_ai_qualifications_journey_check
+flip_ai_qualifications_tracking_status_check
+flip_ai_qualifications_merit_execution_check
+flip_ai_qualifications_tenant_id_fkey
+flip_ai_qualifications_tenant_id_agent_id_fkey
+flip_ai_qualifications_tenant_id_conversation_id_fkey
+flip_ai_qualifications_lead_id_fkey
+flip_ai_qualifications_tenant_id_knowledge_index_id_fkey
+flip_ai_external_sources_pkey
+flip_ai_external_sources_tenant_id_fkey
+flip_ai_external_sources_tenant_id_agent_id_fkey
+flip_ai_external_search_cache_pkey
+flip_ai_external_search_cache_tenant_id_fkey
+flip_ai_external_search_cache_tenant_id_agent_id_fkey
+`.trim().split(/\s+/);

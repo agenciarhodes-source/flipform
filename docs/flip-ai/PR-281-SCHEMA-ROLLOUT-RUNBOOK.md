@@ -67,9 +67,9 @@ Antes da aplicação manual:
 ## Pós-verificação
 
 1. executar `npm run flip-ai:diagnose-schema`;
-2. confirmar 14 tabelas, índices críticos, colunas posteriores e extensão `vector`;
-3. confirmar tipos `TEXT` em todas as chaves de `flip_ai_qualifications`;
-4. confirmar que os planos Premium existem com `is_active = false`;
+2. confirmar 14 tabelas, as 167 colunas e tipos versionados, todos os índices e constraints e a extensão `vector`;
+3. confirmar que todas as chaves de `flip_ai_qualifications` são `TEXT`;
+4. confirmar preços de R$ 797/R$ 1.497, ciclo mensal e `is_active = false` nos planos Premium;
 5. verificar erros de runtime na Vercel;
 6. manter a publicação bloqueada até os controles de créditos e orçamento estarem prontos.
 

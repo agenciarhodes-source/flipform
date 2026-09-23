@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { canAccessFlipAi, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
 import type { SessionPayload } from '../lib/auth';
@@ -22,6 +22,12 @@ import {
   shouldSearchExternalKnowledge,
   OpenAiWebSearchError,
 } from '../lib/flip-ai/external-web-search';
+import {
+  FLIP_AI_REQUIRED_COLUMN_SPECS,
+  FLIP_AI_REQUIRED_CONSTRAINTS,
+  FLIP_AI_REQUIRED_INDEXES,
+  FLIP_AI_REQUIRED_TABLES,
+} from '../lib/flip-ai/schema-contract';
 
 const plan = { slug: 'premium', isActive: true };
 const allowed = { role: 'owner', tenantStatus: 'active', plan };
@@ -303,13 +309,64 @@ test('PR 274 migration adds tenant-scoped qualification without destructive SQL'
 test('Flip AI production schema diagnostic remains read-only', () => {
   const source = readFileSync(new URL('../lib/flip-ai/schema-readiness.ts', import.meta.url), 'utf8');
   assert.match(source, /SELECT/);
-  assert.match(source, /flip_ai_qualifications/);
-  assert.match(source, /QUALIFICATION_TEXT_COLUMNS\.map/,
-    'every qualification identity column must also be checked for absence');
+  assert.match(source, /FLIP_AI_REQUIRED_COLUMN_SPECS/);
+  assert.match(source, /missingConstraints/);
+  assert.match(source, /incompatibleColumns/);
   assert.match(source, /activePremiumPlanCount === 0/,
     'the rollout gate must reject Premium plans that are already active');
   assert.doesNotMatch(source, /\$(?:executeRaw|queryRawUnsafe)/);
   assert.doesNotMatch(source, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i);
+});
+
+test('Flip AI schema contract covers every object declared by the rollout migrations', () => {
+  const root = new URL('../prisma/migrations/', import.meta.url);
+  const migrationSql = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.includes('flip_ai'))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => readFileSync(new URL(`${entry.name}/migration.sql`, root), 'utf8'))
+    .join('\n');
+  const columns = new Set(FLIP_AI_REQUIRED_COLUMN_SPECS
+    .map(([table, column, type]) => `${table}.${column}:${type}`));
+  const indexes = new Set(FLIP_AI_REQUIRED_INDEXES);
+  const constraints = new Set(FLIP_AI_REQUIRED_CONSTRAINTS);
+  const postgresType = (type: string) => {
+    const normalized = type.toUpperCase().replace(/\s+/g, ' ');
+    if (normalized === 'TEXT') return 'text';
+    if (normalized === 'TEXT[]') return '_text';
+    if (normalized === 'INTEGER') return 'int4';
+    if (normalized.startsWith('TIMESTAMP')) return 'timestamp';
+    if (normalized === 'DOUBLE PRECISION') return 'float8';
+    if (normalized === 'JSONB') return 'jsonb';
+    if (normalized.startsWith('VECTOR')) return 'vector';
+    throw new Error(`unmapped migration type: ${type}`);
+  };
+  const columnPattern = /"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))/gi;
+  for (const tableMatch of migrationSql.matchAll(/CREATE TABLE\s+"([^"]+)"\s*\(([\s\S]*?)\n\);/g)) {
+    const [, table, body] = tableMatch;
+    if (!table.startsWith('flip_ai_')) continue;
+    for (const columnMatch of body.matchAll(columnPattern)) {
+      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}`), true,
+        `schema contract is missing ${table}.${columnMatch[1]}`);
+    }
+  }
+  for (const statement of migrationSql.split(';')) {
+    const table = statement.match(/ALTER TABLE\s+"([^"]+)"/i)?.[1];
+    if (!table?.startsWith('flip_ai_')) continue;
+    for (const columnMatch of statement.matchAll(/ADD COLUMN\s+"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))/gi)) {
+      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}`), true,
+        `schema contract is missing ${table}.${columnMatch[1]}`);
+    }
+  }
+  for (const match of migrationSql.matchAll(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+"([^"]+)"/gi)) {
+    assert.equal(indexes.has(match[1]), true, `schema contract is missing index ${match[1]}`);
+  }
+  for (const match of migrationSql.matchAll(/CONSTRAINT\s+"([^"]+)"/gi)) {
+    assert.equal(constraints.has(match[1]), true, `schema contract is missing constraint ${match[1]}`);
+  }
+  assert.equal(FLIP_AI_REQUIRED_TABLES.length, 14);
+  assert.equal(columns.size, 167);
+  assert.equal(indexes.size, 52);
+  assert.equal(constraints.size, 57);
 });
 
 test('long chats preserve server-validated identity without putting PII in instructions', () => {

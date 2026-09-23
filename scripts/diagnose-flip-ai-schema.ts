@@ -15,11 +15,13 @@ async function main() {
   console.log(`Catálogo Premium: ${readiness.catalogReady ? 'OK' : 'FAIL'}`);
   console.log(`Extensão vector: ${readiness.vectorReady ? 'OK' : 'FAIL'}`);
   console.log(`Planos Premium encontrados: ${readiness.premiumPlanCount}`);
+  console.log(`Planos Premium com preço e ciclo esperados: ${readiness.configuredPremiumPlanCount}`);
   console.log(`Planos Premium ativos: ${readiness.activePremiumPlanCount}`);
   list('Tabelas ausentes', readiness.missingTables);
   list('Índices ausentes', readiness.missingIndexes);
+  list('Constraints ausentes', readiness.missingConstraints);
   list('Colunas ausentes', readiness.missingColumns);
-  list('Tipos incompatíveis em flip_ai_qualifications', readiness.incompatibleQualificationColumns);
+  list('Tipos incompatíveis', readiness.incompatibleColumns);
   console.log('===========================================');
   console.log(`Resultado: ${readiness.ready ? 'OK' : 'FAIL'}`);
   if (!readiness.ready) process.exitCode = 1;
