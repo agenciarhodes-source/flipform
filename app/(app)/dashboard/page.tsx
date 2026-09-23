@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, BarChart3, CheckCircle2, CircleDollarSign, ClipboardList, Clock3, Filter, Flame, LineChart as LineChartIcon, ListChecks, RefreshCw, Target, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, BarChart3, CheckCircle2, CircleDollarSign, ClipboardList, Clock3, Filter, Flame, LineChart as LineChartIcon, ListChecks, Printer, RefreshCw, Target, TrendingUp, Trophy, UserPlus, Users } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { DashboardMetricPicker } from '@/components/dashboard-metric-picker';
 
 type ProfileItem = { key: string; label: string; count: number; percentage: number; color: string };
 type ActivityBucket = { label: string; start: string; end: string; count: number; intensity: number };
@@ -46,6 +47,7 @@ type DashboardData = {
 };
 
 const periodOptions = [{ value: 'today', label: 'Hoje' }, { value: '7d', label: '7 dias' }, { value: '30d', label: '30 dias' }, { value: 'custom', label: 'Personalizado' }] as const;
+const DEFAULT_DASHBOARD_METRICS = ['newLeads', 'inProgress', 'qualified', 'won', 'purchases', 'customers', 'conversion', 'revenue'];
 const mapPositions: Record<string, { x: number; y: number }> = { AC: { x: 12, y: 45 }, AM: { x: 24, y: 32 }, RR: { x: 32, y: 16 }, RO: { x: 28, y: 52 }, PA: { x: 47, y: 33 }, AP: { x: 53, y: 18 }, MT: { x: 45, y: 58 }, MS: { x: 50, y: 75 }, GO: { x: 58, y: 62 }, DF: { x: 62, y: 61 }, TO: { x: 60, y: 48 }, MA: { x: 69, y: 40 }, PI: { x: 75, y: 46 }, CE: { x: 82, y: 42 }, RN: { x: 89, y: 44 }, PB: { x: 87, y: 49 }, PE: { x: 84, y: 53 }, AL: { x: 83, y: 58 }, SE: { x: 80, y: 62 }, BA: { x: 72, y: 63 }, MG: { x: 66, y: 76 }, ES: { x: 76, y: 78 }, RJ: { x: 71, y: 84 }, SP: { x: 61, y: 84 }, PR: { x: 58, y: 92 }, SC: { x: 62, y: 97 }, RS: { x: 55, y: 102 } };
 
 function formatDate(value: string | null) {
@@ -119,6 +121,24 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [selectedMetricKeys, setSelectedMetricKeys] = useState<string[]>(DEFAULT_DASHBOARD_METRICS);
+  const [metricPreferencesReady, setMetricPreferencesReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('flipform-dashboard-metrics-v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setSelectedMetricKeys(parsed.filter((item) => typeof item === 'string').slice(0, 8));
+      }
+    } catch {}
+    setMetricPreferencesReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!metricPreferencesReady) return;
+    try { window.localStorage.setItem('flipform-dashboard-metrics-v1', JSON.stringify(selectedMetricKeys.slice(0, 8))); } catch {}
+  }, [selectedMetricKeys, metricPreferencesReady]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -141,9 +161,42 @@ export default function DashboardPage() {
 
   const hasData = (data?.summary.totalLeads || 0) > 0;
   const formOptions = useMemo(() => data?.filters.forms.filter((form) => !pipelineId || form.pipelineId === pipelineId) || [], [data, pipelineId]);
+  const metricCatalog = useMemo(() => {
+    if (!data) return [];
+    const base = [
+      { key: 'totalLeads', label: 'Total de leads', value: data.summary.totalLeads, icon: Users, tone: 'blue' as const },
+      { key: 'newLeads', label: 'Novos leads', value: data.summary.newLeads, icon: UserPlus, tone: 'blue' as const },
+      { key: 'inProgress', label: 'Em atendimento', value: data.summary.inProgress, icon: ClipboardList, tone: 'amber' as const },
+      { key: 'qualified', label: 'Qualificados', value: data.summary.qualified, icon: Flame, tone: 'purple' as const },
+      { key: 'won', label: 'Fechamentos', value: data.summary.won, icon: Trophy, tone: 'green' as const },
+      { key: 'purchases', label: 'Compras', value: data.executive.financial.purchases.current, icon: CircleDollarSign, tone: 'green' as const },
+      { key: 'customers', label: 'Clientes', value: data.executive.financial.buyingCustomers.current, icon: Users, tone: 'blue' as const },
+      { key: 'conversion', label: 'Conversão', value: `${data.summary.conversionRate}%`, icon: TrendingUp, tone: 'green' as const },
+      { key: 'advancement', label: 'Taxa de avanço', value: `${data.summary.advancementRate}%`, icon: Target, tone: 'blue' as const },
+      { key: 'revenue', label: 'Receita', value: moneyFromCents(data.executive.revenue.currentCents), icon: CircleDollarSign, tone: 'green' as const },
+      { key: 'ticket', label: 'Ticket médio', value: moneyFromCents(data.executive.financial.averageTicket.currentCents), icon: TrendingUp, tone: 'blue' as const },
+      { key: 'repurchase', label: 'Taxa de recompra', value: `${data.executive.financial.repurchaseRate.current}%`, icon: RefreshCw, tone: 'purple' as const },
+      ...(data.funnel?.stages || []).map((stage) => ({ key: `stage:${stage.id}`, label: stage.name, value: stage.count, icon: Target, tone: stage.isFinal ? 'green' as const : 'blue' as const })),
+    ];
+    return base;
+  }, [data]);
+  const selectedMetrics = selectedMetricKeys.map((key) => metricCatalog.find((metric) => metric.key === key)).filter(Boolean) as typeof metricCatalog;
 
-  return <div className="space-y-4 p-3 lg:p-5 animate-fade-in">
-    <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-brand-900 to-blue-700 p-4 text-white shadow-lg"><div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/20"><BarChart3 className="h-3 w-3" /> Dashboard executivo</div><h1 className="font-heading text-2xl font-bold">Dashboard</h1><p className="mt-1 text-xs text-blue-100">Leads, funil e desempenho comercial.</p></div><div className="grid gap-2 rounded-xl bg-white/10 p-2 ring-1 ring-white/20 sm:grid-cols-5 xl:grid-cols-8"><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Período</span><select value={period} onChange={(e) => setPeriod(e.target.value as any)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900">{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>{period === 'custom' && <><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data inicial</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data final</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label></>}<label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Pipeline</span><select value={pipelineId} onChange={(e) => { setPipelineId(e.target.value); setFormId(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.filters.pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Formulário</span><select value={formId} onChange={(e) => setFormId(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{formOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Estado</span><select value={state} onChange={(e) => { setState(e.target.value); setCity(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.geo.byState.map((s) => <option key={s.state} value={s.state}>{s.state}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Cidade</span><select value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">Todas</option>{data?.geo.byCity.map((c) => <option key={`${c.state}-${c.city}`} value={c.city}>{c.city}</option>)}</select></label>{data?.filters.canFilterByAssignee ? <label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Vendedor</span><select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} disabled={!data.filters.agents.length} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">{data.filters.agents.length ? 'Todos' : 'Nenhum vendedor cadastrado'}</option>{data.filters.agents.map((a) => <option key={a.userId} value={a.userId}>{a.name}</option>)}</select></label> : data ? <div className="self-end rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-blue-100 ring-1 ring-white/20">Meu desempenho</div> : null}</div></div></div>
+  return <div className="dashboard-print-page space-y-4 p-3 lg:p-5 animate-fade-in">
+    <style jsx global>{`
+      @media print {
+        body:has(.dashboard-print-page) aside,
+        body:has(.dashboard-print-page) header,
+        body:has(.dashboard-print-page) .dashboard-print-hide,
+        body:has(.dashboard-print-page) .dashboard-metric-picker { display: none !important; }
+        body:has(.dashboard-print-page) aside + div { padding-left: 0 !important; }
+        body:has(.dashboard-print-page) main { overflow: visible !important; }
+        body:has(.dashboard-print-page) .dashboard-print-page { padding: 0 !important; }
+        body:has(.dashboard-print-page) .shadow-sm,
+        body:has(.dashboard-print-page) .shadow-lg { box-shadow: none !important; }
+      }
+    `}</style>
+    <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-brand-900 to-blue-700 p-4 text-white shadow-lg"><div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/20"><BarChart3 className="h-3 w-3" /> Dashboard executivo</div><h1 className="font-heading text-2xl font-bold">Dashboard</h1><p className="mt-1 text-xs text-blue-100">Leads, funil e desempenho comercial.</p><Button type="button" size="sm" variant="secondary" className="dashboard-print-hide mt-3 w-fit" onClick={() => window.print()}><Printer className="mr-1.5 h-3.5 w-3.5" />Imprimir / Salvar PDF</Button></div><div className="dashboard-print-hide grid gap-2 rounded-xl bg-white/10 p-2 ring-1 ring-white/20 sm:grid-cols-5 xl:grid-cols-8"><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Período</span><select value={period} onChange={(e) => setPeriod(e.target.value as any)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900">{periodOptions.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}</select></label>{period === 'custom' && <><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data inicial</span><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Data final</span><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900" /></label></>}<label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Pipeline</span><select value={pipelineId} onChange={(e) => { setPipelineId(e.target.value); setFormId(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.filters.pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Formulário</span><select value={formId} onChange={(e) => setFormId(e.target.value)} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{formOptions.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Estado</span><select value={state} onChange={(e) => { setState(e.target.value); setCity(''); }} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900"><option value="">Todos</option>{data?.geo.byState.map((s) => <option key={s.state} value={s.state}>{s.state}</option>)}</select></label><label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Cidade</span><select value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">Todas</option>{data?.geo.byCity.map((c) => <option key={`${c.state}-${c.city}`} value={c.city}>{c.city}</option>)}</select></label>{data?.filters.canFilterByAssignee ? <label className="space-y-1 text-[11px] font-medium text-blue-100"><span>Vendedor</span><select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} disabled={!data.filters.agents.length} className="w-full rounded-lg bg-white px-2 py-1.5 text-xs text-slate-900 disabled:opacity-60"><option value="">{data.filters.agents.length ? 'Todos' : 'Nenhum vendedor cadastrado'}</option>{data.filters.agents.map((a) => <option key={a.userId} value={a.userId}>{a.name}</option>)}</select></label> : data ? <div className="self-end rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-blue-100 ring-1 ring-white/20">Meu desempenho</div> : null}</div></div></div>
 
     {loading && <Skeleton />}
     {error && <Card className="flex items-center justify-between gap-3 border-red-200 bg-red-50 p-4 text-red-700"><span className="flex items-center gap-2"><AlertCircle className="h-4 w-4" />{error}</span><Button size="sm" variant="outline" onClick={() => setRetry((value) => value + 1)}><RefreshCw className="mr-2 h-3.5 w-3.5" />Tentar novamente</Button></Card>}
@@ -156,7 +209,19 @@ export default function DashboardPage() {
 
       <FunnelStageMetrics data={data} />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7"><MetricCard title="Total de leads" value={data.summary.totalLeads} icon={Users} hint={data.summary.variationVsPrevious == null ? 'Sem base anterior' : `${data.summary.variationVsPrevious > 0 ? '+' : ''}${data.summary.variationVsPrevious}% vs anterior`} /><MetricCard title="Novos no período" value={data.summary.newLeads} icon={UserPlus} /><MetricCard title="Em atendimento" value={data.summary.inProgress} icon={ClipboardList} tone="amber" /><MetricCard title="Qualificados" value={data.summary.qualified} icon={Flame} tone="purple" /><MetricCard title="Fechamentos" value={data.summary.won} icon={Trophy} tone="green" /><MetricCard title="Conversão" value={`${data.summary.conversionRate}%`} icon={TrendingUp} tone="green" /><MetricCard title="Taxa de avanço" value={`${data.summary.advancementRate}%`} icon={Target} /></div>
+      <section className="space-y-3">
+        <DashboardMetricPicker
+          options={metricCatalog.map((metric) => ({ key: metric.key, label: metric.label, description: metric.key.startsWith('stage:') ? 'Etapa cadastrada no funil selecionado.' : 'Indicador comercial do Dashboard.' }))}
+          selected={selectedMetricKeys}
+          onChange={setSelectedMetricKeys}
+          defaults={DEFAULT_DASHBOARD_METRICS}
+          max={8}
+        />
+        <div>
+          <div className="mb-2 flex items-end justify-between gap-3"><div><h2 className="font-heading text-base font-semibold">Métricas da minha visão</h2><p className="text-xs text-muted-foreground">Blocos personalizados salvos neste navegador.</p></div><span className="dashboard-print-hide text-xs text-muted-foreground">{selectedMetrics.length}/8 blocos visíveis</span></div>
+          {selectedMetrics.length ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">{selectedMetrics.map((metric) => <MetricCard key={metric.key} title={metric.label} value={metric.value} icon={metric.icon} tone={metric.tone} />)}</div> : <Card className="border-dashed p-5 text-center text-sm text-muted-foreground">Use “Personalizar métricas” para adicionar até 8 blocos à sua visão.</Card>}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2"><Card className="p-4"><div className="mb-3"><h2 className="font-heading text-base font-semibold">Funil visual por etapas</h2><p className="text-xs text-muted-foreground">Etapas reais do pipeline selecionado.</p></div>{!data.funnel ? <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">Selecione um pipeline para visualizar as etapas do funil.</div> : <div className="space-y-2">{data.funnel.stages.map((stage, index) => <div key={stage.id} className="relative rounded-xl border bg-gradient-to-r from-white to-slate-50 p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="truncate text-sm font-semibold"><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stage.color }} />{stage.name}</span>{stage.isFinal && <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">final</span>}</div><div className="grid grid-cols-4 items-end gap-2 text-xs"><strong className="text-2xl">{stage.count}</strong><span>{stage.percentage}% total</span><span className="text-emerald-700">Avanço {rate(stage.advanceRate)}</span><span className="text-rose-700">Queda {rate(stage.dropOffRate)}</span></div><div className="mt-2 h-1.5 rounded-full bg-slate-100"><div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, stage.percentage)}%`, backgroundColor: stage.color }} /></div>{index < data.funnel!.stages.length - 1 && <ArrowRight className="absolute -right-3 top-1/2 hidden h-4 w-4 -translate-y-1/2 text-muted-foreground xl:block" />}</div>)}</div>}</Card><Card className="p-4"><div className="mb-2 flex items-center justify-between"><div><h2 className="font-heading text-base font-semibold">Leads por dia</h2><p className="text-xs text-muted-foreground">Real diário e linha projetada.</p></div>{data.projection.total !== null && <div className="rounded-xl bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">Projeção: {data.projection.total}</div>}</div><ResponsiveContainer width="100%" height={265}><LineChart data={data.leadsByDay}><CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" /><XAxis dataKey="label" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} allowDecimals={false} /><Tooltip /><Legend /><Line name="Real" type="monotone" dataKey="real" stroke="#2563EB" strokeWidth={3} dot={{ r: 2 }} /><Line name="Projetado" type="monotone" dataKey="projected" stroke="#10B981" strokeWidth={2} strokeDasharray="6 6" dot={false} /></LineChart></ResponsiveContainer></Card></div>
 

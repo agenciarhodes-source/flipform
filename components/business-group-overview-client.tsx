@@ -2,16 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, ExternalLink, Loader2, RefreshCcw, Users, TrendingUp, CircleDollarSign, Target, Trophy, XCircle } from 'lucide-react';
+import { Building2, ExternalLink, Loader2, Printer, RefreshCcw, Users, TrendingUp, CircleDollarSign, Target, Trophy, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DashboardMetricPicker } from '@/components/dashboard-metric-picker';
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function formatMoney(cents: number) {
   return money.format((cents || 0) / 100);
 }
+
+const DEFAULT_GROUP_METRICS = ['leads', 'inProgress', 'won', 'lost', 'purchases', 'customers', 'conversion', 'revenue'];
 
 type Overview = {
   period: 'today' | '7d' | '30d' | 'custom';
@@ -72,6 +75,24 @@ export function BusinessGroupOverviewClient() {
   const [loading, setLoading] = useState(true);
   const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedMetricKeys, setSelectedMetricKeys] = useState<string[]>(DEFAULT_GROUP_METRICS);
+  const [metricPreferencesReady, setMetricPreferencesReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('flipform-group-dashboard-metrics-v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setSelectedMetricKeys(parsed.filter((item) => typeof item === 'string').slice(0, 8));
+      }
+    } catch {}
+    setMetricPreferencesReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!metricPreferencesReady) return;
+    try { window.localStorage.setItem('flipform-group-dashboard-metrics-v1', JSON.stringify(selectedMetricKeys.slice(0, 8))); } catch {}
+  }, [selectedMetricKeys, metricPreferencesReady]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,18 +152,31 @@ export function BusinessGroupOverviewClient() {
   }
 
   const cards = overview ? [
-    { label: 'Novos leads', value: overview.summary.totalLeads, icon: Users },
-    { label: 'Em andamento', value: overview.summary.inProgress, icon: TrendingUp },
-    { label: 'Fechados', value: overview.summary.won, icon: Trophy },
-    { label: 'Perdidos', value: overview.summary.lost, icon: XCircle },
-    { label: 'Compras', value: overview.summary.purchases, icon: CircleDollarSign },
-    { label: 'Clientes', value: overview.summary.buyingCustomers, icon: Users },
-    { label: 'Conversão', value: `${overview.summary.conversionRate}%`, icon: Target },
-    { label: 'Receita', value: formatMoney(overview.summary.revenueCents), icon: CircleDollarSign },
+    { key: 'leads', label: 'Novos leads', value: overview.summary.totalLeads, icon: Users },
+    { key: 'inProgress', label: 'Em andamento', value: overview.summary.inProgress, icon: TrendingUp },
+    { key: 'won', label: 'Fechados', value: overview.summary.won, icon: Trophy },
+    { key: 'lost', label: 'Perdidos', value: overview.summary.lost, icon: XCircle },
+    { key: 'purchases', label: 'Compras', value: overview.summary.purchases, icon: CircleDollarSign },
+    { key: 'customers', label: 'Clientes', value: overview.summary.buyingCustomers, icon: Users },
+    { key: 'conversion', label: 'Conversão', value: `${overview.summary.conversionRate}%`, icon: Target },
+    { key: 'revenue', label: 'Receita', value: formatMoney(overview.summary.revenueCents), icon: CircleDollarSign },
+    ...overview.funnelStages.map((stage) => ({ key: `stage:${stage.key}`, label: stage.name, value: stage.count, icon: Target })),
   ] : [];
+  const selectedCards = selectedMetricKeys.map((key) => cards.find((card) => card.key === key)).filter(Boolean) as typeof cards;
 
   return (
-    <div className="p-4 lg:p-8 space-y-6">
+    <div className="group-dashboard-print-page p-4 lg:p-8 space-y-6">
+      <style jsx global>{`
+        @media print {
+          body:has(.group-dashboard-print-page) aside,
+          body:has(.group-dashboard-print-page) header,
+          body:has(.group-dashboard-print-page) .group-dashboard-print-hide,
+          body:has(.group-dashboard-print-page) .dashboard-metric-picker { display: none !important; }
+          body:has(.group-dashboard-print-page) aside + div { padding-left: 0 !important; }
+          body:has(.group-dashboard-print-page) main { overflow: visible !important; }
+          body:has(.group-dashboard-print-page) .group-dashboard-print-page { padding: 0 !important; }
+        }
+      `}</style>
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -151,7 +185,8 @@ export function BusinessGroupOverviewClient() {
           </div>
           <p className="text-sm text-muted-foreground mt-1">Acompanhe toda a operação ou selecione uma empresa para ver seus resultados isoladamente.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="group-dashboard-print-hide flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => window.print()}><Printer className="w-4 h-4 mr-2" />Imprimir / Salvar PDF</Button>
           {overview && overview.groupOptions.length > 1 && (
             <Select value={groupId || overview.group.id} onValueChange={(value) => { setGroupId(value); setTenantId('all'); }}>
               <SelectTrigger className="w-[210px]"><SelectValue placeholder="Grupo" /></SelectTrigger>
@@ -211,18 +246,29 @@ export function BusinessGroupOverviewClient() {
               <div className="text-xs text-muted-foreground mt-1">{overview.summary.companies} empresa(s) · {overview.summary.agents} atendente(s)</div>
             </div>
             {currentTenant?.accessAllowed && (
-              <Button onClick={() => openTenant(currentTenant.id)} disabled={switchingTenantId === currentTenant.id}>
+              <Button className="group-dashboard-print-hide" onClick={() => openTenant(currentTenant.id)} disabled={switchingTenantId === currentTenant.id}>
                 {switchingTenantId === currentTenant.id ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <ExternalLink className="w-4 h-4 mr-2" />}
                 Abrir esta unidade
               </Button>
             )}
           </Card>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8 gap-3">
-            {cards.map((card) => {
-              const Icon = card.icon;
-              return <Card key={card.label} className="p-4"><div className="flex items-center justify-between gap-2"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-xl lg:text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
-            })}
+          <DashboardMetricPicker
+            options={cards.map((card) => ({ key: card.key, label: card.label, description: card.key.startsWith('stage:') ? 'Etapa cadastrada nos funis do grupo.' : 'Indicador consolidado do grupo.' }))}
+            selected={selectedMetricKeys}
+            onChange={setSelectedMetricKeys}
+            defaults={DEFAULT_GROUP_METRICS}
+            max={8}
+          />
+
+          <div>
+            <div className="mb-2"><h2 className="font-heading font-semibold">Métricas da visão atual</h2><p className="text-xs text-muted-foreground">Até 8 blocos personalizados para toda a operação ou para a unidade selecionada.</p></div>
+            {selectedCards.length ? <div className="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8 gap-3">
+              {selectedCards.map((card) => {
+                const Icon = card.icon;
+                return <Card key={card.key} className="p-4"><div className="flex items-center justify-between gap-2"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-xl lg:text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
+              })}
+            </div> : <Card className="border-dashed p-5 text-center text-sm text-muted-foreground">Use “Personalizar métricas” para adicionar blocos à visão atual.</Card>}
           </div>
 
           <Card className="p-4">
@@ -283,7 +329,7 @@ export function BusinessGroupOverviewClient() {
                       <td className="px-4 py-3 text-right">{tenant.agents} atend. / {tenant.teamMembers} total</td>
                       <td className="px-4 py-3 text-right">
                         {tenant.accessAllowed ? (
-                          <Button size="sm" variant="outline" onClick={() => openTenant(tenant.tenantId)} disabled={switchingTenantId === tenant.tenantId}>
+                          <Button className="group-dashboard-print-hide" size="sm" variant="outline" onClick={() => openTenant(tenant.tenantId)} disabled={switchingTenantId === tenant.tenantId}>
                             {switchingTenantId === tenant.tenantId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5 mr-1" />}
                             Abrir
                           </Button>

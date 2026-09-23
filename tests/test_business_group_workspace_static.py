@@ -120,3 +120,15 @@ def test_group_dashboard_api_supports_custom_dates_purchase_customer_split_and_d
     assert "funnelStages" in route
     assert "stage.name.trim().toLocaleLowerCase('pt-BR')" in route
     assert "percentage: percent(stage.count, leads.length)" in route
+
+
+def test_group_dashboard_supports_personalized_metrics_and_printable_company_view():
+    client = read('components/business-group-overview-client.tsx')
+    assert 'DashboardMetricPicker' in client
+    assert 'DEFAULT_GROUP_METRICS' in client
+    assert 'flipform-group-dashboard-metrics-v1' in client
+    assert 'Métricas da visão atual' in client
+    assert 'Até 8 blocos personalizados' in client
+    assert 'Imprimir / Salvar PDF' in client
+    assert 'window.print()' in client
+    assert "key: `stage:${stage.key}`" in client
