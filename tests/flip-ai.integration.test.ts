@@ -28,7 +28,10 @@ test('schema readiness catalog inspection executes read-only against disposable 
   const readiness = await inspectFlipAiSchema();
   assert.equal(readiness.ready, false, 'db push is not the approved migration rollout');
   assert.equal(readiness.missingTables.length, 0);
-  assert.ok(Array.isArray(readiness.incompatibleIndexes));
+  assert.deepEqual(readiness.missingColumns, []);
+  assert.deepEqual(readiness.incompatibleColumns, []);
+  assert.deepEqual(readiness.missingIndexes, []);
+  assert.deepEqual(readiness.incompatibleIndexes, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
 

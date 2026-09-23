@@ -23,6 +23,7 @@ import {
   OpenAiWebSearchError,
 } from '../lib/flip-ai/external-web-search';
 import {
+  canonicalizeFlipAiDefaultDefinition,
   canonicalizeFlipAiCheckDefinition,
   FLIP_AI_REQUIRED_COLUMN_SPECS,
   FLIP_AI_REQUIRED_CONSTRAINT_SPECS,
@@ -318,6 +319,10 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /incompatibleConstraints/);
   assert.match(source, /incompatibleColumns/);
   assert.match(source, /attnotnull/);
+  assert.match(source, /pg_attrdef/);
+  assert.match(source, /pg_get_expr/);
+  assert.match(source, /attidentity/);
+  assert.match(source, /attgenerated/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);
   assert.match(source, /indnullsnotdistinct/);
@@ -338,7 +343,8 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     .map((entry) => readFileSync(new URL(`${entry.name}/migration.sql`, root), 'utf8'))
     .join('\n');
   const columns = new Set(FLIP_AI_REQUIRED_COLUMN_SPECS
-    .map(([table, column, type, notNull]) => `${table}.${column}:${type}:${notNull}`));
+    .map(([table, column, type, notNull, defaultDefinition]) =>
+      `${table}.${column}:${type}:${notNull}:${defaultDefinition ?? 'NO_DEFAULT'}`));
   const indexes = new Set(FLIP_AI_REQUIRED_INDEXES);
   const constraints = new Set(FLIP_AI_REQUIRED_CONSTRAINTS);
   const indexSpecs = new Map(FLIP_AI_REQUIRED_INDEX_SPECS
@@ -363,7 +369,13 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     if (!table.startsWith('flip_ai_')) continue;
     for (const columnMatch of body.matchAll(columnPattern)) {
       const notNull = /\bNOT NULL\b/i.test(columnMatch[3]);
-      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}`), true,
+      const defaultSql = columnMatch[3].match(/\bDEFAULT\s+(.+?)\s*$/i)?.[1] ?? null;
+      const defaultDefinition = defaultSql === null
+        ? 'NO_DEFAULT'
+        : canonicalizeFlipAiDefaultDefinition(defaultSql);
+      assert.equal(columns.has(
+        `${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}:${defaultDefinition}`,
+      ), true,
         `schema contract is missing ${table}.${columnMatch[1]}`);
     }
   }
@@ -372,7 +384,13 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     if (!table?.startsWith('flip_ai_')) continue;
     for (const columnMatch of statement.matchAll(/ADD COLUMN\s+"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))([^,\n]*)/gi)) {
       const notNull = /\bNOT NULL\b/i.test(columnMatch[3]);
-      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}`), true,
+      const defaultSql = columnMatch[3].match(/\bDEFAULT\s+(.+?)\s*$/i)?.[1] ?? null;
+      const defaultDefinition = defaultSql === null
+        ? 'NO_DEFAULT'
+        : canonicalizeFlipAiDefaultDefinition(defaultSql);
+      assert.equal(columns.has(
+        `${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}:${defaultDefinition}`,
+      ), true,
         `schema contract is missing ${table}.${columnMatch[1]}`);
     }
   }
@@ -487,6 +505,8 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 14);
   assert.equal(columns.size, 167);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 22);
+  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , , defaultDefinition]) =>
+    defaultDefinition !== null).length, 39);
   assert.equal(indexes.size, 52);
   assert.equal(constraints.size, 57);
 });

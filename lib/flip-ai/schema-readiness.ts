@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
+  canonicalizeFlipAiDefaultDefinition,
   canonicalizeFlipAiCheckDefinition,
   FLIP_AI_REQUIRED_COLUMN_SPECS,
   FLIP_AI_REQUIRED_CONSTRAINT_SPECS,
@@ -14,12 +15,21 @@ export { FLIP_AI_REQUIRED_TABLES } from './schema-contract';
 
 type ReadinessRow = {
   missingTables: string[];
-  missingColumns: string[];
-  incompatibleColumns: string[];
   vectorReady: boolean;
   premiumPlanCount: bigint | number | string;
   configuredPremiumPlanCount: bigint | number | string;
   activePremiumPlanCount: bigint | number | string;
+};
+
+type ColumnRow = {
+  tableName: string;
+  columnName: string;
+  postgresType: string;
+  notNull: boolean;
+  defaultDefinition: string | null;
+  identity: string;
+  generated: string;
+  customCollation: boolean;
 };
 
 type IndexRow = {
@@ -90,30 +100,14 @@ function sameStrings(actual: readonly string[], expected: readonly string[]) {
 
 export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const tableValues = Prisma.join(FLIP_AI_REQUIRED_TABLES.map((table) => Prisma.sql`(${table})`));
-  const columnValues = Prisma.join(FLIP_AI_REQUIRED_COLUMN_SPECS
-    .map(([table, column, type, notNull]) => Prisma.sql`(${table}, ${column}, ${type}, ${notNull})`));
+  const tableNames = Prisma.join(FLIP_AI_REQUIRED_TABLES);
   const indexNames = Prisma.join(FLIP_AI_REQUIRED_INDEX_SPECS.map(({ indexName }) => indexName));
   const constraintNames = Prisma.join(FLIP_AI_REQUIRED_CONSTRAINT_SPECS
     .map(({ constraintName }) => constraintName));
 
-  const [rows, indexes, constraints] = await Promise.all([
+  const [rows, columns, indexes, constraints] = await Promise.all([
     prisma.$queryRaw<ReadinessRow[]>(Prisma.sql`
-      WITH required_tables(table_name) AS (VALUES ${tableValues}),
-      required_columns(table_name, column_name, expected_type, expected_not_null) AS (
-        VALUES ${columnValues}
-      ),
-      actual_columns AS (
-        SELECT tables.relname::text AS table_name,
-          attributes.attname::text AS column_name,
-          pg_catalog.format_type(attributes.atttypid, attributes.atttypmod) AS postgres_type,
-          attributes.attnotnull AS not_null
-        FROM pg_catalog.pg_attribute AS attributes
-        JOIN pg_catalog.pg_class AS tables ON tables.oid = attributes.attrelid
-        JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
-        WHERE namespaces.nspname = 'public'
-          AND attributes.attnum > 0
-          AND NOT attributes.attisdropped
-      )
+      WITH required_tables(table_name) AS (VALUES ${tableValues})
       SELECT
         ARRAY(
           SELECT table_name
@@ -121,28 +115,6 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
           WHERE to_regclass(format('public.%I', table_name)) IS NULL
           ORDER BY table_name
         ) AS "missingTables",
-        ARRAY(
-          SELECT required_columns.table_name || '.' || required_columns.column_name
-          FROM required_columns
-          WHERE NOT EXISTS (
-            SELECT 1
-            FROM actual_columns
-            WHERE table_name = required_columns.table_name
-              AND column_name = required_columns.column_name
-          )
-          ORDER BY required_columns.table_name, required_columns.column_name
-        ) AS "missingColumns",
-        ARRAY(
-          SELECT columns.table_name || '.' || columns.column_name || ':' || columns.postgres_type
-            || CASE WHEN columns.not_null THEN ':not-null' ELSE ':nullable' END
-          FROM actual_columns AS columns
-          JOIN required_columns
-            ON required_columns.table_name = columns.table_name
-            AND required_columns.column_name = columns.column_name
-          WHERE columns.postgres_type <> required_columns.expected_type
-            OR columns.not_null <> required_columns.expected_not_null
-          ORDER BY columns.table_name, columns.column_name
-        ) AS "incompatibleColumns",
         EXISTS (
           SELECT 1 FROM pg_extension WHERE extname = 'vector'
         ) AS "vectorReady",
@@ -161,6 +133,27 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
           SELECT COUNT(*) FROM plans
           WHERE slug IN ('premium', 'premium-pro') AND is_active = TRUE
         ) AS "activePremiumPlanCount"
+    `),
+    prisma.$queryRaw<ColumnRow[]>(Prisma.sql`
+      SELECT tables.relname::text AS "tableName",
+        attributes.attname::text AS "columnName",
+        pg_catalog.format_type(attributes.atttypid, attributes.atttypmod) AS "postgresType",
+        attributes.attnotnull AS "notNull",
+        pg_catalog.pg_get_expr(defaults.adbin, defaults.adrelid, TRUE) AS "defaultDefinition",
+        attributes.attidentity::text AS "identity",
+        attributes.attgenerated::text AS "generated",
+        attributes.attcollation <> types.typcollation AS "customCollation"
+      FROM pg_catalog.pg_attribute AS attributes
+      JOIN pg_catalog.pg_class AS tables ON tables.oid = attributes.attrelid
+      JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
+      JOIN pg_catalog.pg_type AS types ON types.oid = attributes.atttypid
+      LEFT JOIN pg_catalog.pg_attrdef AS defaults
+        ON defaults.adrelid = attributes.attrelid
+        AND defaults.adnum = attributes.attnum
+      WHERE namespaces.nspname = 'public'
+        AND tables.relname IN (${tableNames})
+        AND attributes.attnum > 0
+        AND NOT attributes.attisdropped
     `),
     prisma.$queryRaw<IndexRow[]>(Prisma.sql`
       SELECT tables.relname::text AS "tableName",
@@ -253,6 +246,34 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const row = rows[0];
   if (!row) throw new Error('FLIP_AI_SCHEMA_DIAGNOSTIC_EMPTY');
 
+  const columnByKey = new Map(columns.map((column) =>
+    [`${column.tableName}.${column.columnName}`, column]));
+  const missingColumns: string[] = [];
+  const incompatibleColumns: string[] = [];
+  for (const [tableName, columnName, postgresType, notNull, expectedDefault] of
+    FLIP_AI_REQUIRED_COLUMN_SPECS) {
+    const key = `${tableName}.${columnName}`;
+    const actual = columnByKey.get(key);
+    if (!actual) {
+      missingColumns.push(key);
+      continue;
+    }
+    const actualDefault = actual.defaultDefinition === null
+      ? null
+      : canonicalizeFlipAiDefaultDefinition(actual.defaultDefinition);
+    if (actual.postgresType !== postgresType
+      || actual.notNull !== notNull
+      || actualDefault !== expectedDefault
+      || actual.identity !== ''
+      || actual.generated !== ''
+      || actual.customCollation) {
+      incompatibleColumns.push(key);
+    }
+  }
+
+  missingColumns.sort();
+  incompatibleColumns.sort();
+
   const indexByName = new Map(indexes.map((index) => [index.indexName, index]));
   const missingIndexes: string[] = [];
   const incompatibleIndexes: string[] = [];
@@ -330,8 +351,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     && incompatibleIndexes.length === 0
     && missingConstraints.length === 0
     && incompatibleConstraints.length === 0
-    && row.missingColumns.length === 0
-    && row.incompatibleColumns.length === 0
+    && missingColumns.length === 0
+    && incompatibleColumns.length === 0
     && row.vectorReady;
   const catalogReady = premiumPlanCount === 2
     && configuredPremiumPlanCount === 2
@@ -346,8 +367,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     incompatibleIndexes,
     missingConstraints,
     incompatibleConstraints,
-    missingColumns: row.missingColumns,
-    incompatibleColumns: row.incompatibleColumns,
+    missingColumns,
+    incompatibleColumns,
     vectorReady: row.vectorReady,
     premiumPlanCount,
     configuredPremiumPlanCount,
