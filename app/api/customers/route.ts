@@ -68,7 +68,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
     averageTicketCents: number;
     preferredPaymentMethod: string | null;
     preferredPaymentLabel: string;
+    firstPurchaseAt: string | null;
     lastPurchaseAt: string | null;
+    customerType: 'new_customer' | 'recurring_customer';
     purchases: Array<{
       id: string;
       amountCents: number;
@@ -98,7 +100,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
         averageTicketCents: 0,
         preferredPaymentMethod: null,
         preferredPaymentLabel: 'Não informado',
+        firstPurchaseAt: purchase.purchaseDate.toISOString(),
         lastPurchaseAt: purchase.purchaseDate.toISOString(),
+        customerType: 'new_customer',
         purchases: [],
         paymentCounts: new Map<string, number>(),
       };
@@ -107,6 +111,7 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
 
     customer.purchaseCount += 1;
     customer.totalAmountCents += purchase.amountCents;
+    customer.firstPurchaseAt = purchase.purchaseDate.toISOString();
     customer.purchases.push({
       id: purchase.id,
       amountCents: purchase.amountCents,
@@ -136,6 +141,7 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
     customer.averageTicketCents = customer.purchaseCount
       ? Math.round(customer.totalAmountCents / customer.purchaseCount)
       : 0;
+    customer.customerType = customer.purchaseCount > 1 ? 'recurring_customer' : 'new_customer';
     const { paymentCounts, ...publicCustomer } = customer;
     return publicCustomer;
   });
@@ -152,14 +158,18 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   });
 
   const totalRevenueCents = purchases.reduce((sum, purchase) => sum + purchase.amountCents, 0);
+  const recurringCustomers = customers.filter((customer) => customer.customerType === 'recurring_customer').length;
 
   return NextResponse.json({
     sort,
     summary: {
       totalCustomers: customers.length,
+      recurringCustomers,
+      repurchaseRate: customers.length ? Math.round((recurringCustomers / customers.length) * 1000) / 10 : 0,
       totalPurchases: purchases.length,
       totalRevenueCents,
       averageTicketCents: purchases.length ? Math.round(totalRevenueCents / purchases.length) : 0,
+      averageLtvCents: customers.length ? Math.round(totalRevenueCents / customers.length) : 0,
     },
     customers,
   });

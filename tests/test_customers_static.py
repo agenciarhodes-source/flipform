@@ -37,3 +37,23 @@ def test_customers_page_has_requested_best_customer_views_and_purchase_history()
     assert 'customer.averageTicketCents' in page
     assert 'customer.preferredPaymentLabel' in page
     assert 'Ordem atual:' in page
+
+
+def test_customers_api_calculates_recurrence_ltv_and_purchase_dates():
+    route = read('app/api/customers/route.ts')
+    assert "customerType: 'new_customer' | 'recurring_customer'" in route
+    assert "customer.customerType = customer.purchaseCount > 1 ? 'recurring_customer' : 'new_customer'" in route
+    assert 'firstPurchaseAt' in route
+    assert 'lastPurchaseAt' in route
+    assert 'recurringCustomers' in route
+    assert 'repurchaseRate' in route
+    assert 'averageLtvCents' in route
+    assert 'Math.round(totalRevenueCents / customers.length)' in route
+
+def test_customers_page_is_more_visual_with_recurrence_ltv_and_podium():
+    page = read('app/(app)/customers/page.tsx')
+    for label in ['Clientes recorrentes', 'Taxa de recompra', 'LTV médio realizado', 'Pódio de clientes', 'LTV realizado', 'Primeira compra', 'Cliente novo', 'Recorrente']:
+        assert label in page
+    assert 'data.customers.slice(0, 3)' in page
+    assert 'customer.customerType' in page
+    assert 'customer.firstPurchaseAt' in page

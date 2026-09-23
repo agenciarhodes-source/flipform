@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, CircleDollarSign, Search, TrendingUp, Trophy, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleDollarSign, Repeat2, Search, Sparkles, TrendingUp, Trophy, Users } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,9 @@ type Customer = {
   averageTicketCents: number;
   preferredPaymentMethod: string | null;
   preferredPaymentLabel: string;
+  firstPurchaseAt: string | null;
   lastPurchaseAt: string | null;
+  customerType: 'new_customer' | 'recurring_customer';
   purchases: Purchase[];
 };
 
@@ -37,9 +39,12 @@ type CustomersResponse = {
   sort: 'purchases' | 'amount';
   summary: {
     totalCustomers: number;
+    recurringCustomers: number;
+    repurchaseRate: number;
     totalPurchases: number;
     totalRevenueCents: number;
     averageTicketCents: number;
+    averageLtvCents: number;
   };
   customers: Customer[];
 };
@@ -107,12 +112,41 @@ export default function CustomersPage() {
       </div>
 
       {data && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Clientes</p><p className="mt-1 text-2xl font-bold">{data.summary.totalCustomers}</p></div><Users className="h-5 w-5 text-muted-foreground" /></div></Card>
-          <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Compras</p><p className="mt-1 text-2xl font-bold">{data.summary.totalPurchases}</p></div><TrendingUp className="h-5 w-5 text-muted-foreground" /></div></Card>
-          <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Valor total comprado</p><p className="mt-1 text-2xl font-bold">{money(data.summary.totalRevenueCents)}</p></div><CircleDollarSign className="h-5 w-5 text-muted-foreground" /></div></Card>
-          <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Ticket médio</p><p className="mt-1 text-2xl font-bold">{money(data.summary.averageTicketCents)}</p></div><Trophy className="h-5 w-5 text-muted-foreground" /></div></Card>
-        </div>
+        <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Clientes</p><p className="mt-1 text-2xl font-bold">{data.summary.totalCustomers}</p></div><Users className="h-5 w-5 text-muted-foreground" /></div></Card>
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Clientes recorrentes</p><p className="mt-1 text-2xl font-bold">{data.summary.recurringCustomers}</p><p className="mt-1 text-[11px] text-muted-foreground">2 ou mais compras</p></div><Repeat2 className="h-5 w-5 text-muted-foreground" /></div></Card>
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Taxa de recompra</p><p className="mt-1 text-2xl font-bold">{data.summary.repurchaseRate}%</p><p className="mt-1 text-[11px] text-muted-foreground">clientes que voltaram a comprar</p></div><TrendingUp className="h-5 w-5 text-muted-foreground" /></div></Card>
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Compras</p><p className="mt-1 text-2xl font-bold">{data.summary.totalPurchases}</p></div><Trophy className="h-5 w-5 text-muted-foreground" /></div></Card>
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Ticket médio</p><p className="mt-1 text-2xl font-bold">{money(data.summary.averageTicketCents)}</p></div><CircleDollarSign className="h-5 w-5 text-muted-foreground" /></div></Card>
+            <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">LTV médio realizado</p><p className="mt-1 text-2xl font-bold">{money(data.summary.averageLtvCents)}</p><p className="mt-1 text-[11px] text-muted-foreground">valor médio acumulado por cliente</p></div><Sparkles className="h-5 w-5 text-muted-foreground" /></div></Card>
+          </div>
+
+          {data.customers.length > 0 && (
+            <Card className="overflow-hidden">
+              <div className="border-b px-4 py-3">
+                <h2 className="font-heading font-semibold">Pódio de clientes</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">{sort === 'purchases' ? 'Destaques por frequência de compra.' : 'Destaques por LTV realizado.'}</p>
+              </div>
+              <div className="grid gap-3 p-4 md:grid-cols-3">
+                {data.customers.slice(0, 3).map((customer, index) => (
+                  <div key={customer.leadId} className="rounded-xl border bg-gradient-to-br from-white to-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">#{index + 1}</div><div className="mt-1 truncate font-heading text-lg font-semibold">{customer.name}</div></div>
+                      <Trophy className="h-5 w-5 text-amber-600" />
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                      <div><div className="text-xs text-muted-foreground">Compras</div><div className="font-bold">{customer.purchaseCount}</div></div>
+                      <div><div className="text-xs text-muted-foreground">LTV realizado</div><div className="font-bold">{money(customer.totalAmountCents)}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Ticket médio</div><div className="font-medium">{money(customer.averageTicketCents)}</div></div>
+                      <div><div className="text-xs text-muted-foreground">Preferido</div><div className="truncate font-medium">{customer.preferredPaymentLabel}</div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
       )}
 
       {error && <Card className="border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</Card>}
@@ -135,7 +169,9 @@ export default function CustomersPage() {
                   <th className="px-4 py-3 text-right">Compras</th>
                   <th className="px-4 py-3 text-right">Total comprado</th>
                   <th className="px-4 py-3 text-right">Ticket médio</th>
+                  <th className="px-4 py-3 text-left">Perfil</th>
                   <th className="px-4 py-3 text-left">Pagamento preferido</th>
+                  <th className="px-4 py-3 text-left">Primeira compra</th>
                   <th className="px-4 py-3 text-left">Última compra</th>
                   <th className="px-4 py-3 text-left">Vendedor</th>
                   <th className="px-4 py-3 text-right">Histórico</th>
@@ -151,14 +187,16 @@ export default function CustomersPage() {
                       <td className="px-4 py-3 text-right font-semibold">{customer.purchaseCount}</td>
                       <td className="px-4 py-3 text-right font-semibold">{money(customer.totalAmountCents)}</td>
                       <td className="px-4 py-3 text-right">{money(customer.averageTicketCents)}</td>
+                      <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${customer.customerType === 'recurring_customer' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'}`}>{customer.customerType === 'recurring_customer' ? 'Recorrente' : 'Cliente novo'}</span></td>
                       <td className="px-4 py-3">{customer.preferredPaymentLabel}</td>
+                      <td className="px-4 py-3">{date(customer.firstPurchaseAt)}</td>
                       <td className="px-4 py-3">{date(customer.lastPurchaseAt)}</td>
                       <td className="px-4 py-3">{customer.assignedUser?.name || 'Sem responsável'}</td>
                       <td className="px-4 py-3 text-right"><Button size="sm" variant="outline" onClick={() => setExpanded(isOpen ? null : customer.leadId)}>{isOpen ? <ChevronUp className="mr-1 h-3.5 w-3.5" /> : <ChevronDown className="mr-1 h-3.5 w-3.5" />}Compras</Button></td>
                     </tr>,
                     isOpen ? (
                       <tr key={`${customer.leadId}-history`} className="border-t bg-muted/20">
-                        <td colSpan={9} className="px-4 py-4">
+                        <td colSpan={11} className="px-4 py-4">
                           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Histórico de compras de {customer.name}</div>
                           <div className="grid gap-2 lg:grid-cols-2">
                             {customer.purchases.map((purchase, purchaseIndex) => (
