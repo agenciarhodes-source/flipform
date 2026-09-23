@@ -55,7 +55,18 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     WITH required_tables(table_name) AS (VALUES ${tableValues}),
     required_indexes(index_name) AS (VALUES ${indexValues}),
     required_constraints(constraint_name) AS (VALUES ${constraintValues}),
-    required_columns(table_name, column_name, expected_udt_name) AS (VALUES ${columnValues})
+    required_columns(table_name, column_name, expected_type) AS (VALUES ${columnValues}),
+    actual_columns AS (
+      SELECT tables.relname::text AS table_name,
+        attributes.attname::text AS column_name,
+        pg_catalog.format_type(attributes.atttypid, attributes.atttypmod) AS postgres_type
+      FROM pg_catalog.pg_attribute AS attributes
+      JOIN pg_catalog.pg_class AS tables ON tables.oid = attributes.attrelid
+      JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
+      WHERE namespaces.nspname = 'public'
+        AND attributes.attnum > 0
+        AND NOT attributes.attisdropped
+    )
     SELECT
       ARRAY(
         SELECT table_name
@@ -85,21 +96,19 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         FROM required_columns
         WHERE NOT EXISTS (
           SELECT 1
-          FROM information_schema.columns
-          WHERE table_schema = 'public'
-            AND table_name = required_columns.table_name
+          FROM actual_columns
+          WHERE table_name = required_columns.table_name
             AND column_name = required_columns.column_name
         )
         ORDER BY required_columns.table_name, required_columns.column_name
       ) AS "missingColumns",
       ARRAY(
-        SELECT columns.table_name || '.' || columns.column_name || ':' || columns.udt_name
-        FROM information_schema.columns AS columns
+        SELECT columns.table_name || '.' || columns.column_name || ':' || columns.postgres_type
+        FROM actual_columns AS columns
         JOIN required_columns
           ON required_columns.table_name = columns.table_name
           AND required_columns.column_name = columns.column_name
-        WHERE columns.table_schema = 'public'
-          AND columns.udt_name <> required_columns.expected_udt_name
+        WHERE columns.postgres_type <> required_columns.expected_type
         ORDER BY columns.table_name, columns.column_name
       ) AS "incompatibleColumns",
       EXISTS (

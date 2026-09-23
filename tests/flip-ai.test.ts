@@ -332,12 +332,13 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   const postgresType = (type: string) => {
     const normalized = type.toUpperCase().replace(/\s+/g, ' ');
     if (normalized === 'TEXT') return 'text';
-    if (normalized === 'TEXT[]') return '_text';
-    if (normalized === 'INTEGER') return 'int4';
-    if (normalized.startsWith('TIMESTAMP')) return 'timestamp';
-    if (normalized === 'DOUBLE PRECISION') return 'float8';
+    if (normalized === 'TEXT[]') return 'text[]';
+    if (normalized === 'INTEGER') return 'integer';
+    if (normalized === 'TIMESTAMP(3)') return 'timestamp(3) without time zone';
+    if (normalized === 'TIMESTAMP') return 'timestamp without time zone';
+    if (normalized === 'DOUBLE PRECISION') return 'double precision';
     if (normalized === 'JSONB') return 'jsonb';
-    if (normalized.startsWith('VECTOR')) return 'vector';
+    if (normalized.startsWith('VECTOR')) return normalized.toLowerCase();
     throw new Error(`unmapped migration type: ${type}`);
   };
   const columnPattern = /"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))/gi;

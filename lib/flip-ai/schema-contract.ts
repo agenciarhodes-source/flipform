@@ -34,10 +34,23 @@ const COLUMN_SPECS_BY_TABLE = {
   flip_ai_external_search_cache: 'id:text tenant_id:text agent_id:text query_hash:text allowlist_hash:text result_text:text sources:jsonb model:text response_id:text searched_at:timestamp expires_at:timestamp created_at:timestamp updated_at:timestamp',
 } satisfies Record<FlipAiRequiredTable, string>;
 
+const POSTGRES_TYPE_FORMATS: Record<string, string> = {
+  text: 'text',
+  int4: 'integer',
+  timestamp: 'timestamp(3) without time zone',
+  float8: 'double precision',
+  jsonb: 'jsonb',
+  vector: 'vector(1536)',
+  _text: 'text[]',
+};
+
 export const FLIP_AI_REQUIRED_COLUMN_SPECS = Object.entries(COLUMN_SPECS_BY_TABLE)
   .flatMap(([table, specs]) => specs.split(' ').map((spec) => {
     const separator = spec.lastIndexOf(':');
-    return [table, spec.slice(0, separator), spec.slice(separator + 1)] as const;
+    const typeAlias = spec.slice(separator + 1);
+    const postgresType = POSTGRES_TYPE_FORMATS[typeAlias];
+    if (!postgresType) throw new Error(`Unsupported Flip AI schema type: ${typeAlias}`);
+    return [table, spec.slice(0, separator), postgresType] as const;
   }));
 
 export const FLIP_AI_REQUIRED_INDEXES = `
