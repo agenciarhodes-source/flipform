@@ -5,14 +5,49 @@ import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
-import { dateOnlyToDate } from '@/lib/date-only';
+import { dateOnlyToDate, isValidDateOnly, todayDateOnly } from '@/lib/date-only';
+
+function dateOnlyBoundary(value: string, endOfDay = false) {
+  return new Date(`${value}T${endOfDay ? '23:59:59.999' : '00:00:00'}-03:00`);
+}
+
+function subtractCalendarDays(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
 
 export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
   const pipelineId = searchParams.get('pipelineId');
   const search = searchParams.get('q')?.toLowerCase();
+  const period = searchParams.get('period');
+  const startDate = searchParams.get('startDate');
+  const endDate = searchParams.get('endDate');
 
   const where: any = { tenantId: session.tenantId, ...getLeadScopeForRole(session) };
+  if (period) {
+    if (!['7d', '30d', 'custom'].includes(period)) {
+      return NextResponse.json({ error: 'Período inválido.' }, { status: 400 });
+    }
+    let rangeStart: string;
+    let rangeEnd: string;
+    if (period === 'custom') {
+      if (!startDate || !endDate || !isValidDateOnly(startDate) || !isValidDateOnly(endDate)) {
+        return NextResponse.json({ error: 'Informe uma data inicial e final válidas.' }, { status: 400 });
+      }
+      if (startDate > endDate) {
+        return NextResponse.json({ error: 'A data final deve ser maior ou igual à data inicial.' }, { status: 400 });
+      }
+      rangeStart = startDate;
+      rangeEnd = endDate;
+    } else {
+      rangeEnd = todayDateOnly();
+      rangeStart = subtractCalendarDays(rangeEnd, period === '7d' ? 6 : 29);
+    }
+    where.enteredAt = { gte: dateOnlyBoundary(rangeStart), lte: dateOnlyBoundary(rangeEnd, true) };
+  }
   if (pipelineId) where.pipelineId = pipelineId;
   if (search) {
     where.OR = [
