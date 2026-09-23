@@ -290,9 +290,23 @@ test('PR 274 migration adds tenant-scoped qualification without destructive SQL'
   assert.match(sql, /UNIQUE INDEX "flip_ai_qualifications_conversation_id_key"/);
   assert.match(sql, /FOREIGN KEY \("tenant_id", "conversation_id"\)/);
   assert.match(sql, /qualified_lead_event_id/);
+  assert.match(sql, /"id" TEXT NOT NULL/);
+  assert.match(sql, /"tenant_id" TEXT NOT NULL/);
+  assert.match(sql, /"agent_id" TEXT NOT NULL/);
+  assert.match(sql, /"lead_id" TEXT/);
+  assert.match(sql, /"knowledge_index_id" TEXT NOT NULL/);
+  assert.doesNotMatch(sql, /\bUUID\b/);
   assert.doesNotMatch(sql, /\b(?:DELETE\s+FROM|DROP\s+(?:TABLE|COLUMN)|TRUNCATE|UPDATE\s+"?(?:leads|conversations))/i);
 });
 
+
+test('Flip AI production schema diagnostic remains read-only', () => {
+  const source = readFileSync(new URL('../lib/flip-ai/schema-readiness.ts', import.meta.url), 'utf8');
+  assert.match(source, /SELECT/);
+  assert.match(source, /flip_ai_qualifications/);
+  assert.doesNotMatch(source, /\$(?:executeRaw|queryRawUnsafe)/);
+  assert.doesNotMatch(source, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i);
+});
 
 test('long chats preserve server-validated identity without putting PII in instructions', () => {
   const runtime = { id: 'agent', tenantId: 'tenant', slug: 'helena', name: 'Helena', description: '',
@@ -544,3 +558,4 @@ test('PR 277 Realtime foundation is migration-free and keeps the permanent key s
     < sessionIssuer.indexOf('const ensured = await ensureConversation'));
   assert.match(route, /clientIp: getClientIp\(request\)/);
 });
+
