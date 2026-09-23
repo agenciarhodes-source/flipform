@@ -31,11 +31,6 @@ const REQUIRED_INDEXES = [
   'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
 ] as const;
 
-const REQUIRED_COLUMNS = [
-  ['flip_ai_agents', 'rotation_id'],
-  ['flip_ai_usage_events', 'conversation_id'],
-] as const;
-
 const QUALIFICATION_TEXT_COLUMNS = [
   'id',
   'tenant_id',
@@ -43,6 +38,13 @@ const QUALIFICATION_TEXT_COLUMNS = [
   'conversation_id',
   'lead_id',
   'knowledge_index_id',
+] as const;
+
+const REQUIRED_COLUMNS = [
+  ['flip_ai_agents', 'rotation_id'],
+  ['flip_ai_usage_events', 'conversation_id'],
+  ...QUALIFICATION_TEXT_COLUMNS.map((column) =>
+    ['flip_ai_qualifications', column] as const),
 ] as const;
 
 type ReadinessRow = {
@@ -142,7 +144,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     && row.missingColumns.length === 0
     && row.incompatibleQualificationColumns.length === 0
     && row.vectorReady;
-  const catalogReady = premiumPlanCount === 2;
+  const catalogReady = premiumPlanCount === 2 && activePremiumPlanCount === 0;
 
   return {
     ready: schemaReady && catalogReady,

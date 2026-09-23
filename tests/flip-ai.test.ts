@@ -304,6 +304,10 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   const source = readFileSync(new URL('../lib/flip-ai/schema-readiness.ts', import.meta.url), 'utf8');
   assert.match(source, /SELECT/);
   assert.match(source, /flip_ai_qualifications/);
+  assert.match(source, /QUALIFICATION_TEXT_COLUMNS\.map/,
+    'every qualification identity column must also be checked for absence');
+  assert.match(source, /activePremiumPlanCount === 0/,
+    'the rollout gate must reject Premium plans that are already active');
   assert.doesNotMatch(source, /\$(?:executeRaw|queryRawUnsafe)/);
   assert.doesNotMatch(source, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i);
 });
@@ -558,4 +562,3 @@ test('PR 277 Realtime foundation is migration-free and keeps the permanent key s
     < sessionIssuer.indexOf('const ensured = await ensureConversation'));
   assert.match(route, /clientIp: getClientIp\(request\)/);
 });
-
