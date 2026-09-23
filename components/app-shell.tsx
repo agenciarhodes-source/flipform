@@ -52,6 +52,7 @@ const NAV: NavItem[] = [
   { href: "/team", label: "Visão da equipe", icon: Network, permission: "DASHBOARD_VIEW", show: (role) => ['owner', 'admin', 'manager'].includes(role) },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
+  { href: "/customers", label: "Clientes", icon: Users, permission: "LEADS_VIEW" },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },
