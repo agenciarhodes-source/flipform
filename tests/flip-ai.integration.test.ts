@@ -37,11 +37,15 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_qualifications.reasons',
   ], 'db push intentionally differs on @updatedAt defaults and scalar-list nullability');
   assert.deepEqual(readiness.unexpectedColumns, []);
-  // These migration-only indexes are intentionally absent from the Prisma db-push rehearsal.
+  // db push cannot reproduce these migration catalog names; the rollout gate still requires all 52.
   assert.deepEqual(readiness.missingIndexes, [
     'flip_ai_external_search_cache_tenant_agent_expires_idx',
     'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
     'flip_ai_knowledge_chunks_embedding_hnsw_idx',
+    'flip_ai_knowledge_indexes_document_id_revision_embedding_model_',
+    'flip_ai_qualifications_tenant_id_qualified_lead_tracking_status',
+    'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_at_',
+    'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_sta',
   ]);
   assert.deepEqual(readiness.incompatibleIndexes, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
