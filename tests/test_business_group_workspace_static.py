@@ -99,6 +99,24 @@ def test_group_dashboard_can_filter_group_or_company_and_shows_full_result_set()
     client = read('components/business-group-overview-client.tsx')
     assert 'Dashboard do grupo' in client
     assert 'Toda a operação' in client
-    for label in ['Leads', 'Em andamento', 'Ganhos', 'Perdidos', 'Conversão', 'Receita']:
+    for label in ['Novos leads', 'Em andamento', 'Fechados', 'Perdidos', 'Compras', 'Clientes', 'Conversão', 'Receita']:
         assert label in client
+    assert 'Personalizado' in client
+    assert 'Data inicial' in client
+    assert 'Data final' in client
+    assert 'overview.funnelStages.map' in client
+    assert '2xl:grid-cols-8' in client
     assert 'performanceRows' in client
+
+
+def test_group_dashboard_api_supports_custom_dates_purchase_customer_split_and_dynamic_stages():
+    route = read('app/api/business-groups/overview/route.ts')
+    assert "z.enum(['today', '7d', '30d', 'custom'])" in route
+    assert "startDate" in route and "endDate" in route
+    assert "periodWindow(parsed.data.period, parsed.data.startDate, parsed.data.endDate)" in route
+    assert "leadId: true" in route
+    assert "buyingCustomers = new Set" in route
+    assert "tenantBuyingCustomers" in route
+    assert "funnelStages" in route
+    assert "stage.name.trim().toLocaleLowerCase('pt-BR')" in route
+    assert "percentage: percent(stage.count, leads.length)" in route

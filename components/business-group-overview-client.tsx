@@ -14,7 +14,7 @@ function formatMoney(cents: number) {
 }
 
 type Overview = {
-  period: 'today' | '7d' | '30d';
+  period: 'today' | '7d' | '30d' | 'custom';
   group: { id: string; name: string; slug: string; role: string };
   selectedTenantId: string | null;
   scopeLabel: string;
@@ -26,11 +26,14 @@ type Overview = {
     won: number;
     lost: number;
     conversionRate: number;
+    purchases: number;
+    buyingCustomers: number;
     revenueCents: number;
     companies: number;
     teamMembers: number;
     agents: number;
   };
+  funnelStages: Array<{ key: string; name: string; color: string; count: number; orderIndex: number; percentage: number }>;
   tenantPerformance: Array<{
     tenantId: string;
     name: string;
@@ -43,6 +46,8 @@ type Overview = {
     won: number;
     lost: number;
     conversionRate: number;
+    purchases: number;
+    buyingCustomers: number;
     revenueCents: number;
     teamMembers: number;
     agents: number;
@@ -52,7 +57,16 @@ type Overview = {
 export function BusinessGroupOverviewClient() {
   const router = useRouter();
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [period, setPeriod] = useState<'today' | '7d' | '30d'>('30d');
+  const [period, setPeriod] = useState<'today' | '7d' | '30d' | 'custom'>('30d');
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 29);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
   const [groupId, setGroupId] = useState('');
   const [tenantId, setTenantId] = useState('all');
   const [loading, setLoading] = useState(true);
@@ -64,6 +78,10 @@ export function BusinessGroupOverviewClient() {
     setError(null);
     try {
       const params = new URLSearchParams({ period });
+      if (period === 'custom') {
+        params.set('startDate', startDate);
+        params.set('endDate', endDate);
+      }
       if (groupId) params.set('groupId', groupId);
       if (tenantId !== 'all') params.set('tenantId', tenantId);
       const response = await fetch(`/api/business-groups/overview?${params.toString()}`, { cache: 'no-store' });
@@ -76,7 +94,7 @@ export function BusinessGroupOverviewClient() {
     } finally {
       setLoading(false);
     }
-  }, [period, groupId, tenantId]);
+  }, [period, startDate, endDate, groupId, tenantId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -113,10 +131,12 @@ export function BusinessGroupOverviewClient() {
   }
 
   const cards = overview ? [
-    { label: 'Leads', value: overview.summary.totalLeads, icon: Users },
+    { label: 'Novos leads', value: overview.summary.totalLeads, icon: Users },
     { label: 'Em andamento', value: overview.summary.inProgress, icon: TrendingUp },
-    { label: 'Ganhos', value: overview.summary.won, icon: Trophy },
+    { label: 'Fechados', value: overview.summary.won, icon: Trophy },
     { label: 'Perdidos', value: overview.summary.lost, icon: XCircle },
+    { label: 'Compras', value: overview.summary.purchases, icon: CircleDollarSign },
+    { label: 'Clientes', value: overview.summary.buyingCustomers, icon: Users },
     { label: 'Conversão', value: `${overview.summary.conversionRate}%`, icon: Target },
     { label: 'Receita', value: formatMoney(overview.summary.revenueCents), icon: CircleDollarSign },
   ] : [];
@@ -151,14 +171,27 @@ export function BusinessGroupOverviewClient() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={period} onValueChange={(value) => setPeriod(value as 'today' | '7d' | '30d')}>
+          <Select value={period} onValueChange={(value) => setPeriod(value as 'today' | '7d' | '30d' | 'custom')}>
             <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="today">Hoje</SelectItem>
               <SelectItem value="7d">7 dias</SelectItem>
               <SelectItem value="30d">30 dias</SelectItem>
+              <SelectItem value="custom">Personalizado</SelectItem>
             </SelectContent>
           </Select>
+          {period === 'custom' && (
+            <>
+              <label className="text-xs text-muted-foreground">
+                <span className="sr-only">Data inicial</span>
+                <input aria-label="Data inicial" type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm text-foreground" />
+              </label>
+              <label className="text-xs text-muted-foreground">
+                <span className="sr-only">Data final</span>
+                <input aria-label="Data final" type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} className="h-10 rounded-md border bg-background px-3 text-sm text-foreground" />
+              </label>
+            </>
+          )}
           <Button variant="outline" onClick={load} disabled={loading}>
             <RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
@@ -185,12 +218,33 @@ export function BusinessGroupOverviewClient() {
             )}
           </Card>
 
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8 gap-3">
             {cards.map((card) => {
               const Icon = card.icon;
               return <Card key={card.label} className="p-4"><div className="flex items-center justify-between gap-2"><div><div className="text-xs text-muted-foreground">{card.label}</div><div className="font-heading text-xl lg:text-2xl font-bold mt-1">{card.value}</div></div><Icon className="w-5 h-5 text-muted-foreground" /></div></Card>;
             })}
           </div>
+
+          <Card className="p-4">
+            <div className="mb-3">
+              <h2 className="font-heading font-semibold">Etapas do funil</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">As etapas usam os nomes cadastrados nos pipelines. Na visão consolidada, etapas com o mesmo nome são somadas e nomes diferentes permanecem separados.</p>
+            </div>
+            {overview.funnelStages.length ? (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
+                {overview.funnelStages.map((stage) => (
+                  <div key={stage.key} className="relative min-h-[98px] overflow-hidden rounded-xl border bg-card p-3">
+                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: stage.color }} />
+                    <div className="pt-1">
+                      <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={stage.name}>{stage.name}</div>
+                      <div className="mt-2 font-heading text-2xl font-bold">{stage.count}</div>
+                      <div className="mt-1 text-[11px] text-muted-foreground">{stage.percentage}% dos leads</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhuma etapa com leads no período selecionado.</div>}
+          </Card>
 
           <Card className="overflow-hidden">
             <div className="px-4 py-3 border-b">
@@ -204,8 +258,10 @@ export function BusinessGroupOverviewClient() {
                     <th className="text-left px-4 py-3">Empresa</th>
                     <th className="text-right px-4 py-3">Leads</th>
                     <th className="text-right px-4 py-3">Andamento</th>
-                    <th className="text-right px-4 py-3">Ganhos</th>
+                    <th className="text-right px-4 py-3">Fechados</th>
                     <th className="text-right px-4 py-3">Perdidos</th>
+                    <th className="text-right px-4 py-3">Compras</th>
+                    <th className="text-right px-4 py-3">Clientes</th>
                     <th className="text-right px-4 py-3">Conversão</th>
                     <th className="text-right px-4 py-3">Receita</th>
                     <th className="text-right px-4 py-3">Equipe</th>
@@ -220,6 +276,8 @@ export function BusinessGroupOverviewClient() {
                       <td className="px-4 py-3 text-right">{tenant.inProgress}</td>
                       <td className="px-4 py-3 text-right">{tenant.won}</td>
                       <td className="px-4 py-3 text-right">{tenant.lost}</td>
+                      <td className="px-4 py-3 text-right">{tenant.purchases}</td>
+                      <td className="px-4 py-3 text-right">{tenant.buyingCustomers}</td>
                       <td className="px-4 py-3 text-right">{tenant.conversionRate}%</td>
                       <td className="px-4 py-3 text-right">{formatMoney(tenant.revenueCents)}</td>
                       <td className="px-4 py-3 text-right">{tenant.agents} atend. / {tenant.teamMembers} total</td>
