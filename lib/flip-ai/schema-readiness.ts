@@ -26,6 +26,7 @@ type IndexRow = {
   tableName: string;
   indexName: string;
   unique: boolean;
+  nullsNotDistinct: boolean;
   primary: boolean;
   exclusion: boolean;
   immediate: boolean;
@@ -46,6 +47,7 @@ type ConstraintRow = {
   constraintName: string;
   type: string;
   columns: string[];
+  referencedSchema: string | null;
   referencedTable: string | null;
   referencedColumns: string[];
   updateAction: string;
@@ -88,8 +90,8 @@ function sameStrings(actual: readonly string[], expected: readonly string[]) {
 
 export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const tableValues = Prisma.join(FLIP_AI_REQUIRED_TABLES.map((table) => Prisma.sql`(${table})`));
-  const columnValues = Prisma.join(FLIP_AI_REQUIRED_COLUMN_SPECS.map(([table, column, type]) =>
-    Prisma.sql`(${table}, ${column}, ${type})`));
+  const columnValues = Prisma.join(FLIP_AI_REQUIRED_COLUMN_SPECS
+    .map(([table, column, type, notNull]) => Prisma.sql`(${table}, ${column}, ${type}, ${notNull})`));
   const indexNames = Prisma.join(FLIP_AI_REQUIRED_INDEX_SPECS.map(({ indexName }) => indexName));
   const constraintNames = Prisma.join(FLIP_AI_REQUIRED_CONSTRAINT_SPECS
     .map(({ constraintName }) => constraintName));
@@ -97,11 +99,14 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const [rows, indexes, constraints] = await Promise.all([
     prisma.$queryRaw<ReadinessRow[]>(Prisma.sql`
       WITH required_tables(table_name) AS (VALUES ${tableValues}),
-      required_columns(table_name, column_name, expected_type) AS (VALUES ${columnValues}),
+      required_columns(table_name, column_name, expected_type, expected_not_null) AS (
+        VALUES ${columnValues}
+      ),
       actual_columns AS (
         SELECT tables.relname::text AS table_name,
           attributes.attname::text AS column_name,
-          pg_catalog.format_type(attributes.atttypid, attributes.atttypmod) AS postgres_type
+          pg_catalog.format_type(attributes.atttypid, attributes.atttypmod) AS postgres_type,
+          attributes.attnotnull AS not_null
         FROM pg_catalog.pg_attribute AS attributes
         JOIN pg_catalog.pg_class AS tables ON tables.oid = attributes.attrelid
         JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
@@ -129,11 +134,13 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         ) AS "missingColumns",
         ARRAY(
           SELECT columns.table_name || '.' || columns.column_name || ':' || columns.postgres_type
+            || CASE WHEN columns.not_null THEN ':not-null' ELSE ':nullable' END
           FROM actual_columns AS columns
           JOIN required_columns
             ON required_columns.table_name = columns.table_name
             AND required_columns.column_name = columns.column_name
           WHERE columns.postgres_type <> required_columns.expected_type
+            OR columns.not_null <> required_columns.expected_not_null
           ORDER BY columns.table_name, columns.column_name
         ) AS "incompatibleColumns",
         EXISTS (
@@ -159,6 +166,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       SELECT tables.relname::text AS "tableName",
         index_relations.relname::text AS "indexName",
         index_metadata.indisunique AS "unique",
+        index_metadata.indnullsnotdistinct AS "nullsNotDistinct",
         index_metadata.indisprimary AS "primary",
         index_metadata.indisexclusion AS "exclusion",
         index_metadata.indimmediate AS "immediate",
@@ -211,6 +219,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
             AND attributes.attnum = keys.attribute_number
           ORDER BY keys.ordinal
         ) AS "columns",
+        referenced_namespaces.nspname::text AS "referencedSchema",
         referenced_tables.relname::text AS "referencedTable",
         ARRAY(
           SELECT attributes.attname::text
@@ -235,6 +244,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = tables.relnamespace
       LEFT JOIN pg_catalog.pg_class AS referenced_tables
         ON referenced_tables.oid = constraint_metadata.confrelid
+      LEFT JOIN pg_catalog.pg_namespace AS referenced_namespaces
+        ON referenced_namespaces.oid = referenced_tables.relnamespace
       WHERE namespaces.nspname = 'public'
         AND constraint_metadata.conname IN (${constraintNames})
     `),
@@ -253,6 +264,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     }
     if (actual.tableName !== expected.tableName
       || actual.unique !== expected.unique
+      || actual.nullsNotDistinct !== expected.nullsNotDistinct
       || actual.primary
       || actual.exclusion
       || (actual.unique && !actual.immediate)
@@ -293,7 +305,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       || !actual.local
       || actual.inheritanceCount !== 0
       || (expected.type === 'f' && (
-        actual.referencedTable !== expected.referencedTable
+        actual.referencedSchema !== expected.referencedSchema
+        || actual.referencedTable !== expected.referencedTable
         || !sameStrings(actual.referencedColumns, expected.referencedColumns)
         || actual.updateAction !== expected.updateAction
         || actual.deleteAction !== expected.deleteAction

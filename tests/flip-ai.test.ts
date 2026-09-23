@@ -317,9 +317,12 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /incompatibleIndexes/);
   assert.match(source, /incompatibleConstraints/);
   assert.match(source, /incompatibleColumns/);
+  assert.match(source, /attnotnull/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);
+  assert.match(source, /indnullsnotdistinct/);
   assert.match(source, /convalidated/);
+  assert.match(source, /referenced_namespaces/);
   assert.match(source, /pg_get_constraintdef/);
   assert.match(source, /activePremiumPlanCount === 0/,
     'the rollout gate must reject Premium plans that are already active');
@@ -335,7 +338,7 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     .map((entry) => readFileSync(new URL(`${entry.name}/migration.sql`, root), 'utf8'))
     .join('\n');
   const columns = new Set(FLIP_AI_REQUIRED_COLUMN_SPECS
-    .map(([table, column, type]) => `${table}.${column}:${type}`));
+    .map(([table, column, type, notNull]) => `${table}.${column}:${type}:${notNull}`));
   const indexes = new Set(FLIP_AI_REQUIRED_INDEXES);
   const constraints = new Set(FLIP_AI_REQUIRED_CONSTRAINTS);
   const indexSpecs = new Map(FLIP_AI_REQUIRED_INDEX_SPECS
@@ -354,20 +357,22 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     if (normalized.startsWith('VECTOR')) return normalized.toLowerCase();
     throw new Error(`unmapped migration type: ${type}`);
   };
-  const columnPattern = /"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))/gi;
+  const columnPattern = /"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))([^,\n]*)/gi;
   for (const tableMatch of migrationSql.matchAll(/CREATE TABLE\s+"([^"]+)"\s*\(([\s\S]*?)\n\);/g)) {
     const [, table, body] = tableMatch;
     if (!table.startsWith('flip_ai_')) continue;
     for (const columnMatch of body.matchAll(columnPattern)) {
-      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}`), true,
+      const notNull = /\bNOT NULL\b/i.test(columnMatch[3]);
+      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}`), true,
         `schema contract is missing ${table}.${columnMatch[1]}`);
     }
   }
   for (const statement of migrationSql.split(';')) {
     const table = statement.match(/ALTER TABLE\s+"([^"]+)"/i)?.[1];
     if (!table?.startsWith('flip_ai_')) continue;
-    for (const columnMatch of statement.matchAll(/ADD COLUMN\s+"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))/gi)) {
-      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}`), true,
+    for (const columnMatch of statement.matchAll(/ADD COLUMN\s+"([^"]+)"\s+(TEXT\[\]|TEXT|INTEGER|TIMESTAMP(?:\(\d+\))?|DOUBLE\s+PRECISION|JSONB|vector\(\d+\))([^,\n]*)/gi)) {
+      const notNull = /\bNOT NULL\b/i.test(columnMatch[3]);
+      assert.equal(columns.has(`${table}.${columnMatch[1]}:${postgresType(columnMatch[2])}:${notNull}`), true,
         `schema contract is missing ${table}.${columnMatch[1]}`);
     }
   }
@@ -405,12 +410,14 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     assert.deepEqual({
       tableName: spec.tableName,
       unique: spec.unique,
+      nullsNotDistinct: spec.nullsNotDistinct,
       method: spec.method,
       columns: [...spec.columns],
       opclasses: [...spec.opclasses],
     }, {
       tableName,
       unique: Boolean(unique),
+      nullsNotDistinct: false,
       method: method.toLowerCase(),
       columns: parsedColumns,
       opclasses: parsedOpclasses,
@@ -454,12 +461,14 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
       const remove = foreignMatch[4].match(/ON DELETE\s+(NO ACTION|RESTRICT|CASCADE|SET NULL|SET DEFAULT)/i)?.[1].toUpperCase();
       assert.deepEqual({
         columns: quotedColumns(foreignMatch[1]),
+        referencedSchema: 'public',
         referencedTable: foreignMatch[2],
         referencedColumns: quotedColumns(foreignMatch[3]),
         updateAction: actionCode(update),
         deleteAction: actionCode(remove),
       }, {
         columns: [...spec.columns],
+        referencedSchema: spec.referencedSchema,
         referencedTable: spec.referencedTable,
         referencedColumns: [...spec.referencedColumns],
         updateAction: spec.updateAction,
@@ -477,6 +486,7 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 14);
   assert.equal(columns.size, 167);
+  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 22);
   assert.equal(indexes.size, 52);
   assert.equal(constraints.size, 57);
 });
