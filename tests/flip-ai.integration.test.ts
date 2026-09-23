@@ -29,10 +29,13 @@ test('schema readiness catalog inspection executes read-only against disposable 
   assert.equal(readiness.ready, false, 'db push is not the approved migration rollout');
   assert.equal(readiness.missingTables.length, 0);
   assert.deepEqual(readiness.missingColumns, []);
+  // Prisma db push leaves scalar lists nullable; the approved migrations intentionally enforce NOT NULL.
   assert.deepEqual(readiness.incompatibleColumns, [
     'flip_ai_external_search_cache.updated_at',
     'flip_ai_external_sources.updated_at',
-  ], 'db push intentionally differs from the approved migrations on @updatedAt defaults');
+    'flip_ai_qualifications.evidence_message_ids',
+    'flip_ai_qualifications.reasons',
+  ], 'db push intentionally differs on @updatedAt defaults and scalar-list nullability');
   assert.deepEqual(readiness.missingIndexes, []);
   assert.deepEqual(readiness.incompatibleIndexes, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
