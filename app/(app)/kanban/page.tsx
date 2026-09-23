@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus, MessageCircle } from 'lucide-react';
+import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus, MessageCircle, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
@@ -137,6 +137,16 @@ export default function KanbanPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [taskInds, setTaskInds] = useState<Record<string, TaskIndicator>>({});
   const [search, setSearch] = useState('');
+  const [period, setPeriod] = useState<'7d' | '30d' | 'custom'>('30d');
+  const [startDate, setStartDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 29);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
+  const [endDate, setEndDate] = useState(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  });
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
@@ -158,10 +168,28 @@ export default function KanbanPage() {
 
   const loadLeads = async () => {
     if (!pipelineId) { setLoading(false); return; }
-    const url = `/api/leads?pipelineId=${pipelineId}${search ? `&q=${encodeURIComponent(search)}` : ''}`;
-    const data = await fetch(url).then((r) => r.json());
-    setLeads(data.leads || []);
-    setLoading(false);
+    if (period === 'custom' && (!startDate || !endDate || startDate > endDate)) {
+      setLeads([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const params = new URLSearchParams({ pipelineId, period });
+    if (search) params.set('q', search);
+    if (period === 'custom') {
+      params.set('startDate', startDate);
+      params.set('endDate', endDate);
+    }
+    try {
+      const response = await fetch(`/api/leads?${params.toString()}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível filtrar os leads.');
+      setLeads(data.leads || []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível filtrar os leads.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openWhatsAppConversation = async (leadId: string) => {
@@ -188,9 +216,11 @@ export default function KanbanPage() {
   useEffect(() => {
     const p = pipelines.find((x) => x.id === pipelineId);
     setStages((p?.stages || []).filter((s) => !s.isArchived));
-    loadLeads();
-  /* eslint-disable-next-line */ }, [pipelineId, pipelines]);
-  useEffect(() => { const t = setTimeout(loadLeads, 300); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [search]);
+  }, [pipelineId, pipelines]);
+  useEffect(() => {
+    const t = setTimeout(loadLeads, 300);
+    return () => clearTimeout(t);
+  /* eslint-disable-next-line */ }, [pipelineId, search, period, startDate, endDate]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
@@ -257,13 +287,35 @@ export default function KanbanPage() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2">
+            <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom')}>
+              <SelectTrigger className="w-[150px]" aria-label="Período do Kanban">
+                <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-muted-foreground" /><SelectValue /></div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">7 dias</SelectItem>
+                <SelectItem value="30d">30 dias</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+            {period === 'custom' && (
+              <div className="flex items-center gap-2">
+                <Input aria-label="Data inicial do Kanban" type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="w-[150px]" />
+                <span className="text-xs text-muted-foreground">até</span>
+                <Input aria-label="Data final do Kanban" type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} className="w-[150px]" />
+              </div>
+            )}
+          </div>
           <Button type="button" onClick={() => setManualOpen(true)} disabled={!pipelineId}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar lead por nome, e-mail..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         </div>
+      </div>
+      <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground lg:px-6">
+        Filtro por data de entrada do lead no funil · {period === '7d' ? 'últimos 7 dias' : period === '30d' ? 'últimos 30 dias' : `${startDate || '—'} até ${endDate || '—'}`}
       </div>
       <div className="w-full flex-1 min-h-0 overflow-hidden p-4 lg:p-6">
         {loading ? (
