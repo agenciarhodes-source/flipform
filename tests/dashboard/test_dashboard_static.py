@@ -93,7 +93,7 @@ def test_dashboard_ui_has_executive_top_and_activity_pulse():
     assert "Ao vivo" in page
     assert "Receita do período" in page
     assert "moneyFromCents" in page
-    assert "Negócios abertos" in page
+    assert "Novos leads" in page
     assert "Tempo médio até fechamento" in page
     assert "Taxa de conversão" in page
     assert "vs. período anterior" in page
@@ -117,3 +117,15 @@ def test_kanban_move_marks_final_stage_as_won_and_hot():
     assert "newStatus = 'won'" in route
     assert "newTemperature = 'hot'" in route
     assert "Lead marcado como ganho ao chegar na etapa final." in route
+
+
+def test_dashboard_ui_distinguishes_customers_from_purchases_and_mirrors_pipeline_stages():
+    page = (ROOT / "app/(app)/dashboard/page.tsx").read_text()
+    assert 'title="Compras"' in page
+    assert 'title="Clientes"' in page
+    assert 'financial.buyingCustomers.current' in page
+    assert 'Compras contam transações; clientes contam pessoas' in page
+    assert 'function FunnelStageMetrics' in page
+    assert 'data.funnel.stages.map' in page
+    assert '2xl:grid-cols-8' in page
+    assert 'Os blocos acompanham automaticamente as etapas do pipeline ou formulário selecionado.' in page
