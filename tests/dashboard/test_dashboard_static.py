@@ -129,3 +129,18 @@ def test_dashboard_ui_distinguishes_customers_from_purchases_and_mirrors_pipelin
     assert 'data.funnel.stages.map' in page
     assert '2xl:grid-cols-8' in page
     assert 'Os blocos acompanham automaticamente as etapas do pipeline ou formulário selecionado.' in page
+
+
+def test_dashboard_supports_up_to_eight_personalized_metrics_and_print_export():
+    page = (ROOT / "app/(app)/dashboard/page.tsx").read_text()
+    picker = (ROOT / "components/dashboard-metric-picker.tsx").read_text()
+    assert 'DashboardMetricPicker' in page
+    assert 'DEFAULT_DASHBOARD_METRICS' in page
+    assert 'flipform-dashboard-metrics-v1' in page
+    assert 'stage:' in page
+    assert 'max={8}' in page
+    assert 'Métricas da minha visão' in page
+    assert 'Imprimir / Salvar PDF' in page
+    assert 'window.print()' in page
+    assert 'Escolha até {max} blocos' in picker
+    assert 'Restaurar padrão' in picker
