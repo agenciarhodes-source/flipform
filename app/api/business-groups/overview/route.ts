@@ -6,12 +6,27 @@ import { evaluateBillingAccess } from '@/lib/billing-access';
 import { getBusinessGroupAccessesForUser, BusinessGroupError } from '@/lib/business-groups';
 
 const querySchema = z.object({
-  period: z.enum(['today', '7d', '30d']).default('30d'),
+  period: z.enum(['today', '7d', '30d', 'custom']).default('30d'),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   groupId: z.string().uuid().optional(),
   tenantId: z.string().uuid().optional(),
+}).superRefine((value, ctx) => {
+  if (value.period !== 'custom') return;
+  if (!value.startDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Data inicial obrigatória para período personalizado.' });
+  if (!value.endDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endDate'], message: 'Data final obrigatória para período personalizado.' });
+  if (value.startDate && value.endDate && value.startDate > value.endDate) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['endDate'], message: 'Data final deve ser maior ou igual à data inicial.' });
+  }
 });
 
-function periodWindow(period: 'today' | '7d' | '30d') {
+function periodWindow(period: 'today' | '7d' | '30d' | 'custom', startDate?: string, endDate?: string) {
+  if (period === 'custom') {
+    return {
+      start: new Date(`${startDate}T00:00:00`),
+      end: new Date(`${endDate}T23:59:59.999`),
+    };
+  }
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   const start = new Date(end);
@@ -82,7 +97,7 @@ export async function GET(req: NextRequest) {
     const tenantIds = parsed.data.tenantId
       ? [parsed.data.tenantId]
       : tenantAccess.filter((tenant) => tenant.accessAllowed).map((tenant) => tenant.id);
-    const window = periodWindow(parsed.data.period);
+    const window = periodWindow(parsed.data.period, parsed.data.startDate, parsed.data.endDate);
 
     const pipelines = tenantIds.length ? await prisma.pipeline.findMany({
       where: { tenantId: { in: tenantIds }, isArchived: false },
@@ -90,7 +105,7 @@ export async function GET(req: NextRequest) {
     }) : [];
     const stages = pipelines.length ? await prisma.pipelineStage.findMany({
       where: { pipelineId: { in: pipelines.map((pipeline) => pipeline.id) }, isArchived: false },
-      select: { id: true, pipelineId: true, orderIndex: true },
+      select: { id: true, pipelineId: true, name: true, color: true, orderIndex: true },
       orderBy: [{ pipelineId: 'asc' }, { orderIndex: 'asc' }],
     }) : [];
     const finalStageByPipeline = new Map<string, string>();
@@ -102,7 +117,7 @@ export async function GET(req: NextRequest) {
     }) : [];
     const purchases = tenantIds.length ? await prisma.leadPurchase.findMany({
       where: { tenantId: { in: tenantIds }, purchaseDate: { gte: window.start, lte: window.end } },
-      select: { tenantId: true, amountCents: true },
+      select: { tenantId: true, leadId: true, amountCents: true },
     }) : [];
     const members = tenantIds.length ? await prisma.tenantUser.findMany({
       where: { tenantId: { in: tenantIds }, status: 'active' },
@@ -115,14 +130,33 @@ export async function GET(req: NextRequest) {
     const won = leads.filter(isClosed).length;
     const lost = leads.filter((lead) => lead.status === 'lost').length;
     const revenueCents = purchases.reduce((sum, purchase) => sum + purchase.amountCents, 0);
+    const buyingCustomers = new Set(purchases.map((purchase) => purchase.leadId)).size;
+
+    const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+    const stageMetrics = new Map<string, { key: string; name: string; color: string; count: number; orderIndex: number }>();
+    for (const lead of leads) {
+      const stage = stageById.get(lead.stageId);
+      if (!stage) continue;
+      const key = stage.name.trim().toLocaleLowerCase('pt-BR');
+      const current = stageMetrics.get(key);
+      if (current) {
+        current.count += 1;
+        current.orderIndex = Math.min(current.orderIndex, stage.orderIndex);
+      } else {
+        stageMetrics.set(key, { key, name: stage.name, color: stage.color, count: 1, orderIndex: stage.orderIndex });
+      }
+    }
+    const funnelStages = Array.from(stageMetrics.values())
+      .sort((a, b) => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name, 'pt-BR'))
+      .map((stage) => ({ ...stage, percentage: percent(stage.count, leads.length) }));
 
     const tenantPerformance = tenantAccess.map((tenant) => {
       const tenantLeads = leads.filter((lead) => lead.tenantId === tenant.id);
       const tenantWon = tenantLeads.filter(isClosed).length;
       const tenantLost = tenantLeads.filter((lead) => lead.status === 'lost').length;
-      const tenantRevenue = purchases
-        .filter((purchase) => purchase.tenantId === tenant.id)
-        .reduce((sum, purchase) => sum + purchase.amountCents, 0);
+      const tenantPurchases = purchases.filter((purchase) => purchase.tenantId === tenant.id);
+      const tenantRevenue = tenantPurchases.reduce((sum, purchase) => sum + purchase.amountCents, 0);
+      const tenantBuyingCustomers = new Set(tenantPurchases.map((purchase) => purchase.leadId)).size;
       const tenantMembers = members.filter((member) => member.tenantId === tenant.id);
       return {
         tenantId: tenant.id,
@@ -136,6 +170,8 @@ export async function GET(req: NextRequest) {
         won: tenantWon,
         lost: tenantLost,
         conversionRate: percent(tenantWon, tenantLeads.length),
+        purchases: tenantPurchases.length,
+        buyingCustomers: tenantBuyingCustomers,
         revenueCents: tenantRevenue,
         teamMembers: tenantMembers.length,
         agents: tenantMembers.filter((member) => String(member.role) === 'agent').length,
@@ -157,11 +193,14 @@ export async function GET(req: NextRequest) {
         won,
         lost,
         conversionRate: percent(won, leads.length),
+        purchases: purchases.length,
+        buyingCustomers,
         revenueCents,
         companies: tenantIds.length,
         teamMembers: members.length,
         agents: members.filter((member) => String(member.role) === 'agent').length,
       },
+      funnelStages,
       tenantPerformance,
     });
   } catch (error) {
