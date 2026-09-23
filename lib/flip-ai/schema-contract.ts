@@ -17,6 +17,21 @@ export const FLIP_AI_REQUIRED_TABLES = [
 
 type FlipAiRequiredTable = (typeof FLIP_AI_REQUIRED_TABLES)[number];
 
+const POSTGRES_IDENTIFIER_MAX_BYTES = 63;
+
+export function canonicalizeFlipAiIdentifier(identifier: string) {
+  let bytes = 0;
+  let result = '';
+  for (const character of identifier) {
+    const codePoint = character.codePointAt(0) || 0;
+    const width = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+    if (bytes + width > POSTGRES_IDENTIFIER_MAX_BYTES) break;
+    result += character;
+    bytes += width;
+  }
+  return result;
+}
+
 const COLUMN_SPECS_BY_TABLE = {
   flip_ai_agents: "id:text tenant_id:text name:text description:text='' primary_color:text='#2563EB' style:text='welcoming' status:text='draft' version:int4=1 pipeline_id:text initial_stage_id:text created_by:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp rotation_id:text?",
   flip_ai_endpoints: 'id:text tenant_id:text agent_id:text slug:text created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
@@ -102,7 +117,7 @@ function index(
 ): FlipAiRequiredIndexSpec {
   return {
     tableName,
-    indexName,
+    indexName: canonicalizeFlipAiIdentifier(indexName),
     unique,
     nullsNotDistinct: false,
     method,
@@ -227,7 +242,7 @@ function constraint(
 ): FlipAiRequiredConstraintSpec {
   return {
     tableName,
-    constraintName,
+    constraintName: canonicalizeFlipAiIdentifier(constraintName),
     type,
     columns: columns ? columns.split(',') : [],
     referencedSchema: referencedTable ? 'public' : null,

@@ -42,10 +42,6 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_external_search_cache_tenant_agent_expires_idx',
     'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
     'flip_ai_knowledge_chunks_embedding_hnsw_idx',
-    'flip_ai_knowledge_indexes_document_id_revision_embedding_model_key',
-    'flip_ai_qualifications_tenant_id_qualified_lead_tracking_status_idx',
-    'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_at_idx',
-    'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_start_key',
   ]);
   assert.deepEqual(readiness.incompatibleIndexes, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));

@@ -23,6 +23,7 @@ import {
   OpenAiWebSearchError,
 } from '../lib/flip-ai/external-web-search';
 import {
+  canonicalizeFlipAiIdentifier,
   canonicalizeFlipAiDefaultDefinition,
   canonicalizeFlipAiCheckDefinition,
   FLIP_AI_REQUIRED_COLUMN_SPECS,
@@ -345,6 +346,16 @@ test('Flip AI schema contract treats equivalent PostgreSQL empty text-array defa
   );
 });
 
+test('Flip AI schema contract mirrors PostgreSQL identifier truncation without collisions', () => {
+  assert.equal(
+    canonicalizeFlipAiIdentifier('flip_ai_knowledge_indexes_document_id_revision_embedding_model_key'),
+    'flip_ai_knowledge_indexes_document_id_revision_embedding_model_',
+  );
+  assert.equal(canonicalizeFlipAiIdentifier('á'.repeat(40)), 'á'.repeat(31));
+  assert.equal(new Set(FLIP_AI_REQUIRED_INDEXES).size, FLIP_AI_REQUIRED_INDEXES.length);
+  assert.equal(FLIP_AI_REQUIRED_INDEXES.every((name) => new TextEncoder().encode(name).length <= 63), true);
+});
+
 test('Flip AI schema contract covers every object declared by the rollout migrations', () => {
   const root = new URL('../prisma/migrations/', import.meta.url);
   const migrationSql = readdirSync(root, { withFileTypes: true })
@@ -405,10 +416,12 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     }
   }
   for (const match of migrationSql.matchAll(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+"([^"]+)"/gi)) {
-    assert.equal(indexes.has(match[1]), true, `schema contract is missing index ${match[1]}`);
+    assert.equal(indexes.has(canonicalizeFlipAiIdentifier(match[1])), true,
+      `schema contract is missing index ${match[1]}`);
   }
   for (const match of migrationSql.matchAll(/CONSTRAINT\s+"([^"]+)"/gi)) {
-    assert.equal(constraints.has(match[1]), true, `schema contract is missing constraint ${match[1]}`);
+    assert.equal(constraints.has(canonicalizeFlipAiIdentifier(match[1])), true,
+      `schema contract is missing constraint ${match[1]}`);
   }
 
   const typeToOpclass: Record<string, string> = {
@@ -424,7 +437,8 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   const indexPattern = /CREATE\s+(UNIQUE\s+)?INDEX\s+"([^"]+)"\s+ON\s+"([^"]+)"(?:\s+USING\s+([a-z0-9_]+))?\s*\(([^;]+?)\)\s*;/gi;
   for (const match of migrationSql.matchAll(indexPattern)) {
     const [, unique, indexName, tableName, method = 'btree', keySql] = match;
-    const spec = indexSpecs.get(indexName);
+    const catalogIndexName = canonicalizeFlipAiIdentifier(indexName);
+    const spec = indexSpecs.get(catalogIndexName);
     assert.ok(spec, `schema contract is missing index definition ${indexName}`);
     const parsedKeys = [...keySql.matchAll(/"([^"]+)"(?:\s+([a-z0-9_]+))?/gi)];
     const parsedColumns = parsedKeys.map((key) => key[1]);
@@ -450,7 +464,7 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
       columns: parsedColumns,
       opclasses: parsedOpclasses,
     }, `index definition drifted: ${indexName}`);
-    parsedIndexes.add(indexName);
+    parsedIndexes.add(catalogIndexName);
   }
   assert.equal(parsedIndexes.size, FLIP_AI_REQUIRED_INDEX_SPECS.length);
 
