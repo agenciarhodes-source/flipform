@@ -80,3 +80,15 @@ def test_customers_support_7d_30d_and_custom_purchase_date_filter():
     assert "params.set('startDate', startDate)" in page
     assert "params.set('endDate', endDate)" in page
     assert 'Ranking, clientes, recompra, ticket e LTV realizado' in page
+
+
+def test_customers_panel_shows_revenue_for_selected_period():
+    page = read('app/(app)/customers/page.tsx')
+    route = read('app/api/customers/route.ts')
+    assert 'Receita do período' in page
+    assert 'valor vendido na janela selecionada' in page
+    assert 'money(data.summary.totalRevenueCents)' in page
+    assert '2xl:grid-cols-7' in page
+    assert 'totalRevenueCents' in route
+    assert 'const totalRevenueCents = purchases.reduce' in route
+    assert 'purchaseDate: { gte: range.start, lte: range.end }' in route
