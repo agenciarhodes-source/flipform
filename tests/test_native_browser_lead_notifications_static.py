@@ -38,6 +38,7 @@ def test_native_notification_preference_is_local_only():
     assert "window.localStorage.setItem(nativeEnabledKey, enabled ? 'enabled' : 'disabled')" in center
 
 def test_native_notification_layer_remains_read_only_and_integration_isolated():
+    center = read('components/lead-notification-center.tsx')
     paths = [
         'components/lead-notification-center.tsx',
         'lib/notifications/browser-state.ts',
