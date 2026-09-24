@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, UserPlus } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, UserPlus, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,6 +18,7 @@ import {
   notificationItemsStorageKey,
   notificationNativeEnabledStorageKey,
   notificationSeenStorageKey,
+  notificationSoundEnabledStorageKey,
   parseSeenNotificationIds,
   parseStoredCursor,
   parseStoredNotificationItems,
@@ -46,15 +47,19 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const [loading, setLoading] = useState(true);
   const [browserPermission, setBrowserPermission] = useState<'unsupported' | NotificationPermission>('unsupported');
   const [nativeEnabled, setNativeEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const cursorRef = useRef<LeadNotificationCursor | null>(null);
   const pollingRef = useRef(false);
   const browserPermissionRef = useRef<'unsupported' | NotificationPermission>('unsupported');
   const nativeEnabledRef = useRef(false);
+  const soundEnabledRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
   const seenKey = useMemo(() => notificationSeenStorageKey(tenantId, userId), [tenantId, userId]);
   const itemsKey = useMemo(() => notificationItemsStorageKey(tenantId, userId), [tenantId, userId]);
   const nativeEnabledKey = useMemo(() => notificationNativeEnabledStorageKey(tenantId, userId), [tenantId, userId]);
+  const soundEnabledKey = useMemo(() => notificationSoundEnabledStorageKey(tenantId, userId), [tenantId, userId]);
 
   const persistSeen = useCallback((next: string[]) => {
     setSeenIds(next);
@@ -71,6 +76,36 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     setNativeEnabled(enabled);
     try { window.localStorage.setItem(nativeEnabledKey, enabled ? 'enabled' : 'disabled'); } catch {}
   }, [nativeEnabledKey]);
+
+  const persistSoundEnabled = useCallback((enabled: boolean) => {
+    soundEnabledRef.current = enabled;
+    setSoundEnabled(enabled);
+    try { window.localStorage.setItem(soundEnabledKey, enabled ? 'enabled' : 'disabled'); } catch {}
+  }, [soundEnabledKey]);
+
+  const playLeadSound = useCallback(async () => {
+    if (!soundEnabledRef.current || typeof window === 'undefined' || !window.AudioContext) return;
+    try {
+      const context = audioContextRef.current || new window.AudioContext();
+      audioContextRef.current = context;
+      if (context.state === 'suspended') await context.resume();
+
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(880, context.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(660, context.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.28);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.3);
+    } catch {
+      // Sound is best-effort and must never affect CRM flows.
+    }
+  }, []);
 
   const showNativeNotification = useCallback((item: LeadBrowserNotification) => {
     if (browserPermissionRef.current !== 'granted' || !nativeEnabledRef.current || typeof window === 'undefined') return;
@@ -117,6 +152,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
           return next;
         });
+        void playLeadSound();
         for (const item of feed.items) showNativeNotification(item);
       }
     } catch {
@@ -125,7 +161,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       pollingRef.current = false;
       setLoading(false);
     }
-  }, [cursorKey, itemsKey, showNativeNotification]);
+  }, [cursorKey, itemsKey, playLeadSound, showNativeNotification]);
 
   useEffect(() => {
     try {
@@ -140,11 +176,37 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       const enabled = permission === 'granted' && savedNative;
       nativeEnabledRef.current = enabled;
       setNativeEnabled(enabled);
+
+      const savedSound = window.localStorage.getItem(soundEnabledKey);
+      const enabledSound = savedSound !== 'disabled';
+      soundEnabledRef.current = enabledSound;
+      setSoundEnabled(enabledSound);
     } catch {}
     void poll();
     const timer = window.setInterval(() => void poll(), POLL_MS);
     return () => window.clearInterval(timer);
-  }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, poll]);
+  }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, poll]);
+
+  useEffect(() => {
+    if (!soundEnabled || typeof window === 'undefined' || !window.AudioContext) return;
+
+    const primeAudio = () => {
+      try {
+        const context = audioContextRef.current || new window.AudioContext();
+        audioContextRef.current = context;
+        if (context.state === 'suspended') void context.resume();
+      } catch {}
+      window.removeEventListener('pointerdown', primeAudio);
+      window.removeEventListener('keydown', primeAudio);
+    };
+
+    window.addEventListener('pointerdown', primeAudio, { once: true });
+    window.addEventListener('keydown', primeAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', primeAudio);
+      window.removeEventListener('keydown', primeAudio);
+    };
+  }, [soundEnabled]);
 
   const unreadIds = useMemo(
     () => items.filter((item) => !seenIds.includes(item.id)).map((item) => item.id),
@@ -184,6 +246,12 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       return;
     }
     persistNativeEnabled(!nativeEnabled);
+  }
+
+  function toggleLeadSound() {
+    const next = !soundEnabled;
+    persistSoundEnabled(next);
+    if (next) void playLeadSound();
   }
 
   return (
@@ -231,6 +299,16 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
               <BellRing className="mr-2 h-4 w-4" />Avisos do navegador: {nativeEnabled ? 'ativados' : 'desativados'}
             </Button>
           )}
+          <Button
+            type="button"
+            variant={soundEnabled ? 'secondary' : 'outline'}
+            size="sm"
+            className="mt-2 w-full justify-start"
+            onClick={(event) => { event.preventDefault(); toggleLeadSound(); }}
+          >
+            {soundEnabled ? <Volume2 className="mr-2 h-4 w-4" /> : <VolumeX className="mr-2 h-4 w-4" />}
+            Som de novo lead: {soundEnabled ? 'ativado' : 'desativado'}
+          </Button>
         </div>
         <DropdownMenuSeparator className="m-0" />
         <div className="max-h-[420px] overflow-y-auto">
