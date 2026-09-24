@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, CheckCheck, Loader2, UserPlus } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +16,7 @@ import {
   mergeStoredNotificationItems,
   notificationCursorStorageKey,
   notificationItemsStorageKey,
+  notificationNativeEnabledStorageKey,
   notificationSeenStorageKey,
   parseSeenNotificationIds,
   parseStoredCursor,
@@ -43,12 +44,17 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const [items, setItems] = useState<LeadBrowserNotification[]>([]);
   const [seenIds, setSeenIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [browserPermission, setBrowserPermission] = useState<'unsupported' | NotificationPermission>('unsupported');
+  const [nativeEnabled, setNativeEnabled] = useState(false);
   const cursorRef = useRef<LeadNotificationCursor | null>(null);
   const pollingRef = useRef(false);
+  const browserPermissionRef = useRef<'unsupported' | NotificationPermission>('unsupported');
+  const nativeEnabledRef = useRef(false);
 
   const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
   const seenKey = useMemo(() => notificationSeenStorageKey(tenantId, userId), [tenantId, userId]);
   const itemsKey = useMemo(() => notificationItemsStorageKey(tenantId, userId), [tenantId, userId]);
+  const nativeEnabledKey = useMemo(() => notificationNativeEnabledStorageKey(tenantId, userId), [tenantId, userId]);
 
   const persistSeen = useCallback((next: string[]) => {
     setSeenIds(next);
@@ -59,6 +65,31 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     setItems(next);
     try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
   }, [itemsKey]);
+
+  const persistNativeEnabled = useCallback((enabled: boolean) => {
+    nativeEnabledRef.current = enabled;
+    setNativeEnabled(enabled);
+    try { window.localStorage.setItem(nativeEnabledKey, enabled ? 'enabled' : 'disabled'); } catch {}
+  }, [nativeEnabledKey]);
+
+  const showNativeNotification = useCallback((item: LeadBrowserNotification) => {
+    if (browserPermissionRef.current !== 'granted' || !nativeEnabledRef.current || typeof window === 'undefined') return;
+    try {
+      const details = [item.formName, item.source].filter(Boolean).join(' · ');
+      const notification = new Notification(item.title, {
+        body: details ? `${item.leadName} — ${details}` : item.leadName,
+        tag: item.id,
+      });
+      notification.onclick = () => {
+        window.focus();
+        router.push(item.href);
+        notification.close();
+      };
+      window.setTimeout(() => notification.close(), 12_000);
+    } catch {
+      // Native browser notifications are best-effort and must never affect CRM flows.
+    }
+  }, [router]);
 
   const poll = useCallback(async () => {
     if (pollingRef.current) return;
@@ -86,6 +117,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
           return next;
         });
+        for (const item of feed.items) showNativeNotification(item);
       }
     } catch {
       // Notifications are best-effort and must never affect CRM flows.
@@ -93,18 +125,26 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       pollingRef.current = false;
       setLoading(false);
     }
-  }, [cursorKey, itemsKey]);
+  }, [cursorKey, itemsKey, showNativeNotification]);
 
   useEffect(() => {
     try {
       cursorRef.current = parseStoredCursor(window.localStorage.getItem(cursorKey));
       setSeenIds(parseSeenNotificationIds(window.localStorage.getItem(seenKey)));
       setItems(parseStoredNotificationItems(window.localStorage.getItem(itemsKey)));
+      const supported = typeof window !== 'undefined' && 'Notification' in window;
+      const permission = supported ? Notification.permission : 'unsupported';
+      browserPermissionRef.current = permission;
+      setBrowserPermission(permission);
+      const savedNative = window.localStorage.getItem(nativeEnabledKey) === 'enabled';
+      const enabled = permission === 'granted' && savedNative;
+      nativeEnabledRef.current = enabled;
+      setNativeEnabled(enabled);
     } catch {}
     void poll();
     const timer = window.setInterval(() => void poll(), POLL_MS);
     return () => window.clearInterval(timer);
-  }, [cursorKey, seenKey, itemsKey, poll]);
+  }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, poll]);
 
   const unreadIds = useMemo(
     () => items.filter((item) => !seenIds.includes(item.id)).map((item) => item.id),
@@ -120,6 +160,30 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   function openNotification(item: LeadBrowserNotification) {
     persistSeen(mergeSeenNotificationIds(seenIds, [item.id]));
     router.push(item.href);
+  }
+
+  async function requestBrowserNotifications() {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      browserPermissionRef.current = 'unsupported';
+      setBrowserPermission('unsupported');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      browserPermissionRef.current = permission;
+      setBrowserPermission(permission);
+      persistNativeEnabled(permission === 'granted');
+    } catch {
+      persistNativeEnabled(false);
+    }
+  }
+
+  function toggleNativeNotifications() {
+    if (browserPermission !== 'granted') {
+      void requestBrowserNotifications();
+      return;
+    }
+    persistNativeEnabled(!nativeEnabled);
   }
 
   return (
@@ -143,6 +207,28 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           {items.length > 0 && (
             <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={(event) => { event.preventDefault(); markAllSeen(); }}>
               <CheckCheck className="mr-1 h-3.5 w-3.5" />Marcar como vistas
+            </Button>
+          )}
+        </div>
+        <DropdownMenuSeparator className="m-0" />
+        <div className="px-3 py-2">
+          {browserPermission === 'unsupported' ? (
+            <div className="flex items-start gap-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Este navegador não oferece notificações nativas compatíveis.</span>
+            </div>
+          ) : browserPermission === 'denied' ? (
+            <div className="flex items-start gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Notificações estão bloqueadas no navegador. Libere a permissão nas configurações do site para ativar.</span>
+            </div>
+          ) : browserPermission !== 'granted' ? (
+            <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={(event) => { event.preventDefault(); void requestBrowserNotifications(); }}>
+              <BellRing className="mr-2 h-4 w-4" />Ativar avisos no navegador
+            </Button>
+          ) : (
+            <Button type="button" variant={nativeEnabled ? 'secondary' : 'outline'} size="sm" className="w-full justify-start" onClick={(event) => { event.preventDefault(); toggleNativeNotifications(); }}>
+              <BellRing className="mr-2 h-4 w-4" />Avisos do navegador: {nativeEnabled ? 'ativados' : 'desativados'}
             </Button>
           )}
         </div>

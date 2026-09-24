@@ -94,3 +94,8 @@ export function mergeStoredNotificationItems(current: LeadBrowserNotification[],
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .slice(-50);
 }
+
+
+export function notificationNativeEnabledStorageKey(tenantId: string, userId: string) {
+  return `flipform:lead-notification-native-enabled:${tenantId}:${userId}`;
+}
