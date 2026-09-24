@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { getLeadScopeForRole } from '@/lib/rbac';
+import { isValidDateOnly, todayDateOnly } from '@/lib/date-only';
 
 const paymentLabels: Record<string, string> = {
   pix: 'Pix',
@@ -13,15 +14,57 @@ const paymentLabels: Record<string, string> = {
   other: 'Outro',
 };
 
+function subtractCalendarDays(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function purchaseDateRange(period: '7d' | '30d' | 'custom', startDate?: string | null, endDate?: string | null) {
+  let start: string;
+  let end: string;
+
+  if (period === 'custom') {
+    if (!startDate || !endDate || !isValidDateOnly(startDate) || !isValidDateOnly(endDate)) {
+      return { ok: false as const, error: 'Informe uma data inicial e final válidas.' };
+    }
+    if (startDate > endDate) return { ok: false as const, error: 'A data final deve ser maior ou igual à data inicial.' };
+    start = startDate;
+    end = endDate;
+  } else {
+    end = todayDateOnly();
+    start = subtractCalendarDays(end, period === '7d' ? 6 : 29);
+  }
+
+  const [startYear, startMonth, startDay] = start.split('-').map(Number);
+  const [endYear, endMonth, endDay] = end.split('-').map(Number);
+  return {
+    ok: true as const,
+    startDate: start,
+    endDate: end,
+    start: new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0, 0)),
+    end: new Date(Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59, 999)),
+  };
+}
+
 export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
   const sort = searchParams.get('sort') === 'amount' ? 'amount' : 'purchases';
   const search = searchParams.get('q')?.trim();
+  const periodParam = searchParams.get('period') || '30d';
+  if (!['7d', '30d', 'custom'].includes(periodParam)) {
+    return NextResponse.json({ error: 'Período inválido.' }, { status: 400 });
+  }
+  const period = periodParam as '7d' | '30d' | 'custom';
+  const range = purchaseDateRange(period, searchParams.get('startDate'), searchParams.get('endDate'));
+  if (!range.ok) return NextResponse.json({ error: range.error }, { status: 400 });
 
   const leadScope = getLeadScopeForRole(session);
   const purchases = await prisma.leadPurchase.findMany({
     where: {
       tenantId: session.tenantId,
+      purchaseDate: { gte: range.start, lte: range.end },
       lead: {
         tenantId: session.tenantId,
         ...leadScope,
@@ -162,6 +205,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
 
   return NextResponse.json({
     sort,
+    period,
+    startDate: range.startDate,
+    endDate: range.endDate,
     summary: {
       totalCustomers: customers.length,
       recurringCustomers,
