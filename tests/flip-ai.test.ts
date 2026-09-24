@@ -318,6 +318,7 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /missingConstraints/);
   assert.match(source, /incompatibleIndexes/);
   assert.match(source, /incompatibleConstraints/);
+  assert.match(source, /unexpectedConstraints/);
   assert.match(source, /incompatibleColumns/);
   assert.match(source, /unexpectedColumns/);
   assert.match(source, /attnotnull/);
@@ -329,6 +330,7 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /collation_namespaces/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);
+  assert.match(source, /indcollation/);
   assert.match(source, /indnullsnotdistinct/);
   assert.match(source, /convalidated/);
   assert.match(source, /referenced_namespaces/);
@@ -456,6 +458,7 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
       method: spec.method,
       columns: [...spec.columns],
       opclasses: [...spec.opclasses],
+      collations: [...spec.collations],
     }, {
       tableName,
       unique: Boolean(unique),
@@ -463,6 +466,8 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
       method: method.toLowerCase(),
       columns: parsedColumns,
       opclasses: parsedOpclasses,
+      collations: parsedOpclasses.map((opclass) =>
+        opclass === 'text_ops' ? 'pg_catalog.default' : ''),
     }, `index definition drifted: ${indexName}`);
     parsedIndexes.add(catalogIndexName);
   }

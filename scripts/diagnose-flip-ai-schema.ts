@@ -22,6 +22,7 @@ async function main() {
   list('Índices incompatíveis', readiness.incompatibleIndexes);
   list('Constraints ausentes', readiness.missingConstraints);
   list('Constraints incompatíveis', readiness.incompatibleConstraints);
+  list('Constraints inesperadas', readiness.unexpectedConstraints);
   list('Colunas ausentes', readiness.missingColumns);
   list('Tipos incompatíveis', readiness.incompatibleColumns);
   list('Colunas inesperadas', readiness.unexpectedColumns);

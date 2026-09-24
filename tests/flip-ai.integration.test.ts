@@ -48,6 +48,7 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_sta',
   ]);
   assert.deepEqual(readiness.incompatibleIndexes, []);
+  assert.deepEqual(readiness.unexpectedConstraints, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
 

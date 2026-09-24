@@ -46,6 +46,7 @@ type IndexRow = {
   method: string;
   columns: string[];
   opclasses: string[];
+  collations: string[];
   keyAttributeCount: number;
   totalAttributeCount: number;
   hasExpressions: boolean;
@@ -80,6 +81,7 @@ export type FlipAiSchemaReadiness = {
   incompatibleIndexes: string[];
   missingConstraints: string[];
   incompatibleConstraints: string[];
+  unexpectedConstraints: string[];
   missingColumns: string[];
   incompatibleColumns: string[];
   unexpectedColumns: string[];
@@ -103,9 +105,6 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const tableValues = Prisma.join(FLIP_AI_REQUIRED_TABLES.map((table) => Prisma.sql`(${table})`));
   const tableNames = Prisma.join(FLIP_AI_REQUIRED_TABLES);
   const indexNames = Prisma.join(FLIP_AI_REQUIRED_INDEX_SPECS.map(({ indexName }) => indexName));
-  const constraintNames = Prisma.join(FLIP_AI_REQUIRED_CONSTRAINT_SPECS
-    .map(({ constraintName }) => constraintName));
-
   const [rows, columns, indexes, constraints] = await Promise.all([
     prisma.$queryRaw<ReadinessRow[]>(Prisma.sql`
       WITH required_tables(table_name) AS (VALUES ${tableValues})
@@ -194,6 +193,20 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
           WHERE classes.ordinal <= index_metadata.indnkeyatts
           ORDER BY classes.ordinal
         ) AS "opclasses",
+        ARRAY(
+          SELECT CASE
+            WHEN keys.collation_id = 0 THEN ''
+            ELSE collation_namespaces.nspname::text || '.' || collations.collname::text
+          END
+          FROM unnest(index_metadata.indcollation::oid[]) WITH ORDINALITY
+            AS keys(collation_id, ordinal)
+          LEFT JOIN pg_catalog.pg_collation AS collations
+            ON collations.oid = keys.collation_id
+          LEFT JOIN pg_catalog.pg_namespace AS collation_namespaces
+            ON collation_namespaces.oid = collations.collnamespace
+          WHERE keys.ordinal <= index_metadata.indnkeyatts
+          ORDER BY keys.ordinal
+        ) AS "collations",
         index_metadata.indnkeyatts AS "keyAttributeCount",
         index_metadata.indnatts AS "totalAttributeCount",
         index_metadata.indexprs IS NOT NULL AS "hasExpressions",
@@ -248,7 +261,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       LEFT JOIN pg_catalog.pg_namespace AS referenced_namespaces
         ON referenced_namespaces.oid = referenced_tables.relnamespace
       WHERE namespaces.nspname = 'public'
-        AND constraint_metadata.conname IN (${constraintNames})
+        AND tables.relname IN (${tableNames})
     `),
   ]);
   const row = rows[0];
@@ -308,6 +321,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       || actual.method !== expected.method
       || !sameStrings(actual.columns, expected.columns)
       || !sameStrings(actual.opclasses, expected.opclasses)
+      || !sameStrings(actual.collations, expected.collations)
       || actual.keyAttributeCount !== actual.totalAttributeCount
       || actual.hasExpressions
       || actual.hasPredicate) {
@@ -323,6 +337,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   }
   const missingConstraints: string[] = [];
   const incompatibleConstraints: string[] = [];
+  const requiredConstraintKeys = new Set(FLIP_AI_REQUIRED_CONSTRAINT_SPECS
+    .map(({ tableName, constraintName }) => `${tableName}.${constraintName}`));
   for (const expected of FLIP_AI_REQUIRED_CONSTRAINT_SPECS) {
     const named = constraintsByName.get(expected.constraintName) || [];
     const actual = named.find((candidate) => candidate.tableName === expected.tableName);
@@ -350,6 +366,10 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
         && canonicalizeFlipAiCheckDefinition(actual.definition) !== expected.checkSignature);
     if (incompatible) incompatibleConstraints.push(expected.constraintName);
   }
+  const unexpectedConstraints = constraints
+    .map(({ tableName, constraintName }) => `${tableName}.${constraintName}`)
+    .filter((key) => !requiredConstraintKeys.has(key))
+    .sort();
 
   missingIndexes.sort();
   incompatibleIndexes.sort();
@@ -364,6 +384,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     && incompatibleIndexes.length === 0
     && missingConstraints.length === 0
     && incompatibleConstraints.length === 0
+    && unexpectedConstraints.length === 0
     && missingColumns.length === 0
     && incompatibleColumns.length === 0
     && unexpectedColumns.length === 0
@@ -381,6 +402,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     incompatibleIndexes,
     missingConstraints,
     incompatibleConstraints,
+    unexpectedConstraints,
     missingColumns,
     incompatibleColumns,
     unexpectedColumns,

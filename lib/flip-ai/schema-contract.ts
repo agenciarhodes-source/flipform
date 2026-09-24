@@ -105,6 +105,7 @@ export type FlipAiRequiredIndexSpec = Readonly<{
   method: 'btree' | 'hnsw';
   columns: readonly string[];
   opclasses: readonly string[];
+  collations: readonly string[];
 }>;
 
 function index(
@@ -115,6 +116,7 @@ function index(
   opclasses: string,
   method: 'btree' | 'hnsw' = 'btree',
 ): FlipAiRequiredIndexSpec {
+  const parsedOpclasses = opclasses.split(',');
   return {
     tableName,
     indexName: canonicalizeFlipAiIdentifier(indexName),
@@ -122,7 +124,9 @@ function index(
     nullsNotDistinct: false,
     method,
     columns: columns.split(','),
-    opclasses: opclasses.split(','),
+    opclasses: parsedOpclasses,
+    collations: parsedOpclasses.map((opclass) =>
+      opclass === 'text_ops' ? 'pg_catalog.default' : ''),
   };
 }
 
