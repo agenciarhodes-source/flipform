@@ -47,7 +47,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const [loading, setLoading] = useState(true);
   const [browserPermission, setBrowserPermission] = useState<'unsupported' | NotificationPermission>('unsupported');
   const [nativeEnabled, setNativeEnabled] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const cursorRef = useRef<LeadNotificationCursor | null>(null);
   const pollingRef = useRef(false);
   const browserPermissionRef = useRef<'unsupported' | NotificationPermission>('unsupported');
@@ -177,14 +177,36 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       nativeEnabledRef.current = enabled;
       setNativeEnabled(enabled);
 
-      const savedSound = window.localStorage.getItem(soundEnabledKey) === 'enabled';
-      soundEnabledRef.current = savedSound;
-      setSoundEnabled(savedSound);
+      const savedSound = window.localStorage.getItem(soundEnabledKey);
+      const enabledSound = savedSound !== 'disabled';
+      soundEnabledRef.current = enabledSound;
+      setSoundEnabled(enabledSound);
     } catch {}
     void poll();
     const timer = window.setInterval(() => void poll(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, poll]);
+
+  useEffect(() => {
+    if (!soundEnabled || typeof window === 'undefined' || !window.AudioContext) return;
+
+    const primeAudio = () => {
+      try {
+        const context = audioContextRef.current || new window.AudioContext();
+        audioContextRef.current = context;
+        if (context.state === 'suspended') void context.resume();
+      } catch {}
+      window.removeEventListener('pointerdown', primeAudio);
+      window.removeEventListener('keydown', primeAudio);
+    };
+
+    window.addEventListener('pointerdown', primeAudio, { once: true });
+    window.addEventListener('keydown', primeAudio, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', primeAudio);
+      window.removeEventListener('keydown', primeAudio);
+    };
+  }, [soundEnabled]);
 
   const unreadIds = useMemo(
     () => items.filter((item) => !seenIds.includes(item.id)).map((item) => item.id),

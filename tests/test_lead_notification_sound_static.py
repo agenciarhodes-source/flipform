@@ -5,14 +5,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
-def test_new_lead_sound_is_opt_in_and_local_only():
+def test_new_lead_sound_is_enabled_by_default_and_can_be_disabled_locally():
     center = read('components/lead-notification-center.tsx')
     state = read('lib/notifications/browser-state.ts')
-    assert 'soundEnabled' in center
+    assert 'const [soundEnabled, setSoundEnabled] = useState(true)' in center
+    assert "const enabledSound = savedSound !== 'disabled'" in center
     assert 'Som de novo lead:' in center
     assert 'notificationSoundEnabledStorageKey' in center
     assert 'flipform:lead-notification-sound-enabled:' in state
     assert "window.localStorage.setItem(soundEnabledKey, enabled ? 'enabled' : 'disabled')" in center
+    assert 'persistSoundEnabled(next)' in center
 
 def test_sound_uses_web_audio_without_external_assets_or_network_calls():
     center = read('components/lead-notification-center.tsx')
@@ -53,3 +55,10 @@ def test_sound_layer_does_not_touch_database_or_integrations():
         'CREATE TABLE',
     ]:
         assert forbidden not in combined
+
+
+def test_sound_prepares_audio_after_first_user_interaction_without_playing_immediately():
+    center = read('components/lead-notification-center.tsx')
+    assert "window.addEventListener('pointerdown', primeAudio, { once: true })" in center
+    assert "window.addEventListener('keydown', primeAudio, { once: true })" in center
+    assert "if (context.state === 'suspended') void context.resume()" in center
