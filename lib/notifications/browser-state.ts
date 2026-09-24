@@ -99,3 +99,8 @@ export function mergeStoredNotificationItems(current: LeadBrowserNotification[],
 export function notificationNativeEnabledStorageKey(tenantId: string, userId: string) {
   return `flipform:lead-notification-native-enabled:${tenantId}:${userId}`;
 }
+
+
+export function notificationSoundEnabledStorageKey(tenantId: string, userId: string) {
+  return `flipform:lead-notification-sound-enabled:${tenantId}:${userId}`;
+}
