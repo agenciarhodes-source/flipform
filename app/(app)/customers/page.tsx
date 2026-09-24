@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatDateOnlyBR } from '@/lib/date-only';
+import { formatDateOnlyBR, todayDateOnly } from '@/lib/date-only';
 
 type Purchase = {
   id: string;
@@ -38,6 +38,9 @@ type Customer = {
 
 type CustomersResponse = {
   sort: 'purchases' | 'amount';
+  period: '7d' | '30d' | 'custom';
+  startDate: string;
+  endDate: string;
   summary: {
     totalCustomers: number;
     recurringCustomers: number;
@@ -58,8 +61,19 @@ function date(value: string | null) {
   return formatDateOnlyBR(value);
 }
 
+function daysAgoDateOnly(days: number) {
+  const today = todayDateOnly();
+  const [year, month, day] = today.split('-').map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+  value.setUTCDate(value.getUTCDate() - days);
+  return value.toISOString().slice(0, 10);
+}
+
 export default function CustomersPage() {
   const [sort, setSort] = useState<'purchases' | 'amount'>('purchases');
+  const [period, setPeriod] = useState<'7d' | '30d' | 'custom'>('30d');
+  const [startDate, setStartDate] = useState(() => daysAgoDateOnly(29));
+  const [endDate, setEndDate] = useState(() => todayDateOnly());
   const [search, setSearch] = useState('');
   const [data, setData] = useState<CustomersResponse | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -72,7 +86,17 @@ export default function CustomersPage() {
       setLoading(true);
       setError('');
       try {
-        const params = new URLSearchParams({ sort });
+        if (period === 'custom' && (!startDate || !endDate || startDate > endDate)) {
+          setData(null);
+          setError('Informe um período personalizado válido.');
+          setLoading(false);
+          return;
+        }
+        const params = new URLSearchParams({ sort, period });
+        if (period === 'custom') {
+          params.set('startDate', startDate);
+          params.set('endDate', endDate);
+        }
         if (search.trim()) params.set('q', search.trim());
         const response = await fetch(`/api/customers?${params.toString()}`, { signal: controller.signal });
         const payload = await response.json();
@@ -85,7 +109,7 @@ export default function CustomersPage() {
       }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [sort, search]);
+  }, [sort, period, startDate, endDate, search]);
 
   return (
     <div className="space-y-5 p-4 lg:p-6">
@@ -95,9 +119,26 @@ export default function CustomersPage() {
             <Users className="h-6 w-6 text-brand-600" />
             <h1 className="font-heading text-2xl font-bold">Clientes</h1>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">Clientes são pessoas com pelo menos uma compra registrada. Um mesmo cliente pode realizar várias compras.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Clientes são pessoas com pelo menos uma compra registrada no período selecionado. Um mesmo cliente pode realizar várias compras.</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex flex-col gap-2 xl:items-end">
+          <div className="flex flex-wrap gap-2">
+            <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom')}>
+              <SelectTrigger className="w-[170px]" aria-label="Período de clientes"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">7 dias</SelectItem>
+                <SelectItem value="30d">30 dias</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+            {period === 'custom' && (
+              <>
+                <Input aria-label="Data inicial de clientes" type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="w-[160px]" />
+                <Input aria-label="Data final de clientes" type="date" value={endDate} min={startDate} onChange={(event) => setEndDate(event.target.value)} className="w-[160px]" />
+              </>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative min-w-[260px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="pl-9" placeholder="Buscar cliente..." value={search} onChange={(event) => setSearch(event.target.value)} />
@@ -109,11 +150,15 @@ export default function CustomersPage() {
               <SelectItem value="amount">Maior valor comprado</SelectItem>
             </SelectContent>
           </Select>
+          </div>
         </div>
       </div>
 
       {data && (
         <>
+          <Card className="border-dashed bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+            Visão por compras realizadas no período: <strong className="text-foreground">{formatDateOnlyBR(data.startDate)} a {formatDateOnlyBR(data.endDate)}</strong>. Ranking, clientes, recompra, ticket e LTV realizado abaixo consideram apenas essa janela.
+          </Card>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 2xl:grid-cols-6">
             <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Clientes</p><p className="mt-1 text-2xl font-bold">{data.summary.totalCustomers}</p></div><Users className="h-5 w-5 text-muted-foreground" /></div></Card>
             <Card className="p-4"><div className="flex items-start justify-between"><div><p className="text-xs text-muted-foreground">Clientes recorrentes</p><p className="mt-1 text-2xl font-bold">{data.summary.recurringCustomers}</p><p className="mt-1 text-[11px] text-muted-foreground">2 ou mais compras</p></div><Repeat2 className="h-5 w-5 text-muted-foreground" /></div></Card>

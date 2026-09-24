@@ -57,3 +57,26 @@ def test_customers_page_is_more_visual_with_recurrence_ltv_and_podium():
     assert 'data.customers.slice(0, 3)' in page
     assert 'customer.customerType' in page
     assert 'customer.firstPurchaseAt' in page
+
+
+def test_customers_support_7d_30d_and_custom_purchase_date_filter():
+    route = read('app/api/customers/route.ts')
+    page = read('app/(app)/customers/page.tsx')
+    assert "['7d', '30d', 'custom'].includes(periodParam)" in route
+    assert "purchaseDate: { gte: range.start, lte: range.end }" in route
+    assert "todayDateOnly()" in route
+    assert "period === '7d' ? 6 : 29" in route
+    assert "isValidDateOnly(startDate)" in route
+    assert "startDate > endDate" in route
+    assert "period: '7d' | '30d' | 'custom'" in page
+    assert "useState<'7d' | '30d' | 'custom'>('30d')" in page
+    assert 'Período de clientes' in page
+    assert '<SelectItem value="7d">7 dias</SelectItem>' in page
+    assert '<SelectItem value="30d">30 dias</SelectItem>' in page
+    assert '<SelectItem value="custom">Personalizado</SelectItem>' in page
+    assert 'Data inicial de clientes' in page
+    assert 'Data final de clientes' in page
+    assert "new URLSearchParams({ sort, period })" in page
+    assert "params.set('startDate', startDate)" in page
+    assert "params.set('endDate', endDate)" in page
+    assert 'Ranking, clientes, recompra, ticket e LTV realizado' in page
