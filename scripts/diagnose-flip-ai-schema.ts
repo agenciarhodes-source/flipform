@@ -20,6 +20,7 @@ async function main() {
   list('Tabelas ausentes', readiness.missingTables);
   list('Índices ausentes', readiness.missingIndexes);
   list('Índices incompatíveis', readiness.incompatibleIndexes);
+  list('Índices inesperados', readiness.unexpectedIndexes);
   list('Constraints ausentes', readiness.missingConstraints);
   list('Constraints incompatíveis', readiness.incompatibleConstraints);
   list('Constraints inesperadas', readiness.unexpectedConstraints);

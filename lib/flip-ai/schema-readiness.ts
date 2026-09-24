@@ -79,6 +79,7 @@ export type FlipAiSchemaReadiness = {
   missingTables: string[];
   missingIndexes: string[];
   incompatibleIndexes: string[];
+  unexpectedIndexes: string[];
   missingConstraints: string[];
   incompatibleConstraints: string[];
   unexpectedConstraints: string[];
@@ -218,7 +219,19 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       JOIN pg_catalog.pg_namespace AS namespaces ON namespaces.oid = index_relations.relnamespace
       JOIN pg_catalog.pg_am AS access_methods ON access_methods.oid = index_relations.relam
       WHERE namespaces.nspname = 'public'
-        AND index_relations.relname IN (${indexNames})
+        AND (
+          index_relations.relname IN (${indexNames})
+          OR (
+            tables.relname IN (${tableNames})
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_catalog.pg_constraint AS index_constraints
+              WHERE index_constraints.conindid = index_metadata.indexrelid
+                AND index_constraints.conrelid = index_metadata.indrelid
+                AND index_constraints.contype IN ('p', 'u', 'x')
+            )
+          )
+        )
     `),
     prisma.$queryRaw<ConstraintRow[]>(Prisma.sql`
       SELECT tables.relname::text AS "tableName",
@@ -301,6 +314,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     .sort();
 
   const indexByName = new Map(indexes.map((index) => [index.indexName, index]));
+  const requiredIndexNames = new Set(FLIP_AI_REQUIRED_INDEX_SPECS
+    .map(({ indexName }) => indexName));
   const missingIndexes: string[] = [];
   const incompatibleIndexes: string[] = [];
   for (const expected of FLIP_AI_REQUIRED_INDEX_SPECS) {
@@ -328,6 +343,12 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       incompatibleIndexes.push(expected.indexName);
     }
   }
+  const unexpectedIndexes = indexes
+    .filter(({ tableName, indexName }) =>
+      (FLIP_AI_REQUIRED_TABLES as readonly string[]).includes(tableName)
+      && !requiredIndexNames.has(indexName))
+    .map(({ indexName }) => indexName)
+    .sort();
 
   const constraintsByName = new Map<string, ConstraintRow[]>();
   for (const actual of constraints) {
@@ -382,6 +403,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const schemaReady = row.missingTables.length === 0
     && missingIndexes.length === 0
     && incompatibleIndexes.length === 0
+    && unexpectedIndexes.length === 0
     && missingConstraints.length === 0
     && incompatibleConstraints.length === 0
     && unexpectedConstraints.length === 0
@@ -400,6 +422,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     missingTables: row.missingTables,
     missingIndexes,
     incompatibleIndexes,
+    unexpectedIndexes,
     missingConstraints,
     incompatibleConstraints,
     unexpectedConstraints,

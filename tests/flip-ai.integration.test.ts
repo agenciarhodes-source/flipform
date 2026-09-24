@@ -48,6 +48,14 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_sta',
   ]);
   assert.deepEqual(readiness.incompatibleIndexes, []);
+  assert.deepEqual(readiness.unexpectedIndexes, [
+    'flip_ai_external_search_cache_tenant_id_agent_id_expires_at_idx',
+    'flip_ai_external_search_cache_tenant_id_agent_id_query_hash_key',
+    'flip_ai_knowledge_indexes_document_id_revision_embedding_mo_key',
+    'flip_ai_qualifications_tenant_id_qualified_lead_tracking_st_idx',
+    'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_idx',
+    'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_key',
+  ], 'db push names differ from the reviewed migration catalog names');
   assert.deepEqual(readiness.unexpectedConstraints, []);
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
