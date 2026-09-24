@@ -39,6 +39,7 @@ import {
   Building2,
 } from "lucide-react";
 import type { SessionPayload } from "@/lib/auth";
+import { LeadNotificationCenter } from "@/components/lead-notification-center";
 
 type NavItem = {
   href: string;
@@ -296,6 +297,8 @@ export function AppShell({
               </div>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            {!inGroupView && <LeadNotificationCenter tenantId={session.tenantId} userId={session.userId} />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="gap-2 px-2">
@@ -343,6 +346,7 @@ export function AppShell({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </header>
         {!inGroupView && tenant?.status === "past_due" && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 lg:px-6 py-2.5 text-sm text-amber-900 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
