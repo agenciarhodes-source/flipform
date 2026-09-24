@@ -316,6 +316,7 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /SELECT/);
   assert.match(source, /FLIP_AI_REQUIRED_COLUMN_SPECS/);
   assert.match(source, /missingConstraints/);
+  assert.match(source, /incompatibleTables/);
   assert.match(source, /incompatibleIndexes/);
   assert.match(source, /unexpectedIndexes/);
   assert.match(source, /incompatibleConstraints/);
@@ -328,6 +329,8 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /attidentity/);
   assert.match(source, /attgenerated/);
   assert.match(source, /pg_collation/);
+  assert.match(source, /relrowsecurity/);
+  assert.match(source, /relforcerowsecurity/);
   assert.match(source, /collation_namespaces/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);

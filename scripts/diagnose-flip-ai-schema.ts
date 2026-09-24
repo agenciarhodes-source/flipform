@@ -18,6 +18,7 @@ async function main() {
   console.log(`Planos Premium com preço e ciclo esperados: ${readiness.configuredPremiumPlanCount}`);
   console.log(`Planos Premium ativos: ${readiness.activePremiumPlanCount}`);
   list('Tabelas ausentes', readiness.missingTables);
+  list('Tabelas incompatíveis', readiness.incompatibleTables);
   list('Índices ausentes', readiness.missingIndexes);
   list('Índices incompatíveis', readiness.incompatibleIndexes);
   list('Índices inesperados', readiness.unexpectedIndexes);

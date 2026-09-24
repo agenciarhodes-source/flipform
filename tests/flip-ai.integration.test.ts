@@ -28,6 +28,7 @@ test('schema readiness catalog inspection executes read-only against disposable 
   const readiness = await inspectFlipAiSchema();
   assert.equal(readiness.ready, false, 'db push is not the approved migration rollout');
   assert.equal(readiness.missingTables.length, 0);
+  assert.deepEqual(readiness.incompatibleTables, []);
   assert.deepEqual(readiness.missingColumns, []);
   // Prisma db push leaves scalar lists nullable; the approved migrations intentionally enforce NOT NULL.
   assert.deepEqual(readiness.incompatibleColumns, [

@@ -15,6 +15,7 @@ export { FLIP_AI_REQUIRED_TABLES } from './schema-contract';
 
 type ReadinessRow = {
   missingTables: string[];
+  incompatibleTables: string[];
   vectorReady: boolean;
   premiumPlanCount: bigint | number | string;
   configuredPremiumPlanCount: bigint | number | string;
@@ -77,6 +78,7 @@ export type FlipAiSchemaReadiness = {
   schemaReady: boolean;
   catalogReady: boolean;
   missingTables: string[];
+  incompatibleTables: string[];
   missingIndexes: string[];
   incompatibleIndexes: string[];
   unexpectedIndexes: string[];
@@ -116,6 +118,17 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
           WHERE to_regclass(format('public.%I', table_name)) IS NULL
           ORDER BY table_name
         ) AS "missingTables",
+        ARRAY(
+          SELECT required_tables.table_name
+          FROM required_tables
+          JOIN pg_catalog.pg_class AS table_metadata
+            ON table_metadata.oid = to_regclass(format('public.%I', required_tables.table_name))
+          WHERE table_metadata.relkind <> 'r'
+            OR table_metadata.relpersistence <> 'p'
+            OR table_metadata.relrowsecurity
+            OR table_metadata.relforcerowsecurity
+          ORDER BY required_tables.table_name
+        ) AS "incompatibleTables",
         EXISTS (
           SELECT 1 FROM pg_extension WHERE extname = 'vector'
         ) AS "vectorReady",
@@ -401,6 +414,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const configuredPremiumPlanCount = safeCount(row.configuredPremiumPlanCount);
   const activePremiumPlanCount = safeCount(row.activePremiumPlanCount);
   const schemaReady = row.missingTables.length === 0
+    && row.incompatibleTables.length === 0
     && missingIndexes.length === 0
     && incompatibleIndexes.length === 0
     && unexpectedIndexes.length === 0
@@ -420,6 +434,7 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     schemaReady,
     catalogReady,
     missingTables: row.missingTables,
+    incompatibleTables: row.incompatibleTables,
     missingIndexes,
     incompatibleIndexes,
     unexpectedIndexes,
