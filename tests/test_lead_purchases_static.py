@@ -78,3 +78,26 @@ def test_repair_production_schema_npm_alias_is_documented():
     assert '"repair:production-schema": "tsx scripts/repair-production-schema.ts"' in package
     assert 'npm run repair:production-schema' in docs
     assert '20260704120000_add_lead_purchases' in docs
+
+
+def test_purchase_date_is_calendar_date_without_timezone_day_shift():
+    helper = read('lib/date-only.ts')
+    purchase_schema = read('lib/lead-purchases.ts')
+    create_route = read('app/api/leads/[id]/purchases/route.ts')
+    edit_route = read('app/api/leads/[id]/purchases/[purchaseId]/route.ts')
+    modal = read('components/lead-detail-modal.tsx')
+    customers = read('app/(app)/customers/page.tsx')
+
+    assert 'dateLikeToDateOnly' in helper
+    assert 'formatDateOnlyBR' in helper
+    assert "refine(isValidDateOnly, 'Data da compra inválida.')" in purchase_schema
+    assert 'purchaseDate: dateOnlyToDate(data.purchaseDate)' in create_route
+    assert 'purchaseDate: dateOnlyToDate(data.purchaseDate)' in edit_route
+    assert 'purchaseDate: new Date(data.purchaseDate)' not in create_route
+    assert 'purchaseDate: new Date(data.purchaseDate)' not in edit_route
+    assert 'purchaseDate: todayDateOnly()' in modal
+    assert 'formatDateOnlyBR(purchaseSummary.firstPurchaseAt)' in modal
+    assert 'formatDateOnlyBR(purchaseSummary.lastPurchaseAt)' in modal
+    assert 'formatDateOnlyBR(purchase.purchaseDate)' in modal
+    assert 'dateLikeToDateOnly(purchase.purchaseDate)' in modal
+    assert 'return formatDateOnlyBR(value);' in customers

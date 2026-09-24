@@ -4,6 +4,7 @@ import { withPermission, canEditLead } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { formatBRLFromCents } from '@/lib/currency-brl';
 import { leadPurchaseSchema } from '@/lib/lead-purchases';
+import { dateOnlyToDate } from '@/lib/date-only';
 
 async function getLeadForEdit(id: string, tenantId: string) {
   return prisma.lead.findFirst({ where: { id, tenantId }, select: { id: true, assignedTo: true } });
@@ -18,7 +19,7 @@ export const PATCH = withPermission('LEADS_EDIT_ASSIGNED', async (req, session, 
   const parsed = leadPurchaseSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
   const data = parsed.data;
-  const purchase = await prisma.leadPurchase.update({ where: { id: current.id }, data: { amountCents: data.amountCents, currency: 'BRL', purchaseDate: new Date(data.purchaseDate), orderNumber: data.orderNumber || null, paymentMethod: data.paymentMethod || null, notes: data.notes || null, updatedBy: session.userId } });
+  const purchase = await prisma.leadPurchase.update({ where: { id: current.id }, data: { amountCents: data.amountCents, currency: 'BRL', purchaseDate: dateOnlyToDate(data.purchaseDate), orderNumber: data.orderNumber || null, paymentMethod: data.paymentMethod || null, notes: data.notes || null, updatedBy: session.userId } });
   await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: lead.id, action: 'lead.purchase_updated', metadata: { purchaseId: purchase.id, oldAmountCents: current.amountCents, amountCents: purchase.amountCents, message: `Compra atualizada de ${formatBRLFromCents(current.amountCents)} para ${formatBRLFromCents(purchase.amountCents)}.` } });
   return NextResponse.json({ purchase, message: 'Compra atualizada com sucesso.' });
 });
