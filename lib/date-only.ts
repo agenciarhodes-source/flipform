@@ -27,3 +27,26 @@ export function dateOnlyToDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
 }
+
+
+/**
+ * Returns the calendar-date portion of a stored date without applying the
+ * browser/server timezone. Useful for fields such as purchaseDate where the
+ * business meaning is a date, not an instant.
+ */
+export function dateLikeToDateOnly(value: string | Date): string {
+  const raw = value instanceof Date ? value.toISOString() : String(value || '');
+  const direct = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct && isValidDateOnly(direct[1])) return direct[1];
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString().slice(0, 10);
+}
+
+export function formatDateOnlyBR(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const dateOnly = dateLikeToDateOnly(value);
+  if (!dateOnly) return '—';
+  const [year, month, day] = dateOnly.split('-');
+  return `${day}/${month}/${year}`;
+}

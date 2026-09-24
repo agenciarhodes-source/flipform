@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { formatBRLFromCents } from './currency-brl';
+import { isValidDateOnly } from './date-only';
 
 export type CustomerType = 'no_purchase' | 'new_customer' | 'recurring_customer';
 
 export const leadPurchaseSchema = z.object({
   amountCents: z.coerce.number().int().positive('Valor da compra deve ser maior que zero.'),
   currency: z.literal('BRL').optional().default('BRL'),
-  purchaseDate: z.string().min(1, 'Data da compra obrigatória.').refine((value) => !Number.isNaN(new Date(value).getTime()), 'Data da compra inválida.'),
+  purchaseDate: z.string().min(1, 'Data da compra obrigatória.').refine(isValidDateOnly, 'Data da compra inválida.'),
   orderNumber: z.string().trim().max(80).optional().nullable(),
   paymentMethod: z.enum(['pix', 'credit_card', 'debit_card', 'cash', 'boleto', 'bank_transfer', 'other']).optional().nullable(),
   notes: z.string().trim().max(1000).optional().nullable(),

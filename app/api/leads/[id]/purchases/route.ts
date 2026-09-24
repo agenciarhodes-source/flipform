@@ -5,6 +5,7 @@ import { logAudit } from '@/lib/audit';
 import { formatBRLFromCents } from '@/lib/currency-brl';
 import { leadPurchaseSchema, summarizePurchases } from '@/lib/lead-purchases';
 import { dispatchLeadPurchaseTracking } from '@/lib/tracking';
+import { dateOnlyToDate } from '@/lib/date-only';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const lead = await prisma.lead.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId }, select: { id: true, assignedTo: true } });
@@ -32,7 +33,7 @@ export const POST = withPermission('LEADS_EDIT_ASSIGNED', async (req, session, c
   const parsed = leadPurchaseSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
   const data = parsed.data;
-  const purchase = await prisma.leadPurchase.create({ data: { tenantId: session.tenantId, leadId: lead.id, amountCents: data.amountCents, currency: 'BRL', purchaseDate: new Date(data.purchaseDate), orderNumber: data.orderNumber || null, paymentMethod: data.paymentMethod || null, notes: data.notes || null, createdBy: session.userId, updatedBy: session.userId } });
+  const purchase = await prisma.leadPurchase.create({ data: { tenantId: session.tenantId, leadId: lead.id, amountCents: data.amountCents, currency: 'BRL', purchaseDate: dateOnlyToDate(data.purchaseDate), orderNumber: data.orderNumber || null, paymentMethod: data.paymentMethod || null, notes: data.notes || null, createdBy: session.userId, updatedBy: session.userId } });
   await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: lead.id, action: 'lead.purchase_created', metadata: { purchaseId: purchase.id, amountCents: purchase.amountCents, message: `Compra de ${formatBRLFromCents(purchase.amountCents)} registrada.` } });
 
   // Revenue registration is the source of truth for Purchase. Tracking is

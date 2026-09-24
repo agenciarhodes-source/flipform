@@ -13,6 +13,7 @@ import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, Messa
 import { TasksTab } from '@/components/tasks-tab';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity, normalizeBrazilState, formatLeadLocation } from '@/lib/brazil-locations';
+import { dateLikeToDateOnly, formatDateOnlyBR, todayDateOnly } from '@/lib/date-only';
 
 interface Stage { id: string; name: string; color: string; }
 
@@ -34,7 +35,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [noteContent, setNoteContent] = useState('');
   const [purchases, setPurchases] = useState<any[]>([]);
   const [purchaseSummary, setPurchaseSummary] = useState<any>(null);
-  const [purchaseForm, setPurchaseForm] = useState({ amount: '', purchaseDate: new Date().toISOString().slice(0, 10), orderNumber: '', paymentMethod: '', notes: '' });
+  const [purchaseForm, setPurchaseForm] = useState({ amount: '', purchaseDate: todayDateOnly(), orderNumber: '', paymentMethod: '', notes: '' });
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [locationForm, setLocationForm] = useState({ state: '', city: '' });
   const [savingLocation, setSavingLocation] = useState(false);
@@ -83,7 +84,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     } catch { toast.error('Não foi possível atualizar a localização.'); } finally { setSavingLocation(false); }
   };
 
-  const resetPurchaseForm = () => { setEditingPurchaseId(null); setPurchaseForm({ amount: '', purchaseDate: new Date().toISOString().slice(0, 10), orderNumber: '', paymentMethod: '', notes: '' }); };
+  const resetPurchaseForm = () => { setEditingPurchaseId(null); setPurchaseForm({ amount: '', purchaseDate: todayDateOnly(), orderNumber: '', paymentMethod: '', notes: '' }); };
   const savePurchase = async () => {
     try {
       const amountCents = parseBRLToCents(purchaseForm.amount);
@@ -95,7 +96,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
       resetPurchaseForm(); await load(); onChange();
     } catch { toast.error('Não foi possível registrar a compra.'); }
   };
-  const editPurchase = (purchase: any) => { setEditingPurchaseId(purchase.id); setPurchaseForm({ amount: formatCurrencyBRLFromCents(purchase.amountCents), purchaseDate: String(purchase.purchaseDate).slice(0, 10), orderNumber: purchase.orderNumber || '', paymentMethod: purchase.paymentMethod || '', notes: purchase.notes || '' }); };
+  const editPurchase = (purchase: any) => { setEditingPurchaseId(purchase.id); setPurchaseForm({ amount: formatCurrencyBRLFromCents(purchase.amountCents), purchaseDate: dateLikeToDateOnly(purchase.purchaseDate), orderNumber: purchase.orderNumber || '', paymentMethod: purchase.paymentMethod || '', notes: purchase.notes || '' }); };
   const deletePurchase = async (purchaseId: string) => {
     if (!confirm('Remover esta compra?')) return;
     try { const res = await fetch(`/api/leads/${leadId}/purchases/${purchaseId}`, { method: 'DELETE' }); if (!res.ok) throw new Error('delete_failed'); toast.success('Compra removida com sucesso.'); await load(); onChange(); } catch { toast.error('Não foi possível remover a compra.'); }
@@ -359,8 +360,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Total comprado</div><div className="text-xl font-bold">{formatCurrencyBRLFromCents(purchaseSummary?.totalAmountCents || 0)}</div></div>
               <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Compras</div><div className="text-xl font-bold">{purchaseSummary?.purchaseCount || 0}</div></div>
               <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Ticket médio</div><div className="text-xl font-bold">{formatCurrencyBRLFromCents(purchaseSummary?.averageTicketCents || 0)}</div></div>
-              <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Primeira compra</div><div className="font-medium">{purchaseSummary?.firstPurchaseAt ? new Date(purchaseSummary.firstPurchaseAt).toLocaleDateString('pt-BR') : '—'}</div></div>
-              <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Última compra</div><div className="font-medium">{purchaseSummary?.lastPurchaseAt ? new Date(purchaseSummary.lastPurchaseAt).toLocaleDateString('pt-BR') : '—'}</div></div>
+              <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Primeira compra</div><div className="font-medium">{purchaseSummary?.firstPurchaseAt ? formatDateOnlyBR(purchaseSummary.firstPurchaseAt) : '—'}</div></div>
+              <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Última compra</div><div className="font-medium">{purchaseSummary?.lastPurchaseAt ? formatDateOnlyBR(purchaseSummary.lastPurchaseAt) : '—'}</div></div>
               <div className="rounded-xl border bg-white p-3"><div className="text-xs text-muted-foreground">Status</div><div className="font-medium">{purchaseSummary?.customerType === 'recurring_customer' ? 'Cliente recorrente' : purchaseSummary?.customerType === 'new_customer' ? 'Cliente novo' : 'Sem compras registradas'}</div></div>
             </section>
             <section className="rounded-xl border bg-white p-4 space-y-3">
@@ -369,7 +370,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <Textarea placeholder="Observação" value={purchaseForm.notes} onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} />
               <div className="flex gap-2"><Button size="sm" onClick={savePurchase}>{editingPurchaseId ? 'Salvar compra' : 'Registrar venda'}</Button>{editingPurchaseId && <Button size="sm" variant="outline" onClick={resetPurchaseForm}>Cancelar</Button>}</div>
             </section>
-            <section className="space-y-2">{purchases.length === 0 ? <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhuma compra registrada ainda.</div> : purchases.map((purchase, index) => <div key={purchase.id} className="rounded-xl border bg-white p-3 text-sm"><div className="flex items-start justify-between gap-2"><div><div className="font-medium">{new Date(purchase.purchaseDate).toLocaleDateString('pt-BR')} — {formatCurrencyBRLFromCents(purchase.amountCents)} {purchase.orderNumber ? `— Pedido #${purchase.orderNumber}` : ''} {purchase.paymentMethod ? `— ${purchase.paymentMethod}` : ''}</div><div className="text-xs text-muted-foreground">{purchases.length - index}ª compra{purchase.notes ? ` • ${purchase.notes}` : ''}</div></div><div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => editPurchase(purchase)}><Pencil className="h-3.5 w-3.5" /></Button><Button size="icon" variant="ghost" onClick={() => deletePurchase(purchase.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button></div></div></div>)}</section>
+            <section className="space-y-2">{purchases.length === 0 ? <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">Nenhuma compra registrada ainda.</div> : purchases.map((purchase, index) => <div key={purchase.id} className="rounded-xl border bg-white p-3 text-sm"><div className="flex items-start justify-between gap-2"><div><div className="font-medium">{formatDateOnlyBR(purchase.purchaseDate)} — {formatCurrencyBRLFromCents(purchase.amountCents)} {purchase.orderNumber ? `— Pedido #${purchase.orderNumber}` : ''} {purchase.paymentMethod ? `— ${purchase.paymentMethod}` : ''}</div><div className="text-xs text-muted-foreground">{purchases.length - index}ª compra{purchase.notes ? ` • ${purchase.notes}` : ''}</div></div><div className="flex gap-1"><Button size="icon" variant="ghost" onClick={() => editPurchase(purchase)}><Pencil className="h-3.5 w-3.5" /></Button><Button size="icon" variant="ghost" onClick={() => deletePurchase(purchase.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button></div></div></div>)}</section>
           </TabsContent>
 
         </Tabs>

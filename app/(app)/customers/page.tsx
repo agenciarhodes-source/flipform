@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatDateOnlyBR } from '@/lib/date-only';
 
 type Purchase = {
   id: string;
@@ -54,7 +55,7 @@ function money(cents: number) {
 }
 
 function date(value: string | null) {
-  return value ? new Intl.DateTimeFormat('pt-BR').format(new Date(value)) : '—';
+  return formatDateOnlyBR(value);
 }
 
 export default function CustomersPage() {
