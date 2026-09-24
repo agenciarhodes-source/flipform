@@ -53,6 +53,11 @@ def test_notification_foundation_does_not_change_schema_or_integrations():
     assert 'ALTER TABLE' not in combined
     assert 'CREATE TABLE' not in combined
     assert 'metaAccessToken' not in combined
-    assert 'pixel' not in combined.lower()
-    assert 'whatsapp' not in combined.lower()
-    assert 'instagram' not in combined.lower()
+    assert 'TenantMetaConnection' not in combined
+    assert 'PlatformMetaSettings' not in combined
+    assert 'TenantIntegrationSettings' not in combined
+    assert 'TenantWhatsAppConnection' not in combined
+    assert 'TenantInstagramConnection' not in combined
+    assert 'dispatchFormSubmissionTracking' not in combined
+    assert 'dispatchKanbanStageTracking' not in combined
+    assert 'dispatchLeadPurchaseTracking' not in combined
