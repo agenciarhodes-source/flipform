@@ -59,3 +59,38 @@ export function parseSeenNotificationIds(raw: string | null): string[] {
 export function mergeSeenNotificationIds(current: string[], incoming: string[]) {
   return [...new Set([...current, ...incoming])].slice(-200);
 }
+
+
+export function notificationItemsStorageKey(tenantId: string, userId: string) {
+  return `flipform:lead-notification-items:${tenantId}:${userId}`;
+}
+
+export function parseStoredNotificationItems(raw: string | null): LeadBrowserNotification[] {
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item): item is LeadBrowserNotification =>
+        !!item
+        && item.type === 'lead_created'
+        && typeof item.id === 'string'
+        && typeof item.leadId === 'string'
+        && typeof item.title === 'string'
+        && typeof item.leadName === 'string'
+        && typeof item.createdAt === 'string'
+        && typeof item.href === 'string'
+      )
+      .slice(-50);
+  } catch {
+    return [];
+  }
+}
+
+export function mergeStoredNotificationItems(current: LeadBrowserNotification[], incoming: LeadBrowserNotification[]) {
+  const byId = new Map<string, LeadBrowserNotification>();
+  for (const item of [...current, ...incoming]) byId.set(item.id, item);
+  return Array.from(byId.values())
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-50);
+}

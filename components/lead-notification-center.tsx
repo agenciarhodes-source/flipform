@@ -1,0 +1,185 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, CheckCheck, Loader2, UserPlus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  mergeSeenNotificationIds,
+  mergeStoredNotificationItems,
+  notificationCursorStorageKey,
+  notificationItemsStorageKey,
+  notificationSeenStorageKey,
+  parseSeenNotificationIds,
+  parseStoredCursor,
+  parseStoredNotificationItems,
+  type LeadBrowserNotification,
+  type LeadNotificationCursor,
+  type LeadNotificationFeed,
+} from '@/lib/notifications/browser-state';
+
+const POLL_MS = 15_000;
+
+function relativeTime(value: string) {
+  const deltaSeconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (deltaSeconds < 60) return 'agora';
+  const minutes = Math.floor(deltaSeconds / 60);
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `há ${days} d`;
+}
+
+export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const router = useRouter();
+  const [items, setItems] = useState<LeadBrowserNotification[]>([]);
+  const [seenIds, setSeenIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const cursorRef = useRef<LeadNotificationCursor | null>(null);
+  const pollingRef = useRef(false);
+
+  const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
+  const seenKey = useMemo(() => notificationSeenStorageKey(tenantId, userId), [tenantId, userId]);
+  const itemsKey = useMemo(() => notificationItemsStorageKey(tenantId, userId), [tenantId, userId]);
+
+  const persistSeen = useCallback((next: string[]) => {
+    setSeenIds(next);
+    try { window.localStorage.setItem(seenKey, JSON.stringify(next)); } catch {}
+  }, [seenKey]);
+
+  const persistItems = useCallback((next: LeadBrowserNotification[]) => {
+    setItems(next);
+    try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
+  }, [itemsKey]);
+
+  const poll = useCallback(async () => {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    try {
+      const cursor = cursorRef.current;
+      const params = new URLSearchParams();
+      if (cursor) {
+        params.set('after', cursor.createdAt);
+        if (cursor.id) params.set('afterId', cursor.id);
+      }
+
+      const response = await fetch(`/api/notifications/leads${params.size ? `?${params.toString()}` : ''}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+
+      const feed = await response.json() as LeadNotificationFeed;
+      cursorRef.current = feed.cursor;
+      try { window.localStorage.setItem(cursorKey, JSON.stringify(feed.cursor)); } catch {}
+
+      if (feed.items.length) {
+        setItems((current) => {
+          const next = mergeStoredNotificationItems(current, feed.items);
+          try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      }
+    } catch {
+      // Notifications are best-effort and must never affect CRM flows.
+    } finally {
+      pollingRef.current = false;
+      setLoading(false);
+    }
+  }, [cursorKey, itemsKey]);
+
+  useEffect(() => {
+    try {
+      cursorRef.current = parseStoredCursor(window.localStorage.getItem(cursorKey));
+      setSeenIds(parseSeenNotificationIds(window.localStorage.getItem(seenKey)));
+      setItems(parseStoredNotificationItems(window.localStorage.getItem(itemsKey)));
+    } catch {}
+    void poll();
+    const timer = window.setInterval(() => void poll(), POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [cursorKey, seenKey, itemsKey, poll]);
+
+  const unreadIds = useMemo(
+    () => items.filter((item) => !seenIds.includes(item.id)).map((item) => item.id),
+    [items, seenIds],
+  );
+  const unreadCount = unreadIds.length;
+
+  function markAllSeen() {
+    if (!unreadIds.length) return;
+    persistSeen(mergeSeenNotificationIds(seenIds, unreadIds));
+  }
+
+  function openNotification(item: LeadBrowserNotification) {
+    persistSeen(mergeSeenNotificationIds(seenIds, [item.id]));
+    router.push(item.href);
+  }
+
+  return (
+    <DropdownMenu onOpenChange={(open) => { if (open) markAllSeen(); }}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative" aria-label="Notificações de leads">
+          {loading && !items.length ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <Bell className="h-5 w-5" />}
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-red-500 px-1 text-center text-[10px] font-bold leading-4 text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[360px] max-w-[calc(100vw-24px)] p-0">
+        <div className="flex items-center justify-between px-3 py-3">
+          <div>
+            <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
+            <p className="mt-0.5 text-xs text-muted-foreground">Novos leads da sua operação</p>
+          </div>
+          {items.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={(event) => { event.preventDefault(); markAllSeen(); }}>
+              <CheckCheck className="mr-1 h-3.5 w-3.5" />Marcar como vistas
+            </Button>
+          )}
+        </div>
+        <DropdownMenuSeparator className="m-0" />
+        <div className="max-h-[420px] overflow-y-auto">
+          {items.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <Bell className="mx-auto h-7 w-7 text-muted-foreground/60" />
+              <p className="mt-2 text-sm font-medium">Nenhuma notificação nova</p>
+              <p className="mt-1 text-xs text-muted-foreground">Quando um novo lead entrar no seu escopo, ele aparecerá aqui.</p>
+            </div>
+          ) : [...items].reverse().map((item) => {
+            const unseen = !seenIds.includes(item.id);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => openNotification(item)}
+                className="flex w-full gap-3 border-b px-3 py-3 text-left last:border-b-0 hover:bg-muted/60"
+              >
+                <div className="mt-0.5 rounded-full bg-brand-50 p-2 text-brand-700"><UserPlus className="h-4 w-4" /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start gap-2">
+                    <p className="truncate text-sm font-semibold">{item.title}</p>
+                    {unseen && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />}
+                  </div>
+                  <p className="mt-0.5 truncate text-sm">{item.leadName}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {[item.formName, item.source, item.assignedUserName].filter(Boolean).join(' · ') || item.pipelineName}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{relativeTime(item.createdAt)}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

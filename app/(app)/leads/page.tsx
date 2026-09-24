@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import { formatLeadSource } from '@/lib/leads';
 import { formatLeadLocation } from '@/lib/brazil-locations';
 
 export default function LeadsPage() {
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<any[]>([]);
   const [stages, setStages] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
@@ -30,6 +32,10 @@ export default function LeadsPage() {
     setStages(p.pipelines[0]?.stages || []);
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const leadId = searchParams.get('leadId');
+    if (leadId) setSelectedId(leadId);
+  }, [searchParams]);
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [search]);
 
   const tempIcon = (t: string) => t === 'hot' ? <Flame className="w-3.5 h-3.5 text-red-500" /> : t === 'warm' ? <Thermometer className="w-3.5 h-3.5 text-amber-500" /> : <Snowflake className="w-3.5 h-3.5 text-sky-500" />;
