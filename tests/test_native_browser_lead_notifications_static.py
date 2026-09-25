@@ -20,7 +20,8 @@ def test_new_lead_feed_can_show_native_notification_when_page_is_open():
     assert "if (permission !== 'granted') return" in center
     assert 'new Notification(item.title' in center
     assert 'if (feed.items.length) deliverItems(feed.items)' in center
-    assert 'for (const item of fresh) void showNativeNotification(item)' in center
+    assert 'for (const item of fresh) {' in center
+    assert 'void showNativeNotification(item)' in center
     assert '!nativeEnabledRef.current' in center
     assert 'tag: item.id' in center
     assert 'registration.showNotification(item.title' in center
