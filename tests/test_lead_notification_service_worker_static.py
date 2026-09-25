@@ -5,12 +5,14 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
-def test_native_notification_uses_service_worker_for_background_tab_reliability():
+def test_native_notification_keeps_service_worker_as_browser_fallback():
     center = read('components/lead-notification-center.tsx')
     worker = read('public/lead-notification-sw.js')
     assert "navigator.serviceWorker.register('/lead-notification-sw.js')" in center
     assert 'navigator.serviceWorker.ready' in center
     assert 'registration.showNotification(item.title' in center
+    assert 'const notification = new Notification(item.title' in center
+    assert center.index('const notification = new Notification(item.title') < center.index('registration.showNotification(item.title')
     assert "requireInteraction: true" in center
     assert "data: { href: item.href }" in center
     assert "self.addEventListener('notificationclick'" in worker

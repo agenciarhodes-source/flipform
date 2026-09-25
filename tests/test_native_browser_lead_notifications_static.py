@@ -16,14 +16,16 @@ def test_native_browser_notifications_require_explicit_user_permission():
 
 def test_new_lead_feed_can_show_native_notification_when_page_is_open():
     center = read('components/lead-notification-center.tsx')
+    assert 'const permission = Notification.permission' in center
+    assert "if (permission !== 'granted') return" in center
     assert 'new Notification(item.title' in center
     assert 'if (feed.items.length) deliverItems(feed.items)' in center
     assert 'for (const item of fresh) void showNativeNotification(item)' in center
-    assert 'browserPermissionRef.current !== \'granted\'' in center
     assert '!nativeEnabledRef.current' in center
     assert 'tag: item.id' in center
     assert 'registration.showNotification(item.title' in center
     assert 'requireInteraction: true' in center
+    assert 'silent: false' in center
 
 def test_native_notification_click_focuses_flipform_and_opens_lead():
     center = read('components/lead-notification-center.tsx')
@@ -84,3 +86,13 @@ def test_notification_feed_refreshes_when_user_returns_to_flipform_tab():
     assert "window.addEventListener('focus', refreshOnFocus)" in center
     assert "document.addEventListener('visibilitychange', refreshOnVisibility)" in center
     assert "document.visibilityState === 'visible'" in center
+
+
+def test_chrome_desktop_popup_is_preferred_before_service_worker_fallback():
+    center = read('components/lead-notification-center.tsx')
+    direct = center.index('const notification = new Notification(item.title')
+    fallback = center.index('await registration.showNotification(item.title')
+    assert direct < fallback
+    assert 'Chrome desktop: prefer the page Notification API' in center
+    assert 'window.focus()' in center
+    assert 'router.push(item.href)' in center
