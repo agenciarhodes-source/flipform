@@ -4,7 +4,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
-import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
+import { getBrazilianPhoneAliases, isValidBrazilianPhone, normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
 import { dateOnlyToDate, isValidDateOnly, todayDateOnly } from '@/lib/date-only';
 
 function dateOnlyBoundary(value: string, endOfDay = false) {
@@ -73,7 +73,7 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
 
     const email = normalizeEmail(parsed.data.email);
     const enteredAt = parsed.data.entryDate ? dateOnlyToDate(parsed.data.entryDate) : new Date();
-    const phone = normalizeBrazilianPhone(parsed.data.phone);
+    const phone = normalizeBrazilianLeadPhone(parsed.data.phone);
     if (!email && !phone) return NextResponse.json({ error: 'Informe telefone ou e-mail.' }, { status: 400 });
     if (email && !/^\S+@\S+\.\S+$/.test(email)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
     if (phone && !isValidBrazilianPhone(phone)) return NextResponse.json({ error: 'Informe um telefone válido.' }, { status: 400 });
@@ -85,7 +85,10 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
       prisma.lead.findFirst({
         where: {
           tenantId: session.tenantId,
-          OR: [phone ? { phone } : undefined, email ? { email } : undefined].filter(Boolean) as any,
+          OR: [
+            phone ? { phone: { in: getBrazilianPhoneAliases(phone).filter(candidate => candidate.startsWith('55')) } } : undefined,
+            email ? { email } : undefined,
+          ].filter(Boolean) as any,
         },
         select: { id: true, name: true },
       }),
