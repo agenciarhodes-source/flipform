@@ -79,3 +79,23 @@ def test_long_poll_change_does_not_touch_integrations_or_lead_creation():
         'CREATE TABLE',
     ]:
         assert forbidden not in combined
+
+def test_background_delivery_uses_service_worker_popup_without_touching_lead_flow():
+    center = read('components/lead-notification-center.tsx')
+    worker = read('public/lead-notification-sw.js')
+    assert "type: 'SHOW_LEAD_NOTIFICATION'" in center
+    assert "event.data.type !== 'SHOW_LEAD_NOTIFICATION'" in worker
+    assert 'self.registration.showNotification(title' in worker
+    assert 'requireInteraction: true' in center
+    assert 'renotify: true' in center
+    for forbidden in [
+        'prisma.lead.create',
+        'prisma.lead.update',
+        'prisma.lead.delete',
+        'tenantMetaConnection',
+        'tenantWhatsAppConnection',
+        'tenantInstagramConnection',
+        'ALTER TABLE',
+        'CREATE TABLE',
+    ]:
+        assert forbidden not in worker

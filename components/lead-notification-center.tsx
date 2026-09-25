@@ -124,6 +124,51 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     }
   }, []);
 
+  const showNativeNotificationThroughWorker = useCallback(async (
+    registration: ServiceWorkerRegistration,
+    item: LeadBrowserNotification,
+    body: string,
+  ) => {
+    const worker = registration.active;
+    if (!worker || typeof MessageChannel === 'undefined') return false;
+
+    return await new Promise<boolean>((resolve) => {
+      const channel = new MessageChannel();
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        channel.port1.close();
+        resolve(ok);
+      };
+      const timeout = window.setTimeout(() => finish(false), 1_800);
+
+      channel.port1.onmessage = (event) => {
+        finish(event.data?.ok === true);
+      };
+
+      try {
+        worker.postMessage({
+          type: 'SHOW_LEAD_NOTIFICATION',
+          notification: {
+            title: item.title,
+            body,
+            icon: '/icon.svg',
+            badge: '/icon.svg',
+            tag: item.id,
+            data: { href: item.href },
+            requireInteraction: true,
+            renotify: true,
+            timestamp: new Date(item.createdAt).getTime(),
+          },
+        }, [channel.port2]);
+      } catch {
+        finish(false);
+      }
+    });
+  }, []);
+
   const showNativeNotification = useCallback(async (item: LeadBrowserNotification) => {
     if (typeof window === 'undefined' || !('Notification' in window) || !nativeEnabledRef.current) return;
 
@@ -136,17 +181,27 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
 
     try {
       const registration = ('serviceWorker' in navigator)
-        ? (serviceWorkerRef.current || await navigator.serviceWorker.getRegistration())
+        ? (serviceWorkerRef.current || await navigator.serviceWorker.ready)
         : null;
 
       if (registration?.active) {
         serviceWorkerRef.current = registration;
+
+        const shownByWorker = await showNativeNotificationThroughWorker(registration, item, body);
+        if (shownByWorker) {
+          const active = await registration.getNotifications({ tag: item.id });
+          if (active.some((notification) => notification.tag === item.id)) return;
+        }
+
         await registration.showNotification(item.title, {
           body,
           icon: '/icon.svg',
           badge: '/icon.svg',
           tag: item.id,
           silent: false,
+          requireInteraction: true,
+          renotify: true,
+          timestamp: new Date(item.createdAt).getTime(),
           data: { href: item.href },
         });
 
@@ -163,6 +218,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
         icon: '/icon.svg',
         tag: item.id,
         silent: false,
+        requireInteraction: true,
       });
       notification.onclick = () => {
         window.focus();
@@ -172,7 +228,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     } catch {
       // Native browser notifications are best-effort and must never affect CRM flows.
     }
-  }, [router]);
+  }, [router, showNativeNotificationThroughWorker]);
 
   const deliverItems = useCallback((incoming: LeadBrowserNotification[]) => {
     const fresh = incoming.filter((item) => {
@@ -242,7 +298,11 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('/lead-notification-sw.js')
-        .then((registration) => { serviceWorkerRef.current = registration; })
+        .then(async (registration) => {
+          serviceWorkerRef.current = registration;
+          try { await registration.update(); } catch {}
+          try { serviceWorkerRef.current = await navigator.serviceWorker.ready; } catch {}
+        })
         .catch(() => {});
     }
 
@@ -474,6 +534,11 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           {browserPermission === 'default' && (
             <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
               Ative para receber o alerta nativo do navegador mesmo quando estiver em outra aba. A posição do aviso é controlada pelo navegador e pelo sistema operacional.
+            </p>
+          )}
+          {browserPermission === 'granted' && (
+            <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
+              Alertas nativos estão habilitados. Em outra aba, o aviso é disparado pelo Service Worker e fica persistente até interação, sujeito às permissões do Chrome e às notificações do Windows.
             </p>
           )}
           {browserPermission === 'granted' && (

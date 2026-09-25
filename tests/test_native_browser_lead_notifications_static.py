@@ -94,7 +94,23 @@ def test_service_worker_native_popup_is_preferred_with_page_notification_fallbac
     service_worker = center.index('await registration.showNotification(item.title')
     direct = center.index('const notification = new Notification(item.title')
     assert service_worker < direct
-    assert 'await navigator.serviceWorker.getRegistration()' in center
+    assert 'await navigator.serviceWorker.ready' in center
     assert 'registration.getNotifications({ tag: item.id })' in center
     assert 'window.focus()' in center
     assert 'router.push(item.href)' in center
+
+
+def test_background_tab_popup_is_dispatched_through_active_service_worker():
+    center = read('components/lead-notification-center.tsx')
+    worker = read('public/lead-notification-sw.js')
+    assert 'const showNativeNotificationThroughWorker' in center
+    assert "type: 'SHOW_LEAD_NOTIFICATION'" in center
+    assert 'worker.postMessage({' in center
+    assert 'new MessageChannel()' in center
+    assert 'await navigator.serviceWorker.ready' in center
+    assert 'registration.update()' in center
+    assert "self.addEventListener('message'" in worker
+    assert 'self.registration.showNotification(title' in worker
+    assert 'requireInteraction: true' in center
+    assert 'renotify: true' in center
+    assert 'Alertas nativos estão habilitados' in center
