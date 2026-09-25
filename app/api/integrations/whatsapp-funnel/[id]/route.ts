@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { withPermission } from '@/lib/rbac-server';
 
 const deprecated = () => NextResponse.json(
   {
@@ -8,5 +9,5 @@ const deprecated = () => NextResponse.json(
   { status: 410 },
 );
 
-export const PUT = deprecated;
-export const DELETE = deprecated;
+export const PUT = withPermission('INTEGRATIONS_EDIT', async () => deprecated());
+export const DELETE = withPermission('INTEGRATIONS_EDIT', async () => deprecated());
