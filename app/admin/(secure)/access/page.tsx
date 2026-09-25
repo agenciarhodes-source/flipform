@@ -156,7 +156,7 @@ export default function AdminAccessPage() {
 
       {accessMode === 'group_account' ? (
         <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">
-          Esse cadastro cria apenas a conta de login. Depois vá em <strong>Grupos empresariais</strong>, selecione as empresas do grupo e escolha este acesso como administrador, dono ou visualizador do grupo.
+          Esse cadastro cria apenas a conta de login. Depois vá em <strong>Grupos empresariais</strong>, selecione as empresas do grupo e escolha este acesso como dono, administrador ou visualizador do grupo. Gestores de loja devem ser vinculados diretamente à empresa correspondente.
         </div>
       ) : (
         <div className="space-y-2">

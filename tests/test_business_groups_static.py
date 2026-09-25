@@ -120,3 +120,30 @@ def test_platform_admin_selects_registered_access_by_user_id():
     assert "member: { userId" in page
     assert 'passwordHash' not in helper
     assert 'upsertBusinessGroupMember' in update
+
+
+def test_group_admin_remains_group_wide_admin_not_store_manager():
+    helper = read('lib/business-groups.ts')
+    update = read('app/api/admin/business-groups/[id]/route.ts')
+    page = read('app/admin/(secure)/groups/page.tsx')
+    assert "export type BusinessGroupRole = 'owner' | 'admin' | 'viewer'" in helper
+    assert "role: z.enum(['owner', 'admin', 'viewer'])" in update
+    assert "if (role === 'admin') return 'admin';" in helper
+    assert "admin: 'Administrador do grupo'" in page
+    assert "const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const" in page
+    assert 'Gestores de loja devem ser configurados dentro da empresa correspondente' in page
+
+
+def test_platform_admin_can_edit_existing_group_member_level_inline():
+    page = read('app/admin/(secure)/groups/page.tsx')
+    assert 'memberEditRole' in page
+    assert 'saveExistingMemberRole' in page
+    assert 'userId: member.userId' in page
+    assert 'Salvar nível' in page
+    assert 'Nível de acesso de ${member.name}' in page
+
+
+def test_group_manager_semantics_are_reused_by_flip_ai_access_check():
+    access = read('lib/flip-ai/access.ts')
+    assert 'mapBusinessGroupRoleToTenantRole' in access
+    assert 'role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;' in access
