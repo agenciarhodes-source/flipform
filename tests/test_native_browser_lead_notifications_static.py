@@ -17,11 +17,12 @@ def test_native_browser_notifications_require_explicit_user_permission():
 def test_new_lead_feed_can_show_native_notification_when_page_is_open():
     center = read('components/lead-notification-center.tsx')
     assert 'new Notification(item.title' in center
-    assert 'for (const item of feed.items) showNativeNotification(item)' in center
+    assert 'for (const item of feed.items) void showNativeNotification(item)' in center
     assert 'browserPermissionRef.current !== \'granted\'' in center
     assert '!nativeEnabledRef.current' in center
     assert 'tag: item.id' in center
-    assert 'window.setTimeout(() => notification.close(), 12_000)' in center
+    assert 'registration.showNotification(item.title' in center
+    assert 'requireInteraction: true' in center
 
 def test_native_notification_click_focuses_flipform_and_opens_lead():
     center = read('components/lead-notification-center.tsx')
