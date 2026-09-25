@@ -81,12 +81,6 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     type FieldRow = { id: string; label: string; fieldType: string; isRequired: boolean; options?: unknown; validationRules?: unknown; [key: string]: unknown };
     const orderedFields = form.fields as FieldRow[];
     const fieldsById = new Map<string, FieldRow>(orderedFields.map((f) => [f.id, f]));
-    const primaryPhoneField = orderedFields.find((f) => f.fieldType === 'phone_br' || f.fieldType === 'phone');
-    const primaryPhoneRules = primaryPhoneField?.validationRules && typeof primaryPhoneField.validationRules === 'object' && !Array.isArray(primaryPhoneField.validationRules)
-      ? primaryPhoneField.validationRules as Record<string, unknown>
-      : null;
-    const preventDuplicateLead = primaryPhoneRules?.preventDuplicateLead === true;
-
     // Filtra apenas answers com fieldId válido para este form
     const cleanAnswers = parsed.data.answers
       .filter((a) => fieldsById.has(a.fieldId))
@@ -197,15 +191,15 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
     const email = pickByType(['email']);
     const phone = pickByType(['phone_br', 'phone']);
-    const uniqueContactPhone = preventDuplicateLead ? phone : null;
-    const uniqueContactEmail = preventDuplicateLead ? email : null;
+    const uniqueContactPhone = phone;
+    const uniqueContactEmail = email;
     const locationAnswer = normalizedAnswers.find((a) => a.fieldType === 'city_state' && a.value && typeof a.value === 'object')?.value as any;
     const leadState = locationAnswer?.state || null;
     const leadCity = locationAnswer?.city || null;
 
-    // Quando o cadastro único está ativo, a conta inteira é a referência. Uma nova
-    // submissão com telefone/e-mail já existente reutiliza o primeiro lead do tenant
-    // sem mover etapa, trocar responsável, origem ou sobrescrever dados.
+    // Cadastro único é uma regra global da conta. Uma nova submissão com telefone/e-mail
+    // já existente reutiliza o primeiro lead do tenant, independentemente de formulário
+    // ou atendente, sem mover etapa, trocar responsável, origem ou sobrescrever dados.
     const assignmentResult = { assignedTo: null as string | null, reason: 'not_started' };
     const leadResult = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       if (uniqueContactPhone || uniqueContactEmail) {

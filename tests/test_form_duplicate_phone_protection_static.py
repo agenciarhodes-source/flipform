@@ -12,14 +12,16 @@ def read(path: Path) -> str:
     return path.read_text()
 
 
-def test_protection_is_opt_in_per_form_but_scoped_to_the_entire_account():
+def test_protection_is_mandatory_and_account_wide_for_all_forms():
     builder = read(BUILDER)
     submit = read(SUBMIT)
     assert 'Cadastro único por conta' in builder
-    assert 'A origem do primeiro cadastro será preservada.' in builder
-    assert 'preventDuplicateLead?: boolean' in builder
-    assert 'primaryPhoneRules?.preventDuplicateLead === true' in submit
-    assert 'disabled={primaryPhoneFieldIndex < 0}' in builder
+    assert 'Esta proteção é obrigatória em toda a conta.' in builder
+    assert 'nenhum formulário ou atendente poderá criar outro cadastro' in builder
+    assert 'primaryPhoneRules?.preventDuplicateLead === true' not in submit
+    assert 'const uniqueContactPhone = phone;' in submit
+    assert 'const uniqueContactEmail = email;' in submit
+    assert 'setPreventDuplicateLead' not in builder
 
 
 def test_duplicate_check_is_scoped_by_tenant_contact_not_form():
@@ -119,3 +121,13 @@ def test_account_scope_preserves_original_crm_source_and_owner_on_repeat_submiss
     assert 'tx.lead.update' not in branch
     assert 'source:' not in branch
     assert 'assignedTo:' not in branch
+
+
+def test_account_uniqueness_does_not_depend_on_assignee_or_form_setting():
+    submit = read(SUBMIT)
+    lookup_index = submit.index('const existingLeadId = await findExistingLeadIdByContactInTenant(')
+    lookup_branch = submit[lookup_index:submit.index('if (existingLeadId)', lookup_index)]
+    assert 'tenantId: form.tenantId' in lookup_branch
+    assert 'assignedTo' not in lookup_branch
+    assert 'formId' not in lookup_branch
+    assert 'preventDuplicateLead' not in submit
