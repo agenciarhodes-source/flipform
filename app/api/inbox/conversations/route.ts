@@ -91,13 +91,43 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
           type: true,
           text: true,
           status: true,
+          sentByUserId: true,
+          sentByUser: {
+            select: { id: true, name: true },
+          },
           providerTimestamp: true,
           createdAt: true,
         },
       })
     : [];
 
-  const messageById = new Map(latestMessages.map((message) => [message.id, message]));
+  const senderUserIds = [...new Set(
+    latestMessages
+      .map((message) => message.sentByUserId)
+      .filter((userId): userId is string => Boolean(userId)),
+  )];
+  const senderMemberships = senderUserIds.length > 0
+    ? await prisma.tenantUser.findMany({
+        where: {
+          tenantId: session.tenantId,
+          userId: { in: senderUserIds },
+        },
+        select: { userId: true, role: true },
+      })
+    : [];
+  const senderRoleByUserId = new Map(senderMemberships.map((membership) => [membership.userId, membership.role]));
+
+  const latestMessagesWithSender = latestMessages.map((message) => ({
+    ...message,
+    sentByUser: message.sentByUser
+      ? {
+          ...message.sentByUser,
+          role: message.sentByUserId ? senderRoleByUserId.get(message.sentByUserId) || null : null,
+        }
+      : null,
+  }));
+
+  const messageById = new Map(latestMessagesWithSender.map((message) => [message.id, message]));
   const latestMessageIdByConversation = new Map(latestRows.map((row) => [row.conversation_id, row.id]));
 
   const conversations = baseConversations.map((conversation) => {
