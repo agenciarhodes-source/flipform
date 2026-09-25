@@ -8,6 +8,11 @@ import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
 import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
+import {
+  buildPublicAgentSignature,
+  getWhatsAppAgentSignatureSettings,
+  type WhatsAppAgentSignatureMode,
+} from '@/lib/meta/whatsapp-agent-signature';
 
 const GRAPH_HOST = 'graph.facebook.com';
 const SEND_TIMEOUT_MS = 15_000;
@@ -46,6 +51,9 @@ type OutboxMetadata = {
   providerErrorCode?: string;
   providerErrorType?: string;
   providerStatusAt?: string;
+  agentSignatureMode?: WhatsAppAgentSignatureMode;
+  agentSignature?: string;
+  agentSignatureSkippedReason?: 'message_limit';
 };
 
 function sha256(value: string) {
@@ -103,7 +111,10 @@ async function assertRequesterCanSend(input: {
 }) {
   const membership = await prisma.tenantUser.findFirst({
     where: { tenantId: input.tenantId, userId: input.userId, status: 'active' },
-    select: { role: true },
+    select: {
+      role: true,
+      user: { select: { name: true } },
+    },
   });
   if (!membership || !can(membership.role, 'LEADS_CONTACT_WHATSAPP')) {
     throw new WhatsAppOutboundError('FORBIDDEN', 'User cannot send WhatsApp messages');
@@ -131,7 +142,13 @@ async function assertRequesterCanSend(input: {
     }
   }
 
-  return conversation;
+  return {
+    conversation,
+    sender: {
+      id: input.userId,
+      name: membership.user.name,
+    },
+  };
 }
 
 async function resolveConnectedWhatsAppConnection(tenantId: string) {
@@ -172,7 +189,8 @@ async function enqueueWhatsAppTextMessage(input: {
     throw new WhatsAppOutboundError('INVALID_REQUEST', 'Missing WhatsApp outbound fields');
   }
 
-  const conversation = await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
+  const authorization = await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
+  const conversation = authorization.conversation;
   const recipientWaId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
   const connection = await resolveConnectedWhatsAppConnection(tenantId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
@@ -188,6 +206,32 @@ async function enqueueWhatsAppTextMessage(input: {
     return { message: existing, metadata, created: false as const };
   }
 
+  const [signatureSettings, previousOutbound] = await Promise.all([
+    getWhatsAppAgentSignatureSettings(tenantId),
+    prisma.message.findFirst({
+      where: {
+        tenantId,
+        conversationId,
+        provider: 'meta',
+        channel: 'whatsapp',
+        direction: 'outbound',
+        status: { in: ['sent', 'delivered', 'read'] },
+      },
+      orderBy: [
+        { providerTimestamp: { sort: 'desc', nulls: 'last' } },
+        { createdAt: 'desc' },
+      ],
+      select: { sentByUserId: true },
+    }),
+  ]);
+  const signature = buildPublicAgentSignature({
+    mode: signatureSettings.mode,
+    senderUserId: authorization.sender.id,
+    senderName: authorization.sender.name,
+    previousOutboundSenderId: previousOutbound?.sentByUserId || null,
+    text,
+  });
+
   const metadata: OutboxMetadata = {
     source: OUTBOX_SOURCE,
     connectionId: connection.id,
@@ -196,6 +240,9 @@ async function enqueueWhatsAppTextMessage(input: {
     idempotencyKeyHash,
     requestFingerprint: fingerprint,
     dispatchState: 'queued',
+    agentSignatureMode: signatureSettings.mode,
+    ...(signature.signature ? { agentSignature: signature.signature } : {}),
+    ...(signature.skippedReason ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
   };
 
   try {
@@ -566,10 +613,13 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     return { status: 'failed', messageId: begun.row.id, providerMessageId: null, idempotent: !queued.created };
   }
 
+  const providerText = begun.metadata.agentSignature
+    ? `${begun.metadata.agentSignature}\n${begun.row.text || ''}`
+    : begun.row.text || '';
   const provider = await sendMetaWhatsAppText({
     phoneNumberId: begun.metadata.phoneNumberId,
     recipientWaId: begun.metadata.recipientWaId,
-    text: begun.row.text || '',
+    text: providerText,
     accessToken: credentials.systemUserAccessToken,
   });
   if (provider.kind === 'unknown') {
