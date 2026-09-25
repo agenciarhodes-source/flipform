@@ -2,7 +2,7 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { normalizeBrazilianPhone } from '@/lib/leads';
+import { getBrazilianPhoneAliases } from '@/lib/leads';
 
 type LeadPhoneRow = {
   id: string;
@@ -14,15 +14,7 @@ type ConversationPhoneRow = {
 };
 
 function phoneCandidates(phone?: string | null) {
-  const normalized = normalizeBrazilianPhone(phone);
-  if (!normalized) return [];
-
-  const candidates = new Set<string>([normalized]);
-  if (normalized.startsWith('55') && (normalized.length === 12 || normalized.length === 13)) {
-    candidates.add(normalized.slice(2));
-  }
-
-  return [...candidates];
+  return getBrazilianPhoneAliases(phone);
 }
 
 async function findUniqueLeadByPhone(tenantId: string, phone?: string | null) {
