@@ -5,15 +5,15 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
-def test_native_notification_keeps_service_worker_as_browser_fallback():
+def test_native_notification_prefers_active_service_worker_and_keeps_page_fallback():
     center = read('components/lead-notification-center.tsx')
     worker = read('public/lead-notification-sw.js')
     assert "navigator.serviceWorker.register('/lead-notification-sw.js')" in center
     assert 'navigator.serviceWorker.ready' in center
     assert 'registration.showNotification(item.title' in center
+    assert 'registration.getNotifications({ tag: item.id })' in center
     assert 'const notification = new Notification(item.title' in center
-    assert center.index('const notification = new Notification(item.title') < center.index('registration.showNotification(item.title')
-    assert "requireInteraction: true" in center
+    assert center.index('registration.showNotification(item.title') < center.index('const notification = new Notification(item.title')
     assert "data: { href: item.href }" in center
     assert "self.addEventListener('notificationclick'" in worker
     assert "self.clients.matchAll({ type: 'window', includeUncontrolled: true })" in worker

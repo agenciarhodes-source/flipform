@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, closestCorners } from '@dnd-kit/core';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
@@ -14,6 +14,7 @@ import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { timeAgo } from '@/lib/utils';
 import { ManualLeadDialog } from '@/components/manual-lead-dialog';
 import { formatLeadSource } from '@/lib/leads';
+import { NEW_LEAD_BROWSER_EVENT } from '@/lib/notifications/browser-state';
 
 interface Stage { id: string; name: string; color: string; orderIndex: number; isArchived?: boolean; }
 interface Pipeline { id: string; name: string; isDefault: boolean; isArchived: boolean; stages: Stage[]; }
@@ -166,31 +167,36 @@ export default function KanbanPage() {
     }
   };
 
-  const loadLeads = async () => {
-    if (!pipelineId) { setLoading(false); return; }
-    if (period === 'custom' && (!startDate || !endDate || startDate > endDate)) {
-      setLeads([]);
-      setLoading(false);
+  const loadLeads = useCallback(async (silent = false) => {
+    if (!pipelineId) {
+      if (!silent) setLoading(false);
       return;
     }
-    setLoading(true);
+    if (period === 'custom' && (!startDate || !endDate || startDate > endDate)) {
+      setLeads([]);
+      if (!silent) setLoading(false);
+      return;
+    }
+
+    if (!silent) setLoading(true);
     const params = new URLSearchParams({ pipelineId, period });
     if (search) params.set('q', search);
     if (period === 'custom') {
       params.set('startDate', startDate);
       params.set('endDate', endDate);
     }
+
     try {
-      const response = await fetch(`/api/leads?${params.toString()}`);
+      const response = await fetch(`/api/leads?${params.toString()}`, { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível filtrar os leads.');
       setLeads(data.leads || []);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível filtrar os leads.');
+      if (!silent) toast.error(error instanceof Error ? error.message : 'Não foi possível filtrar os leads.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [pipelineId, period, search, startDate, endDate]);
 
   const openWhatsAppConversation = async (leadId: string) => {
     try {
@@ -218,9 +224,29 @@ export default function KanbanPage() {
     setStages((p?.stages || []).filter((s) => !s.isArchived));
   }, [pipelineId, pipelines]);
   useEffect(() => {
-    const t = setTimeout(loadLeads, 300);
-    return () => clearTimeout(t);
-  /* eslint-disable-next-line */ }, [pipelineId, search, period, startDate, endDate]);
+    const t = window.setTimeout(() => void loadLeads(false), 300);
+    return () => window.clearTimeout(t);
+  }, [loadLeads]);
+
+  useEffect(() => {
+    const refreshForNewLead = () => void loadLeads(true);
+    const refreshOnFocus = () => void loadLeads(true);
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') void loadLeads(true);
+    };
+
+    window.addEventListener(NEW_LEAD_BROWSER_EVENT, refreshForNewLead);
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisibility);
+    const timer = window.setInterval(() => void loadLeads(true), 15_000);
+
+    return () => {
+      window.removeEventListener(NEW_LEAD_BROWSER_EVENT, refreshForNewLead);
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisibility);
+      window.clearInterval(timer);
+    };
+  }, [loadLeads]);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;

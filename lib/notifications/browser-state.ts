@@ -1,3 +1,5 @@
+export const NEW_LEAD_BROWSER_EVENT = 'flipform:new-lead';
+
 export type LeadBrowserNotification = {
   id: string;
   type: 'lead_created';
