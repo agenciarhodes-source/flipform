@@ -31,7 +31,6 @@ import {
   Workflow,
   CreditCard,
   PlugZap,
-  MessageCircle,
   MessagesSquare,
   Bot,
   Globe2,
@@ -83,12 +82,6 @@ const NAV: NavItem[] = [
     href: "/integrations",
     label: "Integrações",
     icon: PlugZap,
-    permission: "INTEGRATIONS_VIEW",
-  },
-  {
-    href: "/whatsapp-funnel",
-    label: "Funil WhatsApp",
-    icon: MessageCircle,
     permission: "INTEGRATIONS_VIEW",
   },
   {
