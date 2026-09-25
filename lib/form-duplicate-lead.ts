@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { getBrazilianPhoneAliases } from '@/lib/leads';
 
 export const DUPLICATE_FORM_PHONE_CODE = 'duplicate_form_phone';
 export const DUPLICATE_FORM_PHONE_MESSAGE = 'Este contato já está cadastrado nesta conta.';
@@ -13,14 +14,11 @@ export class DuplicateFormPhoneError extends Error {
 }
 
 function normalizePhoneIdentity(phone?: string | null) {
-  const digits = String(phone || '').replace(/\D/g, '');
-  if (!digits) return null;
-  const localDigits = digits.startsWith('55') ? digits.slice(2) : digits;
-  if (!localDigits) return null;
-  return {
-    localDigits,
-    internationalDigits: `55${localDigits}`,
-  };
+  const aliases = getBrazilianPhoneAliases(phone)
+    .map((value) => String(value).replace(/\D/g, ''))
+    .filter(Boolean);
+  if (!aliases.length) return null;
+  return [...new Set(aliases)];
 }
 
 function normalizeEmailIdentity(email?: string | null) {
@@ -70,15 +68,12 @@ export async function findExistingLeadIdByContactInTenant({
   if (!normalizedPhone && !normalizedEmail) return null;
 
   const lockKeys: string[] = [];
-  if (normalizedPhone) lockKeys.push(`phone:${normalizedPhone.localDigits}`);
+  if (normalizedPhone) lockKeys.push(...normalizedPhone.map((alias) => `phone:${alias}`));
   if (normalizedEmail) lockKeys.push(`email:${normalizedEmail}`);
   await lockTenantContactKeys({ tx, tenantId, keys: lockKeys });
 
   const phoneCondition = normalizedPhone
-    ? Prisma.sql`(
-        regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') = ${normalizedPhone.localDigits}
-        OR regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') = ${normalizedPhone.internationalDigits}
-      )`
+    ? Prisma.sql`regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') IN (${Prisma.join(normalizedPhone)})`
     : null;
   const emailCondition = normalizedEmail
     ? Prisma.sql`LOWER(BTRIM(COALESCE("email", ''))) = ${normalizedEmail}`

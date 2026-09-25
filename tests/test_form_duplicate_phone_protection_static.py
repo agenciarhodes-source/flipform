@@ -120,7 +120,8 @@ def test_account_scope_preserves_original_crm_source_and_owner_on_repeat_submiss
     branch = submit[lookup_index:return_index]
     assert 'tx.lead.update' not in branch
     assert 'source:' not in branch
-    assert 'assignedTo:' not in branch
+    assert 'data: { assignedTo:' not in branch
+    assert 'assignedTo: true' in branch
 
 
 def test_account_uniqueness_does_not_depend_on_assignee_or_form_setting():

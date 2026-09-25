@@ -58,4 +58,9 @@ def test_whatsapp_lead_phone_matching_accepts_brazilian_mobile_alias_with_or_wit
     assert 'export function normalizeBrazilianLeadPhone' in leads
     assert 'return getBrazilianPhoneAliases(phone);' in linking
     assert 'normalizeBrazilianLeadPhone(parsed.data.phone)' in route
-    assert "phone: { in: getBrazilianPhoneAliases(phone).filter(candidate => candidate.startsWith('55')) }" in route
+    assert 'findExistingLeadIdByContactInTenant' in route
+
+    guard = read('lib/form-duplicate-lead.ts')
+    assert "import { getBrazilianPhoneAliases } from '@/lib/leads';" in guard
+    assert 'const aliases = getBrazilianPhoneAliases(phone)' in guard
+    assert 'Prisma.join(normalizedPhone)' in guard
