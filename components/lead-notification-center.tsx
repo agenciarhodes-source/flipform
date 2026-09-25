@@ -200,8 +200,6 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           tag: item.id,
           silent: false,
           requireInteraction: true,
-          renotify: true,
-          timestamp: new Date(item.createdAt).getTime(),
           data: { href: item.href },
         });
 
