@@ -48,3 +48,16 @@ def test_admin_card_explains_that_no_inbound_message_is_simulated():
     assert 'Nenhuma mensagem recebida é simulada.' in card
     assert "/api/admin/integrations/whatsapp/test-conversation" in card
     assert 'Preparar conversa no Inbox' in card
+
+
+def test_meta_review_inbound_reuses_prepared_brazilian_recipient_alias_only_for_same_connection():
+    runtime = read(ROOT / 'lib/meta/whatsapp-runtime.ts')
+    assert 'function brazilianWhatsAppAliasCandidates' in runtime
+    assert "normalized.length === 12" in runtime
+    assert "normalized.length === 13 && normalized[4] === '9'" in runtime
+    assert "action: 'WHATSAPP_META_REVIEW_TEST_CONVERSATION_PREPARED'" in runtime
+    assert "metadata.source === 'platform_admin_meta_review'" in runtime
+    assert 'metadata.connectionId === input.connectionId' in runtime
+    assert 'const resolvedExternalUserId = await resolvePreparedMetaReviewRecipient({' in runtime
+    assert 'externalUserId: resolvedExternalUserId' in runtime
+    assert 'phone: resolvedExternalUserId' in runtime

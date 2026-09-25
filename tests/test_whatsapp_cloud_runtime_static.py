@@ -42,11 +42,12 @@ def test_inbound_messages_use_conversation_core_and_database_idempotency():
     runtime = read('lib/meta/whatsapp-runtime.ts')
     assert 'recordInboundMessage({' in runtime
     assert 'externalMessageId: message.id' in runtime
-    assert 'externalUserId: message.from' in runtime
+    assert 'providerWaId: message.from' in runtime
+    assert 'externalUserId: resolvedExternalUserId' in runtime
     assert "channel: 'whatsapp'" in runtime
     assert "provider: 'meta'" in runtime
     assert 'if (persisted.duplicate)' in runtime
-    assert 'phone: message.from' in runtime
+    assert 'phone: resolvedExternalUserId' in runtime
 
 
 def test_status_updates_are_serialized_tenant_scoped_and_monotonic():
