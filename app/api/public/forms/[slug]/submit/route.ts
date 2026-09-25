@@ -10,7 +10,7 @@ import { getBrazilStateName, normalizeBrazilCity, normalizeBrazilState } from '@
 import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
-import { findExistingLeadIdByPhoneInForm } from '@/lib/form-duplicate-lead';
+import { findExistingLeadIdByContactInTenant } from '@/lib/form-duplicate-lead';
 
 /**
  * Public form submit endpoint.
@@ -197,28 +197,27 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
     const name = pickByType(['name']) || pickByType(['short_text']) || 'Lead sem nome';
     const email = pickByType(['email']);
     const phone = pickByType(['phone_br', 'phone']);
-    const protectedPhoneAnswer = preventDuplicateLead && primaryPhoneField
-      ? normalizedAnswers.find((a) => a.fieldId === primaryPhoneField.id && !isEmpty(a.value))
-      : null;
-    const protectedPhone = protectedPhoneAnswer ? String(protectedPhoneAnswer.value) : null;
+    const uniqueContactPhone = preventDuplicateLead ? phone : null;
+    const uniqueContactEmail = preventDuplicateLead ? email : null;
     const locationAnswer = normalizedAnswers.find((a) => a.fieldType === 'city_state' && a.value && typeof a.value === 'object')?.value as any;
     const leadState = locationAnswer?.state || null;
     const leadCity = locationAnswer?.city || null;
 
-    // Cria somente pessoas novas no CRM. Uma nova submissão com telefone já existente
-    // reutiliza o lead atual sem mover etapa, trocar responsável ou sobrescrever dados.
+    // Quando o cadastro único está ativo, a conta inteira é a referência. Uma nova
+    // submissão com telefone/e-mail já existente reutiliza o primeiro lead do tenant
+    // sem mover etapa, trocar responsável, origem ou sobrescrever dados.
     const assignmentResult = { assignedTo: null as string | null, reason: 'not_started' };
     const leadResult = await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
-      if (protectedPhone) {
-        const existingLeadId = await findExistingLeadIdByPhoneInForm({
+      if (uniqueContactPhone || uniqueContactEmail) {
+        const existingLeadId = await findExistingLeadIdByContactInTenant({
           tx,
           tenantId: form.tenantId,
-          formId: form.id,
-          phone: protectedPhone,
+          phone: uniqueContactPhone,
+          email: uniqueContactEmail,
         });
         if (existingLeadId) {
           const existing = await tx.lead.findFirst({
-            where: { id: existingLeadId, tenantId: form.tenantId, formId: form.id },
+            where: { id: existingLeadId, tenantId: form.tenantId },
             select: { id: true, name: true, email: true, phone: true, assignedTo: true },
           });
           if (existing) return { lead: existing, created: false } as const;

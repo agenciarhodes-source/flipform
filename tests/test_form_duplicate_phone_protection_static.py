@@ -12,20 +12,22 @@ def read(path: Path) -> str:
     return path.read_text()
 
 
-def test_protection_is_opt_in_and_scoped_to_a_form_phone_field():
+def test_protection_is_opt_in_per_form_but_scoped_to_the_entire_account():
     builder = read(BUILDER)
     submit = read(SUBMIT)
-    assert 'Cadastro único por formulário' in builder
+    assert 'Cadastro único por conta' in builder
+    assert 'A origem do primeiro cadastro será preservada.' in builder
     assert 'preventDuplicateLead?: boolean' in builder
     assert 'primaryPhoneRules?.preventDuplicateLead === true' in submit
     assert 'disabled={primaryPhoneFieldIndex < 0}' in builder
 
 
-def test_duplicate_check_is_scoped_by_tenant_form_and_phone():
+def test_duplicate_check_is_scoped_by_tenant_contact_not_form():
     guard = read(GUARD)
     assert '"tenant_id" = ${tenantId}' in guard
-    assert '"form_id" = ${formId}' in guard
+    assert '"form_id" = ${formId}' not in guard
     assert "regexp_replace(COALESCE(\"phone\", ''), '[^0-9]', '', 'g')" in guard
+    assert "LOWER(BTRIM(COALESCE(\"email\", '')))" in guard
     assert "digits.startsWith('55') ? digits.slice(2) : digits" in guard
 
 
@@ -36,13 +38,14 @@ def test_concurrent_duplicate_submissions_are_serialized_without_void_deserializ
     assert 'SELECT 1::int AS locked FROM lock_guard' in guard
     assert 'Array<{ locked: number }>' in guard
     assert 'SELECT pg_advisory_xact_lock(hashtext(${formId}), hashtext(${digits})) AS locked' not in guard
+    assert 'pg_advisory_xact_lock(hashtext(${tenantId}), hashtext(${key}))' in guard
     schema = read(SCHEMA)
     assert '@@unique([formId, phone])' not in schema
 
 
 def test_existing_lead_is_reused_before_rotation_without_crm_mutation():
     submit = read(SUBMIT)
-    lookup_index = submit.index('const existingLeadId = await findExistingLeadIdByPhoneInForm(')
+    lookup_index = submit.index('const existingLeadId = await findExistingLeadIdByContactInTenant(')
     existing_return_index = submit.index('return { lead: existing, created: false } as const;', lookup_index)
     rotation_index = submit.index('const rotation = await assignLeadByRotation(', lookup_index)
     create_index = submit.index('const created = await tx.lead.create(', rotation_index)
@@ -98,8 +101,21 @@ def test_current_submission_attribution_enriches_capi_without_overwriting_existi
     assert 'attribution.landingPage || data.landingPage' in tracking
 
 
-def test_same_phone_remains_allowed_in_other_forms():
+def test_same_contact_is_reused_across_different_forms_in_the_same_account():
     guard = read(GUARD)
-    assert '"form_id" = ${formId}' in guard
+    submit = read(SUBMIT)
+    assert '"form_id" = ${formId}' not in guard
     assert 'tenantId: string' in guard
-    assert 'formId: string' in guard
+    assert 'findExistingLeadIdByContactInTenant' in submit
+    assert 'where: { id: existingLeadId, tenantId: form.tenantId }' in submit
+    assert 'where: { id: existingLeadId, tenantId: form.tenantId, formId: form.id }' not in submit
+
+
+def test_account_scope_preserves_original_crm_source_and_owner_on_repeat_submission():
+    submit = read(SUBMIT)
+    lookup_index = submit.index('const existingLeadId = await findExistingLeadIdByContactInTenant(')
+    return_index = submit.index('return { lead: existing, created: false } as const;', lookup_index)
+    branch = submit[lookup_index:return_index]
+    assert 'tx.lead.update' not in branch
+    assert 'source:' not in branch
+    assert 'assignedTo:' not in branch

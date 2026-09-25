@@ -405,8 +405,8 @@ export function FormBuilder({ formId }: { formId?: string }) {
             <Card className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-heading font-semibold mb-1">Cadastro único por formulário</h3>
-                  <p className="text-xs text-muted-foreground">Quando ativado, um telefone que já gerou lead neste formulário não poderá gerar outro lead nele. O mesmo telefone continua permitido em outros formulários.</p>
+                  <h3 className="font-heading font-semibold mb-1">Cadastro único por conta</h3>
+                  <p className="text-xs text-muted-foreground">Quando ativado, um telefone ou e-mail que já exista em qualquer lead desta conta não criará outro lead. A origem do primeiro cadastro será preservada.</p>
                 </div>
                 <Switch
                   checked={preventDuplicateLead}
@@ -417,7 +417,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
               {primaryPhoneFieldIndex < 0 ? (
                 <p className="text-xs text-amber-600 mt-3">Adicione um campo “Telefone Brasil” para habilitar esta proteção.</p>
               ) : (
-                <p className="text-xs text-muted-foreground mt-3">A validação usa o primeiro campo de telefone do formulário e acontece antes da criação do lead.</p>
+                <p className="text-xs text-muted-foreground mt-3">A validação usa o primeiro campo de telefone e o e-mail informado, consulta toda a conta e acontece antes da criação do lead.</p>
               )}
             </Card>
 
