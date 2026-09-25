@@ -55,7 +55,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const soundEnabledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const serviceWorkerRef = useRef<ServiceWorkerRegistration | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const watchAbortRef = useRef<AbortController | null>(null);
   const deliveredIdsRef = useRef<Set<string>>(new Set());
 
   const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
@@ -234,55 +234,53 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       soundEnabledRef.current = enabledSound;
       setSoundEnabled(enabledSound);
     } catch {}
-    let fallbackTimer: number | null = null;
     let cancelled = false;
+    const fallbackTimer = window.setInterval(() => void poll(), POLL_MS);
 
-    const startStream = async () => {
+    const waitForNewLeads = async () => {
       if (!cursorRef.current) await poll();
-      if (cancelled || typeof window === 'undefined' || !('EventSource' in window)) {
-        fallbackTimer = window.setInterval(() => void poll(), POLL_MS);
-        return;
-      }
 
-      const cursor = cursorRef.current;
-      const params = new URLSearchParams();
-      if (cursor) {
-        params.set('after', cursor.createdAt);
+      while (!cancelled) {
+        const cursor = cursorRef.current;
+        if (!cursor) {
+          await poll();
+          continue;
+        }
+
+        const params = new URLSearchParams({ after: cursor.createdAt });
         if (cursor.id) params.set('afterId', cursor.id);
-      }
+        const controller = new AbortController();
+        watchAbortRef.current = controller;
 
-      const source = new EventSource(`/api/notifications/leads/stream?${params.toString()}`);
-      eventSourceRef.current = source;
-
-      source.addEventListener('lead', (event) => {
         try {
-          const message = event as MessageEvent<string>;
-          const item = JSON.parse(message.data) as LeadBrowserNotification;
-          const lastEventId = message.lastEventId;
-          const separator = lastEventId.lastIndexOf('|');
-          if (separator > 0) {
-            const nextCursor = {
-              createdAt: lastEventId.slice(0, separator),
-              id: lastEventId.slice(separator + 1),
-            };
-            cursorRef.current = nextCursor;
-            try { window.localStorage.setItem(cursorKey, JSON.stringify(nextCursor)); } catch {}
+          const response = await fetch(`/api/notifications/leads/wait?${params.toString()}`, {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+            continue;
           }
-          deliverItems([item]);
-        } catch {}
-      });
 
-      source.onerror = () => {
-        // EventSource reconnects automatically. Foreground polling remains only as a fallback.
-      };
+          const feed = await response.json() as LeadNotificationFeed;
+          cursorRef.current = feed.cursor;
+          try { window.localStorage.setItem(cursorKey, JSON.stringify(feed.cursor)); } catch {}
+          if (feed.items.length) deliverItems(feed.items);
+        } catch (error) {
+          if (controller.signal.aborted || cancelled) break;
+          await new Promise((resolve) => window.setTimeout(resolve, 1_500));
+        } finally {
+          if (watchAbortRef.current === controller) watchAbortRef.current = null;
+        }
+      }
     };
 
-    void startStream();
+    void waitForNewLeads();
     return () => {
       cancelled = true;
-      if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
-      eventSourceRef.current?.close();
-      eventSourceRef.current = null;
+      window.clearInterval(fallbackTimer);
+      watchAbortRef.current?.abort();
+      watchAbortRef.current = null;
     };
   }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, deliverItems, poll]);
 
