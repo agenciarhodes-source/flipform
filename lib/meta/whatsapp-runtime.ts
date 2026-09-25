@@ -101,6 +101,67 @@ async function resolveConnectedWhatsAppTenant(phoneNumberId: string) {
   return connection;
 }
 
+function brazilianWhatsAppAliasCandidates(value: string) {
+  const normalized = value.trim();
+  if (!/^55\d{10,11}$/.test(normalized)) return [normalized];
+
+  const aliases = [normalized];
+  if (normalized.length === 12) {
+    aliases.push(`${normalized.slice(0, 4)}9${normalized.slice(4)}`);
+  } else if (normalized.length === 13 && normalized[4] === '9') {
+    aliases.push(`${normalized.slice(0, 4)}${normalized.slice(5)}`);
+  }
+  return [...new Set(aliases)];
+}
+
+async function resolvePreparedMetaReviewRecipient(input: {
+  tenantId: string;
+  connectionId: string;
+  providerWaId: string;
+}) {
+  const candidates = brazilianWhatsAppAliasCandidates(input.providerWaId);
+  if (candidates.length === 1) return input.providerWaId;
+
+  const conversations = await prisma.conversation.findMany({
+    where: {
+      tenantId: input.tenantId,
+      provider: 'meta',
+      channel: 'whatsapp',
+      externalContactIdentity: {
+        externalUserId: { in: candidates },
+      },
+    },
+    select: {
+      id: true,
+      externalContactIdentity: {
+        select: { externalUserId: true },
+      },
+    },
+  });
+  if (conversations.length === 0) return input.providerWaId;
+
+  const audits = await prisma.auditLog.findMany({
+    where: {
+      tenantId: input.tenantId,
+      entityType: 'conversation',
+      entityId: { in: conversations.map(conversation => conversation.id) },
+      action: 'WHATSAPP_META_REVIEW_TEST_CONVERSATION_PREPARED',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { entityId: true, metadata: true },
+  });
+
+  const prepared = audits.find((audit) => {
+    const metadata = jsonObject(audit.metadata);
+    return metadata.source === 'platform_admin_meta_review'
+      && metadata.connectionId === input.connectionId;
+  });
+  if (!prepared) return input.providerWaId;
+
+  return conversations.find(conversation => conversation.id === prepared.entityId)
+    ?.externalContactIdentity.externalUserId || input.providerWaId;
+}
+
 export async function applyWhatsAppMessageStatus(input: {
   tenantId: string;
   externalMessageId: string;
@@ -321,14 +382,24 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           : null;
         let automationQueued = false;
 
+        // The Meta test environment can expose a Brazilian recipient with or without
+        // the extra mobile digit in wa_id. Reuse only an explicitly prepared App
+        // Review conversation for the same test connection; normal tenant traffic is
+        // never globally rewritten or merged by this compatibility path.
+        const resolvedExternalUserId = await resolvePreparedMetaReviewRecipient({
+          tenantId: connection.tenantId,
+          connectionId: connection.id,
+          providerWaId: message.from,
+        });
+
         const persisted = await recordInboundMessage({
           tenantId: connection.tenantId,
           channel: 'whatsapp',
           provider: 'meta',
-          externalUserId: message.from,
+          externalUserId: resolvedExternalUserId,
           externalMessageId: message.id,
           displayName: contacts.get(message.from) ?? null,
-          phone: message.from,
+          phone: resolvedExternalUserId,
           text: messageText,
           type: normalizeMessageType(message.type),
           providerTimestamp: parseProviderTimestamp(message.timestamp),
