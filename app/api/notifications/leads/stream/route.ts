@@ -10,6 +10,14 @@ export const maxDuration = 60;
 const STREAM_LIFETIME_MS = 50_000;
 const QUERY_INTERVAL_MS = 5_000;
 const encoder = new TextEncoder();
+const FLUSH_CHUNK_BYTES = 4_096;
+
+function encodeFlushableSse(payload: string) {
+  const encoded = encoder.encode(payload);
+  if (encoded.byteLength >= FLUSH_CHUNK_BYTES) return encoded;
+  const padding = `: ${' '.repeat(FLUSH_CHUNK_BYTES - encoded.byteLength)}\n\n`;
+  return encoder.encode(payload + padding);
+}
 
 function parseCursorDate(raw: string | null) {
   if (!raw) return null;
@@ -57,7 +65,8 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const startedAt = Date.now();
-      controller.enqueue(encoder.encode('retry: 1500\n\n'));
+      // Force the first bytes through compression/proxy buffers immediately.
+      controller.enqueue(encodeFlushableSse('retry: 1500\n\n'));
 
       try {
         while (!req.signal.aborted && Date.now() - startedAt < STREAM_LIFETIME_MS) {
@@ -108,7 +117,8 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
             };
 
             const eventId = `${lead.createdAt.toISOString()}|${lead.id}`;
-            controller.enqueue(encoder.encode(
+            // Pad lead events so intermediary buffers flush while the tab is hidden.
+            controller.enqueue(encodeFlushableSse(
               `id: ${eventId}\nevent: lead\ndata: ${JSON.stringify(item)}\n\n`,
             ));
             cursorDate = lead.createdAt;
@@ -130,7 +140,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
     headers: {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
+      'Content-Encoding': 'none',
       'X-Accel-Buffering': 'no',
+      'X-Content-Type-Options': 'nosniff',
       Connection: 'keep-alive',
     },
   });

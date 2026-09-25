@@ -71,3 +71,13 @@ def test_sse_change_does_not_touch_integrations_or_lead_creation():
         'CREATE TABLE',
     ]:
         assert forbidden not in combined
+
+def test_sse_forces_chunks_through_proxy_and_compression_buffers():
+    route = read('app/api/notifications/leads/stream/route.ts')
+    assert 'const FLUSH_CHUNK_BYTES = 4_096' in route
+    assert 'function encodeFlushableSse(payload: string)' in route
+    assert "controller.enqueue(encodeFlushableSse('retry: 1500" in route
+    assert 'controller.enqueue(encodeFlushableSse(' in route
+    assert "'Content-Encoding': 'none'" in route
+    assert "'X-Accel-Buffering': 'no'" in route
+    assert "'X-Content-Type-Options': 'nosniff'" in route
