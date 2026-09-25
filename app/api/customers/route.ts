@@ -21,7 +21,7 @@ function subtractCalendarDays(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function purchaseDateRange(period: '7d' | '30d' | 'custom', startDate?: string | null, endDate?: string | null) {
+function purchaseDateRange(period: '7d' | '30d' | 'custom' | 'year', startDate?: string | null, endDate?: string | null) {
   let start: string;
   let end: string;
 
@@ -34,7 +34,9 @@ function purchaseDateRange(period: '7d' | '30d' | 'custom', startDate?: string |
     end = endDate;
   } else {
     end = todayDateOnly();
-    start = subtractCalendarDays(end, period === '7d' ? 6 : 29);
+    start = period === 'year'
+      ? `${end.slice(0, 4)}-01-01`
+      : subtractCalendarDays(end, period === '7d' ? 6 : 29);
   }
 
   const [startYear, startMonth, startDay] = start.split('-').map(Number);
@@ -53,10 +55,10 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const sort = searchParams.get('sort') === 'amount' ? 'amount' : 'purchases';
   const search = searchParams.get('q')?.trim();
   const periodParam = searchParams.get('period') || '30d';
-  if (!['7d', '30d', 'custom'].includes(periodParam)) {
+  if (!['7d', '30d', 'custom', 'year'].includes(periodParam)) {
     return NextResponse.json({ error: 'Período inválido.' }, { status: 400 });
   }
-  const period = periodParam as '7d' | '30d' | 'custom';
+  const period = periodParam as '7d' | '30d' | 'custom' | 'year';
   const range = purchaseDateRange(period, searchParams.get('startDate'), searchParams.get('endDate'));
   if (!range.ok) return NextResponse.json({ error: range.error }, { status: 400 });
 

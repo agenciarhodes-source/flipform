@@ -59,21 +59,24 @@ def test_customers_page_is_more_visual_with_recurrence_ltv_and_podium():
     assert 'customer.firstPurchaseAt' in page
 
 
-def test_customers_support_7d_30d_and_custom_purchase_date_filter():
+def test_customers_support_7d_30d_custom_and_current_year_purchase_date_filter():
     route = read('app/api/customers/route.ts')
     page = read('app/(app)/customers/page.tsx')
-    assert "['7d', '30d', 'custom'].includes(periodParam)" in route
+    assert "['7d', '30d', 'custom', 'year'].includes(periodParam)" in route
     assert "purchaseDate: { gte: range.start, lte: range.end }" in route
     assert "todayDateOnly()" in route
     assert "period === '7d' ? 6 : 29" in route
     assert "isValidDateOnly(startDate)" in route
     assert "startDate > endDate" in route
-    assert "period: '7d' | '30d' | 'custom'" in page
-    assert "useState<'7d' | '30d' | 'custom'>('30d')" in page
+    assert "period: '7d' | '30d' | 'custom' | 'year'" in page
+    assert "useState<'7d' | '30d' | 'custom' | 'year'>('30d')" in page
     assert 'Período de clientes' in page
     assert '<SelectItem value="7d">7 dias</SelectItem>' in page
     assert '<SelectItem value="30d">30 dias</SelectItem>' in page
     assert '<SelectItem value="custom">Personalizado</SelectItem>' in page
+    assert '<SelectItem value="year">Ano atual</SelectItem>' in page
+    assert "period === 'year'" in route
+    assert "`${end.slice(0, 4)}-01-01`" in route
     assert 'Data inicial de clientes' in page
     assert 'Data final de clientes' in page
     assert "new URLSearchParams({ sort, period })" in page
@@ -92,3 +95,14 @@ def test_customers_panel_shows_revenue_for_selected_period():
     assert 'totalRevenueCents' in route
     assert 'const totalRevenueCents = purchases.reduce' in route
     assert 'purchaseDate: { gte: range.start, lte: range.end }' in route
+
+
+def test_customers_current_year_runs_from_january_first_to_today():
+    route = read('app/api/customers/route.ts')
+    page = read('app/(app)/customers/page.tsx')
+    assert "end = todayDateOnly()" in route
+    assert "start = period === 'year'" in route
+    assert "`${end.slice(0, 4)}-01-01`" in route
+    assert '<SelectItem value="year">Ano atual</SelectItem>' in page
+    assert page.index('<SelectItem value="custom">Personalizado</SelectItem>') < page.index('<SelectItem value="year">Ano atual</SelectItem>')
+    assert "purchaseDate: { gte: range.start, lte: range.end }" in route
