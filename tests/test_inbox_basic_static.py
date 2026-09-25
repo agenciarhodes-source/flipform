@@ -111,3 +111,24 @@ def test_inbox_does_not_add_or_mutate_prisma_schema():
     client = read('app/(app)/inbox/inbox-client.tsx')
     assert "fetch('/api/inbox/conversations'" in client
     assert "unreadCount" in client
+
+
+def test_inbox_outbound_messages_expose_tenant_scoped_sender_identity_and_role():
+    conversations = read('app/api/inbox/conversations/route.ts')
+    messages = read('app/api/inbox/conversations/[id]/messages/route.ts')
+    client = read('app/(app)/inbox/inbox-client.tsx')
+
+    for route in (conversations, messages):
+        assert 'sentByUserId' in route
+        assert 'sentByUser' in route
+        assert 'tenantId: session.tenantId' in route
+        assert 'prisma.tenantUser.findMany({' in route
+        assert 'userId: { in: senderUserIds }' in route
+        assert 'select: { userId: true, role: true }' in route
+
+    assert "function senderRoleLabel" in client
+    assert "return 'Atendente'" in client
+    assert "message.sentByUser?.name || 'WhatsApp da empresa'" in client
+    assert "senderRoleLabel(message.sentByUser?.role)" in client
+    assert "outboundSenderLabel(last)" in client
+    assert "'Você: '" not in client

@@ -36,6 +36,7 @@ interface InboxLead {
 interface InboxAssignee {
   id: string;
   name: string;
+  role?: string | null;
 }
 
 interface InboxMessageSummary {
@@ -46,6 +47,8 @@ interface InboxMessageSummary {
   status: string;
   providerTimestamp: string | null;
   createdAt: string;
+  sentByUserId?: string | null;
+  sentByUser?: InboxAssignee | null;
 }
 
 interface InboxConversation {
@@ -85,6 +88,20 @@ function lastMessageText(conversation: InboxConversation) {
   if (!message) return 'Sem mensagens';
   if (message.text?.trim()) return message.text.trim();
   return message.type === 'text' ? 'Mensagem' : `[${message.type}]`;
+}
+
+function senderRoleLabel(role?: string | null) {
+  if (role === 'owner') return 'Dono';
+  if (role === 'admin') return 'Administrador';
+  if (role === 'manager') return 'Gestor';
+  if (role === 'agent') return 'Atendente';
+  if (role === 'viewer') return 'Visualizador';
+  return null;
+}
+
+function outboundSenderLabel(message: InboxMessageSummary) {
+  if (message.direction !== 'outbound') return '';
+  return message.sentByUser?.name || 'WhatsApp da empresa';
 }
 
 function formatListDate(value: string | null | undefined) {
@@ -400,7 +417,7 @@ export function InboxClient({
                       </div>
                       <div className="mt-0.5 flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                          {last?.direction === 'outbound' ? 'Você: ' : ''}{lastMessageText(conversation)}
+                          {last?.direction === 'outbound' ? `${outboundSenderLabel(last)}: ` : ''}{lastMessageText(conversation)}
                         </span>
                         {conversation.unreadCount > 0 && (
                           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-600 px-1.5 text-[10px] font-semibold text-white">
@@ -473,13 +490,22 @@ export function InboxClient({
                       return (
                         <div key={message.id} className={`flex ${outbound ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm md:max-w-[72%] ${outbound ? 'rounded-br-md bg-brand-600 text-white' : 'rounded-bl-md border bg-card text-foreground'} ${message.status === 'failed' ? 'ring-1 ring-red-400' : ''}`}>
+                            {outbound && (
+                              <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-white/90">
+                                <span className="max-w-44 truncate rounded-full bg-white/15 px-2 py-0.5 font-medium">
+                                  {message.sentByUser?.name || 'WhatsApp da empresa'}
+                                </span>
+                                {senderRoleLabel(message.sentByUser?.role) && (
+                                  <span className="opacity-80">• {senderRoleLabel(message.sentByUser?.role)}</span>
+                                )}
+                              </div>
+                            )}
                             {message.text ? (
                               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
                             ) : (
                               <p className="text-sm italic opacity-75">Mensagem do tipo {message.type}</p>
                             )}
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outbound ? 'text-white/75' : 'text-muted-foreground'}`}>
-                              {message.sentByUser?.name && <span className="max-w-32 truncate">{message.sentByUser.name}</span>}
                               <span>{formatMessageDate(message.providerTimestamp || message.createdAt)}</span>
                               {outbound && <MessageStatus status={message.status} />}
                             </div>

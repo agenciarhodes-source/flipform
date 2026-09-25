@@ -37,14 +37,40 @@ export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, sessio
       })
     : [];
 
-  const messages = selectedMessages.sort((left, right) => {
-    const leftTime = (left.providerTimestamp ?? left.createdAt).getTime();
-    const rightTime = (right.providerTimestamp ?? right.createdAt).getTime();
-    if (leftTime !== rightTime) return leftTime - rightTime;
-    const createdDelta = left.createdAt.getTime() - right.createdAt.getTime();
-    if (createdDelta !== 0) return createdDelta;
-    return left.id.localeCompare(right.id);
-  });
+  const senderUserIds = [...new Set(
+    selectedMessages
+      .map((message) => message.sentByUserId)
+      .filter((userId): userId is string => Boolean(userId)),
+  )];
+  const senderMemberships = senderUserIds.length > 0
+    ? await prisma.tenantUser.findMany({
+        where: {
+          tenantId: session.tenantId,
+          userId: { in: senderUserIds },
+        },
+        select: { userId: true, role: true },
+      })
+    : [];
+  const senderRoleByUserId = new Map(senderMemberships.map((membership) => [membership.userId, membership.role]));
+
+  const messages = selectedMessages
+    .map((message) => ({
+      ...message,
+      sentByUser: message.sentByUser
+        ? {
+            ...message.sentByUser,
+            role: message.sentByUserId ? senderRoleByUserId.get(message.sentByUserId) || null : null,
+          }
+        : null,
+    }))
+    .sort((left, right) => {
+      const leftTime = (left.providerTimestamp ?? left.createdAt).getTime();
+      const rightTime = (right.providerTimestamp ?? right.createdAt).getTime();
+      if (leftTime !== rightTime) return leftTime - rightTime;
+      const createdDelta = left.createdAt.getTime() - right.createdAt.getTime();
+      if (createdDelta !== 0) return createdDelta;
+      return left.id.localeCompare(right.id);
+    });
 
   return NextResponse.json({
     conversation,
