@@ -38,7 +38,7 @@ type Customer = {
 
 type CustomersResponse = {
   sort: 'purchases' | 'amount';
-  period: '7d' | '30d' | 'custom';
+  period: '7d' | '30d' | 'custom' | 'year';
   startDate: string;
   endDate: string;
   summary: {
@@ -71,7 +71,7 @@ function daysAgoDateOnly(days: number) {
 
 export default function CustomersPage() {
   const [sort, setSort] = useState<'purchases' | 'amount'>('purchases');
-  const [period, setPeriod] = useState<'7d' | '30d' | 'custom'>('30d');
+  const [period, setPeriod] = useState<'7d' | '30d' | 'custom' | 'year'>('30d');
   const [startDate, setStartDate] = useState(() => daysAgoDateOnly(29));
   const [endDate, setEndDate] = useState(() => todayDateOnly());
   const [search, setSearch] = useState('');
@@ -123,12 +123,13 @@ export default function CustomersPage() {
         </div>
         <div className="flex flex-col gap-2 xl:items-end">
           <div className="flex flex-wrap gap-2">
-            <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom')}>
+            <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom' | 'year')}>
               <SelectTrigger className="w-[170px]" aria-label="Período de clientes"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="7d">7 dias</SelectItem>
                 <SelectItem value="30d">30 dias</SelectItem>
                 <SelectItem value="custom">Personalizado</SelectItem>
+                <SelectItem value="year">Ano atual</SelectItem>
               </SelectContent>
             </Select>
             {period === 'custom' && (
