@@ -45,3 +45,17 @@ def test_internal_whatsapp_conversation_resolution_is_tenant_scoped():
     assert "...(session.role === 'agent' ? { assignedTo: session.userId } : {})" in route
     assert 'findOrLinkWhatsAppConversationForLead({' in route
     assert 'findAccessibleInboxConversation(session, resolved.conversationId)' in route
+
+
+def test_whatsapp_lead_phone_matching_accepts_brazilian_mobile_alias_with_or_without_ninth_digit():
+    leads = read('lib/leads.ts')
+    linking = read('lib/conversations/whatsapp-lead-linking.ts')
+    route = read('app/api/leads/route.ts')
+
+    assert 'export function getBrazilianPhoneAliases' in leads
+    assert "normalized.length === 13 && normalized[4] === '9'" in leads
+    assert "normalized.length === 12 && /^[6-9]$/.test(normalized[4])" in leads
+    assert 'export function normalizeBrazilianLeadPhone' in leads
+    assert 'return getBrazilianPhoneAliases(phone);' in linking
+    assert 'normalizeBrazilianLeadPhone(parsed.data.phone)' in route
+    assert "phone: { in: getBrazilianPhoneAliases(phone).filter(candidate => candidate.startsWith('55')) }" in route
