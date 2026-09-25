@@ -134,7 +134,6 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           icon: '/icon.svg',
           badge: '/icon.svg',
           tag: item.id,
-          renotify: true,
           requireInteraction: true,
           data: { href: item.href },
         });
