@@ -25,6 +25,8 @@ export function IntegrationsClient() {
   const [disconnectingMeta, setDisconnectingMeta] = useState(false);
   const [metaConnection, setMetaConnection] = useState<any>({ platformAvailable: false, status: null, grantedScopes: [] });
   const [showMetaToken, setShowMetaToken] = useState(false);
+  const [whatsappAgentSignature, setWhatsappAgentSignature] = useState<any>({ mode: 'disabled', schemaReady: true });
+  const [savingWhatsappAgentSignature, setSavingWhatsappAgentSignature] = useState(false);
   const [form, setForm] = useState<any>({ provider: 'meta', eventName: 'Lead', enabled: true, currency: 'BRL' });
 
   function cleanSecretValue(value: string) {
@@ -52,17 +54,19 @@ export function IntegrationsClient() {
   async function load() {
     setLoading(true);
     try {
-      const [s, e, l, m] = await Promise.all([
+      const [s, e, l, m, w] = await Promise.all([
         fetch('/api/integrations').then(r=>r.json()),
         fetch('/api/integrations/events').then(r=>r.json()),
         fetch('/api/integrations/event-logs').then(r=>r.json()),
         fetch('/api/integrations/meta/connection').then(r=>r.json()),
+        fetch('/api/inbox/whatsapp-settings').then(r=>r.json()),
       ]);
       if (s.settings) setSettings(normalizeIntegrationSettings(s.settings));
       setEvents(e.events || []);
       setPipelines(e.pipelines || []);
       setLogs(l.logs || []);
       setMetaConnection(m);
+      if (w?.settings) setWhatsappAgentSignature(w.settings);
       const firstPipeline = e.pipelines?.[0];
       const firstStage = firstPipeline?.stages?.[0];
       setForm((prev: any) => ({ ...prev, pipelineId: prev.pipelineId || firstPipeline?.id || '', stageId: prev.stageId || firstStage?.id || '' }));
@@ -131,6 +135,25 @@ export function IntegrationsClient() {
       toast.error(error.message || 'Erro ao salvar integrações.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveWhatsappAgentSignature() {
+    setSavingWhatsappAgentSignature(true);
+    try {
+      const response = await fetch('/api/inbox/whatsapp-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: whatsappAgentSignature.mode }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível salvar a identificação do atendente.');
+      setWhatsappAgentSignature(data.settings);
+      toast.success('Identificação do atendente no WhatsApp atualizada.');
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível salvar a identificação do atendente.');
+    } finally {
+      setSavingWhatsappAgentSignature(false);
     }
   }
 
@@ -287,6 +310,44 @@ export function IntegrationsClient() {
       </div>
       <button className="px-4 py-2 rounded bg-black text-white" onClick={addEvent}>Adicionar evento</button>
       <div className="overflow-x-auto border rounded-lg"><table className="w-full text-sm"><thead className="bg-muted"><tr><th className="p-2 text-left">Pipeline</th><th className="p-2 text-left">Etapa</th><th className="p-2 text-left">Provedor</th><th className="p-2 text-left">Evento</th><th className="p-2 text-left">Label/Valor</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Ações</th></tr></thead><tbody>{events.map(ev=>{ const p=pipelines.find(x=>x.id===ev.pipelineId); const st=p?.stages?.find((s:any)=>s.id===ev.stageId); const purchaseValueFromLead=ev.provider==='meta'&&ev.eventName==='Purchase'; return <tr key={ev.id} className="border-t"><td className="p-2">{p?.name || ev.pipelineId}</td><td className="p-2">{st?.name || ev.stageId}</td><td className="p-2">{providers.find(p=>p.value===ev.provider)?.label || ev.provider}</td><td className="p-2">{ev.customEventName || ev.eventName}</td><td className="p-2">{ev.conversionLabel || '-'} {purchaseValueFromLead ? '· valor da compra registrada' : ev.conversionValue ? `· R$ ${ev.conversionValue}` : ''}</td><td className="p-2">{ev.enabled ? 'Ativo' : 'Inativo'}</td><td className="p-2 space-x-2"><button className="underline" onClick={()=>toggleEvent(ev)}>{ev.enabled ? 'Desativar' : 'Ativar'}</button><button className="underline text-red-600" onClick={()=>deleteEvent(ev.id)}>Excluir</button></td></tr>})}{events.length===0 && <tr><td className="p-4 text-muted-foreground" colSpan={7}>Nenhum evento configurado.</td></tr>}</tbody></table></div>
+    </div>
+
+    <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
+      <div>
+        <h2 className="font-semibold text-lg">Identificação do atendente no WhatsApp</h2>
+        <p className="text-sm text-muted-foreground">Define quando o cliente verá o nome de quem está atendendo. A autoria interna do Inbox continua sendo registrada em todos os modos.</p>
+      </div>
+      {!whatsappAgentSignature.schemaReady && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Esta configuração ainda aguarda a atualização segura do banco. Enquanto isso, nenhuma assinatura é adicionada às mensagens do cliente.
+        </div>
+      )}
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Mostrar nome do atendente ao cliente</span>
+        <select
+          className="w-full rounded border bg-white p-2 text-sm"
+          value={whatsappAgentSignature.mode || 'disabled'}
+          disabled={!whatsappAgentSignature.schemaReady || savingWhatsappAgentSignature}
+          onChange={e=>setWhatsappAgentSignature((current:any)=>({ ...current, mode:e.target.value }))}
+        >
+          <option value="disabled">Desativado</option>
+          <option value="handoff">Ao iniciar ou trocar de atendente — recomendado</option>
+          <option value="always">Em todas as mensagens</option>
+        </select>
+      </label>
+      <div className="rounded-lg border bg-slate-50 p-3 text-sm">
+        <p className="font-medium">Exemplo no WhatsApp do cliente</p>
+        <p className="mt-1 text-muted-foreground"><strong>Maria Silva · Atendente</strong><br />Olá! Vou verificar para você.</p>
+        <p className="mt-2 text-xs text-muted-foreground">O papel interno (Dono, Administrador, Gestor etc.) não é exposto ao cliente. Publicamente usamos apenas “Atendente”.</p>
+      </div>
+      <button
+        type="button"
+        className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60"
+        onClick={saveWhatsappAgentSignature}
+        disabled={!whatsappAgentSignature.schemaReady || savingWhatsappAgentSignature}
+      >
+        {savingWhatsappAgentSignature ? 'Salvando...' : 'Salvar identificação'}
+      </button>
     </div>
 
     <div className="rounded-xl border bg-white p-5 space-y-3 shadow-sm">
