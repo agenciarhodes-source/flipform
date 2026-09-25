@@ -32,6 +32,7 @@
     "admin:diagnose-access": "tsx scripts/diagnose-admin-access.ts",
     "admin:create-test-access": "tsx scripts/create-manual-test-access.ts",
     "admin:diagnose-schema": "tsx scripts/diagnose-production-schema.ts",
+    "flip-ai:diagnose-schema": "NODE_OPTIONS='--conditions=react-server' tsx scripts/diagnose-flip-ai-schema.ts",
     "admin:repair-schema": "tsx scripts/repair-production-schema.ts",
     "repair:production-schema": "tsx scripts/repair-production-schema.ts",
     "leads:mark-final-stage-won": "tsx scripts/mark-final-stage-leads-won.ts",

@@ -13,6 +13,7 @@ import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
+import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 
 function assertDisposableDatabase() {
@@ -21,6 +22,54 @@ function assertDisposableDatabase() {
     throw new Error('Flip AI fixtures require CI=true and local disposable flipform_ci database.');
   }
 }
+
+test('schema readiness catalog inspection executes read-only against disposable PostgreSQL', async () => {
+  assertDisposableDatabase();
+  const readiness = await inspectFlipAiSchema();
+  assert.equal(readiness.ready, false, 'db push is not the approved migration rollout');
+  assert.equal(readiness.missingTables.length, 0);
+  assert.deepEqual(readiness.incompatibleTables, []);
+  assert.deepEqual(readiness.missingColumns, []);
+  // Prisma db push leaves scalar lists nullable; the approved migrations intentionally enforce NOT NULL.
+  assert.deepEqual(readiness.incompatibleColumns, [
+    'flip_ai_external_search_cache.updated_at',
+    'flip_ai_external_sources.updated_at',
+    'flip_ai_qualifications.evidence_message_ids',
+    'flip_ai_qualifications.reasons',
+  ], 'db push intentionally differs on @updatedAt defaults and scalar-list nullability');
+  assert.deepEqual(readiness.unexpectedColumns, []);
+  // db push cannot reproduce these migration catalog names; the rollout gate still requires all 52.
+  assert.deepEqual(readiness.missingIndexes, [
+    'flip_ai_external_search_cache_tenant_agent_expires_idx',
+    'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
+    'flip_ai_knowledge_chunks_embedding_hnsw_idx',
+    'flip_ai_knowledge_indexes_document_id_revision_embedding_model_',
+    'flip_ai_qualifications_tenant_id_qualified_lead_tracking_status',
+    'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_at_',
+    'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_sta',
+  ]);
+  assert.deepEqual(readiness.incompatibleIndexes, []);
+  assert.deepEqual(readiness.unexpectedIndexes, [
+    'flip_ai_external_search_cache_tenant_id_agent_id_expires_at_idx',
+    'flip_ai_external_search_cache_tenant_id_agent_id_query_hash_key',
+    'flip_ai_knowledge_indexes_document_id_revision_embedding_mo_key',
+    'flip_ai_qualifications_tenant_id_qualified_lead_tracking_st_idx',
+    'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_idx',
+    'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_key',
+  ], 'db push names differ from the reviewed migration catalog names');
+  assert.deepEqual(readiness.unexpectedConstraints, [
+    'flip_ai_knowledge_indexes.flip_ai_knowledge_indexes_tenant_id_document_id_revision_fkey',
+  ], 'db push uses a generated FK name instead of the reviewed migration name');
+  assert.deepEqual(readiness.incompatibleForeignKeyTriggers, [
+    'flip_ai_knowledge_indexes_source_revision_fkey',
+  ], 'db push cannot provide triggers for the reviewed migration-only FK name');
+  assert.equal(readiness.unexpectedTriggers.length, 4,
+    'the generated db-push FK contributes four unexpected internal triggers');
+  assert.ok(readiness.unexpectedTriggers.every((trigger) =>
+    /\.RI_ConstraintTrigger_[ac]_\d+$/.test(trigger)));
+  assert.ok(Array.isArray(readiness.incompatibleConstraints));
+});
+
 async function fixture() {
   const suffix = randomUUID();
   const plan = await prisma.plan.upsert({ where: { slug: 'premium' }, update: {}, create: { name: 'Premium CI', slug: 'premium', price: 797 } });

@@ -1,12 +1,12 @@
 -- Flip AI Qualification Engine (PR 274)
 -- Additive only. Apply manually through the controlled production runbook.
 CREATE TABLE "flip_ai_qualifications" (
-  "id" UUID NOT NULL,
-  "tenant_id" UUID NOT NULL,
-  "agent_id" UUID NOT NULL,
+  "id" TEXT NOT NULL,
+  "tenant_id" TEXT NOT NULL,
+  "agent_id" TEXT NOT NULL,
   "conversation_id" TEXT NOT NULL,
-  "lead_id" UUID,
-  "knowledge_index_id" UUID NOT NULL,
+  "lead_id" TEXT,
+  "knowledge_index_id" TEXT NOT NULL,
   "classification" TEXT NOT NULL,
   "fit_score" INTEGER NOT NULL,
   "intent_score" INTEGER NOT NULL,
@@ -86,3 +86,4 @@ ALTER TABLE "flip_ai_qualifications"
 ALTER TABLE "flip_ai_qualifications"
   ADD CONSTRAINT "flip_ai_qualifications_tenant_id_knowledge_index_id_fkey"
   FOREIGN KEY ("tenant_id", "knowledge_index_id") REFERENCES "flip_ai_knowledge_indexes"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
