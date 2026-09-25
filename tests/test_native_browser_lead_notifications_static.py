@@ -10,7 +10,7 @@ def test_native_browser_notifications_require_explicit_user_permission():
     assert "'Notification' in window" in center
     assert 'Notification.requestPermission()' in center
     assert "browserPermission === 'denied'" in center
-    assert 'Ativar avisos no navegador' in center
+    assert 'Ativar notificações no navegador' in center
     assert 'Notificações estão bloqueadas no navegador' in center
     assert 'Este navegador não oferece notificações nativas compatíveis' in center
 
@@ -63,3 +63,22 @@ def test_native_notification_layer_remains_read_only_and_integration_isolated():
         assert forbidden not in combined
     for method in ['POST', 'PUT', 'PATCH', 'DELETE']:
         assert f"method: '{method}'" not in center
+
+
+def test_native_notifications_are_enabled_by_default_after_browser_permission_is_granted():
+    center = read('components/lead-notification-center.tsx')
+    assert "const savedNative = window.localStorage.getItem(nativeEnabledKey)" in center
+    assert "const enabled = permission === 'granted' && savedNative !== 'disabled'" in center
+    assert 'Notificações do navegador:' in center
+
+def test_notification_center_uses_bell_visual_and_native_app_icon():
+    center = read('components/lead-notification-center.tsx')
+    assert '<BellRing className="h-4 w-4" />' in center
+    assert "icon: '/icon.svg'" in center
+    assert 'mesmo quando estiver em outra aba' in center
+
+def test_notification_feed_refreshes_when_user_returns_to_flipform_tab():
+    center = read('components/lead-notification-center.tsx')
+    assert "window.addEventListener('focus', refreshOnFocus)" in center
+    assert "document.addEventListener('visibilitychange', refreshOnVisibility)" in center
+    assert "document.visibilityState === 'visible'" in center

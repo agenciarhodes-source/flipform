@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, UserPlus, Volume2, VolumeX } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -113,6 +113,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       const details = [item.formName, item.source].filter(Boolean).join(' · ');
       const notification = new Notification(item.title, {
         body: details ? `${item.leadName} — ${details}` : item.leadName,
+        icon: '/icon.svg',
         tag: item.id,
       });
       notification.onclick = () => {
@@ -172,8 +173,8 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       const permission = supported ? Notification.permission : 'unsupported';
       browserPermissionRef.current = permission;
       setBrowserPermission(permission);
-      const savedNative = window.localStorage.getItem(nativeEnabledKey) === 'enabled';
-      const enabled = permission === 'granted' && savedNative;
+      const savedNative = window.localStorage.getItem(nativeEnabledKey);
+      const enabled = permission === 'granted' && savedNative !== 'disabled';
       nativeEnabledRef.current = enabled;
       setNativeEnabled(enabled);
 
@@ -186,6 +187,19 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     const timer = window.setInterval(() => void poll(), POLL_MS);
     return () => window.clearInterval(timer);
   }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, poll]);
+
+  useEffect(() => {
+    const refreshOnFocus = () => void poll();
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') void poll();
+    };
+    window.addEventListener('focus', refreshOnFocus);
+    document.addEventListener('visibilitychange', refreshOnVisibility);
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus);
+      document.removeEventListener('visibilitychange', refreshOnVisibility);
+    };
+  }, [poll]);
 
   useEffect(() => {
     if (!soundEnabled || typeof window === 'undefined' || !window.AudioContext) return;
@@ -292,12 +306,17 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
             </div>
           ) : browserPermission !== 'granted' ? (
             <Button type="button" variant="outline" size="sm" className="w-full justify-start" onClick={(event) => { event.preventDefault(); void requestBrowserNotifications(); }}>
-              <BellRing className="mr-2 h-4 w-4" />Ativar avisos no navegador
+              <BellRing className="mr-2 h-4 w-4" />Ativar notificações no navegador
             </Button>
           ) : (
             <Button type="button" variant={nativeEnabled ? 'secondary' : 'outline'} size="sm" className="w-full justify-start" onClick={(event) => { event.preventDefault(); toggleNativeNotifications(); }}>
-              <BellRing className="mr-2 h-4 w-4" />Avisos do navegador: {nativeEnabled ? 'ativados' : 'desativados'}
+              <BellRing className="mr-2 h-4 w-4" />Notificações do navegador: {nativeEnabled ? 'ativadas' : 'desativadas'}
             </Button>
+          )}
+          {browserPermission === 'default' && (
+            <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
+              Ative para receber o alerta nativo do navegador mesmo quando estiver em outra aba. A posição do aviso é controlada pelo navegador e pelo sistema operacional.
+            </p>
           )}
           <Button
             type="button"
@@ -327,7 +346,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
                 onClick={() => openNotification(item)}
                 className="flex w-full gap-3 border-b px-3 py-3 text-left last:border-b-0 hover:bg-muted/60"
               >
-                <div className="mt-0.5 rounded-full bg-brand-50 p-2 text-brand-700"><UserPlus className="h-4 w-4" /></div>
+                <div className="mt-0.5 rounded-full bg-brand-50 p-2 text-brand-700"><BellRing className="h-4 w-4" /></div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start gap-2">
                     <p className="truncate text-sm font-semibold">{item.title}</p>
