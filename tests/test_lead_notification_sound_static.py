@@ -22,15 +22,18 @@ def test_sound_uses_web_audio_without_external_assets_or_network_calls():
     assert 'context.createOscillator()' in center
     assert 'context.createGain()' in center
     assert "oscillator.type = 'sine'" in center
-    assert 'oscillator.frequency.setValueAtTime(880' in center
+    assert 'const ring = (offset: number, fundamental: number)' in center
+    assert 'oscillator.frequency.setValueAtTime(fundamental * partial.ratio, start)' in center
+    assert 'ring(0, 1046.5)' in center
+    assert 'ring(0.42, 1318.5)' in center
     assert 'gain.connect(context.destination)' in center
     assert 'fetch(' not in center[center.index('const playLeadSound'):center.index('const showNativeNotification')]
 
 def test_sound_fires_once_for_a_batch_of_new_leads_and_never_blocks_crm():
     center = read('components/lead-notification-center.tsx')
     assert 'void playLeadSound();' in center
-    assert 'for (const item of feed.items) showNativeNotification(item)' in center
-    assert center.index('void playLeadSound();') < center.index('for (const item of feed.items) showNativeNotification(item)')
+    assert 'for (const item of feed.items) void showNativeNotification(item)' in center
+    assert center.index('void playLeadSound();') < center.index('for (const item of feed.items) void showNativeNotification(item)')
     assert 'Sound is best-effort and must never affect CRM flows.' in center
 
 def test_sound_layer_does_not_touch_database_or_integrations():
