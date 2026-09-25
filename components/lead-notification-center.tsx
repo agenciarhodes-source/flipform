@@ -55,6 +55,8 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const soundEnabledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const serviceWorkerRef = useRef<ServiceWorkerRegistration | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const deliveredIdsRef = useRef<Set<string>>(new Set());
 
   const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
   const seenKey = useMemo(() => notificationSeenStorageKey(tenantId, userId), [tenantId, userId]);
@@ -156,6 +158,26 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     }
   }, [router]);
 
+  const deliverItems = useCallback((incoming: LeadBrowserNotification[]) => {
+    const fresh = incoming.filter((item) => {
+      if (deliveredIdsRef.current.has(item.id)) return false;
+      deliveredIdsRef.current.add(item.id);
+      return true;
+    });
+    if (!fresh.length) return;
+
+    if (deliveredIdsRef.current.size > 250) {
+      deliveredIdsRef.current = new Set(Array.from(deliveredIdsRef.current).slice(-200));
+    }
+
+    setItems((current) => {
+      const next = mergeStoredNotificationItems(current, fresh);
+      try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    void playLeadSound();
+    for (const item of fresh) void showNativeNotification(item);
+  }, [itemsKey, playLeadSound, showNativeNotification]);
   const poll = useCallback(async () => {
     if (pollingRef.current) return;
     pollingRef.current = true;
@@ -176,22 +198,14 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       cursorRef.current = feed.cursor;
       try { window.localStorage.setItem(cursorKey, JSON.stringify(feed.cursor)); } catch {}
 
-      if (feed.items.length) {
-        setItems((current) => {
-          const next = mergeStoredNotificationItems(current, feed.items);
-          try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
-          return next;
-        });
-        void playLeadSound();
-        for (const item of feed.items) void showNativeNotification(item);
-      }
+      if (feed.items.length) deliverItems(feed.items);
     } catch {
       // Notifications are best-effort and must never affect CRM flows.
     } finally {
       pollingRef.current = false;
       setLoading(false);
     }
-  }, [cursorKey, itemsKey, playLeadSound, showNativeNotification]);
+  }, [cursorKey, deliverItems]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
@@ -203,7 +217,9 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     try {
       cursorRef.current = parseStoredCursor(window.localStorage.getItem(cursorKey));
       setSeenIds(parseSeenNotificationIds(window.localStorage.getItem(seenKey)));
-      setItems(parseStoredNotificationItems(window.localStorage.getItem(itemsKey)));
+      const storedItems = parseStoredNotificationItems(window.localStorage.getItem(itemsKey));
+      setItems(storedItems);
+      deliveredIdsRef.current = new Set(storedItems.map((item) => item.id));
       const supported = typeof window !== 'undefined' && 'Notification' in window;
       const permission = supported ? Notification.permission : 'unsupported';
       browserPermissionRef.current = permission;
@@ -218,10 +234,57 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       soundEnabledRef.current = enabledSound;
       setSoundEnabled(enabledSound);
     } catch {}
-    void poll();
-    const timer = window.setInterval(() => void poll(), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, poll]);
+    let fallbackTimer: number | null = null;
+    let cancelled = false;
+
+    const startStream = async () => {
+      if (!cursorRef.current) await poll();
+      if (cancelled || typeof window === 'undefined' || !('EventSource' in window)) {
+        fallbackTimer = window.setInterval(() => void poll(), POLL_MS);
+        return;
+      }
+
+      const cursor = cursorRef.current;
+      const params = new URLSearchParams();
+      if (cursor) {
+        params.set('after', cursor.createdAt);
+        if (cursor.id) params.set('afterId', cursor.id);
+      }
+
+      const source = new EventSource(`/api/notifications/leads/stream?${params.toString()}`);
+      eventSourceRef.current = source;
+
+      source.addEventListener('lead', (event) => {
+        try {
+          const message = event as MessageEvent<string>;
+          const item = JSON.parse(message.data) as LeadBrowserNotification;
+          const lastEventId = message.lastEventId;
+          const separator = lastEventId.lastIndexOf('|');
+          if (separator > 0) {
+            const nextCursor = {
+              createdAt: lastEventId.slice(0, separator),
+              id: lastEventId.slice(separator + 1),
+            };
+            cursorRef.current = nextCursor;
+            try { window.localStorage.setItem(cursorKey, JSON.stringify(nextCursor)); } catch {}
+          }
+          deliverItems([item]);
+        } catch {}
+      });
+
+      source.onerror = () => {
+        // EventSource reconnects automatically. Foreground polling remains only as a fallback.
+      };
+    };
+
+    void startStream();
+    return () => {
+      cancelled = true;
+      if (fallbackTimer !== null) window.clearInterval(fallbackTimer);
+      eventSourceRef.current?.close();
+      eventSourceRef.current = null;
+    };
+  }, [cursorKey, seenKey, itemsKey, nativeEnabledKey, soundEnabledKey, deliverItems, poll]);
 
   useEffect(() => {
     const refreshOnFocus = () => void poll();

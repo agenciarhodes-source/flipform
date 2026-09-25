@@ -32,8 +32,9 @@ def test_sound_uses_web_audio_without_external_assets_or_network_calls():
 def test_sound_fires_once_for_a_batch_of_new_leads_and_never_blocks_crm():
     center = read('components/lead-notification-center.tsx')
     assert 'void playLeadSound();' in center
-    assert 'for (const item of feed.items) void showNativeNotification(item)' in center
-    assert center.index('void playLeadSound();') < center.index('for (const item of feed.items) void showNativeNotification(item)')
+    assert 'if (feed.items.length) deliverItems(feed.items)' in center
+    assert 'for (const item of fresh) void showNativeNotification(item)' in center
+    assert center.index('void playLeadSound();') < center.index('for (const item of fresh) void showNativeNotification(item)')
     assert 'Sound is best-effort and must never affect CRM flows.' in center
 
 def test_sound_layer_does_not_touch_database_or_integrations():
