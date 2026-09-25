@@ -123,36 +123,50 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   }, []);
 
   const showNativeNotification = useCallback(async (item: LeadBrowserNotification) => {
-    if (browserPermissionRef.current !== 'granted' || !nativeEnabledRef.current || typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !('Notification' in window) || !nativeEnabledRef.current) return;
+
+    const permission = Notification.permission;
+    browserPermissionRef.current = permission;
+    if (permission !== 'granted') return;
+
+    const details = [item.formName, item.source].filter(Boolean).join(' · ');
+    const body = details ? `${item.leadName} — ${details}` : item.leadName;
+
     try {
-      const details = [item.formName, item.source].filter(Boolean).join(' · ');
-      const registration = serviceWorkerRef.current
-        || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
-
-      if (registration) {
-        serviceWorkerRef.current = registration;
-        await registration.showNotification(item.title, {
-          body: details ? `${item.leadName} — ${details}` : item.leadName,
-          icon: '/icon.svg',
-          badge: '/icon.svg',
-          tag: item.id,
-          requireInteraction: true,
-          data: { href: item.href },
-        });
-        return;
-      }
-
+      // Chrome desktop: prefer the page Notification API so the OS/browser shows
+      // the same native toast users see from sites such as Facebook.
       const notification = new Notification(item.title, {
-        body: details ? `${item.leadName} — ${details}` : item.leadName,
+        body,
         icon: '/icon.svg',
         tag: item.id,
         requireInteraction: true,
+        silent: false,
       });
       notification.onclick = () => {
         window.focus();
         router.push(item.href);
         notification.close();
       };
+      return;
+    } catch {
+      // Some browsers only allow persistent notifications through a Service Worker.
+    }
+
+    try {
+      const registration = serviceWorkerRef.current
+        || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
+      if (!registration) return;
+
+      serviceWorkerRef.current = registration;
+      await registration.showNotification(item.title, {
+        body,
+        icon: '/icon.svg',
+        badge: '/icon.svg',
+        tag: item.id,
+        requireInteraction: true,
+        silent: false,
+        data: { href: item.href },
+      });
     } catch {
       // Native browser notifications are best-effort and must never affect CRM flows.
     }
