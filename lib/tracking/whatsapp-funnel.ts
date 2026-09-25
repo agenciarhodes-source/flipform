@@ -6,6 +6,7 @@ import { sendMetaCapiEvent } from '@/lib/tracking/meta-capi';
 import { logTrackingEvent, toPrismaDecimal } from '@/lib/tracking';
 
 export const whatsappMatchTypes = ['exact', 'contains', 'starts_with'] as const;
+export const WHATSAPP_FUNNEL_DEPRECATED = true as const;
 export type WhatsAppMatchType = (typeof whatsappMatchTypes)[number];
 
 export type WhatsAppMessageEvent = {
@@ -60,14 +61,10 @@ export async function hasWhatsAppDuplicate(params: { tenantId: string; leadId?: 
   return Boolean(existing);
 }
 
-export async function processWhatsAppFunnelMessage(_event: WhatsAppMessageEvent) {
-  // Deprecated in PR #301. Historical rules and logs are preserved, but no
-  // seller-phrase trigger is evaluated or dispatched anymore.
-  return { status: 'skipped', reason: 'whatsapp_funnel_deprecated' } as const;
-}
-
-/*
-export async function processWhatsAppFunnelMessageLegacy(event: WhatsAppMessageEvent) {
+export async function processWhatsAppFunnelMessage(event: WhatsAppMessageEvent) {
+  if (WHATSAPP_FUNNEL_DEPRECATED) {
+    return { status: 'skipped', reason: 'whatsapp_funnel_deprecated' } as const;
+  }
   if (event.direction !== 'outbound' && event.senderType !== 'agent') return { status: 'skipped', reason: 'inbound_or_not_agent' };
   if (event.senderType === 'system') return { status: 'skipped', reason: 'system_message' };
 
@@ -162,4 +159,3 @@ export function toWhatsAppTriggerData(data: any, tenantId: string) {
     enabled: data.enabled ?? true,
   } satisfies Prisma.WhatsAppEventTriggerUncheckedCreateInput;
 }
-*/
