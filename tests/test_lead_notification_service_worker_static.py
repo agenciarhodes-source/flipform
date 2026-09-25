@@ -10,6 +10,8 @@ def test_native_notification_prefers_active_service_worker_and_keeps_page_fallba
     worker = read('public/lead-notification-sw.js')
     assert "navigator.serviceWorker.register('/lead-notification-sw.js')" in center
     assert 'navigator.serviceWorker.ready' in center
+    assert 'showNativeNotificationThroughWorker' in center
+    assert "type: 'SHOW_LEAD_NOTIFICATION'" in center
     assert 'registration.showNotification(item.title' in center
     assert 'registration.getNotifications({ tag: item.id })' in center
     assert 'const notification = new Notification(item.title' in center
@@ -61,3 +63,23 @@ def test_service_worker_fix_remains_isolated_from_data_and_integrations():
         'CREATE TABLE',
     ]:
         assert forbidden not in combined
+
+
+def test_service_worker_receives_background_popup_messages_and_activates_immediately():
+    center = read('components/lead-notification-center.tsx')
+    worker = read('public/lead-notification-sw.js')
+    assert "self.addEventListener('install'" in worker
+    assert 'self.skipWaiting()' in worker
+    assert "self.addEventListener('activate'" in worker
+    assert 'self.clients.claim()' in worker
+    assert "self.addEventListener('message'" in worker
+    assert "event.data.type !== 'SHOW_LEAD_NOTIFICATION'" in worker
+    assert 'self.registration.showNotification(title' in worker
+    assert 'requireInteraction:' in worker
+    assert 'renotify:' in worker
+    assert "event.ports[0].postMessage({ ok: true, tag })" in worker
+    assert 'showNativeNotificationThroughWorker' in center
+    assert 'worker.postMessage({' in center
+    assert 'new MessageChannel()' in center
+    assert 'requireInteraction: true' in center
+    assert 'renotify: true' in center
