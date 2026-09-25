@@ -30,7 +30,9 @@ def test_duplicate_check_is_scoped_by_tenant_contact_not_form():
     assert '"form_id" = ${formId}' not in guard
     assert "regexp_replace(COALESCE(\"phone\", ''), '[^0-9]', '', 'g')" in guard
     assert "LOWER(BTRIM(COALESCE(\"email\", '')))" in guard
-    assert "digits.startsWith('55') ? digits.slice(2) : digits" in guard
+    assert "import { getBrazilianPhoneAliases } from '@/lib/leads';" in guard
+    assert 'const aliases = getBrazilianPhoneAliases(phone)' in guard
+    assert 'Prisma.join(normalizedPhone)' in guard
 
 
 def test_concurrent_duplicate_submissions_are_serialized_without_void_deserialization_or_schema_change():
