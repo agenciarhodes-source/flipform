@@ -48,7 +48,7 @@ def test_tenant_schema_validates_uploaded_logo_server_side():
 def test_settings_page_uses_company_logo_picker_instead_of_url_input():
     source = read(SETTINGS)
     assert "import { CompanyLogoPicker } from '@/components/settings/company-logo-picker';" in source
-    assert '<CompanyLogoPicker value={logoUrl} onChange={setLogoUrl} disabled={!canEdit} />' in source
+    assert '<CompanyLogoPicker value={logoUrl} onChange={setLogoUrl} disabled={!canBrandingEdit} />' in source
     assert 'Logo (URL)' not in source
 
 

@@ -7,7 +7,7 @@ import { SettingsPageClient } from '@/components/settings-page-client';
 export default async function SettingsPage() {
   const session = await getSession();
   if (!session) redirect('/login');
-  if (!can(session.role, 'SETTINGS_VIEW')) {
+  if (!can(session.role, 'BRANDING_VIEW')) {
     return <div className="p-8"><div className="rounded-md border border-dashed p-12 text-center text-muted-foreground">Acesso restrito.</div></div>;
   }
   const tenant = await prisma.tenant.findUnique({
