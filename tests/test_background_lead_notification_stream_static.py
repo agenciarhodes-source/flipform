@@ -5,18 +5,17 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
-def test_background_notification_stream_is_server_driven_and_read_only():
-    route = read('app/api/notifications/leads/stream/route.ts')
+def test_long_poll_endpoint_is_server_driven_read_only_and_scoped():
+    route = read('app/api/notifications/leads/wait/route.ts')
     assert "export const runtime = 'nodejs'" in route
-    assert 'export const maxDuration = 60' in route
+    assert 'export const maxDuration = 30' in route
     assert "withPermission('LEADS_VIEW'" in route
     assert 'tenantId: session.tenantId' in route
     assert 'getLeadScopeForRole(session)' in route
     assert 'prisma.lead.findMany' in route
-    assert "'Content-Type': 'text/event-stream; charset=utf-8'" in route
-    assert 'event: lead' in route
-    assert 'QUERY_INTERVAL_MS = 5_000' in route
-    assert 'STREAM_LIFETIME_MS = 50_000' in route
+    assert 'WAIT_TIMEOUT_MS = 20_000' in route
+    assert 'CHECK_INTERVAL_MS = 2_000' in route
+    assert "'Cache-Control': 'no-store'" in route
     for forbidden in [
         'prisma.lead.create',
         'prisma.lead.update',
@@ -32,27 +31,35 @@ def test_background_notification_stream_is_server_driven_and_read_only():
     ]:
         assert forbidden not in route
 
-def test_client_uses_eventsource_so_hidden_tab_does_not_depend_on_browser_interval():
+def test_client_uses_continuous_network_wait_not_eventsource_for_hidden_tabs():
     center = read('components/lead-notification-center.tsx')
-    assert 'new EventSource(`/api/notifications/leads/stream?' in center
-    assert "source.addEventListener('lead'" in center
-    assert 'deliverItems([item])' in center
-    assert 'message.lastEventId' in center
-    assert 'eventSourceRef.current?.close()' in center
-    assert 'EventSource reconnects automatically' in center
+    assert 'const watchAbortRef = useRef<AbortController | null>(null)' in center
+    assert 'while (!cancelled)' in center
+    assert 'fetch(`/api/notifications/leads/wait?${params.toString()}`' in center
+    assert "cache: 'no-store'" in center
+    assert 'signal: controller.signal' in center
+    assert 'if (feed.items.length) deliverItems(feed.items)' in center
+    assert 'watchAbortRef.current?.abort()' in center
+    assert 'new EventSource(' not in center
 
-def test_stream_and_polling_dedupe_before_sound_and_native_popup():
+def test_regular_polling_stays_enabled_as_foreground_fallback():
+    center = read('components/lead-notification-center.tsx')
+    assert 'const fallbackTimer = window.setInterval(() => void poll(), POLL_MS)' in center
+    assert 'window.clearInterval(fallbackTimer)' in center
+    assert "window.addEventListener('focus', refreshOnFocus)" in center
+    assert "document.addEventListener('visibilitychange', refreshOnVisibility)" in center
+
+def test_long_poll_and_fallback_dedupe_before_sound_and_native_popup():
     center = read('components/lead-notification-center.tsx')
     assert 'const deliveredIdsRef = useRef<Set<string>>(new Set())' in center
     assert 'if (deliveredIdsRef.current.has(item.id)) return false' in center
-    assert 'if (feed.items.length) deliverItems(feed.items)' in center
     assert 'void playLeadSound()' in center
     assert 'for (const item of fresh) void showNativeNotification(item)' in center
     assert 'deliveredIdsRef.current = new Set(storedItems.map((item) => item.id))' in center
 
-def test_sse_change_does_not_touch_integrations_or_lead_creation():
+def test_long_poll_change_does_not_touch_integrations_or_lead_creation():
     combined = '\n'.join([
-        read('app/api/notifications/leads/stream/route.ts'),
+        read('app/api/notifications/leads/wait/route.ts'),
         read('components/lead-notification-center.tsx'),
     ])
     for forbidden in [
@@ -71,13 +78,3 @@ def test_sse_change_does_not_touch_integrations_or_lead_creation():
         'CREATE TABLE',
     ]:
         assert forbidden not in combined
-
-def test_sse_forces_chunks_through_proxy_and_compression_buffers():
-    route = read('app/api/notifications/leads/stream/route.ts')
-    assert 'const FLUSH_CHUNK_BYTES = 4_096' in route
-    assert 'function encodeFlushableSse(payload: string)' in route
-    assert "controller.enqueue(encodeFlushableSse('retry: 1500" in route
-    assert 'controller.enqueue(encodeFlushableSse(' in route
-    assert "'Content-Encoding': 'none'" in route
-    assert "'X-Accel-Buffering': 'no'" in route
-    assert "'X-Content-Type-Options': 'nosniff'" in route
