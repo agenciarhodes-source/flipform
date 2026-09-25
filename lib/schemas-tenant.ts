@@ -9,6 +9,12 @@ const tenantLogoSchema = z.string().refine(
   'Logo inválida. Envie PNG, JPG ou WebP de até 120 KB.',
 );
 
+export const tenantBrandingUpdateSchema = z.object({
+  name: z.string().min(2, 'Nome muito curto').max(80).optional(),
+  primaryColor: z.string().regex(HEX_COLOR_REGEX, 'Cor inválida. Use formato #RRGGBB').optional(),
+  logoUrl: z.union([tenantLogoSchema, z.literal('')]).optional().nullable(),
+}).refine((d) => Object.keys(d).length > 0, { message: 'Nenhum campo de identidade visual para atualizar' });
+
 export const tenantUpdateSchema = z.object({
   name: z.string().min(2, 'Nome muito curto').max(80).optional(),
   slug: z.string()
@@ -21,3 +27,5 @@ export const tenantUpdateSchema = z.object({
 }).refine((d) => Object.keys(d).length > 0, { message: 'Nenhum campo para atualizar' });
 
 export type TenantUpdateInput = z.infer<typeof tenantUpdateSchema>;
+
+export type TenantBrandingUpdateInput = z.infer<typeof tenantBrandingUpdateSchema>;

@@ -107,6 +107,8 @@ export const PERMISSIONS = {
   REPORTS_VIEW_ALL: ['owner', 'admin', 'manager', 'viewer'],
   REPORTS_VIEW_OWN: ['agent'],
   REPORTS_EXPORT: ['owner', 'admin'],
+  BRANDING_VIEW: ['owner', 'admin', 'manager'],
+  BRANDING_EDIT: ['owner', 'admin', 'manager'],
   SETTINGS_VIEW: ['owner', 'admin'],
   SETTINGS_MANAGE: ['owner'],
   SETTINGS_EDIT: ['owner'],

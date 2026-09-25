@@ -24,7 +24,8 @@ interface TenantData {
 
 export function SettingsPageClient({ initialTenant, role }: { initialTenant: TenantData; role: string }) {
   const router = useRouter();
-  const canEdit = can(role, 'SETTINGS_EDIT');
+  const canFullEdit = can(role, 'SETTINGS_EDIT');
+  const canBrandingEdit = can(role, 'BRANDING_EDIT');
   const [tenant, setTenant] = useState<TenantData>(initialTenant);
   const [name, setName] = useState(initialTenant.name);
   const [slug, setSlug] = useState(initialTenant.slug);
@@ -38,27 +39,34 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
 
   const slugValid = SLUG_REGEX_FE.test(slug);
   const colorValid = /^#[0-9A-Fa-f]{6}$/.test(primaryColor);
-  const hasChanges = (
-    name !== tenant.name || slug !== tenant.slug ||
-    primaryColor !== tenant.primaryColor || (logoUrl || null) !== tenant.logoUrl
+  const brandingChanged = (
+    name !== tenant.name ||
+    primaryColor !== tenant.primaryColor ||
+    (logoUrl || null) !== tenant.logoUrl
   );
+  const hasChanges = brandingChanged || (canFullEdit && slug !== tenant.slug);
   const slugChanged = slug !== tenant.slug;
 
   const initials = (tenant.name || '').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
 
   const save = async () => {
-    if (!canEdit) return;
-    if (!slugValid) { toast.error('Slug inválido. Use apenas letras minúsculas, números e hífens.'); return; }
+    if (!canBrandingEdit) return;
+    if (canFullEdit && !slugValid) { toast.error('Slug inválido. Use apenas letras minúsculas, números e hífens.'); return; }
     if (!colorValid) { toast.error('Cor inválida. Use formato #RRGGBB.'); return; }
     setSaving(true);
     try {
-      const res = await fetch('/api/settings/tenant', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, slug, primaryColor, logoUrl: logoUrl || '' }),
+      const endpoint = canFullEdit ? '/api/settings/tenant' : '/api/settings/branding';
+      const payload = canFullEdit
+        ? { name, slug, primaryColor, logoUrl: logoUrl || '' }
+        : { name, primaryColor, logoUrl: logoUrl || '' };
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      toast.success('Configurações salvas!');
+      toast.success(canFullEdit ? 'Configurações salvas!' : 'Identidade visual salva!');
       if (data.tenant) setTenant({ ...tenant, ...data.tenant });
       router.refresh();
     } catch (e: any) {
@@ -97,16 +105,17 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           <h1 className="font-heading text-2xl lg:text-3xl font-bold">Configurações da Empresa</h1>
           <p className="text-muted-foreground text-sm">Personalize a identidade visual e dados da sua empresa.</p>
         </div>
-        {canEdit && (
-          <Button onClick={save} disabled={!hasChanges || !slugValid || !colorValid || saving}>
+        {canBrandingEdit && (
+          <Button onClick={save} disabled={!hasChanges || (canFullEdit && !slugValid) || !colorValid || saving}>
             <Save className="w-4 h-4 mr-2" />{saving ? 'Salvando...' : 'Salvar alterações'}
           </Button>
         )}
       </div>
 
-      {!canEdit && (
-        <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" />Você está visualizando como <strong>{role}</strong>. Apenas owner/admin podem editar.
+      {canBrandingEdit && !canFullEdit && (
+        <div className="rounded-md bg-blue-50 border border-blue-200 p-3 text-sm text-blue-900 flex items-start gap-2">
+          <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>Seu acesso permite editar somente a <strong>identidade da empresa</strong>: nome, logo e cor principal. Slug, integrações, usuários, financeiro e configurações críticas continuam protegidos.</span>
         </div>
       )}
 
@@ -140,16 +149,17 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           </div>
           <div>
             <Label>Nome da empresa</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canEdit} maxLength={80} />
+            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={!canBrandingEdit} maxLength={80} />
           </div>
           <div>
             <Label>Slug único</Label>
             <div className="flex items-center gap-1">
               <span className="text-xs text-muted-foreground">/</span>
-              <Input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={!canEdit} className={!slugValid && slug ? 'border-destructive' : ''} />
+              <Input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={!canFullEdit} className={!slugValid && slug ? 'border-destructive' : ''} />
             </div>
-            {!slugValid && slug && <p className="text-xs text-destructive mt-1">Use apenas letras minúsculas, números e hífens.</p>}
-            {slugChanged && slugValid && (
+            {!canFullEdit && <p className="text-xs text-muted-foreground mt-1">Somente o Dono da empresa pode alterar o slug.</p>}
+            {canFullEdit && !slugValid && slug && <p className="text-xs text-destructive mt-1">Use apenas letras minúsculas, números e hífens.</p>}
+            {canFullEdit && slugChanged && slugValid && (
               <div className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md p-2 mt-2 flex items-start gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                 <span>Alterar o slug pode quebrar URLs externas que referenciam <strong>{tenant.slug}</strong>.</span>
@@ -167,16 +177,16 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           <div>
             <Label>Cor principal</Label>
             <div className="flex items-center gap-2">
-              <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value.toUpperCase())} disabled={!canEdit} className="w-12 h-10 rounded-md cursor-pointer border" />
-              <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value.toUpperCase())} disabled={!canEdit} maxLength={7} className="font-mono" />
+              <input type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value.toUpperCase())} disabled={!canBrandingEdit} className="w-12 h-10 rounded-md cursor-pointer border" />
+              <Input value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value.toUpperCase())} disabled={!canBrandingEdit} maxLength={7} className="font-mono" />
             </div>
             <div className="flex gap-1.5 mt-2 flex-wrap">
               {SUGGESTED_COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => canEdit && setPrimaryColor(c)} className={`w-7 h-7 rounded-md transition ${primaryColor.toUpperCase() === c ? 'ring-2 ring-offset-2 ring-foreground' : ''}`} style={{ backgroundColor: c }} />
+                <button key={c} type="button" onClick={() => canBrandingEdit && setPrimaryColor(c)} className={`w-7 h-7 rounded-md transition ${primaryColor.toUpperCase() === c ? 'ring-2 ring-offset-2 ring-foreground' : ''}`} style={{ backgroundColor: c }} />
               ))}
             </div>
           </div>
-          <CompanyLogoPicker value={logoUrl} onChange={setLogoUrl} disabled={!canEdit} />
+          <CompanyLogoPicker value={logoUrl} onChange={setLogoUrl} disabled={!canBrandingEdit} />
         </Card>
       </div>
 

@@ -110,3 +110,11 @@ def test_admin_manager_agent_and_viewer_never_receive_lead_delete_permission():
     permission_line = next(line for line in rbac.splitlines() if 'LEADS_DELETE:' in line)
     for role in ["'admin'", "'manager'", "'agent'", "'viewer'"]:
         assert role not in permission_line
+
+
+def test_manager_can_access_limited_branding_without_full_settings_permission():
+    source = read('lib/rbac.ts')
+    assert "BRANDING_VIEW: ['owner', 'admin', 'manager']" in source
+    assert "BRANDING_EDIT: ['owner', 'admin', 'manager']" in source
+    assert "SETTINGS_VIEW: ['owner', 'admin']" in source
+    assert "SETTINGS_EDIT: ['owner']" in source

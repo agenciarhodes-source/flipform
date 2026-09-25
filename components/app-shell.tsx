@@ -88,7 +88,7 @@ const NAV: NavItem[] = [
     href: "/settings",
     label: "Configurações",
     icon: Settings,
-    permission: "SETTINGS_VIEW",
+    permission: "BRANDING_VIEW",
   },
 ];
 
