@@ -9,19 +9,32 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Loader2, ArrowLeft, Power, RotateCcw, ShieldOff, Ban } from 'lucide-react';
+import { Loader2, ArrowLeft, Power, RotateCcw, ShieldOff, Ban, Save } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/status-badge';
+
+const ROLE_OPTIONS = [
+  { value: 'owner', label: 'Dono da empresa' },
+  { value: 'admin', label: 'Administrador' },
+  { value: 'manager', label: 'Gestor' },
+  { value: 'agent', label: 'Atendente/Vendedor' },
+  { value: 'viewer', label: 'Visualizador' },
+];
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tenant, setTenant] = useState<any>(null);
   const [plans, setPlans] = useState<any[]>([]);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
+  const [savingUserRole, setSavingUserRole] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState<{ planId: string; nextDueDate: string; internalNotes: string }>({ planId: '', nextDueDate: '', internalNotes: '' });
 
   const load = async () => {
-    const d = await fetch(`/api/admin/tenants/${id}`).then((r) => r.json());
+    const d = await fetch(`/api/admin/tenants/${id}`, { cache: 'no-store' }).then((r) => r.json());
     setTenant(d.tenant);
+    const nextRoleDrafts: Record<string, string> = {};
+    for (const tenantUser of d.tenant?.tenantUsers || []) nextRoleDrafts[tenantUser.id] = tenantUser.role;
+    setRoleDrafts(nextRoleDrafts);
     setPlanForm({
       planId: d.tenant?.planId || 'none',
       nextDueDate: d.tenant?.nextDueDate ? new Date(d.tenant.nextDueDate).toISOString().slice(0, 10) : '',
@@ -59,6 +72,28 @@ export default function TenantDetailPage() {
       load();
     } catch (e: any) { toast.error(e.message); }
     finally { setSavingPlan(false); }
+  };
+
+  const saveUserRole = async (tenantUser: any) => {
+    const role = roleDrafts[tenantUser.id] || tenantUser.role;
+    if (role === tenantUser.role) return;
+
+    setSavingUserRole(tenantUser.id);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/users/${tenantUser.id}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível alterar o nível de acesso.');
+      toast.success(`${tenantUser.user.name} agora é ${ROLE_OPTIONS.find((item) => item.value === role)?.label || role}.`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSavingUserRole(null);
+    }
   };
 
   if (!tenant) return <div className="p-8 text-muted-foreground"><Loader2 className="w-5 h-5 inline animate-spin mr-2" />Carregando...</div>;
@@ -119,16 +154,51 @@ export default function TenantDetailPage() {
           </Card>
         </TabsContent>
         <TabsContent value="users">
-          <Card className="p-0 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/40 border-b"><tr className="text-xs uppercase text-muted-foreground"><th className="text-left py-2 px-4">Nome</th><th className="text-left py-2 px-4">E-mail</th><th className="text-left py-2 px-4">Role</th><th className="text-left py-2 px-4">Status</th></tr></thead>
-              <tbody>
-                {tenant.tenantUsers.map((tu: any) => (
-                  <tr key={tu.id} className="border-b last:border-0"><td className="py-2 px-4">{tu.user.name}</td><td className="py-2 px-4">{tu.user.email}</td><td className="py-2 px-4">{tu.role}</td><td className="py-2 px-4">{tu.status}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
+          <div className="space-y-3">
+            <Card className="p-4 text-sm text-muted-foreground">
+              Hierarquia da empresa: <strong>Dono</strong> → <strong>Administrador</strong> → <strong>Gestor</strong> → <strong>Atendente/Vendedor</strong>. O Gestor acompanha os atendentes vinculados à sua equipe; cada atendente continua operando os próprios leads.
+            </Card>
+            <Card className="p-0 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b">
+                  <tr className="text-xs uppercase text-muted-foreground">
+                    <th className="text-left py-2 px-4">Nome</th>
+                    <th className="text-left py-2 px-4">E-mail</th>
+                    <th className="text-left py-2 px-4">Nível de acesso</th>
+                    <th className="text-left py-2 px-4">Status</th>
+                    <th className="text-right py-2 px-4">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenant.tenantUsers.map((tu: any) => (
+                    <tr key={tu.id} className="border-b last:border-0">
+                      <td className="py-2 px-4">{tu.user.name}</td>
+                      <td className="py-2 px-4">{tu.user.email}</td>
+                      <td className="py-2 px-4 min-w-[220px]">
+                        <Select value={roleDrafts[tu.id] || tu.role} onValueChange={(role) => setRoleDrafts((current) => ({ ...current, [tu.id]: role }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ROLE_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="py-2 px-4">{tu.status}</td>
+                      <td className="py-2 px-4 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => saveUserRole(tu)}
+                          disabled={savingUserRole === tu.id || (roleDrafts[tu.id] || tu.role) === tu.role}
+                        >
+                          <Save className="w-3.5 h-3.5 mr-1" />{savingUserRole === tu.id ? 'Salvando...' : 'Salvar nível'}
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
         </TabsContent>
         <TabsContent value="history">
           <Card className="p-5">

@@ -94,7 +94,7 @@ const NAV: NavItem[] = [
 
 const GROUP_ROLE_LABELS_PT_BR: Record<string, string> = {
   owner: "Dono do grupo",
-  admin: "Gestor do grupo",
+  admin: "Administrador do grupo",
   viewer: "Visualizador do grupo",
 };
 

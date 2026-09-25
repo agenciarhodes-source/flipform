@@ -32,7 +32,8 @@ def test_admin_access_page_separates_group_account_from_direct_tenant_access():
     route = read('app/api/admin/allowed-users/route.ts')
     assert "value=\"group_account\"" in page
     assert 'Administrador / responsável de grupo' in page
-    assert 'dono, gestor ou visualizador do grupo' in page
+    assert 'dono, administrador ou visualizador do grupo' in page
+    assert 'Gestores de loja devem ser vinculados diretamente à empresa correspondente.' in page
     assert 'Nenhuma empresa técnica é criada.' in page
     assert "mode: 'group_account'" in page
     assert "payload.mode === 'group_account'" in route

@@ -93,7 +93,7 @@ def test_app_shell_and_layout_hide_group_hub_and_keep_group_route_recoverable():
     for label in ['Dashboard', 'Leads', 'Formulários', 'Relatórios']:
         assert label in shell
     assert 'GROUP_ROLE_LABELS_PT_BR' in shell
-    assert 'Gestor do grupo' in shell
+    assert 'Administrador do grupo' in shell
     assert 'inGroupView' in shell
     assert 'Visão consolidada' in shell
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in layout
@@ -122,15 +122,16 @@ def test_platform_admin_selects_registered_access_by_user_id():
     assert 'upsertBusinessGroupMember' in update
 
 
-def test_group_admin_storage_role_maps_to_tenant_manager_without_schema_change():
+def test_group_admin_remains_group_wide_admin_not_store_manager():
     helper = read('lib/business-groups.ts')
     update = read('app/api/admin/business-groups/[id]/route.ts')
     page = read('app/admin/(secure)/groups/page.tsx')
     assert "export type BusinessGroupRole = 'owner' | 'admin' | 'viewer'" in helper
     assert "role: z.enum(['owner', 'admin', 'viewer'])" in update
-    assert "if (role === 'admin') return 'manager';" in helper
-    assert "admin: 'Gestor do grupo'" in page
+    assert "if (role === 'admin') return 'admin';" in helper
+    assert "admin: 'Administrador do grupo'" in page
     assert "const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const" in page
+    assert 'Gestores de loja devem ser configurados dentro da empresa correspondente' in page
 
 
 def test_platform_admin_can_edit_existing_group_member_level_inline():
