@@ -3,7 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { assignLeadByRotationId } from '@/lib/lead-assignment';
-import { isValidBrazilianPhone, normalizeBrazilianPhone, normalizeEmail } from '@/lib/leads';
+import { getBrazilianPhoneAliases, isValidBrazilianPhone, normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
 
 export type LeadAttributionSnapshot = {
   utmSource?: string | null;
@@ -114,13 +114,14 @@ export async function ensureLeadFromConversation(input: {
     if (!stage) return { kind: 'stage_invalid' };
 
     await tx.$queryRaw`SELECT id FROM public.tenants WHERE id = ${input.tenantId} FOR UPDATE`;
-    const phone = normalizeBrazilianPhone(identity.phone);
+    const phone = normalizeBrazilianLeadPhone(identity.phone);
     if (input.requireValidPhone && (!phone || !isValidBrazilianPhone(phone))) {
       return { kind: 'valid_phone_required' };
     }
     const email = normalizeEmail(identity.email);
     const contactOr: Prisma.LeadWhereInput[] = [];
-    if (phone) contactOr.push({ phone });
+    const phoneAliases = getBrazilianPhoneAliases(phone).filter(candidate => candidate.startsWith('55'));
+    if (phoneAliases.length) contactOr.push({ phone: { in: phoneAliases } });
     if (email) contactOr.push({ email });
     const matches = contactOr.length
       ? await tx.lead.findMany({

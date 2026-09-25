@@ -81,3 +81,39 @@ export function normalizeBrazilianPhone(phone?: string | null): string | null {
 export function isValidBrazilianPhone(phone: string): boolean {
   return /^55\d{10,11}$/.test(phone);
 }
+
+export function getBrazilianPhoneAliases(phone?: string | null): string[] {
+  const normalized = normalizeBrazilianPhone(phone);
+  if (!normalized || !isValidBrazilianPhone(normalized)) return normalized ? [normalized] : [];
+
+  const aliases = new Set<string>();
+  const add = (value: string) => {
+    aliases.add(value);
+    if (value.startsWith('55')) aliases.add(value.slice(2));
+  };
+
+  add(normalized);
+
+  // Brazilian mobile numbers can appear in WhatsApp/legacy data with or without
+  // the additional ninth digit. Only infer the old/new mobile counterpart when
+  // the subscriber number is mobile-like (6-9), avoiding fixed-line 2-5 ranges.
+  if (normalized.length === 13 && normalized[4] === '9') {
+    add(`${normalized.slice(0, 4)}${normalized.slice(5)}`);
+  } else if (normalized.length === 12 && /^[6-9]$/.test(normalized[4])) {
+    add(`${normalized.slice(0, 4)}9${normalized.slice(4)}`);
+  }
+
+  return [...aliases];
+}
+
+export function normalizeBrazilianLeadPhone(phone?: string | null): string | null {
+  const normalized = normalizeBrazilianPhone(phone);
+  if (!normalized) return null;
+
+  // Prefer the current Brazilian mobile representation in CRM data while still
+  // preserving landlines and non-mobile-shaped numbers exactly as normalized.
+  if (normalized.length === 12 && /^[6-9]$/.test(normalized[4])) {
+    return `${normalized.slice(0, 4)}9${normalized.slice(4)}`;
+  }
+  return normalized;
+}

@@ -33,6 +33,9 @@ def test_lead_ensure_action_reuses_tenant_scoped_conversation_service():
     assert 'FOR UPDATE' in service
     assert 'SELECT id FROM public.tenants WHERE id = ${input.tenantId} FOR UPDATE' in service
     assert 'where: { tenantId: input.tenantId, OR: contactOr }' in service
+    assert 'getBrazilianPhoneAliases(phone)' in service
+    assert "phone: { in: phoneAliases }" in service
+    assert 'normalizeBrazilianLeadPhone(identity.phone)' in service
     assert 'take: 2' in service
     assert "kind: 'ambiguous_contact'" in service
     assert 'tx.lead.create({' in service
