@@ -125,6 +125,13 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
             ON table_metadata.oid = to_regclass(format('public.%I', required_tables.table_name))
           WHERE table_metadata.relkind <> 'r'
             OR table_metadata.relpersistence <> 'p'
+            OR table_metadata.relispartition
+            OR EXISTS (
+              SELECT 1
+              FROM pg_catalog.pg_inherits AS inheritance
+              WHERE inheritance.inhrelid = table_metadata.oid
+                OR inheritance.inhparent = table_metadata.oid
+            )
             OR table_metadata.relrowsecurity
             OR table_metadata.relforcerowsecurity
           ORDER BY required_tables.table_name

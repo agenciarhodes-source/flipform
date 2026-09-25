@@ -57,7 +57,9 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_rate_limit_buckets_tenant_id_rejected_count_updated_idx',
     'flip_ai_rate_limit_buckets_tenant_id_scope_scope_key_window_key',
   ], 'db push names differ from the reviewed migration catalog names');
-  assert.deepEqual(readiness.unexpectedConstraints, []);
+  assert.deepEqual(readiness.unexpectedConstraints, [
+    'flip_ai_knowledge_indexes.flip_ai_knowledge_indexes_tenant_id_document_id_revision_fkey',
+  ], 'db push uses a generated FK name instead of the reviewed migration name');
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
 

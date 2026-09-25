@@ -331,6 +331,8 @@ test('Flip AI production schema diagnostic remains read-only', () => {
   assert.match(source, /pg_collation/);
   assert.match(source, /relrowsecurity/);
   assert.match(source, /relforcerowsecurity/);
+  assert.match(source, /relispartition/);
+  assert.match(source, /pg_inherits/);
   assert.match(source, /collation_namespaces/);
   assert.match(source, /indisvalid/);
   assert.match(source, /indclass/);
