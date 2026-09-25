@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, Volume2, VolumeX } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, TestTube2, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,6 +54,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   const nativeEnabledRef = useRef(false);
   const soundEnabledRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const serviceWorkerRef = useRef<ServiceWorkerRegistration | null>(null);
 
   const cursorKey = useMemo(() => notificationCursorStorageKey(tenantId, userId), [tenantId, userId]);
   const seenKey = useMemo(() => notificationSeenStorageKey(tenantId, userId), [tenantId, userId]);
@@ -90,38 +91,67 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       audioContextRef.current = context;
       if (context.state === 'suspended') await context.resume();
 
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(880, context.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(660, context.currentTime + 0.18);
-      gain.gain.setValueAtTime(0.0001, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.28);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start();
-      oscillator.stop(context.currentTime + 0.3);
+      const ring = (offset: number, fundamental: number) => {
+        const start = context.currentTime + offset;
+        const partials = [
+          { ratio: 1, gain: 0.12 },
+          { ratio: 2.01, gain: 0.055 },
+          { ratio: 3.9, gain: 0.025 },
+        ];
+        for (const partial of partials) {
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(fundamental * partial.ratio, start);
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.exponentialRampToValueAtTime(partial.gain, start + 0.015);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.7);
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start(start);
+          oscillator.stop(start + 0.72);
+        }
+      };
+
+      ring(0, 1046.5);
+      ring(0.42, 1318.5);
     } catch {
       // Sound is best-effort and must never affect CRM flows.
     }
   }, []);
 
-  const showNativeNotification = useCallback((item: LeadBrowserNotification) => {
+  const showNativeNotification = useCallback(async (item: LeadBrowserNotification) => {
     if (browserPermissionRef.current !== 'granted' || !nativeEnabledRef.current || typeof window === 'undefined') return;
     try {
       const details = [item.formName, item.source].filter(Boolean).join(' · ');
+      const registration = serviceWorkerRef.current
+        || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
+
+      if (registration) {
+        serviceWorkerRef.current = registration;
+        await registration.showNotification(item.title, {
+          body: details ? `${item.leadName} — ${details}` : item.leadName,
+          icon: '/icon.svg',
+          badge: '/icon.svg',
+          tag: item.id,
+          renotify: true,
+          requireInteraction: true,
+          data: { href: item.href },
+        });
+        return;
+      }
+
       const notification = new Notification(item.title, {
         body: details ? `${item.leadName} — ${details}` : item.leadName,
         icon: '/icon.svg',
         tag: item.id,
+        requireInteraction: true,
       });
       notification.onclick = () => {
         window.focus();
         router.push(item.href);
         notification.close();
       };
-      window.setTimeout(() => notification.close(), 12_000);
     } catch {
       // Native browser notifications are best-effort and must never affect CRM flows.
     }
@@ -154,7 +184,7 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           return next;
         });
         void playLeadSound();
-        for (const item of feed.items) showNativeNotification(item);
+        for (const item of feed.items) void showNativeNotification(item);
       }
     } catch {
       // Notifications are best-effort and must never affect CRM flows.
@@ -165,6 +195,12 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
   }, [cursorKey, itemsKey, playLeadSound, showNativeNotification]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/lead-notification-sw.js')
+        .then((registration) => { serviceWorkerRef.current = registration; })
+        .catch(() => {});
+    }
+
     try {
       cursorRef.current = parseStoredCursor(window.localStorage.getItem(cursorKey));
       setSeenIds(parseSeenNotificationIds(window.localStorage.getItem(seenKey)));
@@ -249,6 +285,11 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       browserPermissionRef.current = permission;
       setBrowserPermission(permission);
       persistNativeEnabled(permission === 'granted');
+      if (permission === 'granted' && 'serviceWorker' in navigator) {
+        try {
+          serviceWorkerRef.current = await navigator.serviceWorker.ready;
+        } catch {}
+      }
     } catch {
       persistNativeEnabled(false);
     }
@@ -266,6 +307,31 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     const next = !soundEnabled;
     persistSoundEnabled(next);
     if (next) void playLeadSound();
+  }
+
+  async function testNativeNotification() {
+    if (browserPermission !== 'granted') {
+      await requestBrowserNotifications();
+      return;
+    }
+    nativeEnabledRef.current = true;
+    setNativeEnabled(true);
+    try { window.localStorage.setItem(nativeEnabledKey, 'enabled'); } catch {}
+    await playLeadSound();
+    await showNativeNotification({
+      id: `lead:test:${Date.now()}`,
+      type: 'lead_created',
+      leadId: 'test',
+      title: 'Teste de notificação do FlipForm',
+      leadName: 'As notificações estão funcionando',
+      source: 'FlipForm',
+      formName: 'Novo lead',
+      pipelineName: 'Teste',
+      stageName: 'Teste',
+      assignedUserName: null,
+      createdAt: new Date().toISOString(),
+      href: '/leads',
+    });
   }
 
   return (
@@ -317,6 +383,17 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
             <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
               Ative para receber o alerta nativo do navegador mesmo quando estiver em outra aba. A posição do aviso é controlada pelo navegador e pelo sistema operacional.
             </p>
+          )}
+          {browserPermission === 'granted' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full justify-start"
+              onClick={(event) => { event.preventDefault(); void testNativeNotification(); }}
+            >
+              <TestTube2 className="mr-2 h-4 w-4" />Testar notificação
+            </Button>
           )}
           <Button
             type="button"
