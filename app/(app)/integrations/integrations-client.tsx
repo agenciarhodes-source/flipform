@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
@@ -348,14 +347,6 @@ export function IntegrationsClient() {
       >
         {savingWhatsappAgentSignature ? 'Salvando...' : 'Salvar identificação'}
       </button>
-    </div>
-
-    <div className="rounded-xl border bg-white p-5 space-y-3 shadow-sm">
-      <div>
-        <h2 className="font-semibold text-lg">Funil WhatsApp</h2>
-        <p className="text-sm text-muted-foreground">Quer configurar gatilhos por mensagens do vendedor? Acesse a seção dedicada Funil WhatsApp.</p>
-      </div>
-      <Link className="inline-flex w-fit px-4 py-2 rounded border text-sm hover:bg-muted" href="/whatsapp-funnel">Acessar Funil WhatsApp</Link>
     </div>
 
     <div className="grid gap-4 lg:grid-cols-2">
