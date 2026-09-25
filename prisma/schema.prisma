@@ -121,6 +121,7 @@ model Tenant {
   leadAttributions      LeadAttribution[]
   metaConnections       TenantMetaConnection[]
   whatsappConnections   TenantWhatsAppConnection[]
+  whatsappSettings      TenantWhatsAppSettings?
   instagramConnections  TenantInstagramConnection[]
   externalContactIdentities ExternalContactIdentity[]
   conversations         Conversation[]
@@ -844,6 +845,18 @@ model TenantMetaConnection {
   @@index([tenantId, status])
   @@index([connectedById])
   @@map("tenant_meta_connections")
+}
+
+model TenantWhatsAppSettings {
+  id                 String   @id @default(cuid())
+  tenantId           String   @unique @map("tenant_id")
+  agentSignatureMode String   @default("disabled") @map("agent_signature_mode")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_whatsapp_settings")
 }
 
 model TenantWhatsAppConnection {
