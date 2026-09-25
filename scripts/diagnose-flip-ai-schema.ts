@@ -25,6 +25,8 @@ async function main() {
   list('Constraints ausentes', readiness.missingConstraints);
   list('Constraints incompatíveis', readiness.incompatibleConstraints);
   list('Constraints inesperadas', readiness.unexpectedConstraints);
+  list('Triggers de FK incompatíveis', readiness.incompatibleForeignKeyTriggers);
+  list('Triggers inesperados', readiness.unexpectedTriggers);
   list('Colunas ausentes', readiness.missingColumns);
   list('Tipos incompatíveis', readiness.incompatibleColumns);
   list('Colunas inesperadas', readiness.unexpectedColumns);

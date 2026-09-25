@@ -73,6 +73,19 @@ type ConstraintRow = {
   definition: string;
 };
 
+type TriggerRow = {
+  triggerTableName: string;
+  triggerName: string;
+  enabled: string;
+  internal: boolean;
+  deferrable: boolean;
+  initiallyDeferred: boolean;
+  constraintTableName: string | null;
+  constraintName: string | null;
+  constraintType: string | null;
+  functionName: string;
+};
+
 export type FlipAiSchemaReadiness = {
   ready: boolean;
   schemaReady: boolean;
@@ -85,6 +98,8 @@ export type FlipAiSchemaReadiness = {
   missingConstraints: string[];
   incompatibleConstraints: string[];
   unexpectedConstraints: string[];
+  incompatibleForeignKeyTriggers: string[];
+  unexpectedTriggers: string[];
   missingColumns: string[];
   incompatibleColumns: string[];
   unexpectedColumns: string[];
@@ -104,11 +119,23 @@ function sameStrings(actual: readonly string[], expected: readonly string[]) {
     && actual.every((value, index) => value === expected[index]);
 }
 
+function foreignKeyActionTriggerFunction(action: string, event: 'del' | 'upd') {
+  const actionNames: Record<string, string> = {
+    a: 'noaction',
+    r: 'restrict',
+    c: 'cascade',
+    n: 'setnull',
+    d: 'setdefault',
+  };
+  const actionName = actionNames[action];
+  return actionName ? `RI_FKey_${actionName}_${event}` : '';
+}
+
 export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const tableValues = Prisma.join(FLIP_AI_REQUIRED_TABLES.map((table) => Prisma.sql`(${table})`));
   const tableNames = Prisma.join(FLIP_AI_REQUIRED_TABLES);
   const indexNames = Prisma.join(FLIP_AI_REQUIRED_INDEX_SPECS.map(({ indexName }) => indexName));
-  const [rows, columns, indexes, constraints] = await Promise.all([
+  const [rows, columns, indexes, constraints, triggers] = await Promise.all([
     prisma.$queryRaw<ReadinessRow[]>(Prisma.sql`
       WITH required_tables(table_name) AS (VALUES ${tableValues})
       SELECT
@@ -296,6 +323,39 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
       WHERE namespaces.nspname = 'public'
         AND tables.relname IN (${tableNames})
     `),
+    prisma.$queryRaw<TriggerRow[]>(Prisma.sql`
+      SELECT trigger_tables.relname::text AS "triggerTableName",
+        trigger_metadata.tgname::text AS "triggerName",
+        trigger_metadata.tgenabled::text AS "enabled",
+        trigger_metadata.tgisinternal AS "internal",
+        trigger_metadata.tgdeferrable AS "deferrable",
+        trigger_metadata.tginitdeferred AS "initiallyDeferred",
+        constraint_tables.relname::text AS "constraintTableName",
+        constraint_metadata.conname::text AS "constraintName",
+        constraint_metadata.contype::text AS "constraintType",
+        trigger_functions.proname::text AS "functionName"
+      FROM pg_catalog.pg_trigger AS trigger_metadata
+      JOIN pg_catalog.pg_class AS trigger_tables
+        ON trigger_tables.oid = trigger_metadata.tgrelid
+      JOIN pg_catalog.pg_namespace AS trigger_namespaces
+        ON trigger_namespaces.oid = trigger_tables.relnamespace
+      JOIN pg_catalog.pg_proc AS trigger_functions
+        ON trigger_functions.oid = trigger_metadata.tgfoid
+      LEFT JOIN pg_catalog.pg_constraint AS constraint_metadata
+        ON constraint_metadata.oid = trigger_metadata.tgconstraint
+      LEFT JOIN pg_catalog.pg_class AS constraint_tables
+        ON constraint_tables.oid = constraint_metadata.conrelid
+      LEFT JOIN pg_catalog.pg_namespace AS constraint_namespaces
+        ON constraint_namespaces.oid = constraint_tables.relnamespace
+      WHERE (
+          trigger_namespaces.nspname = 'public'
+          AND trigger_tables.relname IN (${tableNames})
+        ) OR (
+          constraint_namespaces.nspname = 'public'
+          AND constraint_tables.relname IN (${tableNames})
+          AND constraint_metadata.contype = 'f'
+        )
+    `),
   ]);
   const row = rows[0];
   if (!row) throw new Error('FLIP_AI_SCHEMA_DIAGNOSTIC_EMPTY');
@@ -412,10 +472,61 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     .filter((key) => !requiredConstraintKeys.has(key))
     .sort();
 
+  const requiredForeignKeys = FLIP_AI_REQUIRED_CONSTRAINT_SPECS
+    .filter((constraint) => constraint.type === 'f');
+  const requiredForeignKeyKeys = new Set(requiredForeignKeys
+    .map(({ tableName, constraintName }) => `${tableName}.${constraintName}`));
+  const triggersByConstraint = new Map<string, TriggerRow[]>();
+  for (const trigger of triggers) {
+    if (!trigger.constraintTableName || !trigger.constraintName) continue;
+    const key = `${trigger.constraintTableName}.${trigger.constraintName}`;
+    const matches = triggersByConstraint.get(key) || [];
+    matches.push(trigger);
+    triggersByConstraint.set(key, matches);
+  }
+  const incompatibleForeignKeyTriggers: string[] = [];
+  for (const expected of requiredForeignKeys) {
+    const key = `${expected.tableName}.${expected.constraintName}`;
+    const actual = triggersByConstraint.get(key) || [];
+    const expectedSignatures = [
+      `${expected.tableName}.RI_FKey_check_ins`,
+      `${expected.tableName}.RI_FKey_check_upd`,
+      `${expected.referencedTable}.${foreignKeyActionTriggerFunction(expected.deleteAction, 'del')}`,
+      `${expected.referencedTable}.${foreignKeyActionTriggerFunction(expected.updateAction, 'upd')}`,
+    ].sort();
+    const actualSignatures = actual
+      .map(({ triggerTableName, functionName }) => `${triggerTableName}.${functionName}`)
+      .sort();
+    if (actual.length !== 4
+      || actual.some((trigger) => !trigger.internal
+        || trigger.enabled !== 'O'
+        || trigger.deferrable
+        || trigger.initiallyDeferred
+        || trigger.constraintType !== 'f')
+      || !sameStrings(actualSignatures, expectedSignatures)) {
+      incompatibleForeignKeyTriggers.push(expected.constraintName);
+    }
+  }
+  const requiredTableNames = new Set<string>(FLIP_AI_REQUIRED_TABLES);
+  const unexpectedTriggers = triggers
+    .filter((trigger) => {
+      if (!requiredTableNames.has(trigger.triggerTableName)) return false;
+      const constraintKey = trigger.constraintTableName && trigger.constraintName
+        ? `${trigger.constraintTableName}.${trigger.constraintName}`
+        : null;
+      const expectedInternalTrigger = trigger.internal
+        && constraintKey !== null
+        && requiredForeignKeyKeys.has(constraintKey);
+      return !expectedInternalTrigger && (trigger.internal || trigger.enabled !== 'D');
+    })
+    .map(({ triggerTableName, triggerName }) => `${triggerTableName}.${triggerName}`)
+    .sort();
+
   missingIndexes.sort();
   incompatibleIndexes.sort();
   missingConstraints.sort();
   incompatibleConstraints.sort();
+  incompatibleForeignKeyTriggers.sort();
 
   const premiumPlanCount = safeCount(row.premiumPlanCount);
   const configuredPremiumPlanCount = safeCount(row.configuredPremiumPlanCount);
@@ -428,6 +539,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     && missingConstraints.length === 0
     && incompatibleConstraints.length === 0
     && unexpectedConstraints.length === 0
+    && incompatibleForeignKeyTriggers.length === 0
+    && unexpectedTriggers.length === 0
     && missingColumns.length === 0
     && incompatibleColumns.length === 0
     && unexpectedColumns.length === 0
@@ -448,6 +561,8 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
     missingConstraints,
     incompatibleConstraints,
     unexpectedConstraints,
+    incompatibleForeignKeyTriggers,
+    unexpectedTriggers,
     missingColumns,
     incompatibleColumns,
     unexpectedColumns,

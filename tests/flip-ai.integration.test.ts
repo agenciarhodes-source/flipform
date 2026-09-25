@@ -60,6 +60,13 @@ test('schema readiness catalog inspection executes read-only against disposable 
   assert.deepEqual(readiness.unexpectedConstraints, [
     'flip_ai_knowledge_indexes.flip_ai_knowledge_indexes_tenant_id_document_id_revision_fkey',
   ], 'db push uses a generated FK name instead of the reviewed migration name');
+  assert.deepEqual(readiness.incompatibleForeignKeyTriggers, [
+    'flip_ai_knowledge_indexes_source_revision_fkey',
+  ], 'db push cannot provide triggers for the reviewed migration-only FK name');
+  assert.equal(readiness.unexpectedTriggers.length, 4,
+    'the generated db-push FK contributes four unexpected internal triggers');
+  assert.ok(readiness.unexpectedTriggers.every((trigger) =>
+    /\.RI_ConstraintTrigger_[ac]_\d+$/.test(trigger)));
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
 
