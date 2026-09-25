@@ -54,7 +54,8 @@ def test_long_poll_and_fallback_dedupe_before_sound_and_native_popup():
     assert 'const deliveredIdsRef = useRef<Set<string>>(new Set())' in center
     assert 'if (deliveredIdsRef.current.has(item.id)) return false' in center
     assert 'void playLeadSound()' in center
-    assert 'for (const item of fresh) void showNativeNotification(item)' in center
+    assert 'for (const item of fresh) {' in center
+    assert 'void showNativeNotification(item)' in center
     assert 'deliveredIdsRef.current = new Set(storedItems.map((item) => item.id))' in center
 
 def test_long_poll_change_does_not_touch_integrations_or_lead_creation():

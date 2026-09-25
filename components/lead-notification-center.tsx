@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, TestTube2, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -14,6 +15,7 @@ import {
 import {
   mergeSeenNotificationIds,
   mergeStoredNotificationItems,
+  NEW_LEAD_BROWSER_EVENT,
   notificationCursorStorageKey,
   notificationItemsStorageKey,
   notificationNativeEnabledStorageKey,
@@ -133,13 +135,33 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     const body = details ? `${item.leadName} — ${details}` : item.leadName;
 
     try {
-      // Chrome desktop: prefer the page Notification API so the OS/browser shows
-      // the same native toast users see from sites such as Facebook.
+      const registration = ('serviceWorker' in navigator)
+        ? (serviceWorkerRef.current || await navigator.serviceWorker.getRegistration())
+        : null;
+
+      if (registration?.active) {
+        serviceWorkerRef.current = registration;
+        await registration.showNotification(item.title, {
+          body,
+          icon: '/icon.svg',
+          badge: '/icon.svg',
+          tag: item.id,
+          silent: false,
+          data: { href: item.href },
+        });
+
+        const active = await registration.getNotifications({ tag: item.id });
+        if (active.some((notification) => notification.tag === item.id)) return;
+      }
+    } catch {
+      // Fall back to the page Notification API below.
+    }
+
+    try {
       const notification = new Notification(item.title, {
         body,
         icon: '/icon.svg',
         tag: item.id,
-        requireInteraction: true,
         silent: false,
       });
       notification.onclick = () => {
@@ -147,26 +169,6 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
         router.push(item.href);
         notification.close();
       };
-      return;
-    } catch {
-      // Some browsers only allow persistent notifications through a Service Worker.
-    }
-
-    try {
-      const registration = serviceWorkerRef.current
-        || (('serviceWorker' in navigator) ? await navigator.serviceWorker.ready : null);
-      if (!registration) return;
-
-      serviceWorkerRef.current = registration;
-      await registration.showNotification(item.title, {
-        body,
-        icon: '/icon.svg',
-        badge: '/icon.svg',
-        tag: item.id,
-        requireInteraction: true,
-        silent: false,
-        data: { href: item.href },
-      });
     } catch {
       // Native browser notifications are best-effort and must never affect CRM flows.
     }
@@ -189,9 +191,25 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
       try { window.localStorage.setItem(itemsKey, JSON.stringify(next)); } catch {}
       return next;
     });
+
     void playLeadSound();
-    for (const item of fresh) void showNativeNotification(item);
-  }, [itemsKey, playLeadSound, showNativeNotification]);
+    for (const item of fresh) {
+      window.dispatchEvent(new CustomEvent(NEW_LEAD_BROWSER_EVENT, { detail: item }));
+
+      if (document.visibilityState === 'visible') {
+        toast(item.title, {
+          description: item.leadName,
+          duration: 8_000,
+          action: {
+            label: 'Abrir lead',
+            onClick: () => router.push(item.href),
+          },
+        });
+      }
+
+      void showNativeNotification(item);
+    }
+  }, [itemsKey, playLeadSound, router, showNativeNotification]);
   const poll = useCallback(async () => {
     if (pollingRef.current) return;
     pollingRef.current = true;
