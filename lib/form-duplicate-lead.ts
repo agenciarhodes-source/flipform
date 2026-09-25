@@ -1,7 +1,8 @@
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { getBrazilianPhoneAliases } from '@/lib/leads';
 
 export const DUPLICATE_FORM_PHONE_CODE = 'duplicate_form_phone';
-export const DUPLICATE_FORM_PHONE_MESSAGE = 'Este número de telefone já foi cadastrado neste formulário.';
+export const DUPLICATE_FORM_PHONE_MESSAGE = 'Este contato já está cadastrado nesta conta.';
 
 export class DuplicateFormPhoneError extends Error {
   readonly code = DUPLICATE_FORM_PHONE_CODE;
@@ -12,55 +13,113 @@ export class DuplicateFormPhoneError extends Error {
   }
 }
 
+function normalizePhoneIdentity(phone?: string | null) {
+  const aliases = getBrazilianPhoneAliases(phone)
+    .map((value) => String(value).replace(/\D/g, ''))
+    .filter(Boolean);
+  if (!aliases.length) return null;
+  return [...new Set(aliases)];
+}
+
+function normalizeEmailIdentity(email?: string | null) {
+  const normalized = String(email || '').trim().toLowerCase();
+  return normalized || null;
+}
+
+async function lockTenantContactKeys({
+  tx,
+  tenantId,
+  keys,
+}: {
+  tx: Prisma.TransactionClient;
+  tenantId: string;
+  keys: string[];
+}) {
+  for (const key of [...new Set(keys)].sort()) {
+    await tx.$queryRaw<Array<{ locked: number }>>`
+      WITH lock_guard AS MATERIALIZED (
+        SELECT pg_advisory_xact_lock(hashtext(${tenantId}), hashtext(${key})) AS acquired
+      )
+      SELECT 1::int AS locked FROM lock_guard
+    `;
+  }
+}
+
+/**
+ * Returns the oldest CRM lead that already owns this phone or e-mail in the tenant.
+ *
+ * The advisory locks serialize concurrent creates for the same contact across
+ * manual creation and public forms without requiring a destructive schema change.
+ */
+export async function findExistingLeadIdByContactInTenant({
+  tx,
+  tenantId,
+  phone,
+  email,
+}: {
+  tx: Prisma.TransactionClient;
+  tenantId: string;
+  phone?: string | null;
+  email?: string | null;
+}): Promise<string | null> {
+  const normalizedPhone = normalizePhoneIdentity(phone);
+  const normalizedEmail = normalizeEmailIdentity(email);
+
+  if (!normalizedPhone && !normalizedEmail) return null;
+
+  const lockKeys: string[] = [];
+  if (normalizedPhone) lockKeys.push(...normalizedPhone.map((alias) => `phone:${alias}`));
+  if (normalizedEmail) lockKeys.push(`email:${normalizedEmail}`);
+  await lockTenantContactKeys({ tx, tenantId, keys: lockKeys });
+
+  const phoneCondition = normalizedPhone
+    ? Prisma.sql`regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') IN (${Prisma.join(normalizedPhone)})`
+    : null;
+  const emailCondition = normalizedEmail
+    ? Prisma.sql`LOWER(BTRIM(COALESCE("email", ''))) = ${normalizedEmail}`
+    : null;
+
+  const contactCondition = phoneCondition && emailCondition
+    ? Prisma.sql`(${phoneCondition} OR ${emailCondition})`
+    : phoneCondition || emailCondition;
+
+  if (!contactCondition) return null;
+
+  const existing = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT "id"
+    FROM "leads"
+    WHERE "tenant_id" = ${tenantId}
+      AND ${contactCondition}
+    ORDER BY "created_at" ASC, "id" ASC
+    LIMIT 1
+  `);
+
+  return existing[0]?.id ?? null;
+}
+
+/**
+ * Backwards-compatible export. Despite the historical name, the lookup is now
+ * tenant-wide so another form can never create a second CRM lead for this phone.
+ */
 export async function findExistingLeadIdByPhoneInForm({
   tx,
   tenantId,
-  formId,
   phone,
 }: {
   tx: Prisma.TransactionClient;
   tenantId: string;
-  formId: string;
+  formId?: string;
   phone: string;
 }): Promise<string | null> {
-  const digits = String(phone).replace(/\D/g, '');
-  if (!digits) return null;
-
-  const localDigits = digits.startsWith('55') ? digits.slice(2) : digits;
-
-  // Serializa apenas submissões concorrentes do mesmo formulário + telefone.
-  // O CTE materializado força a execução do lock, mas devolve apenas um inteiro
-  // para evitar que o Prisma tente desserializar o tipo PostgreSQL `void`.
-  await tx.$queryRaw<Array<{ locked: number }>>`
-    WITH lock_guard AS MATERIALIZED (
-      SELECT pg_advisory_xact_lock(hashtext(${formId}), hashtext(${digits})) AS acquired
-    )
-    SELECT 1::int AS locked FROM lock_guard
-  `;
-
-  // Compatível também com telefones históricos que possam ter sido salvos formatados
-  // ou sem o DDI 55. Retornamos somente o id; o telefone não é exposto nem logado.
-  const existing = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT "id"
-    FROM "leads"
-    WHERE "tenant_id" = ${tenantId}
-      AND "form_id" = ${formId}
-      AND (
-        regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') = ${digits}
-        OR regexp_replace(COALESCE("phone", ''), '[^0-9]', '', 'g') = ${localDigits}
-      )
-    LIMIT 1
-  `;
-
-  return existing[0]?.id ?? null;
+  return findExistingLeadIdByContactInTenant({ tx, tenantId, phone });
 }
 
 export async function assertPhoneNotUsedInForm(params: {
   tx: Prisma.TransactionClient;
   tenantId: string;
-  formId: string;
+  formId?: string;
   phone: string;
 }) {
-  const existingLeadId = await findExistingLeadIdByPhoneInForm(params);
+  const existingLeadId = await findExistingLeadIdByContactInTenant(params);
   if (existingLeadId) throw new DuplicateFormPhoneError();
 }

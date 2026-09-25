@@ -307,16 +307,6 @@ export function FormBuilder({ formId }: { formId?: string }) {
 
   const selected = selectedIdx !== null ? fields[selectedIdx] : null;
   const needsOptions = selected && ['single_select', 'multi_select', 'dropdown'].includes(selected.fieldType);
-  const primaryPhoneFieldIndex = fields.findIndex((field) => field.fieldType === 'phone_br' || field.fieldType === 'phone');
-  const primaryPhoneField = primaryPhoneFieldIndex >= 0 ? fields[primaryPhoneFieldIndex] : null;
-  const preventDuplicateLead = primaryPhoneField?.validationRules?.preventDuplicateLead === true;
-  const setPreventDuplicateLead = (checked: boolean) => {
-    if (primaryPhoneFieldIndex < 0 || !primaryPhoneField) return;
-    updateField(primaryPhoneFieldIndex, {
-      validationRules: { ...(primaryPhoneField.validationRules || {}), preventDuplicateLead: checked },
-    });
-  };
-
   return (
     <div className="flex flex-col h-full">
       <div className="h-14 border-b bg-card px-4 lg:px-6 flex items-center justify-between">
@@ -403,22 +393,9 @@ export function FormBuilder({ formId }: { formId?: string }) {
             </Card>
 
             <Card className="p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="font-heading font-semibold mb-1">Cadastro único por formulário</h3>
-                  <p className="text-xs text-muted-foreground">Quando ativado, um telefone que já gerou lead neste formulário não poderá gerar outro lead nele. O mesmo telefone continua permitido em outros formulários.</p>
-                </div>
-                <Switch
-                  checked={preventDuplicateLead}
-                  disabled={primaryPhoneFieldIndex < 0}
-                  onCheckedChange={setPreventDuplicateLead}
-                />
-              </div>
-              {primaryPhoneFieldIndex < 0 ? (
-                <p className="text-xs text-amber-600 mt-3">Adicione um campo “Telefone Brasil” para habilitar esta proteção.</p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-3">A validação usa o primeiro campo de telefone do formulário e acontece antes da criação do lead.</p>
-              )}
+              <h3 className="font-heading font-semibold mb-1">Cadastro único por conta</h3>
+              <p className="text-xs text-muted-foreground">Esta proteção é obrigatória em toda a conta. Se o telefone ou e-mail já existir em qualquer lead, nenhum formulário ou atendente poderá criar outro cadastro para o mesmo contato.</p>
+              <p className="text-xs text-muted-foreground mt-3">O primeiro lead permanece como registro oficial, preservando a origem e o responsável já existentes.</p>
             </Card>
 
             <Card className="p-5">

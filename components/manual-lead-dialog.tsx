@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { MANUAL_LEAD_SOURCES } from '@/lib/leads';
+import { formatLeadSource, MANUAL_LEAD_SOURCES } from '@/lib/leads';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
 import { todayDateOnly } from '@/lib/date-only';
@@ -49,7 +49,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
     if (!stages.some((stage) => stage.id === form.stageId)) setForm((current) => ({ ...current, stageId: stages[0]?.id || '' }));
   }, [form.pipelineId, selectedPipeline]);
 
-  const submit = async (forceCreate = false) => {
+  const submit = async () => {
     setSaving(true);
     setDuplicate(null);
     try {
@@ -58,11 +58,11 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         body: JSON.stringify({
           name: form.name, phone: form.phone, email: form.email, source: form.source,
           pipelineId: form.pipelineId, stageId: form.stageId, assignedTo: form.assignedTo === 'none' ? null : form.assignedTo,
-          temperature: form.temperature, saleValueCents: cents(form.saleValue), notes: form.notes, state: form.state || null, city: form.city || null, entryDate: form.entryDate, forceCreate,
+          temperature: form.temperature, saleValueCents: cents(form.saleValue), notes: form.notes, state: form.state || null, city: form.city || null, entryDate: form.entryDate,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 409) { setDuplicate(data.duplicate || true); toast.warning(data.error || 'Já existe um lead com este contato.'); return; }
+      if (res.status === 409) { setDuplicate(data.duplicate || true); toast.warning(data.error || 'Este contato já está cadastrado nesta conta.'); return; }
       if (!res.ok) throw new Error(data.error || 'Não foi possível criar o lead.');
       toast.success('Lead criado com sucesso.');
       onOpenChange(false);
@@ -75,13 +75,13 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
       <DialogHeader><DialogTitle>Adicionar lead manualmente</DialogTitle><DialogDescription>Informe a origem obrigatória, contato, pipeline e etapa inicial.</DialogDescription></DialogHeader>
-      {duplicate && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-center justify-between gap-3"><span>Já existe um lead com este contato.</span><Button type="button" size="sm" variant="outline" onClick={() => submit(true)} disabled={saving}>Criar mesmo assim</Button></div>}
+      {duplicate && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><span className="font-medium">Este contato já está cadastrado nesta conta.</span>{duplicate?.source && <span> Origem original: {formatLeadSource(duplicate.source)}.</span>}<span> Não é possível cadastrar novamente.</span></div>}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5"><Label>Nome *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div className="space-y-1.5"><Label>Origem do lead *</Label><Select value={form.source} onValueChange={(source) => setForm({ ...form, source })}><SelectTrigger><SelectValue placeholder="Selecione a origem" /></SelectTrigger><SelectContent>{MANUAL_LEAD_SOURCES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Data de entrada do lead *</Label><Input type="date" value={form.entryDate} max={todayDateOnly()} onChange={(e) => setForm({ ...form, entryDate: e.target.value })} required /></div>
-        <div className="space-y-1.5"><Label>Telefone</Label><Input placeholder="+55 (00) 9 0000-0000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-        <div className="space-y-1.5"><Label>E-mail</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+        <div className="space-y-1.5"><Label>Telefone</Label><Input placeholder="+55 (00) 9 0000-0000" value={form.phone} onChange={(e) => { setDuplicate(null); setForm({ ...form, phone: e.target.value }); }} /></div>
+        <div className="space-y-1.5"><Label>E-mail</Label><Input value={form.email} onChange={(e) => { setDuplicate(null); setForm({ ...form, email: e.target.value }); }} /></div>
         <div className="space-y-1.5"><Label>Pipeline *</Label><Select value={form.pipelineId} onValueChange={(pipelineId) => setForm({ ...form, pipelineId })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{activePipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Etapa *</Label><Select value={form.stageId} onValueChange={(stageId) => setForm({ ...form, stageId })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Responsável</Label><Select value={form.assignedTo} onValueChange={(assignedTo) => setForm({ ...form, assignedTo })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem responsável</SelectItem>{users.filter((u) => u.status === 'active').map((u) => <SelectItem key={u.userId} value={u.userId}>{u.name}</SelectItem>)}</SelectContent></Select></div>
@@ -91,7 +91,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         <div className="space-y-1.5"><Label>Cidade</Label><CityCombobox state={form.state} value={form.city} onValueChange={(city) => setForm((current) => ({ ...current, city }))} allowEmpty /></div>
         <div className="space-y-1.5 sm:col-span-2"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
       </div>
-      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="button" onClick={() => submit(false)} disabled={saving}>{saving ? 'Salvando...' : 'Salvar lead'}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="button" onClick={() => submit()} disabled={saving || !!duplicate}>{saving ? 'Salvando...' : 'Salvar lead'}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }

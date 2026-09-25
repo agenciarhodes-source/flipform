@@ -4,7 +4,8 @@ import { withPermission } from '@/lib/rbac-server';
 import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
-import { getBrazilianPhoneAliases, isValidBrazilianPhone, normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
+import { isValidBrazilianPhone, normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
+import { findExistingLeadIdByContactInTenant } from '@/lib/form-duplicate-lead';
 import { dateOnlyToDate, isValidDateOnly, todayDateOnly } from '@/lib/date-only';
 
 function dateOnlyBoundary(value: string, endOfDay = false) {
@@ -78,33 +79,37 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     if (email && !/^\S+@\S+\.\S+$/.test(email)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
     if (phone && !isValidBrazilianPhone(phone)) return NextResponse.json({ error: 'Informe um telefone válido.' }, { status: 400 });
 
-    const [pipeline, stage, assignedUser, duplicate] = await Promise.all([
+    const [pipeline, stage, assignedUser] = await Promise.all([
       prisma.pipeline.findFirst({ where: { id: parsed.data.pipelineId, tenantId: session.tenantId, isArchived: false } }),
       prisma.pipelineStage.findFirst({ where: { id: parsed.data.stageId, pipelineId: parsed.data.pipelineId, pipeline: { tenantId: session.tenantId }, isArchived: false } }),
       parsed.data.assignedTo ? prisma.tenantUser.findFirst({ where: { tenantId: session.tenantId, userId: parsed.data.assignedTo, status: 'active' } }) : Promise.resolve(null),
-      prisma.lead.findFirst({
-        where: {
-          tenantId: session.tenantId,
-          OR: [
-            phone ? { phone: { in: getBrazilianPhoneAliases(phone).filter(candidate => candidate.startsWith('55')) } } : undefined,
-            email ? { email } : undefined,
-          ].filter(Boolean) as any,
-        },
-        select: { id: true, name: true },
-      }),
     ]);
 
     if (!pipeline) return NextResponse.json({ error: 'Pipeline inválido.' }, { status: 400 });
     if (!stage) return NextResponse.json({ error: 'Etapa inválida para o pipeline selecionado.' }, { status: 400 });
     if (parsed.data.assignedTo && !assignedUser) return NextResponse.json({ error: 'Responsável inválido.' }, { status: 400 });
-    if (duplicate && !body.forceCreate) return NextResponse.json({ error: 'Já existe um lead com este contato.', duplicate }, { status: 409 });
     const state = parsed.data.state ? normalizeBrazilState(parsed.data.state) : null;
     const city = state && parsed.data.city ? normalizeBrazilCity(state, parsed.data.city) : null;
     if (parsed.data.state && !state) return NextResponse.json({ error: 'Estado inválido.' }, { status: 400 });
     if (parsed.data.city && !state) return NextResponse.json({ error: 'Selecione um estado para a cidade informada.' }, { status: 400 });
     if (parsed.data.city && !city) return NextResponse.json({ error: 'Cidade inválida para o estado selecionado.' }, { status: 400 });
 
-    const lead = await prisma.$transaction(async (tx) => {
+    const leadResult = await prisma.$transaction(async (tx) => {
+      const existingLeadId = await findExistingLeadIdByContactInTenant({
+        tx,
+        tenantId: session.tenantId,
+        phone,
+        email,
+      });
+
+      if (existingLeadId) {
+        const duplicate = await tx.lead.findFirst({
+          where: { id: existingLeadId, tenantId: session.tenantId },
+          select: { id: true, name: true, source: true },
+        });
+        if (duplicate) return { duplicate, lead: null } as const;
+      }
+
       const created = await tx.lead.create({
         data: {
           tenantId: session.tenantId,
@@ -130,10 +135,17 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
       await tx.leadStageHistory.create({ data: { leadId: created.id, fromStageId: null, toStageId: parsed.data.stageId, changedBy: session.userId } });
       const noteParts = ['Lead criado manualmente.', parsed.data.notes?.trim()].filter(Boolean);
       if (noteParts.length) await tx.note.create({ data: { tenantId: session.tenantId, leadId: created.id, userId: session.userId, content: noteParts.join('\n\n') } });
-      return created;
+      return { duplicate: null, lead: created } as const;
     });
 
-    return NextResponse.json({ lead }, { status: 201 });
+    if (leadResult.duplicate) {
+      return NextResponse.json({
+        error: 'Este contato já está cadastrado nesta conta. Não é possível cadastrar novamente.',
+        duplicate: leadResult.duplicate,
+      }, { status: 409 });
+    }
+
+    return NextResponse.json({ lead: leadResult.lead }, { status: 201 });
   } catch (e) {
     console.error('leads.create error', e);
     return NextResponse.json({ error: 'Não foi possível criar o lead.' }, { status: 500 });
