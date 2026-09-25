@@ -61,7 +61,7 @@ export const PERMISSIONS = {
   LEADS_CREATE: ['owner', 'admin', 'manager', 'agent'],
   LEADS_EDIT_ALL: ['owner', 'admin', 'manager'],
   LEADS_EDIT_OWN: ['agent'],
-  LEADS_DELETE: ['owner', 'admin'],
+  LEADS_DELETE: ['owner'],
   LEADS_CONTACT_WHATSAPP: ['owner', 'admin', 'manager', 'agent'],
   INBOX_VIEW: ['owner', 'admin', 'manager', 'agent', 'viewer'],
   INBOX_MANAGE: ['owner', 'admin', 'manager', 'agent'],
@@ -169,12 +169,11 @@ export function canMoveLead(role: string, lead: { assignedTo: string | null }, u
 }
 
 /**
- * Lead deletion is intentionally never scoped to the assignee or creator.
- * In particular, an Atendente/Vendedor must not delete a lead under any
- * circumstance, even when it is assigned to or was created by that user.
+ * Lead deletion is an owner-only destructive action.
+ * Admins, managers, agents and viewers must never delete CRM leads.
  */
 export function canDeleteLead(role: string): boolean {
-  return role !== 'agent' && can(role, 'LEADS_DELETE');
+  return role === 'owner' && can(role, 'LEADS_DELETE');
 }
 
 export function assertPermission(session: { role?: string | null } | null | undefined, permission: PermissionKey): void {

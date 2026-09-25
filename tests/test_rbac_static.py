@@ -45,16 +45,17 @@ def test_agent_scope_is_enforced_for_lead_queries_and_access():
     assert "? ['name', 'email', 'phone', 'temperature']" in lead_detail
 
 
-def test_agent_cannot_delete_leads_in_the_ui_or_api():
+def test_only_owner_can_delete_leads_in_the_ui_or_api():
     rbac = read('lib/rbac.ts')
-    assert "LEADS_DELETE: ['owner', 'admin']" in rbac
+    assert "LEADS_DELETE: ['owner']" in rbac
+    assert "LEADS_DELETE: ['owner', 'admin']" not in rbac
     assert "export function canDeleteLead(role: string): boolean" in rbac
-    assert "return role !== 'agent' && can(role, 'LEADS_DELETE');" in rbac
+    assert "return role === 'owner' && can(role, 'LEADS_DELETE');" in rbac
 
     lead_detail = read('app/api/leads/[id]/route.ts')
     assert "canDelete: canDeleteLead(session.role)" in lead_detail
-    assert "if (!canDeleteLead(session.role))" in lead_detail
-    assert "Atendente/Vendedor não pode excluir leads." in lead_detail
+    assert "session.role !== 'owner' || !canDeleteLead(session.role)" in lead_detail
+    assert "Apenas o dono da empresa pode excluir leads." in lead_detail
 
     modal = read('components/lead-detail-modal.tsx')
     assert '{lead.canDelete && <Button' in modal
@@ -102,3 +103,10 @@ def test_agent_cannot_see_or_access_domains_and_billing_account_areas():
         content = read(path)
         assert "withPermission('BILLING_MANAGE'" in content
         assert "['owner', 'admin']" not in content
+
+
+def test_admin_manager_agent_and_viewer_never_receive_lead_delete_permission():
+    rbac = read('lib/rbac.ts')
+    permission_line = next(line for line in rbac.splitlines() if 'LEADS_DELETE:' in line)
+    for role in ["'admin'", "'manager'", "'agent'", "'viewer'"]:
+        assert role not in permission_line

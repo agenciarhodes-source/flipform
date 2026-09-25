@@ -95,10 +95,9 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
 });
 
 export const DELETE = withPermission('LEADS_DELETE', async (_req, session, ctx: { params: { id: string } }) => {
-  // Keep the agent restriction explicit at the destructive endpoint. This
-  // remains enforced even if permissions are changed elsewhere in the future.
-  if (!canDeleteLead(session.role)) {
-    return NextResponse.json({ error: 'Atendente/Vendedor não pode excluir leads.' }, { status: 403 });
+  // Destructive CRM deletion is owner-only, even if RBAC is widened elsewhere.
+  if (session.role !== 'owner' || !canDeleteLead(session.role)) {
+    return NextResponse.json({ error: 'Apenas o dono da empresa pode excluir leads.' }, { status: 403 });
   }
   const lead = await prisma.lead.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
