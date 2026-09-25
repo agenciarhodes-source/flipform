@@ -115,9 +115,9 @@ function isBusinessGroupRole(value: string): value is BusinessGroupRole {
   return ['owner', 'admin', 'viewer'].includes(value);
 }
 
-export function mapBusinessGroupRoleToTenantRole(role: BusinessGroupRole): 'owner' | 'admin' | 'viewer' {
+export function mapBusinessGroupRoleToTenantRole(role: BusinessGroupRole): 'owner' | 'manager' | 'viewer' {
   if (role === 'owner') return 'owner';
-  if (role === 'admin') return 'admin';
+  if (role === 'admin') return 'manager';
   return 'viewer';
 }
 

@@ -93,7 +93,7 @@ def test_app_shell_and_layout_hide_group_hub_and_keep_group_route_recoverable():
     for label in ['Dashboard', 'Leads', 'Formulários', 'Relatórios']:
         assert label in shell
     assert 'GROUP_ROLE_LABELS_PT_BR' in shell
-    assert 'Administrador do grupo' in shell
+    assert 'Gestor do grupo' in shell
     assert 'inGroupView' in shell
     assert 'Visão consolidada' in shell
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in layout
@@ -120,3 +120,29 @@ def test_platform_admin_selects_registered_access_by_user_id():
     assert "member: { userId" in page
     assert 'passwordHash' not in helper
     assert 'upsertBusinessGroupMember' in update
+
+
+def test_group_admin_storage_role_maps_to_tenant_manager_without_schema_change():
+    helper = read('lib/business-groups.ts')
+    update = read('app/api/admin/business-groups/[id]/route.ts')
+    page = read('app/admin/(secure)/groups/page.tsx')
+    assert "export type BusinessGroupRole = 'owner' | 'admin' | 'viewer'" in helper
+    assert "role: z.enum(['owner', 'admin', 'viewer'])" in update
+    assert "if (role === 'admin') return 'manager';" in helper
+    assert "admin: 'Gestor do grupo'" in page
+    assert "const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const" in page
+
+
+def test_platform_admin_can_edit_existing_group_member_level_inline():
+    page = read('app/admin/(secure)/groups/page.tsx')
+    assert 'memberEditRole' in page
+    assert 'saveExistingMemberRole' in page
+    assert 'userId: member.userId' in page
+    assert 'Salvar nível' in page
+    assert 'Nível de acesso de ${member.name}' in page
+
+
+def test_group_manager_semantics_are_reused_by_flip_ai_access_check():
+    access = read('lib/flip-ai/access.ts')
+    assert 'mapBusinessGroupRoleToTenantRole' in access
+    assert 'role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;' in access

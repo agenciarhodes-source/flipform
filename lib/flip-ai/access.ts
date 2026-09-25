@@ -1,7 +1,7 @@
 import 'server-only';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { SessionPayload } from '@/lib/auth';
-import { getBusinessGroupAccessesForUser } from '@/lib/business-groups';
+import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
 import { canAccessFlipAi } from './policy';
 
 export type FlipAiDb = PrismaClient | Prisma.TransactionClient;
@@ -18,7 +18,8 @@ export async function requireFlipAiAccess(db: FlipAiDb, session: SessionPayload)
   let role: string | null = membership?.status === 'active' ? membership.role : null;
   if (!membership) {
     const groups = await getBusinessGroupAccessesForUser(db, session.userId);
-    role = groups.accesses.find((group) => ['owner', 'admin'].includes(group.role) && group.tenants.some((tenant) => tenant.id === session.tenantId))?.role || null;
+    const group = groups.accesses.find((access) => access.tenants.some((tenant) => tenant.id === session.tenantId));
+    role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;
   }
   if (!tenant || !canAccessFlipAi({ role, tenantStatus: tenant.status, plan: tenant.plan, subscription })) {
     throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403, 'O Flip AI está disponível para donos e administradores de empresas com plano Premium ou Premium Pro ativo.');
