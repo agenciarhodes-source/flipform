@@ -16,6 +16,7 @@ import {
   OpenAiRealtimeError,
 } from '../lib/flip-ai/openai-realtime';
 import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
+import { validateFlipAiCreditMutation } from '../lib/flip-ai/credits';
 import {
   sanitizeExternalSearchQuery,
   searchOpenAiWeb,
@@ -61,6 +62,59 @@ test('strict payload rejects tenant and integration overrides', () => {
   assert.equal(createAgentDraftSchema.safeParse({ ...draft, slug: '../admin' }).success, false);
   const { requestId, ...input } = draft;
   assert.equal(updateAgentDraftSchema.safeParse({ ...input, version: 0 }).success, false);
+});
+
+test('credit wallet accepts only bounded, positive and idempotent mutations', () => {
+  assert.deepEqual(validateFlipAiCreditMutation({
+    tenantId: ' tenant-a ',
+    idempotencyKey: ' top-up:provider:123 ',
+    entryType: 'credit',
+    amountCredits: 500,
+    source: ' top_up ',
+    referenceId: ' payment-123 ',
+  }), {
+    tenantId: 'tenant-a',
+    idempotencyKey: 'top-up:provider:123',
+    entryType: 'credit',
+    amountCredits: 500,
+    source: 'top_up',
+    referenceId: 'payment-123',
+  });
+  for (const amountCredits of [0, -1, 1.5, Number.NaN, 2_000_000_001]) {
+    assert.throws(() => validateFlipAiCreditMutation({
+      tenantId: 'tenant-a',
+      idempotencyKey: 'invalid-amount',
+      entryType: 'debit',
+      amountCredits,
+      source: 'usage',
+    }), /inteiro positivo/);
+  }
+  assert.throws(() => validateFlipAiCreditMutation({
+    tenantId: 'tenant-a',
+    idempotencyKey: 'invalid-type',
+    entryType: 'charge' as 'debit',
+    amountCredits: 1,
+    source: 'usage',
+  }), /Tipo de lançamento inválido/);
+});
+
+test('credit wallet migration is additive and the ledger implementation is tenant-safe', () => {
+  const migration = readFileSync(new URL(
+    '../prisma/migrations/20260926010000_flip_ai_credit_wallet/migration.sql',
+    import.meta.url,
+  ), 'utf8');
+  const source = readFileSync(new URL('../lib/flip-ai/credits.ts', import.meta.url), 'utf8');
+  assert.match(migration, /CREATE TABLE "flip_ai_credit_accounts"/);
+  assert.match(migration, /CREATE TABLE "flip_ai_credit_ledger"/);
+  assert.match(migration, /UNIQUE INDEX "flip_ai_credit_ledger_tenant_id_idempotency_key_key"/);
+  assert.match(migration, /CHECK \("balance_credits" >= 0\)/);
+  assert.doesNotMatch(migration,
+    /\b(?:DROP|TRUNCATE|DELETE\s+FROM|UPDATE\s+"?(?:leads|conversations|lead_attributions|tenant_meta|tenant_whatsapp))/i);
+  assert.match(source, /FOR UPDATE/);
+  assert.match(source, /WHERE tenant_id = \$\{mutation\.tenantId\}/);
+  assert.match(source, /FLIP_AI_CREDIT_IDEMPOTENCY_CONFLICT/);
+  assert.match(source, /FLIP_AI_CREDIT_BALANCE_INSUFFICIENT/);
+  assert.doesNotMatch(source, /apiKey|accessToken|creditCard|cvv/i);
 });
 test('fresh membership overrides JWT role', async () => {
   let membership = { role: 'viewer', status: 'active' };
@@ -542,13 +596,13 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
     }
   }
   assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
-  assert.equal(FLIP_AI_REQUIRED_TABLES.length, 14);
-  assert.equal(columns.size, 167);
-  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 22);
+  assert.equal(FLIP_AI_REQUIRED_TABLES.length, 16);
+  assert.equal(columns.size, 183);
+  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 23);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , , defaultDefinition]) =>
-    defaultDefinition !== null).length, 39);
-  assert.equal(indexes.size, 52);
-  assert.equal(constraints.size, 57);
+    defaultDefinition !== null).length, 43);
+  assert.equal(indexes.size, 57);
+  assert.equal(constraints.size, 67);
 });
 
 test('qualification check signatures survive PostgreSQL deparsing without losing boolean structure', () => {

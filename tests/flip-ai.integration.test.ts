@@ -15,6 +15,7 @@ import { createExternalSource, listExternalSources, updateExternalSource } from 
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
+import { getFlipAiCreditWallet, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -38,7 +39,7 @@ test('schema readiness catalog inspection executes read-only against disposable 
     'flip_ai_qualifications.reasons',
   ], 'db push intentionally differs on @updatedAt defaults and scalar-list nullability');
   assert.deepEqual(readiness.unexpectedColumns, []);
-  // db push cannot reproduce these migration catalog names; the rollout gate still requires all 52.
+  // db push cannot reproduce these migration catalog names; the rollout gate still requires all 57.
   assert.deepEqual(readiness.missingIndexes, [
     'flip_ai_external_search_cache_tenant_agent_expires_idx',
     'flip_ai_external_search_cache_tenant_agent_query_allowlist_key',
@@ -84,6 +85,8 @@ async function fixture() {
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiExternalSource.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiCreditLedgerEntry.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiCreditAccount.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiRateLimitBucket.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiQualification.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -300,6 +303,76 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(tenantProbe?.inputTokens, 900);
     assert.equal(tenantProbe?.outputTokens, 800);
     assert.equal(usageA.recent.some((event) => event.operation === 'realtime_session'), true);
+
+    const walletKey = `top-up:ci:${randomUUID()}`;
+    const [credited, creditedReplay] = await Promise.all([
+      recordFlipAiCreditEntry({
+        tenantId: a.tenant.id,
+        idempotencyKey: walletKey,
+        entryType: 'credit',
+        amountCredits: 500,
+        source: 'top_up',
+        referenceId: 'payment-ci',
+      }),
+      recordFlipAiCreditEntry({
+        tenantId: a.tenant.id,
+        idempotencyKey: walletKey,
+        entryType: 'credit',
+        amountCredits: 500,
+        source: 'top_up',
+        referenceId: 'payment-ci',
+      }),
+    ]);
+    assert.equal(credited.entryId, creditedReplay.entryId);
+    assert.equal(credited.balanceCredits, 500);
+    assert.equal([credited.reused, creditedReplay.reused].filter(Boolean).length, 1);
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, idempotencyKey: walletKey },
+    }), 1, 'idempotent concurrent credit must create one ledger row');
+    await assert.rejects(recordFlipAiCreditEntry({
+      tenantId: a.tenant.id,
+      idempotencyKey: walletKey,
+      entryType: 'credit',
+      amountCredits: 501,
+      source: 'top_up',
+      referenceId: 'payment-ci',
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_CREDIT_IDEMPOTENCY_CONFLICT');
+    const debited = await recordFlipAiCreditEntry({
+      tenantId: a.tenant.id,
+      idempotencyKey: `usage:ci:${randomUUID()}`,
+      entryType: 'debit',
+      amountCredits: 125,
+      source: 'usage',
+      referenceId: 'usage-event-ci',
+    });
+    assert.equal(debited.balanceCredits, 375);
+    await assert.rejects(recordFlipAiCreditEntry({
+      tenantId: a.tenant.id,
+      idempotencyKey: `usage:insufficient:${randomUUID()}`,
+      entryType: 'debit',
+      amountCredits: 376,
+      source: 'usage',
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_CREDIT_BALANCE_INSUFFICIENT');
+    await recordFlipAiCreditEntry({
+      tenantId: b.tenant.id,
+      idempotencyKey: walletKey,
+      entryType: 'credit',
+      amountCredits: 50,
+      source: 'top_up',
+      referenceId: 'payment-other-tenant',
+    });
+    const walletA = await getFlipAiCreditWallet(a.session);
+    const walletB = await getFlipAiCreditWallet(b.session);
+    assert.equal(walletA.balanceCredits, 375);
+    assert.equal(walletA.creditedCredits, 500);
+    assert.equal(walletA.debitedCredits, 125);
+    assert.equal(walletA.entries.length, 2);
+    assert.equal(walletB.balanceCredits, 50);
+    assert.equal(walletB.entries.length, 1);
+    assert.equal(walletB.entries.some((entry) => entry.referenceId === 'usage-event-ci'), false,
+      'wallet history must not include another tenant');
 
     const realtimeWindow = new Date(Math.floor(Date.now() / 60_000) * 60_000);
     await prisma.flipAiRateLimitBucket.update({
