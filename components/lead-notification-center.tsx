@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, TestTube2, Volume2, VolumeX } from 'lucide-react';
+import { Bell, BellRing, CheckCheck, Loader2, ShieldAlert, TestTube2, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -413,10 +413,21 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
     [items, seenIds],
   );
   const unreadCount = unreadIds.length;
+  const readCount = items.length - unreadCount;
 
   function markAllSeen() {
     if (!unreadIds.length) return;
     persistSeen(mergeSeenNotificationIds(seenIds, unreadIds));
+  }
+
+  function clearReadNotifications() {
+    if (!readCount) return;
+    const seen = new Set(seenIds);
+    const remaining = items.filter((item) => !seen.has(item.id));
+    const remainingIds = new Set(remaining.map((item) => item.id));
+    persistItems(remaining);
+    persistSeen(seenIds.filter((id) => remainingIds.has(id)));
+    toast.success('Notificações lidas removidas.');
   }
 
   function openNotification(item: LeadBrowserNotification) {
@@ -502,11 +513,25 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
             <DropdownMenuLabel className="p-0">Notificações</DropdownMenuLabel>
             <p className="mt-0.5 text-xs text-muted-foreground">Novos leads da sua operação</p>
           </div>
-          {items.length > 0 && (
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={(event) => { event.preventDefault(); markAllSeen(); }}>
-              <CheckCheck className="mr-1 h-3.5 w-3.5" />Marcar como vistas
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={(event) => { event.preventDefault(); markAllSeen(); }}>
+                <CheckCheck className="mr-1 h-3.5 w-3.5" />Marcar como vistas
+              </Button>
+            )}
+            {readCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                title="Limpar notificações"
+                aria-label="Limpar notificações"
+                onClick={(event) => { event.preventDefault(); clearReadNotifications(); }}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />Limpar notificações
+              </Button>
+            )}
+          </div>
         </div>
         <DropdownMenuSeparator className="m-0" />
         <div className="px-3 py-2">
@@ -532,11 +557,6 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
           {browserPermission === 'default' && (
             <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
               Ative para receber o alerta nativo do navegador mesmo quando estiver em outra aba. A posição do aviso é controlada pelo navegador e pelo sistema operacional.
-            </p>
-          )}
-          {browserPermission === 'granted' && (
-            <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-muted-foreground">
-              Alertas nativos estão habilitados. Em outra aba, o aviso é disparado pelo Service Worker e fica persistente até interação, sujeito às permissões do Chrome e às notificações do Windows.
             </p>
           )}
           {browserPermission === 'granted' && (
