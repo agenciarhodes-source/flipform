@@ -113,4 +113,4 @@ def test_background_tab_popup_is_dispatched_through_active_service_worker():
     assert 'self.registration.showNotification(title' in worker
     assert 'requireInteraction: true' in center
     assert 'renotify: true' in center
-    assert 'Alertas nativos estão habilitados' in center
+    assert 'Alertas nativos estão habilitados' not in center
