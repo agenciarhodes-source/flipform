@@ -14,8 +14,8 @@ def test_notification_center_can_clear_only_read_notifications():
     assert 'persistItems(remaining)' in center
     assert 'persistSeen(seenIds.filter((id) => remainingIds.has(id)))' in center
     assert "toast.success('Notificações lidas removidas.')" in center
-    assert 'Limpar notificações lidas' in center
-    assert 'Limpar lidas' in center
+    assert 'Limpar notificações' in center
+    assert 'Limpar lidas' not in center
     assert '<Trash2 className="mr-1 h-3.5 w-3.5" />' in center
 
 def test_notification_cleanup_keeps_unread_items_and_does_not_touch_server_data():

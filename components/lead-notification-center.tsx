@@ -524,11 +524,11 @@ export function LeadNotificationCenter({ tenantId, userId }: { tenantId: string;
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                title="Limpar notificações lidas"
-                aria-label="Limpar notificações lidas"
+                title="Limpar notificações"
+                aria-label="Limpar notificações"
                 onClick={(event) => { event.preventDefault(); clearReadNotifications(); }}
               >
-                <Trash2 className="mr-1 h-3.5 w-3.5" />Limpar lidas
+                <Trash2 className="mr-1 h-3.5 w-3.5" />Limpar notificações
               </Button>
             )}
           </div>
