@@ -18,6 +18,7 @@ type StatePayload = {
   userId: string;
   purpose: MetaOnboardingPurpose;
   authorizationMode: MetaAdsAuthorizationMode;
+  context?: string;
   expiresAt: number;
 };
 
@@ -34,6 +35,7 @@ function createState(
   purpose: MetaOnboardingPurpose,
   authorizationMode: MetaAdsAuthorizationMode,
   now = Date.now(),
+  context?: string,
 ) {
   const payload: StatePayload = {
     nonce: crypto.randomBytes(32).toString('base64url'),
@@ -41,6 +43,7 @@ function createState(
     userId,
     purpose,
     authorizationMode,
+    ...(context ? { context } : {}),
     expiresAt: now + META_OAUTH_STATE_TTL_SECONDS * 1000,
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -54,6 +57,17 @@ export function createMetaOAuthStateForPurpose(
   now = Date.now(),
 ) {
   return createState(tenantId, userId, purpose, 'client_authorized', now);
+}
+
+export function createMetaOAuthStateForPurposeWithContext(
+  tenantId: string,
+  userId: string,
+  purpose: MetaOnboardingPurpose,
+  context: string,
+  now = Date.now(),
+) {
+  if (!context.trim()) throw new Error('OAuth state context is required');
+  return createState(tenantId, userId, purpose, 'client_authorized', now, context);
 }
 
 export function createPlatformManagedMetaOAuthStateForPurpose(
@@ -104,6 +118,19 @@ export function verifyMetaOAuthStateForPurpose(
 ) {
   const payload = readMetaOAuthStateForPurpose(cookie, state, userId, purpose, now);
   return payload?.tenantId === tenantId;
+}
+
+export function verifyMetaOAuthStateForPurposeWithContext(
+  cookie: string | undefined,
+  state: string | null,
+  tenantId: string,
+  userId: string,
+  purpose: MetaOnboardingPurpose,
+  context: string,
+  now = Date.now(),
+) {
+  const payload = readMetaOAuthStateForPurpose(cookie, state, userId, purpose, now);
+  return payload?.tenantId === tenantId && payload.context === context;
 }
 
 // Backward-compatible Ads wrappers. Existing Ads callers/tests remain simple,
