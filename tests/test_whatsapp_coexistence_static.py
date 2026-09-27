@@ -38,7 +38,7 @@ def test_business_app_flow_uses_official_feature_type_and_skips_pin_registration
 
 def test_business_app_echoes_are_outbound_and_do_not_run_inbound_automations():
     runtime = read('lib/meta/whatsapp-runtime.ts')
-    echo_block = runtime.split("if (field === 'smb_message_echoes')", 1)[1].split('continue;', 1)[0]
+    echo_block = runtime.split("if (field === 'smb_message_echoes')", 1)[1].split('const contacts =', 1)[0]
 
     assert "field !== 'messages' && field !== 'smb_message_echoes'" in runtime
     assert 'value?.message_echoes' in echo_block
