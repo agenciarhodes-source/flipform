@@ -87,8 +87,9 @@ function normalizedMessageMetadata(input: { entryId: string | null; phoneNumberI
 }
 
 function normalizedEchoMetadata(input: { entryId: string | null; phoneNumberId: string; value: any; message: any }): Prisma.InputJsonValue {
+  const metadata = normalizedMessageMetadata(input) as Record<string, Prisma.InputJsonValue>;
   return {
-    ...normalizedMessageMetadata(input),
+    ...metadata,
     source: 'meta_whatsapp_business_app_echo',
     businessAppEcho: true,
     ...(typeof input.message?.from === 'string' ? { businessDisplayPhoneNumber: input.message.from } : {}),
