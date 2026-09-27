@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { MessageType, recordInboundMessage } from '@/lib/conversations/core';
+import { ensureConversation, MessageType, recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
 import {
   enqueueWhatsAppMessageCoreAutomation,
   prepareWhatsAppMessageCoreAutomation,
@@ -83,6 +83,17 @@ function normalizedMessageMetadata(input: { entryId: string | null; phoneNumberI
     ...(typeof media?.id === 'string' ? { mediaId: media.id } : {}),
     ...(typeof message?.interactive?.button_reply?.id === 'string' ? { interactiveReplyId: message.interactive.button_reply.id } : {}),
     ...(typeof message?.interactive?.list_reply?.id === 'string' ? { interactiveReplyId: message.interactive.list_reply.id } : {}),
+  };
+}
+
+function normalizedEchoMetadata(input: { entryId: string | null; phoneNumberId: string; value: any; message: any }): Prisma.InputJsonValue {
+  const metadata = normalizedMessageMetadata(input) as Record<string, Prisma.InputJsonValue>;
+  return {
+    ...metadata,
+    source: 'meta_whatsapp_business_app_echo',
+    businessAppEcho: true,
+    ...(typeof input.message?.from === 'string' ? { businessDisplayPhoneNumber: input.message.from } : {}),
+    ...(typeof input.message?.to === 'string' ? { recipientWaId: input.message.to } : {}),
   };
 }
 
@@ -337,6 +348,8 @@ export async function processWhatsAppCloudWebhook(payload: any) {
     automationsQueued: 0,
     statusesUpdated: 0,
     statusesBuffered: 0,
+    messageEchoesCreated: 0,
+    duplicateMessageEchoes: 0,
     ignored: 0,
   };
 
@@ -347,7 +360,8 @@ export async function processWhatsAppCloudWebhook(payload: any) {
   for (const entry of payload.entry) {
     const changes = Array.isArray(entry?.changes) ? entry.changes : [];
     for (const change of changes) {
-      if (change?.field !== 'messages') continue;
+      const field = change?.field;
+      if (field !== 'messages' && field !== 'smb_message_echoes') continue;
       const value = change?.value;
       const phoneNumberId = typeof value?.metadata?.phone_number_id === 'string' ? value.metadata.phone_number_id : '';
       if (!phoneNumberId) {
@@ -358,6 +372,46 @@ export async function processWhatsAppCloudWebhook(payload: any) {
       const connection = await resolveConnectedWhatsAppTenant(phoneNumberId);
       if (!connection) {
         result.ignored += 1;
+        continue;
+      }
+
+      if (field === 'smb_message_echoes') {
+        for (const message of Array.isArray(value?.message_echoes) ? value.message_echoes : []) {
+          if (typeof message?.id !== 'string' || typeof message?.to !== 'string') {
+            result.ignored += 1;
+            continue;
+          }
+          const externalUserId = await resolvePreparedMetaReviewRecipient({
+            tenantId: connection.tenantId,
+            connectionId: connection.id,
+            providerWaId: message.to,
+          });
+          const ensured = await ensureConversation({
+            tenantId: connection.tenantId,
+            channel: 'whatsapp',
+            provider: 'meta',
+            externalUserId,
+            phone: externalUserId,
+            seenAt: parseProviderTimestamp(message.timestamp),
+          });
+          const persisted = await recordOutboundMessage({
+            tenantId: connection.tenantId,
+            conversationId: ensured.conversation.id,
+            externalMessageId: message.id,
+            text: normalizeMessageText(message),
+            type: normalizeMessageType(message.type),
+            status: 'sent',
+            providerTimestamp: parseProviderTimestamp(message.timestamp),
+            metadata: normalizedEchoMetadata({
+              entryId: typeof entry?.id === 'string' ? entry.id : null,
+              phoneNumberId,
+              value,
+              message,
+            }),
+          });
+          if (persisted.duplicate) result.duplicateMessageEchoes += 1;
+          else result.messageEchoesCreated += 1;
+        }
         continue;
       }
 

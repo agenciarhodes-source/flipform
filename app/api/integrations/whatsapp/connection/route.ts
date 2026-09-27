@@ -9,6 +9,7 @@ import {
 } from '@/lib/meta/platform-settings';
 import {
   getWhatsAppConnectionHealthForTenant,
+  getWhatsAppOnboardingMode,
   getWhatsAppRegisteredAt,
 } from '@/lib/meta/whatsapp-connection-health';
 
@@ -31,7 +32,7 @@ function schemaNotReadyResponse() {
   }, { status: 503 });
 }
 
-function toSafeConnection(connection: any | null, registeredAt: Date | null) {
+function toSafeConnection(connection: any | null, registeredAt: Date | null, onboardingMode: 'cloud_api' | 'coexistence' | null) {
   if (!connection) return null;
   return {
     status: connection.status,
@@ -44,6 +45,7 @@ function toSafeConnection(connection: any | null, registeredAt: Date | null) {
     subscribedAt: connection.subscribedAt,
     lastValidatedAt: connection.lastValidatedAt,
     registeredAt,
+    onboardingMode,
   };
 }
 
@@ -72,20 +74,28 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
       getWhatsAppConnectionHealthForTenant(session.tenantId),
     ]);
 
-    const registeredAt = connection?.status === 'connected'
-      ? await getWhatsAppRegisteredAt({
-          tenantId: session.tenantId,
-          connectionId: connection.id,
-          phoneNumberId: connection.phoneNumberId,
-          connectedAt: connection.connectedAt,
-        })
-      : null;
+    const [registeredAt, onboardingMode] = connection?.status === 'connected'
+      ? await Promise.all([
+          getWhatsAppRegisteredAt({
+            tenantId: session.tenantId,
+            connectionId: connection.id,
+            phoneNumberId: connection.phoneNumberId,
+            connectedAt: connection.connectedAt,
+          }),
+          getWhatsAppOnboardingMode({
+            tenantId: session.tenantId,
+            connectionId: connection.id,
+            phoneNumberId: connection.phoneNumberId,
+            connectedAt: connection.connectedAt,
+          }),
+        ])
+      : [null, null];
 
     return NextResponse.json({
       schemaReady: true,
       platformAvailable,
       runtimeAvailable,
-      connection: toSafeConnection(connection, registeredAt),
+      connection: toSafeConnection(connection, registeredAt, onboardingMode),
       health,
     });
   } catch (error) {

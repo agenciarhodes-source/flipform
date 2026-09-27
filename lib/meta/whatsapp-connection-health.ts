@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { isWhatsAppCoexistenceMode, type WhatsAppOnboardingMode } from './whatsapp-onboarding';
 import {
   getPlatformWhatsAppRuntimeCredentials,
   isPlatformWhatsAppEmbeddedSignupAvailable,
@@ -27,6 +28,7 @@ import {
 
 export const WHATSAPP_CONNECTION_HEALTH_ACTION = 'WHATSAPP_CONNECTION_HEALTH_CHECKED';
 const WHATSAPP_PHONE_REGISTERED_ACTION = 'WHATSAPP_PHONE_REGISTERED';
+const WHATSAPP_CONNECTED_ACTION = 'WHATSAPP_EMBEDDED_SIGNUP_CONNECTED';
 
 type WhatsAppHealthConnection = {
   id: string;
@@ -43,6 +45,7 @@ export function buildWhatsAppConnectionHealth(input: {
   platformAvailable: boolean;
   runtimeAvailable: boolean;
   registeredAt: Date | null;
+  onboardingMode?: WhatsAppOnboardingMode;
   latestHealthAudit: HealthAuditSnapshot;
   now?: Date;
 }): MetaConnectionHealth {
@@ -104,7 +107,7 @@ export function buildWhatsAppConnectionHealth(input: {
     });
   }
 
-  if (!input.registeredAt) {
+  if (!isWhatsAppCoexistenceMode(input.onboardingMode) && !input.registeredAt) {
     return healthResult({
       now,
       state: 'action_required',
@@ -147,21 +150,53 @@ export function buildWhatsAppConnectionHealth(input: {
     });
   }
 
+  const coexistence = isWhatsAppCoexistenceMode(input.onboardingMode);
   return healthResult({
     now,
     state: 'healthy',
     label: 'Saudável',
-    summary: 'WhatsApp conectado, registrado e com validação recente.',
+    summary: coexistence
+      ? 'WhatsApp Business conectado em coexistência e com validação recente.'
+      : 'WhatsApp conectado, registrado e com validação recente.',
     lastValidatedAt: connection.lastValidatedAt?.toISOString() || null,
     reconnectRecommended: false,
     retryable: true,
     checks: [
       { key: 'system_user_assignment', status: 'pass', detail: 'System User atribuído no onboarding.' },
       { key: 'waba_subscription', status: 'pass', detail: 'Assinatura do WABA registrada.' },
-      { key: 'phone_registration', status: 'pass', detail: 'Registro do número confirmado no FlipForm.' },
+      coexistence
+        ? { key: 'coexistence', status: 'pass', detail: 'Aplicativo WhatsApp Business preservado em coexistência.' }
+        : { key: 'phone_registration', status: 'pass', detail: 'Registro do número confirmado no FlipForm.' },
       { key: 'validation_freshness', status: 'pass', detail: 'Validação recente.' },
     ],
   });
+}
+
+export async function getWhatsAppOnboardingMode(input: {
+  tenantId: string;
+  connectionId: string;
+  phoneNumberId: string;
+  connectedAt: Date;
+}): Promise<WhatsAppOnboardingMode> {
+  const audits = await prisma.auditLog.findMany({
+    where: {
+      tenantId: input.tenantId,
+      entityType: 'tenant_whatsapp_connection',
+      entityId: input.connectionId,
+      action: WHATSAPP_CONNECTED_ACTION,
+      createdAt: { gte: input.connectedAt },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: { metadata: true },
+  });
+  const match = audits.find(item => {
+    const metadata = jsonMetadata(item.metadata);
+    return metadata.phoneNumberId === input.phoneNumberId
+      && (metadata.onboardingMode === 'cloud_api' || metadata.onboardingMode === 'coexistence');
+  });
+  const mode = match ? jsonMetadata(match.metadata).onboardingMode : null;
+  return mode === 'coexistence' ? 'coexistence' : 'cloud_api';
 }
 
 export async function getWhatsAppRegisteredAt(input: {
@@ -218,10 +253,13 @@ export async function getWhatsAppConnectionHealthForTenant(tenantId: string) {
       latestHealthAudit: null,
     });
   }
-  const [registeredAt, latestHealthAudit] = await Promise.all([
+  const [registeredAt, onboardingMode, latestHealthAudit] = await Promise.all([
     connection.status === 'connected'
       ? getWhatsAppRegisteredAt({ tenantId, connectionId: connection.id, phoneNumberId: connection.phoneNumberId, connectedAt: connection.connectedAt })
       : Promise.resolve(null),
+    connection.status === 'connected'
+      ? getWhatsAppOnboardingMode({ tenantId, connectionId: connection.id, phoneNumberId: connection.phoneNumberId, connectedAt: connection.connectedAt })
+      : Promise.resolve('cloud_api' as const),
     getLatestConnectionHealthAudit({
       tenantId,
       entityType: 'tenant_whatsapp_connection',
@@ -230,7 +268,7 @@ export async function getWhatsAppConnectionHealthForTenant(tenantId: string) {
       connectedAt: connection.connectedAt,
     }),
   ]);
-  return buildWhatsAppConnectionHealth({ connection, platformAvailable, runtimeAvailable, registeredAt, latestHealthAudit });
+  return buildWhatsAppConnectionHealth({ connection, platformAvailable, runtimeAvailable, registeredAt, onboardingMode, latestHealthAudit });
 }
 
 export async function validateWhatsAppConnectionHealth(input: { tenantId: string; userId: string }) {

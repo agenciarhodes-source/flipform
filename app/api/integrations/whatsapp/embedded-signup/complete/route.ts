@@ -6,7 +6,8 @@ import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { getPlatformWhatsAppEmbeddedSignupCredentials } from '@/lib/meta/platform-settings';
 import { META_WHATSAPP_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
-import { verifyMetaOAuthStateForPurpose } from '@/lib/meta/oauth-state';
+import { verifyMetaOAuthStateForPurposeWithContext } from '@/lib/meta/oauth-state';
+import { WHATSAPP_ONBOARDING_MODES, whatsappOnboardingStateContext } from '@/lib/meta/whatsapp-onboarding';
 import { WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH } from '@/lib/meta/whatsapp-signup-state';
 import {
   ensureSystemUserAssignedToWhatsAppWaba,
@@ -23,6 +24,7 @@ const bodySchema = z.object({
   state: z.string().trim().min(16).max(256),
   wabaId: idSchema,
   phoneNumberId: idSchema,
+  onboardingMode: z.enum(WHATSAPP_ONBOARDING_MODES),
 }).strict();
 
 function clearSignupState(response: NextResponse) {
@@ -47,12 +49,13 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Conclusão do WhatsApp inválida.' }, { status: 400 });
 
-  const stateValid = verifyMetaOAuthStateForPurpose(
+  const stateValid = verifyMetaOAuthStateForPurposeWithContext(
     req.cookies.get(WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE)?.value,
     parsed.data.state,
     session.tenantId,
     session.userId,
     META_WHATSAPP_ONBOARDING_PURPOSE,
+    whatsappOnboardingStateContext(parsed.data.onboardingMode),
   );
   if (!stateValid) {
     return clearSignupState(NextResponse.json({ error: 'Sessão de conexão do WhatsApp inválida ou expirada.' }, { status: 403 }));
@@ -207,6 +210,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
             onboardingScopeCount: onboardingValidation.grantedScopes.length,
             runtimeScopeCount: runtimeValidation.grantedScopes.length,
             credentialMode: 'platform_system_user',
+            onboardingMode: parsed.data.onboardingMode,
           } as any,
         },
       });
@@ -217,6 +221,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       tenantId: session.tenantId,
       connectionId: connection.id,
       credentialMode: 'platform_system_user',
+      onboardingMode: parsed.data.onboardingMode,
       hasDisplayPhoneNumber: Boolean(connection.displayPhoneNumber),
       onboardingScopeCount: onboardingValidation.grantedScopes.length,
       runtimeScopeCount: runtimeValidation.grantedScopes.length,
@@ -231,6 +236,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
         qualityRating: connection.qualityRating,
         connectedAt: connection.connectedAt,
         subscribedAt: connection.subscribedAt,
+        onboardingMode: parsed.data.onboardingMode,
       },
     }));
   } catch (error) {

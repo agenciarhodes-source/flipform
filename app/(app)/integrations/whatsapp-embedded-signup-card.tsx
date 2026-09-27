@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { notifyWhatsAppConnectionChanged } from './connection-events';
+import type { WhatsAppOnboardingMode } from '@/lib/meta/whatsapp-onboarding';
 
 declare global {
   interface Window {
@@ -20,6 +21,7 @@ type Connection = {
   systemUserAssignedAt?: string | null;
   subscribedAt?: string | null;
   registeredAt?: string | null;
+  onboardingMode?: WhatsAppOnboardingMode | null;
 } | null;
 
 type SignupConfig = {
@@ -27,6 +29,7 @@ type SignupConfig = {
   configId: string;
   graphApiVersion: string;
   state: string;
+  onboardingMode: WhatsAppOnboardingMode;
 };
 
 let sdkPromise: Promise<void> | null = null;
@@ -78,7 +81,9 @@ export function WhatsAppEmbeddedSignupCard() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [pin, setPin] = useState('');
+  const [connectingMode, setConnectingMode] = useState<WhatsAppOnboardingMode | null>(null);
 
+  const modeRef = useRef<WhatsAppOnboardingMode | null>(null);
   const stateRef = useRef<string | null>(null);
   const codeRef = useRef<string | null>(null);
   const sessionRef = useRef<{ wabaId: string; phoneNumberId: string } | null>(null);
@@ -106,7 +111,8 @@ export function WhatsAppEmbeddedSignupCard() {
     const state = stateRef.current;
     const code = codeRef.current;
     const session = sessionRef.current;
-    if (!state || !code || !session || completingRef.current) return;
+    const onboardingMode = modeRef.current;
+    if (!state || !code || !session || !onboardingMode || completingRef.current) return;
     completingRef.current = true;
     try {
       const response = await fetch('/api/integrations/whatsapp/embedded-signup/complete', {
@@ -117,22 +123,27 @@ export function WhatsAppEmbeddedSignupCard() {
           state,
           wabaId: session.wabaId,
           phoneNumberId: session.phoneNumberId,
+          onboardingMode,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a conexão do WhatsApp.');
       setPin('');
-      toast.success('WhatsApp conectado. Agora finalize a ativação do número.');
+      toast.success(onboardingMode === 'coexistence'
+        ? 'WhatsApp Business conectado sem desconectar o aplicativo.'
+        : 'WhatsApp conectado. Agora finalize a ativação do número.');
       await loadConnection();
       notifyWhatsAppConnectionChanged();
     } catch (error: any) {
       toast.error(error.message || 'Não foi possível concluir a conexão do WhatsApp.');
     } finally {
+      modeRef.current = null;
       stateRef.current = null;
       codeRef.current = null;
       sessionRef.current = null;
       completingRef.current = false;
       setConnecting(false);
+      setConnectingMode(null);
     }
   }, [loadConnection]);
 
@@ -155,16 +166,20 @@ export function WhatsAppEmbeddedSignupCard() {
         sessionRef.current = { wabaId, phoneNumberId };
         void completeIfReady();
       } else if (payload.event === 'CANCEL') {
+        modeRef.current = null;
         stateRef.current = null;
         codeRef.current = null;
         sessionRef.current = null;
         setConnecting(false);
+        setConnectingMode(null);
         toast.error('A conexão do WhatsApp foi cancelada.');
       } else if (payload.event === 'ERROR') {
+        modeRef.current = null;
         stateRef.current = null;
         codeRef.current = null;
         sessionRef.current = null;
         setConnecting(false);
+        setConnectingMode(null);
         toast.error('A Meta informou um erro ao conectar o WhatsApp.');
       }
     };
@@ -172,17 +187,24 @@ export function WhatsAppEmbeddedSignupCard() {
     return () => window.removeEventListener('message', handler);
   }, [completeIfReady]);
 
-  async function connect() {
+  async function connect(onboardingMode: WhatsAppOnboardingMode) {
     setConnecting(true);
+    setConnectingMode(onboardingMode);
     setPin('');
+    modeRef.current = onboardingMode;
     stateRef.current = null;
     codeRef.current = null;
     sessionRef.current = null;
     completingRef.current = false;
     try {
-      const response = await fetch('/api/integrations/whatsapp/embedded-signup/config', { method: 'POST' });
+      const response = await fetch('/api/integrations/whatsapp/embedded-signup/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboardingMode }),
+      });
       const config = await response.json() as SignupConfig & { error?: string };
       if (!response.ok) throw new Error(config.error || 'Não foi possível iniciar a conexão do WhatsApp.');
+      if (config.onboardingMode !== onboardingMode) throw new Error('A Meta recebeu um modo de conexão inválido.');
       await ensureFacebookSdk(config.appId, config.graphApiVersion);
       stateRef.current = config.state;
 
@@ -202,15 +224,17 @@ export function WhatsAppEmbeddedSignupCard() {
         override_default_response_type: true,
         extras: {
           setup: {},
-          featureType: '',
+          featureType: onboardingMode === 'coexistence' ? 'whatsapp_business_app_onboarding' : '',
           sessionInfoVersion: '3',
         },
       });
     } catch (error: any) {
+      modeRef.current = null;
       stateRef.current = null;
       codeRef.current = null;
       sessionRef.current = null;
       setConnecting(false);
+      setConnectingMode(null);
       toast.error(error.message || 'Não foi possível iniciar a conexão do WhatsApp.');
     }
   }
@@ -259,7 +283,8 @@ export function WhatsAppEmbeddedSignupCard() {
   }
 
   const connected = connection?.status === 'connected';
-  const registered = Boolean(connection?.registeredAt);
+  const coexistence = connection?.onboardingMode === 'coexistence';
+  const registered = coexistence || Boolean(connection?.registeredAt);
   return <div className="px-6 pb-6 max-w-7xl">
     <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -276,10 +301,18 @@ export function WhatsAppEmbeddedSignupCard() {
       </div>}
 
       {!loading && !connected && !platformAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A conexão com o WhatsApp ainda está sendo preparada pela plataforma. Tente novamente mais tarde ou fale com o suporte.</div>}
-      {!loading && platformAvailable && !connected && <p className="text-sm text-muted-foreground">Clique em <strong>Conectar WhatsApp</strong>, faça login na Meta e escolha a conta e o número que pertencem a esta empresa.</p>}
+      {!loading && platformAvailable && !connected && <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+        <p className="font-medium">Escolha como o número é usado hoje:</p>
+        <p className="mt-1 text-xs text-blue-800">Use “WhatsApp Business existente” para manter o aplicativo funcionando no celular do cliente. Use “Número novo” somente para um número dedicado à Cloud API.</p>
+      </div>}
       {!loading && connected && !runtimeAvailable && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">A autorização foi recebida. A ativação do número ainda está sendo finalizada pela plataforma.</div>}
 
-      {connected && <div className={`rounded-md border p-4 ${registered ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+      {connected && coexistence && <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4">
+        <p className="text-sm font-medium text-emerald-900">WhatsApp Business conectado em coexistência</p>
+        <p className="mt-1 text-xs text-emerald-800">O número continua ativo no aplicativo do cliente e também pode ser atendido pelo Inbox do FlipForm. Não é necessário criar PIN nem registrar o número novamente.</p>
+      </div>}
+
+      {connected && !coexistence && <div className={`rounded-md border p-4 ${registered ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <p className={`text-sm font-medium ${registered ? 'text-emerald-900' : 'text-amber-900'}`}>Ativação do número: {registered ? 'concluída' : 'pendente'}</p>
@@ -317,7 +350,8 @@ export function WhatsAppEmbeddedSignupCard() {
       </div>}
 
       <div className="flex flex-wrap gap-2">
-        {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={connect} disabled={connecting || disconnecting || registering}>{connecting ? 'Conectando...' : connected ? 'Reconectar WhatsApp' : 'Conectar WhatsApp'}</button>}
+        {platformAvailable && <button type="button" className="px-4 py-2 rounded bg-emerald-600 text-white text-sm disabled:opacity-60" onClick={() => connect('coexistence')} disabled={connecting || disconnecting || registering}>{connectingMode === 'coexistence' ? 'Conectando...' : connected ? 'Reconectar WhatsApp Business' : 'Conectar WhatsApp Business existente'}</button>}
+        {platformAvailable && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={() => connect('cloud_api')} disabled={connecting || disconnecting || registering}>{connectingMode === 'cloud_api' ? 'Conectando...' : connected ? 'Reconectar número novo' : 'Conectar número novo'}</button>}
         {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting || registering}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
       <p className="text-xs text-muted-foreground">A conexão é feita com segurança pela Meta. Credenciais técnicas ficam protegidas no servidor e não são exibidas neste painel.</p>
