@@ -64,3 +64,16 @@ A assinatura do WABA é feita neste fluxo para deixar o ativo preparado. O endpo
 ## Production data safety
 
 A migration é aditiva: cria `tenant_whatsapp_connections` e adiciona colunas opcionais de configuração WhatsApp à configuração Meta da plataforma. Ela não executa `DELETE`, `TRUNCATE`, `DROP`, backfill ou atualização em massa de dados de clientes.
+
+## Coexistência com o WhatsApp Business App
+
+O tenant agora escolhe explicitamente um dos dois modos:
+
+- **WhatsApp Business existente (`coexistence`)**: abre o Embedded Signup com `featureType: whatsapp_business_app_onboarding`. O aplicativo no celular continua ativo e o FlipForm não chama `/{PHONE_NUMBER_ID}/register`.
+- **Número novo (`cloud_api`)**: mantém o fluxo anterior, incluindo a ativação separada com PIN de seis dígitos.
+
+O modo é vinculado ao state HMAC do onboarding e registrado no audit log `WHATSAPP_EMBEDDED_SIGNUP_CONNECTED`. Não há nova tabela, coluna ou migration. Conexões anteriores sem esse marcador são tratadas como `cloud_api` para preservar compatibilidade.
+
+Para coexistência, o Meta App deve ter no painel de Webhooks os campos `messages` e `smb_message_echoes` assinados para WhatsApp Business Account. O primeiro mantém as mensagens recebidas do consumidor; o segundo informa mensagens enviadas pelo cliente no WhatsApp Business App ou em dispositivo vinculado. O runtime grava esses ecos como mensagens `outbound` no Inbox, com idempotência pelo ID da Meta, sem aumentar não lidas nem disparar automações de entrada.
+
+O campo `smb_app_state_sync` pode ser habilitado posteriormente para sincronização de contatos. Ele não é necessário para o roteiro mínimo de enviar e responder mensagens nos dois lados.
