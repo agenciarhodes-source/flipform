@@ -4,6 +4,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
+import { getWhatsAppOnboardingMode } from '@/lib/meta/whatsapp-connection-health';
 import {
   registerWhatsAppPhoneNumber,
   validateWhatsAppSystemUserToken,
@@ -36,6 +37,18 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   });
   if (!connection) {
     return NextResponse.json({ error: 'Conecte o WhatsApp desta empresa antes de registrar o número.' }, { status: 409 });
+  }
+
+  const onboardingMode = await getWhatsAppOnboardingMode({
+    tenantId: session.tenantId,
+    connectionId: connection.id,
+    phoneNumberId: connection.phoneNumberId,
+    connectedAt: connection.connectedAt,
+  });
+  if (onboardingMode === 'coexistence') {
+    return NextResponse.json({
+      error: 'Este número já foi ativado pela Meta no modo de coexistência com o WhatsApp Business.',
+    }, { status: 409 });
   }
 
   const credentials = await getPlatformWhatsAppRuntimeCredentials();
