@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { canAccessFlipAi, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
+import { agentPublicationSchema, canAccessFlipAi, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
 import type { SessionPayload } from '../lib/auth';
 import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
@@ -62,6 +62,10 @@ test('strict payload rejects tenant and integration overrides', () => {
   assert.equal(createAgentDraftSchema.safeParse({ ...draft, slug: '../admin' }).success, false);
   const { requestId, ...input } = draft;
   assert.equal(updateAgentDraftSchema.safeParse({ ...input, version: 0 }).success, false);
+  assert.equal(agentPublicationSchema.safeParse({ action: 'publish', version: 1 }).success, true);
+  assert.equal(agentPublicationSchema.safeParse({ action: 'unpublish', version: 1 }).success, true);
+  assert.equal(agentPublicationSchema.safeParse({ action: 'publish', version: 1, tenantId: 'tenant-injected' }).success, false);
+  assert.equal(agentPublicationSchema.safeParse({ action: 'delete', version: 1 }).success, false);
 });
 
 test('credit wallet accepts only bounded, positive and idempotent mutations', () => {

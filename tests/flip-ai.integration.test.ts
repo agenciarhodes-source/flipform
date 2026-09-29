@@ -16,6 +16,7 @@ import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 import { getFlipAiCreditWallet, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
+import { changeAgentPublication } from '../lib/flip-ai/publication';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -124,6 +125,12 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const updated = await saveAgentDraft(a.session, { ...a.input, name: 'Ana' }, { kind: 'update', id, version: 1 });
     assert.equal(updated.version, 2);
     await assert.rejects(saveAgentDraft(a.session, a.input, { kind: 'update', id, version: 1 }), (e: unknown) => e instanceof FlipAiError && e.code === 'VERSION_CONFLICT');
+    await assert.rejects(changeAgentPublication(a.session, id, {
+      action: 'publish', version: updated.version,
+    }, { openAiConfigured: true }), (error: unknown) =>
+      error instanceof FlipAiError && error.code === 'AGENT_NOT_READY');
+    assert.equal((await prisma.flipAiAgent.findUniqueOrThrow({ where: { id } })).status, 'draft',
+      'failed readiness must never expose the public chat');
 
     const sourceRequest = { requestId: randomUUID(), label: 'Site oficial', domain: 'WWW.Empresa.COM.BR' };
     const source = await createExternalSource(a.session, id, sourceRequest);
@@ -235,7 +242,25 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(ownedEvent.status, 'confirmed');
     assert.equal(ownedEvent.inputTokens, 13, 'late attempt must not overwrite the confirmed retry');
 
-    await prisma.flipAiAgent.update({ where: { id }, data: { status: 'published' } });
+    await assert.rejects(changeAgentPublication(b.session, id, {
+      action: 'publish', version: savedWithKnowledge.version,
+    }, { openAiConfigured: true }), (error: unknown) =>
+      error instanceof FlipAiError && error.status === 404);
+    const published = await changeAgentPublication(a.session, id, {
+      action: 'publish', version: savedWithKnowledge.version,
+    }, { openAiConfigured: true });
+    assert.equal(published.status, 'published');
+    assert.equal(published.publication.ready, true);
+    assert.equal(published.publication.publicPath, `/chat/${a.input.slug}`);
+    const publicationReplay = await changeAgentPublication(a.session, id, {
+      action: 'publish', version: savedWithKnowledge.version,
+    }, { openAiConfigured: true });
+    assert.equal(publicationReplay.reused, true, 'publication replay must be idempotent');
+    const publishedWorkspace = await getAgentDraftWorkspace(a.session);
+    assert.equal(publishedWorkspace.agents.find((agent) => agent.id === id)?.status, 'published');
+    assert.equal(await prisma.auditLog.count({
+      where: { tenantId: a.tenant.id, entityId: id, action: 'published' },
+    }), 1);
     const chatRuntime = { id, tenantId: a.tenant.id, slug: a.input.slug, name: 'Helena', description: 'Atendimento CI',
       primaryColor: '#2563EB', style: 'welcoming', tenantName: a.tenant.name, tenantLogoUrl: null,
       knowledgeRevision: 2, knowledgeIndexId: prepared.id, pipelineId: a.pipeline.id,
@@ -550,6 +575,23 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
 
     const audit = await prisma.auditLog.findFirst({ where: { tenantId: a.tenant.id, action: 'master_markdown.revision_created' } });
     assert.equal(JSON.stringify(audit?.metadata).includes(master.content), false, 'knowledge content must not leak into audit metadata');
+
+    const leadsBeforeUnpublish = await prisma.lead.count({ where: { tenantId: a.tenant.id } });
+    const conversationsBeforeUnpublish = await prisma.conversation.count({ where: { tenantId: a.tenant.id } });
+    const unpublished = await changeAgentPublication(a.session, id, {
+      action: 'unpublish', version: published.version,
+    }, { openAiConfigured: true });
+    assert.equal(unpublished.status, 'draft');
+    assert.equal((await changeAgentPublication(a.session, id, {
+      action: 'unpublish', version: published.version,
+    }, { openAiConfigured: true })).reused, true, 'unpublication replay must be idempotent');
+    assert.equal(await prisma.auditLog.count({
+      where: { tenantId: a.tenant.id, entityId: id, action: 'unpublished' },
+    }), 1);
+    assert.equal(await prisma.lead.count({ where: { tenantId: a.tenant.id } }), leadsBeforeUnpublish,
+      'unpublishing must not delete leads');
+    assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id } }), conversationsBeforeUnpublish,
+      'unpublishing must not delete conversations');
 
     await prisma.tenantUser.update({ where: { tenantId_userId: { tenantId: a.tenant.id, userId: a.user.id } }, data: { status: 'inactive' } });
     await assert.rejects(getAgentDraftWorkspace(a.session), (e: unknown) => e instanceof FlipAiError && e.status === 403);

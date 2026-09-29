@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRef, useState, type FormEvent } from 'react';
-import { BarChart3, Bot, BookOpen, Globe2, Plus } from 'lucide-react';
+import { BarChart3, Bot, BookOpen, CheckCircle2, CircleAlert, ExternalLink, Globe2, Plus, Power } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
@@ -40,16 +40,35 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
   function change<K extends keyof AgentDraftInput>(key: K, value: AgentDraftInput[K]) {
     setEditor((current) => current ? { ...current, input: { ...current.input, [key]: value } } : current);
   }
-  async function reload() {
+  async function reload(successMessage = 'Lista atualizada.') {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true);
     try {
       const response = await fetch('/api/flip-ai/agents', { cache: 'no-store' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível atualizar a lista.');
-      setWorkspace(data); setEditor(null); setMessage('Lista atualizada.');
+      setWorkspace(data); setEditor(null); setMessage(successMessage);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão.'); }
     finally { inFlight.current = false; setBusy(false); }
+  }
+  async function togglePublication(agent: AgentDraft) {
+    if (inFlight.current) return;
+    const action = agent.status === 'published' ? 'unpublish' : 'publish';
+    inFlight.current = true; setBusy(true); setMessage('');
+    try {
+      const response = await fetch(`/api/flip-ai/agents/${agent.id}/publication`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, version: agent.version }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível alterar a publicação.');
+      inFlight.current = false;
+      await reload(action === 'publish'
+        ? `${agent.name} foi publicado com segurança.`
+        : `${agent.name} foi retirado do ar.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Falha de conexão. Atualize a lista antes de tentar novamente.');
+    } finally { inFlight.current = false; setBusy(false); }
   }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -83,9 +102,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <Button onClick={createDraft} disabled={busy || !!editor}><Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo atendente</Button>
       </div>
     </header>
-    <div className="rounded-lg border bg-muted/40 p-4 text-sm">Os atendentes continuam em rascunho. Agora você pode cadastrar o Markdown Mestre; a publicação do chat permanece bloqueada.</div>
+    <div className="rounded-lg border bg-muted/40 p-4 text-sm">A publicação só é liberada quando destino, conhecimento, OpenAI e carteira estiverem prontos. Retirar do ar é imediato e não apaga conversas ou Leads.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
-      <Button variant="outline" disabled={busy} onClick={reload}>Atualizar lista</Button></div>
+      <Button variant="outline" disabled={busy} onClick={() => reload()}>Atualizar lista</Button></div>
     {editor ? <form onSubmit={save} className="rounded-lg border bg-card p-5">
       <h2 className="mb-4 text-lg font-medium">{editor.id ? 'Editar atendente' : 'Novo atendente'}</h2>
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2"><legend className="sr-only">Identidade e destino do atendente</legend>
@@ -126,19 +145,36 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       <p className="mt-2 text-sm text-muted-foreground">Defina sua identidade e o destino dos futuros leads no Kanban.</p></div> :
       <ul className="grid gap-4 md:grid-cols-2">{workspace.agents.map((agent) => <li key={agent.id} className="rounded-lg border bg-card p-5">
         <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold" style={{ borderColor: agent.primaryColor }}>{agent.name.slice(0, 2).toUpperCase()}</div>
-          <div className="min-w-0"><h2 className="truncate font-medium">{agent.name}</h2><span className="text-xs text-muted-foreground">Rascunho</span></div></div>
+          <div className="min-w-0"><h2 className="truncate font-medium">{agent.name}</h2><span className="text-xs text-muted-foreground">{agent.status === 'published' ? 'Publicado' : 'Rascunho'}</span></div></div>
         {agent.description ? <p className="mt-3 break-words text-sm text-muted-foreground">{agent.description}</p> : null}
-        <p className="mt-3 break-all text-xs text-muted-foreground">Endereço reservado: /chat/{agent.slug}</p>
+        <p className="mt-3 break-all text-xs text-muted-foreground">{agent.status === 'published' ? 'Chat público' : 'Endereço reservado'}: {agent.publication.publicPath}</p>
         <p className="mt-2 text-xs text-muted-foreground">{agent.knowledge ? `Markdown Mestre: revisão ${agent.knowledge.revision}` : 'Markdown Mestre ainda não cadastrado'}</p>
+        <div className="mt-4 rounded-md border p-3">
+          <p className="text-xs font-medium">Prontidão para publicação</p>
+          <ul className="mt-2 space-y-2">{agent.publication.checks.map((check) => <li key={check.key} className="flex gap-2 text-xs">
+            {check.ready ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              : <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />}
+            <span><span className="font-medium">{check.label}:</span> {check.detail}</span>
+          </li>)}</ul>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
+          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button> : null}
+          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
             <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
-          </Button>
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId}
+          </Button> : null}
+          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId}
             onClick={() => setExternalAgentId(agent.id)}>
             <Globe2 className="mr-2 h-4 w-4" aria-hidden="true" />Fontes externas
+          </Button> : null}
+          <Button variant={agent.status === 'published' ? 'outline' : 'default'}
+            disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId || (agent.status === 'draft' && !agent.publication.ready)}
+            onClick={() => togglePublication(agent)}>
+            <Power className="mr-2 h-4 w-4" aria-hidden="true" />{agent.status === 'published' ? 'Retirar do ar' : 'Publicar'}
           </Button>
+          {agent.status === 'published' ? <Link href={agent.publication.publicPath} target="_blank" rel="noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted">
+            Abrir chat<ExternalLink className="h-4 w-4" aria-hidden="true" />
+          </Link> : null}
         </div>
       </li>)}</ul>}
   </section>;
