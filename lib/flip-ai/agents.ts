@@ -69,7 +69,7 @@ async function validateDestination(db: FlipAiDb, tenantId: string, input: AgentD
 }
 export async function getAgentDraftWorkspace(session: SessionPayload): Promise<AgentWorkspace> {
   return prisma.$transaction(async (db) => {
-    const { tenantId } = await requireFlipAiAccess(db, session);
+    const { tenantId, accessMode } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
     const [agents, pipelines, rotations, knowledge] = await Promise.all([
       selectAgents(db, tenantId),
@@ -86,6 +86,7 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
     const publications = await Promise.all(agents.map((agent) =>
       inspectAgentPublicationReadiness(db, tenantId, agent.id)));
     return {
+      accessMode,
       agents: agents.map((agent, index) => ({ ...agent, updatedAt: agent.updatedAt.toISOString(),
         knowledge: knowledge.get(agent.id) || null, publication: publications[index] })),
       pipelines,

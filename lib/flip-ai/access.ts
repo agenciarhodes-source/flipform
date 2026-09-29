@@ -2,13 +2,18 @@ import 'server-only';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { SessionPayload } from '@/lib/auth';
 import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
-import { canAccessFlipAi } from './policy';
+import { isFlipAiPilotTenant } from './pilot-access';
+import { canAccessFlipAi, canServeFlipAiPilot } from './policy';
 
 export type FlipAiDb = PrismaClient | Prisma.TransactionClient;
 export class FlipAiError extends Error {
   constructor(public code: string, public status: number, message: string) { super(message); }
 }
-export async function requireFlipAiAccess(db: FlipAiDb, session: SessionPayload) {
+export async function requireFlipAiAccess(
+  db: FlipAiDb,
+  session: SessionPayload,
+  options?: { pilotTenantIds?: string },
+) {
   if (!session.tenantId) throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403, 'Selecione uma empresa com plano Premium.');
   const [membership, tenant, subscription] = await Promise.all([
     db.tenantUser.findUnique({ where: { tenantId_userId: { tenantId: session.tenantId, userId: session.userId } }, select: { role: true, status: true } }),
@@ -21,8 +26,19 @@ export async function requireFlipAiAccess(db: FlipAiDb, session: SessionPayload)
     const group = groups.accesses.find((access) => access.tenants.some((tenant) => tenant.id === session.tenantId));
     role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;
   }
-  if (!tenant || !canAccessFlipAi({ role, tenantStatus: tenant.status, plan: tenant.plan, subscription })) {
-    throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403, 'O Flip AI está disponível para donos e administradores de empresas com plano Premium ou Premium Pro ativo.');
+  const planAccess = Boolean(tenant && canAccessFlipAi({
+    role,
+    tenantStatus: tenant.status,
+    plan: tenant.plan,
+    subscription,
+  }));
+  const pilotAccess = Boolean(tenant
+    && ['owner', 'admin'].includes(role || '')
+    && isFlipAiPilotTenant(session.tenantId, options?.pilotTenantIds)
+    && canServeFlipAiPilot({ tenantStatus: tenant.status, subscription }));
+  if (!tenant || (!planAccess && !pilotAccess)) {
+    throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403,
+      'O Flip AI está disponível para donos e administradores com plano Premium ativo ou piloto autorizado.');
   }
-  return { tenantId: session.tenantId, userId: session.userId };
+  return { tenantId: session.tenantId, userId: session.userId, accessMode: planAccess ? 'plan' as const : 'pilot' as const };
 }

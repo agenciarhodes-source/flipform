@@ -22,6 +22,12 @@ export function canServeFlipAiPublic(input: FlipAiBillingInput): boolean {
   return true;
 }
 
+export function canServeFlipAiPilot(input: Pick<FlipAiBillingInput, 'tenantStatus' | 'subscription'>): boolean {
+  if (!['active', 'trial'].includes(input.tenantStatus)) return false;
+  return !input.subscription
+    || ['active', 'trialing', 'courtesy'].includes(input.subscription.status);
+}
+
 export function canAccessFlipAi(input: FlipAiBillingInput & { role: string | null }): boolean {
   return ['owner', 'admin'].includes(input.role || '') && canServeFlipAiPublic(input);
 }
@@ -87,6 +93,7 @@ export type AgentDraft = AgentDraftInput & {
   publication: AgentPublicationReadiness;
 };
 export type AgentWorkspace = {
+  accessMode: 'plan' | 'pilot';
   agents: AgentDraft[];
   pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;
   rotations: Array<{ id: string; name: string; pipelineId: string; enabled: boolean }>;
