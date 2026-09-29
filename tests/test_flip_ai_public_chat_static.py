@@ -192,6 +192,17 @@ def test_qualification_retrieval_and_output_are_structured_and_bounded():
     assert "Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados" in chat
 
 
+def test_entry_context_reuses_message_metadata_without_schema_or_tracking_changes():
+    chat = read("lib/flip-ai/public-chat.ts")
+    shell = read("components/flip-ai/public-chat-shell.tsx")
+    assert "entryAttribution" in chat
+    assert "buildPublicEntryContext" in chat
+    assert "CONTEXTO DE ENTRADA NÃO CONFIÁVEL" in chat
+    assert "profundidade da conversa deve ser adaptativa" in chat
+    assert "fbclid" not in chat.split("export function buildPublicEntryContext", 1)[1].split("}", 1)[0]
+    assert "Olá! Sou ${agent.name}, da ${agent.tenantName}. Como posso ajudar você hoje?" in shell
+
+
 def test_lead_detail_reuses_existing_crm_surface_for_flip_ai():
     api = read("app/api/leads/[id]/route.ts")
     modal = read("components/lead-detail-modal.tsx")

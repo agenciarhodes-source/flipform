@@ -424,7 +424,13 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       conversationsBeforeRotatedCookie,
       'rotating the anonymous cookie must not create rows after the stable agent quota is exhausted');
 
-    const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.' };
+    const entryAttribution = {
+      utmSource: 'meta', utmMedium: 'paid-social', utmCampaign: 'salario-maternidade',
+      utmContent: 'video-02', utmTerm: null, fbclid: null, gclid: null,
+      landingPage: 'https://leads.example/chat/helena', referrer: null,
+    };
+    const chatInput = { messageId: randomUUID(), text: 'Quero entender o atendimento.',
+      attribution: entryAttribution };
     const turn = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
     assert.equal(turn.mode, 'execute');
     if (turn.mode !== 'execute') throw new Error('expected executable chat turn');
@@ -441,6 +447,8 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const identityTurn = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
     assert.equal(identityTurn.mode, 'execute');
     if (identityTurn.mode !== 'execute') throw new Error('expected identity turn');
+    assert.deepEqual(identityTurn.attribution, entryAttribution,
+      'later turns must preserve the first acquisition context even when the browser omits it');
     await completePublicChatTurn(identityTurn, {
       responseId: 'resp_identity', model: 'test-model', text: 'Obrigado, Diego. Como posso continuar?',
       inputTokens: 24, outputTokens: 9,

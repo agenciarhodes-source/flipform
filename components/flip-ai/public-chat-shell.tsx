@@ -54,7 +54,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
   const [messages, setMessages] = useState<ChatMessage[]>([{
     id: 'greeting',
     role: 'assistant',
-    text: `Olá! Eu sou ${agent.name}, assistente virtual de ${agent.tenantName}. Posso entender melhor o que você está buscando?`,
+    text: `Olá! Sou ${agent.name}, da ${agent.tenantName}. Como posso ajudar você hoje?`,
   }]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
