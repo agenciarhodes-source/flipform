@@ -37,6 +37,10 @@ export const agentDraftSchema = z.object({
 }).strict();
 export const createAgentDraftSchema = agentDraftSchema.extend({ requestId: z.string().uuid() });
 export const updateAgentDraftSchema = agentDraftSchema.extend({ version: z.number().int().positive() });
+export const agentPublicationSchema = z.object({
+  action: z.enum(['publish', 'unpublish']),
+  version: z.number().int().positive(),
+}).strict();
 export type AgentDraftInput = z.infer<typeof agentDraftSchema>;
 export type KnowledgeMasterSummary = { title: string; revision: number; byteSize: number; contentHash: string; updatedAt: string };
 export type KnowledgeMaster = KnowledgeMasterSummary & { content: string };
@@ -63,7 +67,25 @@ export type FlipAiExternalSource = {
   version: number;
   updatedAt: string;
 };
-export type AgentDraft = AgentDraftInput & { id: string; version: number; status: 'draft'; updatedAt: string; knowledge: KnowledgeMasterSummary | null };
+export type AgentPublicationCheck = {
+  key: 'destination' | 'knowledge' | 'openai' | 'wallet';
+  label: string;
+  ready: boolean;
+  detail: string;
+};
+export type AgentPublicationReadiness = {
+  ready: boolean;
+  publicPath: string;
+  checks: AgentPublicationCheck[];
+};
+export type AgentDraft = AgentDraftInput & {
+  id: string;
+  version: number;
+  status: 'draft' | 'published';
+  updatedAt: string;
+  knowledge: KnowledgeMasterSummary | null;
+  publication: AgentPublicationReadiness;
+};
 export type AgentWorkspace = {
   agents: AgentDraft[];
   pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;

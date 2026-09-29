@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import type { SessionPayload } from '@/lib/auth';
 import { FlipAiError, requireFlipAiAccess, type FlipAiDb } from './access';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace, type KnowledgeMasterSummary } from './policy';
+import { inspectAgentPublicationReadiness } from './publication';
 
 async function ensureSchema(db: FlipAiDb) {
   const rows = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -17,17 +18,17 @@ async function ensureSchema(db: FlipAiDb) {
   `);
   if (!rows[0]?.ready) throw new FlipAiError('FLIP_AI_SCHEMA_NOT_READY', 503, 'O Flip AI está em preparação. Tente novamente após a ativação.');
 }
-async function selectDrafts(db: FlipAiDb, tenantId: string, id?: string): Promise<AgentDraft[]> {
-  const rows = await db.$queryRaw<Array<Omit<AgentDraft, 'updatedAt'> & { updatedAt: Date }>>(Prisma.sql`
+type AgentRow = Omit<AgentDraft, 'updatedAt' | 'knowledge' | 'publication'> & { updatedAt: Date };
+async function selectAgents(db: FlipAiDb, tenantId: string, id?: string): Promise<AgentRow[]> {
+  return db.$queryRaw<AgentRow[]>(Prisma.sql`
     SELECT a.id, a.name, a.description, a.primary_color AS "primaryColor", a.style,
       a.pipeline_id AS "pipelineId", a.initial_stage_id AS "initialStageId", a.rotation_id AS "rotationId", e.slug,
       a.status, a.version, a.updated_at AS "updatedAt"
     FROM flip_ai_agents a JOIN flip_ai_endpoints e ON e.agent_id = a.id AND e.tenant_id = a.tenant_id
-    WHERE a.tenant_id = ${tenantId} AND a.status = 'draft'
+    WHERE a.tenant_id = ${tenantId} AND a.status IN ('draft', 'published')
       ${id ? Prisma.sql`AND a.id = ${id}` : Prisma.empty}
     ORDER BY a.created_at DESC, a.id DESC
   `);
-  return rows.map((row) => ({ ...row, updatedAt: row.updatedAt.toISOString(), knowledge: null }));
 }
 async function selectKnowledgeSummaries(db: FlipAiDb, tenantId: string): Promise<Map<string, KnowledgeMasterSummary>> {
   const ready = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -71,7 +72,7 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
     const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
     const [agents, pipelines, rotations, knowledge] = await Promise.all([
-      selectDrafts(db, tenantId),
+      selectAgents(db, tenantId),
       db.pipeline.findMany({ where: { tenantId, isArchived: false }, orderBy: { name: 'asc' }, select: {
         id: true, name: true, stages: { where: { isArchived: false }, orderBy: { orderIndex: 'asc' }, select: { id: true, name: true } },
       } }),
@@ -82,8 +83,11 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
       }),
       selectKnowledgeSummaries(db, tenantId),
     ]);
+    const publications = await Promise.all(agents.map((agent) =>
+      inspectAgentPublicationReadiness(db, tenantId, agent.id)));
     return {
-      agents: agents.map((agent) => ({ ...agent, knowledge: knowledge.get(agent.id) || null })),
+      agents: agents.map((agent, index) => ({ ...agent, updatedAt: agent.updatedAt.toISOString(),
+        knowledge: knowledge.get(agent.id) || null, publication: publications[index] })),
       pipelines,
       rotations: rotations.map((rotation) => ({
         id: rotation.id,
@@ -105,12 +109,14 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     await ensureSchema(db);
     await db.$queryRaw(Prisma.sql`SELECT id FROM tenants WHERE id = ${tenantId} FOR UPDATE`);
     const id = operation.kind === 'create' ? operation.requestId : operation.id;
-    const existing = (await selectDrafts(db, tenantId, id))[0];
+    const existing = (await selectAgents(db, tenantId, id))[0];
     if (operation.kind === 'create' && existing) {
-      const same = Object.entries(input).every(([key, value]) => existing[key as keyof AgentDraft] === value);
+      const same = (Object.keys(input) as Array<keyof AgentDraftInput>)
+        .every((key) => existing[key] === input[key]);
       if (!same) throw new FlipAiError('REQUEST_CONFLICT', 409, 'Esta solicitação já foi salva com outros dados. Atualize a lista.');
       const knowledge = await selectKnowledgeSummaries(db, tenantId);
-      return { ...existing, knowledge: knowledge.get(existing.id) || null };
+      return { ...existing, updatedAt: existing.updatedAt.toISOString(), knowledge: knowledge.get(existing.id) || null,
+        publication: await inspectAgentPublicationReadiness(db, tenantId, existing.id) };
     }
     if (operation.kind === 'update' && !existing) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
     await validateDestination(db, tenantId, input);
@@ -134,9 +140,10 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     }
     await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_agent', entityId: id,
       action: operation.kind === 'create' ? 'created' : 'updated', metadata: { status: 'draft' } } });
-    const saved = (await selectDrafts(db, tenantId, id))[0];
+    const saved = (await selectAgents(db, tenantId, id))[0];
     if (!saved) throw new FlipAiError('AGENT_NOT_FOUND', 500, 'Não foi possível confirmar o rascunho salvo.');
     const knowledge = await selectKnowledgeSummaries(db, tenantId);
-    return { ...saved, knowledge: knowledge.get(saved.id) || null };
+    return { ...saved, updatedAt: saved.updatedAt.toISOString(), knowledge: knowledge.get(saved.id) || null,
+      publication: await inspectAgentPublicationReadiness(db, tenantId, saved.id) };
   });
 }
