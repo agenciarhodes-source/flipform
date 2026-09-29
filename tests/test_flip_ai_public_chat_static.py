@@ -203,6 +203,15 @@ def test_entry_context_reuses_message_metadata_without_schema_or_tracking_change
     assert "Olá! Sou ${agent.name}, da ${agent.tenantName}. Como posso ajudar você hoje?" in shell
 
 
+def test_public_chat_balances_discovery_with_contact_capture():
+    chat = read("lib/flip-ai/public-chat.ts")
+    assert "normalmente use no máximo três frases curtas e cerca de 70 palavras" in chat
+    assert "nunca faça mais de três perguntas de diagnóstico" in chat
+    assert "CAPTURA PRIORITÁRIA" in chat
+    assert "peça agora o dado de contato que falta" in chat
+    assert "Depois de pedir contato, não acrescente outra pergunta de diagnóstico" in chat
+
+
 def test_lead_detail_reuses_existing_crm_surface_for_flip_ai():
     api = read("app/api/leads/[id]/route.ts")
     modal = read("components/lead-detail-modal.tsx")
