@@ -60,7 +60,11 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
 
   const leads = await prisma.lead.findMany({
     where,
-    include: { assignedUser: { select: { id: true, name: true } }, stage: true },
+    include: {
+      assignedUser: { select: { id: true, name: true } },
+      stage: true,
+      form: { select: { id: true, name: true } },
+    },
     orderBy: { createdAt: 'desc' },
   });
   return NextResponse.json({ leads });
