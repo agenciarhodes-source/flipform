@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, AudioLines, Bot, CircleDollarSign } from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { FlipAiError } from '@/lib/flip-ai/access';
+import { getFlipAiCreditWallet } from '@/lib/flip-ai/credits';
 import {
   FLIP_AI_USAGE_PERIODS,
   getFlipAiUsageDashboard,
@@ -26,6 +27,13 @@ const STATUS_LABELS: Record<string, string> = {
   definitive: 'Falhou',
 };
 
+const CREDIT_SOURCE_LABELS: Record<string, string> = {
+  top_up: 'Recarga',
+  usage: 'Consumo',
+  refund: 'Estorno',
+  manual_adjustment: 'Ajuste manual',
+};
+
 function statusClass(status: string) {
   if (status === 'confirmed') return 'bg-emerald-50 text-emerald-700';
   if (status === 'ambiguous') return 'bg-amber-50 text-amber-800';
@@ -43,7 +51,10 @@ export default async function FlipAiUsagePage({
   const periodDays = parseFlipAiUsagePeriod(searchParams?.days);
 
   try {
-    const usage = await getFlipAiUsageDashboard(session, periodDays);
+    const [usage, wallet] = await Promise.all([
+      getFlipAiUsageDashboard(session, periodDays),
+      getFlipAiCreditWallet(session),
+    ]);
     return <section className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header className="space-y-3">
         <Link href="/flip-ai" className="inline-flex items-center gap-2 text-sm text-brand-600 hover:underline">
@@ -56,7 +67,7 @@ export default async function FlipAiUsagePage({
             </div>
             <h1 className="text-2xl font-semibold">Consumo do Flip AI</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Operações técnicas confirmadas da sua empresa, sem misturar dados de outros tenants.
+              Saldo, histórico de créditos e operações técnicas da sua empresa.
             </p>
           </div>
           <nav className="flex rounded-lg border bg-card p-1" aria-label="Período do consumo">
@@ -71,10 +82,26 @@ export default async function FlipAiUsagePage({
         </div>
       </header>
 
+      {!wallet.available
+        ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          A carteira está em preparação. O consumo técnico continua disponível e nenhum débito automático será realizado.
+        </div>
+        : <div className="grid gap-4 sm:grid-cols-3">
+          {[
+            ['Saldo Flip AI', wallet.balanceCredits],
+            ['Créditos adicionados', wallet.creditedCredits],
+            ['Créditos consumidos', wallet.debitedCredits],
+          ].map(([label, value]) => <div key={String(label)} className="rounded-lg border bg-card p-5">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-2 text-2xl font-semibold">{number.format(Number(value))}</p>
+            <p className="mt-1 text-xs text-muted-foreground">créditos</p>
+          </div>)}
+        </div>}
+
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
         <div className="flex gap-3"><AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-          <div><p className="font-medium">Leitura operacional, ainda sem débito financeiro</p>
-            <p className="mt-1">Somente eventos confirmados entram nos totais. “Sessão de voz emitida” registra a credencial Realtime criada; ainda não representa os tokens finais de áudio. A carteira futura não utilizará esse número como cobrança.</p></div>
+          <div><p className="font-medium">Carteira separada da medição técnica</p>
+            <p className="mt-1">Este PR não converte eventos em cobrança. “Sessão de voz emitida” registra somente a credencial Realtime e nunca será debitada como se fosse consumo final de áudio.</p></div>
         </div>
       </div>
 
@@ -144,6 +171,34 @@ export default async function FlipAiUsagePage({
               <td className="whitespace-nowrap px-4 py-3">{number.format(event.inputTokens)} / {number.format(event.outputTokens)}</td>
             </tr>)}</tbody>
           </table></div>}
+      </section>
+
+      <section className="overflow-hidden rounded-lg border bg-card">
+        <div className="border-b p-4"><h2 className="font-semibold">Histórico de créditos</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Ledger rastreável e isolado por empresa. Chaves técnicas não são exibidas.</p></div>
+        {!wallet.available
+          ? <p className="p-5 text-sm text-muted-foreground">Histórico disponível após a liberação segura do schema.</p>
+          : !wallet.entries.length
+            ? <p className="p-5 text-sm text-muted-foreground">Nenhum lançamento de crédito.</p>
+            : <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+              <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>
+                <th className="px-4 py-3 font-medium">Data</th>
+                <th className="px-4 py-3 font-medium">Origem</th>
+                <th className="px-4 py-3 font-medium">Movimento</th>
+                <th className="px-4 py-3 font-medium">Saldo</th>
+              </tr></thead>
+              <tbody>{wallet.entries.map((entry) => {
+                const positive = entry.entryType !== 'debit';
+                return <tr key={entry.id} className="border-t">
+                  <td className="whitespace-nowrap px-4 py-3">{dateTime.format(new Date(entry.createdAt))}</td>
+                  <td className="px-4 py-3">{CREDIT_SOURCE_LABELS[entry.source] || 'Lançamento interno'}</td>
+                  <td className={`whitespace-nowrap px-4 py-3 font-medium ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
+                    {positive ? '+' : '-'}{number.format(entry.amountCredits)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">{number.format(entry.balanceAfterCredits)}</td>
+                </tr>;
+              })}</tbody>
+            </table></div>}
       </section>
     </section>;
   } catch (error) {

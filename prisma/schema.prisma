@@ -134,6 +134,8 @@ model Tenant {
   flipAiKnowledgeIndexBatches FlipAiKnowledgeIndexBatch[]
   flipAiKnowledgeChunks FlipAiKnowledgeChunk[]
   flipAiUsageEvents FlipAiUsageEvent[]
+  flipAiCreditAccount FlipAiCreditAccount?
+  flipAiCreditLedgerEntries FlipAiCreditLedgerEntry[]
   flipAiConversationStates FlipAiConversationState[]
   flipAiRateLimitBuckets FlipAiRateLimitBucket[]
   flipAiQualifications FlipAiQualification[]
@@ -1308,6 +1310,42 @@ model FlipAiUsageEvent {
   @@index([tenantId, conversationId, createdAt])
   @@index([tenantId, operation, status])
   @@map("flip_ai_usage_events")
+}
+
+model FlipAiCreditAccount {
+  id             String   @id @default(uuid())
+  tenantId       String   @unique @map("tenant_id")
+  balanceCredits Int      @default(0) @map("balance_credits")
+  version        Int      @default(1)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  ledgerEntries FlipAiCreditLedgerEntry[]
+
+  @@unique([tenantId, id])
+  @@map("flip_ai_credit_accounts")
+}
+
+model FlipAiCreditLedgerEntry {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  accountId           String   @map("account_id")
+  idempotencyKey      String   @map("idempotency_key")
+  entryType           String   @map("entry_type")
+  amountCredits       Int      @map("amount_credits")
+  balanceAfterCredits Int      @map("balance_after_credits")
+  source              String
+  referenceId         String?  @map("reference_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  account FlipAiCreditAccount @relation(fields: [tenantId, accountId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, accountId, createdAt])
+  @@map("flip_ai_credit_ledger")
 }
 
 

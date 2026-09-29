@@ -1,0 +1,279 @@
+import 'server-only';
+
+import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
+import type { SessionPayload } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { FlipAiError, requireFlipAiAccess } from './access';
+
+export const FLIP_AI_CREDIT_ENTRY_TYPES = ['credit', 'debit', 'refund'] as const;
+export type FlipAiCreditEntryType = (typeof FLIP_AI_CREDIT_ENTRY_TYPES)[number];
+
+const MAX_CREDIT_AMOUNT = 2_000_000_000;
+const MAX_KEY_LENGTH = 160;
+const MAX_SOURCE_LENGTH = 80;
+const MAX_REFERENCE_LENGTH = 190;
+
+type CreditAccountRow = {
+  id: string;
+  balanceCredits: number;
+  version: number;
+};
+
+type CreditLedgerRow = {
+  id: string;
+  idempotencyKey: string;
+  entryType: string;
+  amountCredits: number;
+  balanceAfterCredits: number;
+  source: string;
+  referenceId: string | null;
+  createdAt: Date;
+};
+
+export type FlipAiCreditWallet = {
+  available: boolean;
+  balanceCredits: number;
+  creditedCredits: number;
+  debitedCredits: number;
+  entries: Array<{
+    id: string;
+    entryType: FlipAiCreditEntryType;
+    amountCredits: number;
+    balanceAfterCredits: number;
+    source: string;
+    referenceId: string | null;
+    createdAt: string;
+  }>;
+};
+
+export type FlipAiCreditMutation = {
+  tenantId: string;
+  idempotencyKey: string;
+  entryType: FlipAiCreditEntryType;
+  amountCredits: number;
+  source: string;
+  referenceId?: string | null;
+};
+
+export type FlipAiCreditMutationResult = {
+  entryId: string;
+  balanceCredits: number;
+  reused: boolean;
+};
+
+function boundedText(value: string, field: string, maxLength: number) {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) {
+    throw new FlipAiError('FLIP_AI_CREDIT_INVALID_INPUT', 400,
+      `${field} deve ter entre 1 e ${maxLength} caracteres.`);
+  }
+  return normalized;
+}
+
+export function validateFlipAiCreditMutation(input: FlipAiCreditMutation) {
+  const tenantId = boundedText(input.tenantId, 'tenantId', MAX_REFERENCE_LENGTH);
+  const idempotencyKey = boundedText(input.idempotencyKey, 'idempotencyKey', MAX_KEY_LENGTH);
+  const source = boundedText(input.source, 'source', MAX_SOURCE_LENGTH);
+  const referenceId = input.referenceId == null || input.referenceId.trim() === ''
+    ? null
+    : boundedText(input.referenceId, 'referenceId', MAX_REFERENCE_LENGTH);
+  if (!FLIP_AI_CREDIT_ENTRY_TYPES.includes(input.entryType)) {
+    throw new FlipAiError('FLIP_AI_CREDIT_INVALID_INPUT', 400, 'Tipo de lançamento inválido.');
+  }
+  if (!Number.isSafeInteger(input.amountCredits)
+    || input.amountCredits <= 0
+    || input.amountCredits > MAX_CREDIT_AMOUNT) {
+    throw new FlipAiError('FLIP_AI_CREDIT_INVALID_INPUT', 400,
+      'A quantidade de créditos deve ser um inteiro positivo dentro do limite permitido.');
+  }
+  return {
+    tenantId,
+    idempotencyKey,
+    entryType: input.entryType,
+    amountCredits: input.amountCredits,
+    source,
+    referenceId,
+  };
+}
+
+async function creditSchemaReady(db: Prisma.TransactionClient) {
+  const rows = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
+    SELECT to_regclass('public.flip_ai_credit_accounts') IS NOT NULL
+      AND to_regclass('public.flip_ai_credit_ledger') IS NOT NULL AS ready
+  `);
+  return Boolean(rows[0]?.ready);
+}
+
+function toWalletEntry(row: CreditLedgerRow) {
+  return {
+    id: row.id,
+    entryType: row.entryType as FlipAiCreditEntryType,
+    amountCredits: row.amountCredits,
+    balanceAfterCredits: row.balanceAfterCredits,
+    source: row.source,
+    referenceId: row.referenceId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function getFlipAiCreditWallet(
+  session: SessionPayload,
+  limit = 50,
+): Promise<FlipAiCreditWallet> {
+  const safeLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 50;
+  return prisma.$transaction(async (db) => {
+    const { tenantId } = await requireFlipAiAccess(db, session);
+    if (!await creditSchemaReady(db)) {
+      return {
+        available: false,
+        balanceCredits: 0,
+        creditedCredits: 0,
+        debitedCredits: 0,
+        entries: [],
+      };
+    }
+
+    const accounts = await db.$queryRaw<CreditAccountRow[]>(Prisma.sql`
+      SELECT id, balance_credits AS "balanceCredits", version
+      FROM flip_ai_credit_accounts
+      WHERE tenant_id = ${tenantId}
+      LIMIT 1
+    `);
+    const account = accounts[0];
+    if (!account) {
+      return {
+        available: true,
+        balanceCredits: 0,
+        creditedCredits: 0,
+        debitedCredits: 0,
+        entries: [],
+      };
+    }
+
+    const totals = await db.$queryRaw<Array<{
+      creditedCredits: number | bigint | string;
+      debitedCredits: number | bigint | string;
+    }>>(Prisma.sql`
+      SELECT
+        COALESCE(SUM(amount_credits) FILTER (WHERE entry_type IN ('credit', 'refund')), 0)
+          AS "creditedCredits",
+        COALESCE(SUM(amount_credits) FILTER (WHERE entry_type = 'debit'), 0)
+          AS "debitedCredits"
+      FROM flip_ai_credit_ledger
+      WHERE tenant_id = ${tenantId} AND account_id = ${account.id}
+    `);
+    const entries = await db.$queryRaw<CreditLedgerRow[]>(Prisma.sql`
+      SELECT id, idempotency_key AS "idempotencyKey", entry_type AS "entryType",
+        amount_credits AS "amountCredits", balance_after_credits AS "balanceAfterCredits",
+        source, reference_id AS "referenceId", created_at AS "createdAt"
+      FROM flip_ai_credit_ledger
+      WHERE tenant_id = ${tenantId} AND account_id = ${account.id}
+      ORDER BY created_at DESC, id DESC
+      LIMIT ${safeLimit}
+    `);
+    const total = totals[0];
+    return {
+      available: true,
+      balanceCredits: account.balanceCredits,
+      creditedCredits: Number(total?.creditedCredits || 0),
+      debitedCredits: Number(total?.debitedCredits || 0),
+      entries: entries.map(toWalletEntry),
+    };
+  });
+}
+
+export async function recordFlipAiCreditEntry(
+  input: FlipAiCreditMutation,
+): Promise<FlipAiCreditMutationResult> {
+  const mutation = validateFlipAiCreditMutation(input);
+  return prisma.$transaction(async (db) => {
+    if (!await creditSchemaReady(db)) {
+      throw new FlipAiError('FLIP_AI_CREDIT_SCHEMA_NOT_READY', 503,
+        'A carteira de créditos ainda está em preparação.');
+    }
+
+    const accountId = randomUUID();
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO flip_ai_credit_accounts
+        (id, tenant_id, balance_credits, version, created_at, updated_at)
+      VALUES (${accountId}, ${mutation.tenantId}, 0, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT (tenant_id) DO NOTHING
+    `);
+    const accounts = await db.$queryRaw<CreditAccountRow[]>(Prisma.sql`
+      SELECT id, balance_credits AS "balanceCredits", version
+      FROM flip_ai_credit_accounts
+      WHERE tenant_id = ${mutation.tenantId}
+      FOR UPDATE
+    `);
+    const account = accounts[0];
+    if (!account) {
+      throw new FlipAiError('FLIP_AI_CREDIT_ACCOUNT_UNAVAILABLE', 503,
+        'Não foi possível preparar a carteira de créditos.');
+    }
+
+    const existingRows = await db.$queryRaw<CreditLedgerRow[]>(Prisma.sql`
+      SELECT id, idempotency_key AS "idempotencyKey", entry_type AS "entryType",
+        amount_credits AS "amountCredits", balance_after_credits AS "balanceAfterCredits",
+        source, reference_id AS "referenceId", created_at AS "createdAt"
+      FROM flip_ai_credit_ledger
+      WHERE tenant_id = ${mutation.tenantId}
+        AND idempotency_key = ${mutation.idempotencyKey}
+      LIMIT 1
+    `);
+    const existing = existingRows[0];
+    if (existing) {
+      const sameMutation = existing.entryType === mutation.entryType
+        && existing.amountCredits === mutation.amountCredits
+        && existing.source === mutation.source
+        && existing.referenceId === mutation.referenceId;
+      if (!sameMutation) {
+        throw new FlipAiError('FLIP_AI_CREDIT_IDEMPOTENCY_CONFLICT', 409,
+          'A chave idempotente já foi usada por outro lançamento.');
+      }
+      return {
+        entryId: existing.id,
+        balanceCredits: existing.balanceAfterCredits,
+        reused: true,
+      };
+    }
+
+    const signedAmount = mutation.entryType === 'debit'
+      ? -mutation.amountCredits
+      : mutation.amountCredits;
+    const nextBalance = account.balanceCredits + signedAmount;
+    if (!Number.isSafeInteger(nextBalance)
+      || nextBalance < 0
+      || nextBalance > MAX_CREDIT_AMOUNT) {
+      throw new FlipAiError(
+        nextBalance < 0
+          ? 'FLIP_AI_CREDIT_BALANCE_INSUFFICIENT'
+          : 'FLIP_AI_CREDIT_BALANCE_LIMIT',
+        409,
+        nextBalance < 0
+          ? 'Saldo de créditos insuficiente.'
+          : 'O saldo ultrapassaria o limite permitido.',
+      );
+    }
+
+    await db.$executeRaw(Prisma.sql`
+      UPDATE flip_ai_credit_accounts
+      SET balance_credits = ${nextBalance},
+        version = version + 1,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = ${mutation.tenantId} AND id = ${account.id}
+    `);
+    const entryId = randomUUID();
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO flip_ai_credit_ledger
+        (id, tenant_id, account_id, idempotency_key, entry_type,
+          amount_credits, balance_after_credits, source, reference_id, created_at)
+      VALUES
+        (${entryId}, ${mutation.tenantId}, ${account.id}, ${mutation.idempotencyKey},
+          ${mutation.entryType}, ${mutation.amountCredits}, ${nextBalance},
+          ${mutation.source}, ${mutation.referenceId}, CURRENT_TIMESTAMP)
+    `);
+    return { entryId, balanceCredits: nextBalance, reused: false };
+  });
+}
+

@@ -8,6 +8,8 @@ export const FLIP_AI_REQUIRED_TABLES = [
   'flip_ai_knowledge_index_batches',
   'flip_ai_knowledge_chunks',
   'flip_ai_usage_events',
+  'flip_ai_credit_accounts',
+  'flip_ai_credit_ledger',
   'flip_ai_conversation_states',
   'flip_ai_rate_limit_buckets',
   'flip_ai_qualifications',
@@ -42,6 +44,8 @@ const COLUMN_SPECS_BY_TABLE = {
   flip_ai_knowledge_index_batches: "id:text tenant_id:text index_id:text ordinal:int4 status:text='pending' byte_size:int4 input_tokens:int4? attempt_count:int4=0 last_error_code:text? started_at:timestamp? completed_at:timestamp? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
   flip_ai_knowledge_chunks: 'id:text tenant_id:text index_id:text batch_id:text ordinal:int4 heading:text? content:text content_hash:text byte_size:int4 token_estimate:int4 embedding:vector? created_at:timestamp=CURRENT_TIMESTAMP',
   flip_ai_usage_events: 'id:text tenant_id:text agent_id:text? request_key:text operation:text provider:text model:text status:text input_tokens:int4? output_tokens:int4? units:int4=1 metadata:jsonb? created_at:timestamp=CURRENT_TIMESTAMP conversation_id:text?',
+  flip_ai_credit_accounts: 'id:text tenant_id:text balance_credits:int4=0 version:int4=1 created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
+  flip_ai_credit_ledger: 'id:text tenant_id:text account_id:text idempotency_key:text entry_type:text amount_credits:int4 balance_after_credits:int4 source:text reference_id:text? created_at:timestamp=CURRENT_TIMESTAMP',
   flip_ai_conversation_states: "id:text tenant_id:text agent_id:text conversation_id:text status:text='active' turn_count:int4=0 summary:text? summary_updated_at:timestamp? last_response_id:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
   flip_ai_rate_limit_buckets: 'id:text tenant_id:text scope:text scope_key:text window_start:timestamp request_count:int4=0 rejected_count:int4=0 last_request_at:timestamp=CURRENT_TIMESTAMP created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
   flip_ai_qualifications: "id:text tenant_id:text agent_id:text conversation_id:text lead_id:text? knowledge_index_id:text classification:text fit_score:int4 intent_score:int4 awareness_level:int4 journey_stage:text confidence:float8 summary:text reasons:_text next_action:text evidence_message_ids:_text=ARRAY[]::TEXT[] model:text qualified_lead_event_id:text? qualified_lead_tracking_status:text='not_applicable' qualified_lead_dispatched_at:timestamp? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
@@ -163,6 +167,11 @@ export const FLIP_AI_REQUIRED_INDEX_SPECS: readonly FlipAiRequiredIndexSpec[] = 
   index('flip_ai_usage_events', 'flip_ai_usage_events_request_key_key', true, 'request_key', T),
   index('flip_ai_usage_events', 'flip_ai_usage_events_tenant_id_created_at_idx', false, 'tenant_id,created_at', `${T},${TS}`),
   index('flip_ai_usage_events', 'flip_ai_usage_events_tenant_id_operation_status_idx', false, 'tenant_id,operation,status', `${T},${T},${T}`),
+  index('flip_ai_credit_accounts', 'flip_ai_credit_accounts_tenant_id_key', true, 'tenant_id', T),
+  index('flip_ai_credit_accounts', 'flip_ai_credit_accounts_tenant_id_id_key', true, 'tenant_id,id', `${T},${T}`),
+  index('flip_ai_credit_ledger', 'flip_ai_credit_ledger_tenant_id_idempotency_key_key', true, 'tenant_id,idempotency_key', `${T},${T}`),
+  index('flip_ai_credit_ledger', 'flip_ai_credit_ledger_tenant_id_created_at_idx', false, 'tenant_id,created_at', `${T},${TS}`),
+  index('flip_ai_credit_ledger', 'flip_ai_credit_ledger_tenant_id_account_id_created_at_idx', false, 'tenant_id,account_id,created_at', `${T},${T},${TS}`),
   index('conversations', 'conversations_tenant_id_id_key', true, 'tenant_id,id', `${T},${T}`),
   index('flip_ai_conversation_states', 'flip_ai_conversation_states_conversation_id_key', true, 'conversation_id', T),
   index('flip_ai_conversation_states', 'flip_ai_conversation_states_tenant_id_id_key', true, 'tenant_id,id', `${T},${T}`),
@@ -372,6 +381,13 @@ const MERIT_EXECUTION_CHECK = `CHECK (
     AND qualified_lead_tracking_status = 'not_applicable'
   )
 )`;
+const CREDIT_ACCOUNT_BALANCE_CHECK = 'CHECK (balance_credits >= 0)';
+const CREDIT_ACCOUNT_VERSION_CHECK = 'CHECK (version >= 1)';
+const CREDIT_LEDGER_ENTRY_TYPE_CHECK = `CHECK (
+  entry_type IN ('credit', 'debit', 'refund')
+)`;
+const CREDIT_LEDGER_AMOUNT_CHECK = 'CHECK (amount_credits > 0)';
+const CREDIT_LEDGER_BALANCE_AFTER_CHECK = 'CHECK (balance_after_credits >= 0)';
 
 export const FLIP_AI_REQUIRED_CONSTRAINT_SPECS: readonly FlipAiRequiredConstraintSpec[] = [
   primary('flip_ai_agents', 'flip_ai_agents_pkey'),
@@ -408,6 +424,16 @@ export const FLIP_AI_REQUIRED_CONSTRAINT_SPECS: readonly FlipAiRequiredConstrain
   foreign('flip_ai_usage_events', 'flip_ai_usage_events_tenant_id_fkey', 'tenant_id', 'tenants', 'id', 'r'),
   foreign('flip_ai_usage_events', 'flip_ai_usage_events_tenant_id_agent_id_fkey', 'tenant_id,agent_id', 'flip_ai_agents', 'tenant_id,id', 'r'),
   foreign('flip_ai_usage_events', 'flip_ai_usage_events_tenant_id_conversation_id_fkey', 'tenant_id,conversation_id', 'conversations', 'tenant_id,id', 'r'),
+  primary('flip_ai_credit_accounts', 'flip_ai_credit_accounts_pkey'),
+  check('flip_ai_credit_accounts', 'flip_ai_credit_accounts_balance_check', 'balance_credits', CREDIT_ACCOUNT_BALANCE_CHECK),
+  check('flip_ai_credit_accounts', 'flip_ai_credit_accounts_version_check', 'version', CREDIT_ACCOUNT_VERSION_CHECK),
+  foreign('flip_ai_credit_accounts', 'flip_ai_credit_accounts_tenant_id_fkey', 'tenant_id', 'tenants', 'id', 'r'),
+  primary('flip_ai_credit_ledger', 'flip_ai_credit_ledger_pkey'),
+  check('flip_ai_credit_ledger', 'flip_ai_credit_ledger_entry_type_check', 'entry_type', CREDIT_LEDGER_ENTRY_TYPE_CHECK),
+  check('flip_ai_credit_ledger', 'flip_ai_credit_ledger_amount_check', 'amount_credits', CREDIT_LEDGER_AMOUNT_CHECK),
+  check('flip_ai_credit_ledger', 'flip_ai_credit_ledger_balance_after_check', 'balance_after_credits', CREDIT_LEDGER_BALANCE_AFTER_CHECK),
+  foreign('flip_ai_credit_ledger', 'flip_ai_credit_ledger_tenant_id_fkey', 'tenant_id', 'tenants', 'id', 'r'),
+  foreign('flip_ai_credit_ledger', 'flip_ai_credit_ledger_tenant_id_account_id_fkey', 'tenant_id,account_id', 'flip_ai_credit_accounts', 'tenant_id,id', 'r'),
   primary('flip_ai_conversation_states', 'flip_ai_conversation_states_pkey'),
   foreign('flip_ai_conversation_states', 'flip_ai_conversation_states_tenant_id_fkey', 'tenant_id', 'tenants', 'id', 'r'),
   foreign('flip_ai_conversation_states', 'flip_ai_conversation_states_tenant_id_agent_id_fkey', 'tenant_id,agent_id', 'flip_ai_agents', 'tenant_id,id', 'r'),
