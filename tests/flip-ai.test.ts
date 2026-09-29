@@ -314,6 +314,29 @@ test('public chat uses bounded campaign fields only as untrusted entry context',
   assert.match(prompt, /priorize sempre o que a pessoa disser/);
 });
 
+test('public instructions balance concise discovery with timely contact capture', () => {
+  const runtime = { id: 'agent', tenantId: 'tenant', slug: 'helena', name: 'Helena', description: '',
+    primaryColor: '#2563EB', style: 'welcoming', tenantName: 'Empresa CI', tenantLogoUrl: null,
+    knowledgeRevision: 1, knowledgeIndexId: 'index', pipelineId: 'pipeline', initialStageId: 'stage', rotationId: null };
+  const early = buildPublicChatInstructions(runtime, [], null, false, null, null,
+    { completedTurns: 1, inboundMessages: 2 });
+  assert.match(early, /normalmente use no máximo três frases curtas e cerca de 70 palavras/);
+  assert.match(early, /nunca faça mais de três perguntas de diagnóstico/);
+  assert.match(early, /Faça descoberta mínima/);
+
+  const capture = buildPublicChatInstructions(runtime, [], null, false, null, null,
+    { completedTurns: 2, inboundMessages: 3 });
+  assert.match(capture, /CAPTURA PRIORITÁRIA/);
+  assert.match(capture, /peça agora o dado de contato que falta/);
+  assert.match(capture, /sem abrir outra sequência de diagnóstico/);
+  assert.match(capture, /Depois de pedir contato, não acrescente outra pergunta de diagnóstico/);
+
+  const identified = buildPublicChatInstructions(runtime, [], null, true, null, null,
+    { completedTurns: 3, inboundMessages: 4 });
+  assert.match(identified, /Nome e telefone já estão confirmados/);
+  assert.doesNotMatch(identified, /CAPTURA PRIORITÁRIA/);
+});
+
 test('structured public turn validates reply and identity without extra fields', () => {
   assert.equal(PUBLIC_CHAT_DECISION_FORMAT.strict, true);
   assert.deepEqual(parsePublicChatDecision(JSON.stringify({
