@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { normalizeHostname } from '@/lib/host-routing';
 import { FLIP_AI_EMBEDDING_MODEL } from './openai-embeddings';
-import { canServeFlipAiPublic } from './policy';
+import { isFlipAiPilotTenant } from './pilot-access';
+import { canServeFlipAiPilot, canServeFlipAiPublic } from './policy';
 
 const PUBLIC_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -121,11 +122,15 @@ export async function resolvePublicFlipAiRuntime(input: {
       plan: { select: { slug: true, isActive: true } },
     },
   });
-  if (!canServeFlipAiPublic({
+  const billingInput = {
     tenantStatus: endpoint.agent.tenant.status,
     plan: endpoint.agent.tenant.plan,
     subscription,
-  })) return null;
+  };
+  const planAccess = canServeFlipAiPublic(billingInput);
+  const pilotAccess = isFlipAiPilotTenant(endpoint.agent.tenantId)
+    && canServeFlipAiPilot(billingInput);
+  if (!planAccess && !pilotAccess) return null;
   if (
     endpoint.agent.pipeline.tenantId !== endpoint.agent.tenantId
     || endpoint.agent.pipeline.isArchived

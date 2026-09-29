@@ -102,6 +102,10 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <Button onClick={createDraft} disabled={busy || !!editor}><Plus className="mr-2 h-4 w-4" aria-hidden="true" />Novo atendente</Button>
       </div>
     </header>
+    {workspace.accessMode === 'pilot' ? <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+      <p className="font-medium">Modo piloto controlado</p>
+      <p className="mt-1">Esta empresa foi autorizada no servidor para testar o Flip AI. Isso não altera o plano contratado nem libera o recurso para outros clientes.</p>
+    </div> : null}
     <div className="rounded-lg border bg-muted/40 p-4 text-sm">A publicação só é liberada quando destino, conhecimento, OpenAI e carteira estiverem prontos. Retirar do ar é imediato e não apaga conversas ou Leads.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
       <Button variant="outline" disabled={busy} onClick={() => reload()}>Atualizar lista</Button></div>

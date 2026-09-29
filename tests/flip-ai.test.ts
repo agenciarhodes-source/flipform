@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { agentPublicationSchema, canAccessFlipAi, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
+import { agentPublicationSchema, canAccessFlipAi, canServeFlipAiPilot, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
+import { isFlipAiPilotTenant, parseFlipAiPilotTenantIds } from '../lib/flip-ai/pilot-access';
 import type { SessionPayload } from '../lib/auth';
 import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
@@ -51,6 +52,22 @@ test('billing is fail-closed, including grace deadlines', () => {
   const now = new Date('2026-09-09T12:00:00Z');
   assert.equal(canAccessFlipAi({ ...allowed, tenantStatus: 'past_due', now }), false);
   for (const ms of [-1, 0, 1]) assert.equal(canAccessFlipAi({ ...allowed, now, subscription: { status: 'past_due', plan, gracePeriodEndsAt: new Date(now.getTime() + ms) } }), ms > 0);
+});
+test('pilot allowlist is exact, bounded and fail-closed', () => {
+  const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
+  assert.equal(parseFlipAiPilotTenantIds(undefined).configured, false);
+  assert.equal(isFlipAiPilotTenant(tenantId, tenantId.toUpperCase()), true);
+  assert.equal(isFlipAiPilotTenant(tenantId, `${tenantId}-suffix`), false);
+  assert.equal(isFlipAiPilotTenant(tenantId, '*'), false);
+  assert.equal(isFlipAiPilotTenant(tenantId, `${tenantId},invalid`), false);
+  assert.equal(isFlipAiPilotTenant(tenantId, `${tenantId},${tenantId}`), false);
+  assert.equal(parseFlipAiPilotTenantIds(Array.from({ length: 11 }, (_, index) =>
+    `a166c90d-c862-4e04-9e8b-${String(index).padStart(12, '0')}`).join(',')).valid, false);
+  assert.equal(canServeFlipAiPilot({ tenantStatus: 'active' }), true);
+  assert.equal(canServeFlipAiPilot({ tenantStatus: 'blocked' }), false);
+  assert.equal(canServeFlipAiPilot({ tenantStatus: 'active', subscription: {
+    status: 'canceled', gracePeriodEndsAt: null, plan,
+  } }), false);
 });
 test('strict payload rejects tenant and integration overrides', () => {
   const draft = { name: 'Helena', description: '', primaryColor: '#2563EB', style: 'welcoming', slug: 'helena-empresa',
@@ -127,7 +144,26 @@ test('fresh membership overrides JWT role', async () => {
   const session = { userId: 'u', tenantId: 't', role: 'owner', globalRole: 'platform_admin' } as SessionPayload;
   await assert.rejects(requireFlipAiAccess(db, session), (e: unknown) => e instanceof FlipAiError && e.status === 403);
   membership = { role: 'admin', status: 'active' };
-  assert.deepEqual(await requireFlipAiAccess(db, session), { tenantId: 't', userId: 'u' });
+  assert.deepEqual(await requireFlipAiAccess(db, session), { tenantId: 't', userId: 'u', accessMode: 'plan' });
+});
+
+test('explicit pilot tenant can access without activating Premium globally', async () => {
+  const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
+  const session = { tenantId, userId: 'u', role: 'owner' } as SessionPayload;
+  let membership = { role: 'owner', status: 'active' };
+  const db = {
+    tenantUser: { findUnique: async () => membership },
+    tenant: { findUnique: async () => ({ status: 'active', plan: { slug: 'starter', isActive: true } }) },
+    subscription: { findFirst: async () => ({
+      status: 'active', gracePeriodEndsAt: null, plan: { slug: 'starter', isActive: true },
+    }) },
+  } as unknown as FlipAiDb;
+  assert.deepEqual(await requireFlipAiAccess(db, session, { pilotTenantIds: tenantId }), {
+    tenantId, userId: 'u', accessMode: 'pilot',
+  });
+  membership = { role: 'manager', status: 'active' };
+  await assert.rejects(requireFlipAiAccess(db, session, { pilotTenantIds: tenantId }),
+    (error: unknown) => error instanceof FlipAiError && error.status === 403);
 });
 
 test('Markdown Mestre payload is strict and bounded', () => {
