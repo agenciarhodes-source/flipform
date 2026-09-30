@@ -32,7 +32,7 @@ def test_pr332_checkout_is_admin_only_test_only_and_server_authoritative():
     assert "import 'server-only'" in checkout
     assert "getStripeTestClient()" in checkout
     assert "mode: 'payment'" in checkout
-    assert "ui_mode: 'hosted'" in checkout
+    assert "ui_mode: 'hosted_page'" in checkout
     assert "payment_method_types: ['card']" in checkout
     assert "unit_amount: reserved.amountCents" in checkout
     assert "client_reference_id: orderId" in checkout
