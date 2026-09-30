@@ -12,6 +12,7 @@ import {
   Users,
   Plug,
   Network,
+  BrainCircuit,
 } from "lucide-react";
 
 export default async function AdminLayout({
@@ -51,6 +52,7 @@ export default async function AdminLayout({
             label="Billing & Planos"
           />
           <AdminLink href="/admin/access" icon={Users} label="Acessos" />
+          <AdminLink href="/admin/openai" icon={BrainCircuit} label="OpenAI" />
           <AdminLink href="/admin/integrations" icon={Plug} label="Integrações" />
           <AdminLink href="/admin/lgpd" icon={ScrollText} label="LGPD" />
           <AdminLink href="/admin/audit" icon={ScrollText} label="Audit logs" />
