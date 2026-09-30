@@ -237,7 +237,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
             </div>}
           <div className="min-w-0">
             <h1 className="truncate font-semibold text-slate-950">{agent.name}</h1>
-            <p className="text-xs text-slate-600">Assistente de {agent.tenantName}</p>
+            <p className="text-xs text-slate-600">Assistente da {agent.tenantName}</p>
             <p className="mt-0.5 flex items-center gap-1 text-xs text-emerald-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
               Online
@@ -305,7 +305,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
             {VOICE_LABEL[voiceState]}
           </p>}
           <p className="mt-2 text-center text-[11px] text-slate-500">
-            Ao continuar, você conversa com um assistente virtual. Não envie senhas ou dados bancários.
+            Você está em ambiente virtual. Não envie senhas ou dados bancários.
           </p>
         </form>
       </section>
