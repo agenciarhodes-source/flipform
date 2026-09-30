@@ -18,6 +18,13 @@ import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 import { getFlipAiCreditWallet, getFlipAiCreditWalletForTenant, grantFlipAiCreditsByPlatformAdmin, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
 import { refundFlipAiUsageCharge, settleFlipAiUsageCharge } from '../lib/flip-ai/usage-billing';
 import { changeAgentPublication } from '../lib/flip-ai/publication';
+import {
+  cancelFlipAiTopUpOrder,
+  createFlipAiTopUpOrder,
+  creditFlipAiTopUpOrder,
+  listFlipAiTopUpOrdersForTenant,
+  markFlipAiTopUpPaid,
+} from '../lib/flip-ai/top-ups';
 
 function assertDisposableDatabase() {
   const url = new URL(process.env.DATABASE_URL || 'https://invalid');
@@ -87,6 +94,7 @@ async function fixture() {
 }
 async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.flipAiExternalSource.deleteMany({ where: { tenantId: x.tenant.id } });
+  await prisma.flipAiTopUpOrder.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiCreditLedgerEntry.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiCreditAccount.deleteMany({ where: { tenantId: x.tenant.id } });
   await prisma.flipAiUsageEvent.deleteMany({ where: { tenantId: x.tenant.id } });
@@ -109,6 +117,137 @@ async function cleanup(x: Awaited<ReturnType<typeof fixture>>) {
   await prisma.tenant.delete({ where: { id: x.tenant.id } });
   await prisma.user.delete({ where: { id: x.user.id } });
 }
+test('commercial top-ups are tenant-isolated, payment-gated and idempotent', async () => {
+  assertDisposableDatabase();
+  const a = await fixture();
+  const b = await fixture();
+  try {
+    const requestKey = `top-up-ci:${randomUUID()}`;
+    const created = await createFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      requestKey,
+      amountCents: 19990,
+      credits: 100_000,
+      estimatedOpenAiCostCents: 890,
+      actorUserId: a.user.id,
+    });
+    assert.equal(created.reused, false);
+    assert.equal(created.order.status, 'pending');
+
+    const replay = await createFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      requestKey,
+      amountCents: 19990,
+      credits: 100_000,
+      estimatedOpenAiCostCents: 890,
+      actorUserId: a.user.id,
+    });
+    assert.equal(replay.reused, true);
+    assert.equal(replay.order.id, created.order.id);
+    assert.equal(await prisma.flipAiTopUpOrder.count({
+      where: { tenantId: a.tenant.id, requestKey },
+    }), 1);
+
+    await assert.rejects(createFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      requestKey,
+      amountCents: 29990,
+      credits: 100_000,
+      estimatedOpenAiCostCents: 890,
+      actorUserId: a.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_IDEMPOTENCY_CONFLICT');
+
+    assert.equal((await listFlipAiTopUpOrdersForTenant(a.tenant.id)).orders.length, 1);
+    assert.equal((await listFlipAiTopUpOrdersForTenant(b.tenant.id)).orders.length, 0);
+    assert.equal((await getFlipAiCreditWalletForTenant(a.tenant.id)).balanceCredits, 0,
+      'a pending commercial order must never pre-credit the wallet');
+
+    await assert.rejects(creditFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      orderId: created.order.id,
+      actorUserId: a.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_NOT_PAID');
+
+    await assert.rejects(markFlipAiTopUpPaid({
+      tenantId: b.tenant.id,
+      orderId: created.order.id,
+      paymentProvider: 'manual',
+      providerPaymentId: `receipt:${randomUUID()}`,
+      paymentMethod: 'pix',
+      actorUserId: b.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_NOT_FOUND');
+
+    const providerPaymentId = `receipt:${randomUUID()}`;
+    const paid = await markFlipAiTopUpPaid({
+      tenantId: a.tenant.id,
+      orderId: created.order.id,
+      paymentProvider: 'manual',
+      providerPaymentId,
+      paymentMethod: 'pix',
+      actorUserId: a.user.id,
+    });
+    assert.equal(paid.order.status, 'paid');
+    assert.equal((await getFlipAiCreditWalletForTenant(a.tenant.id)).balanceCredits, 0,
+      'payment confirmation alone must not mutate the wallet');
+
+    const credited = await creditFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      orderId: created.order.id,
+      actorUserId: a.user.id,
+    });
+    assert.equal(credited.order.status, 'credited');
+    assert.equal(credited.balanceCredits, 100_000);
+    assert.ok(credited.order.creditLedgerEntryId);
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: {
+        tenantId: a.tenant.id,
+        idempotencyKey: `top-up:${created.order.id}`,
+        source: 'top_up',
+      },
+    }), 1);
+
+    const creditReplay = await creditFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      orderId: created.order.id,
+      actorUserId: a.user.id,
+    });
+    assert.equal(creditReplay.reused, true);
+    assert.equal((await getFlipAiCreditWalletForTenant(a.tenant.id)).balanceCredits, 100_000,
+      'credit replay must not duplicate tenant balance');
+
+    const pendingToCancel = await createFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      requestKey: `cancel-ci:${randomUUID()}`,
+      amountCents: 9900,
+      credits: 40_000,
+      estimatedOpenAiCostCents: 300,
+      actorUserId: a.user.id,
+    });
+    const canceled = await cancelFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      orderId: pendingToCancel.order.id,
+      actorUserId: a.user.id,
+    });
+    assert.equal(canceled.order.status, 'canceled');
+    await assert.rejects(creditFlipAiTopUpOrder({
+      tenantId: a.tenant.id,
+      orderId: pendingToCancel.order.id,
+      actorUserId: a.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_NOT_PAID');
+
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: b.tenant.id },
+    }), 0, 'one tenant top-up must never create ledger entries for another tenant');
+  } finally {
+    await cleanup(a);
+    await cleanup(b);
+  }
+});
+
 test('drafts are tenant-isolated, idempotent and transactional', async () => {
   assertDisposableDatabase();
   const a = await fixture(); const b = await fixture(); const leads = await prisma.lead.count();

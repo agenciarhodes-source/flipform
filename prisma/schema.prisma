@@ -136,6 +136,7 @@ model Tenant {
   flipAiUsageEvents FlipAiUsageEvent[]
   flipAiCreditAccount FlipAiCreditAccount?
   flipAiCreditLedgerEntries FlipAiCreditLedgerEntry[]
+  flipAiTopUpOrders FlipAiTopUpOrder[]
   flipAiConversationStates FlipAiConversationState[]
   flipAiRateLimitBuckets FlipAiRateLimitBucket[]
   flipAiQualifications FlipAiQualification[]
@@ -203,6 +204,7 @@ model User {
   sentConversationMessages Message[] @relation("ConversationMessageSender")
   flipAiAgentsCreated FlipAiAgent[]
   flipAiKnowledgeRevisionsCreated FlipAiKnowledgeRevision[]
+  flipAiTopUpOrdersCreated FlipAiTopUpOrder[] @relation("FlipAiTopUpOrderCreator")
 
   @@map("users")
 }
@@ -1350,6 +1352,38 @@ model FlipAiCreditLedgerEntry {
   @@index([tenantId, createdAt])
   @@index([tenantId, accountId, createdAt])
   @@map("flip_ai_credit_ledger")
+}
+
+
+model FlipAiTopUpOrder {
+  id                          String   @id @default(uuid())
+  tenantId                    String   @map("tenant_id")
+  requestKey                  String   @map("request_key")
+  status                      String   @default("pending")
+  amountCents                 Int      @map("amount_cents")
+  currency                    String   @default("BRL")
+  credits                     Int
+  estimatedOpenAiCostCents    Int      @default(0) @map("estimated_openai_cost_cents")
+  estimatedOpenAiCostCurrency String   @default("USD") @map("estimated_openai_cost_currency")
+  paymentProvider             String?  @map("payment_provider")
+  providerPaymentId           String?  @map("provider_payment_id")
+  paymentMethod               String?  @map("payment_method")
+  paidAt                      DateTime? @map("paid_at")
+  creditedAt                  DateTime? @map("credited_at")
+  canceledAt                  DateTime? @map("canceled_at")
+  creditLedgerEntryId         String?  @map("credit_ledger_entry_id")
+  createdBy                   String?  @map("created_by")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  creator User?  @relation("FlipAiTopUpOrderCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, requestKey])
+  @@unique([paymentProvider, providerPaymentId])
+  @@index([tenantId, status, createdAt])
+  @@map("flip_ai_top_up_orders")
 }
 
 

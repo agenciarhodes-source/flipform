@@ -215,7 +215,7 @@ export async function getFlipAiCreditWalletForTenant(
     loadFlipAiCreditWalletForTenant(db, tenantId, limit, range));
 }
 
-async function recordFlipAiCreditEntryWithDb(
+export async function recordFlipAiCreditEntryWithDb(
   db: Prisma.TransactionClient,
   mutation: ReturnType<typeof validateFlipAiCreditMutation>,
 ): Promise<FlipAiCreditMutationResult> {
