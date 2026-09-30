@@ -6,8 +6,8 @@ CREATE TABLE "flip_ai_top_up_orders" (
   "amount_cents" INTEGER NOT NULL,
   "currency" TEXT NOT NULL DEFAULT 'BRL',
   "credits" INTEGER NOT NULL,
-  "estimated_open_ai_cost_cents" INTEGER NOT NULL DEFAULT 0,
-  "estimated_open_ai_cost_currency" TEXT NOT NULL DEFAULT 'USD',
+  "estimated_openai_cost_cents" INTEGER NOT NULL DEFAULT 0,
+  "estimated_openai_cost_currency" TEXT NOT NULL DEFAULT 'USD',
   "payment_provider" TEXT,
   "provider_payment_id" TEXT,
   "payment_method" TEXT,
@@ -23,7 +23,7 @@ CREATE TABLE "flip_ai_top_up_orders" (
     CHECK ("status" IN ('pending', 'paid', 'credited', 'canceled')),
   CONSTRAINT "flip_ai_top_up_orders_amount_cents_check" CHECK ("amount_cents" > 0),
   CONSTRAINT "flip_ai_top_up_orders_credits_check" CHECK ("credits" > 0),
-  CONSTRAINT "flip_ai_top_up_orders_estimated_cost_check" CHECK ("estimated_open_ai_cost_cents" >= 0),
+  CONSTRAINT "flip_ai_top_up_orders_estimated_cost_check" CHECK ("estimated_openai_cost_cents" >= 0),
   CONSTRAINT "flip_ai_top_up_orders_tenant_id_fkey"
     FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT "flip_ai_top_up_orders_created_by_fkey"
