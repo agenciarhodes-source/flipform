@@ -168,20 +168,23 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
             send_button_color = ${input.sendButtonColor}, style = ${input.style}, pipeline_id = ${input.pipelineId},
             initial_stage_id = ${input.initialStageId}, rotation_id = ${input.rotationId},
             version = version + 1, updated_at = NOW()
-            WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`)
+            WHERE id = ${id} AND tenant_id = ${tenantId} AND status IN ('draft', 'published')
+              AND version = ${operation.version}`)
         : await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
             description = ${input.description}, primary_color = ${input.primaryColor}, style = ${input.style},
             pipeline_id = ${input.pipelineId}, initial_stage_id = ${input.initialStageId},
             rotation_id = ${input.rotationId}, version = version + 1, updated_at = NOW()
-            WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`);
+            WHERE id = ${id} AND tenant_id = ${tenantId} AND status IN ('draft', 'published')
+              AND version = ${operation.version}`);
       if (changed !== 1) throw new FlipAiError('VERSION_CONFLICT', 409, 'Este atendente mudou em outra sessão. Atualize a lista antes de editar.');
       await db.$executeRaw(Prisma.sql`UPDATE flip_ai_endpoints SET slug = ${input.slug}, updated_at = NOW()
         WHERE agent_id = ${id} AND tenant_id = ${tenantId}`);
     }
     await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_agent', entityId: id,
-      action: operation.kind === 'create' ? 'created' : 'updated', metadata: { status: 'draft' } } });
+      action: operation.kind === 'create' ? 'created' : 'updated',
+      metadata: { status: operation.kind === 'create' ? 'draft' : existing?.status } } });
     const saved = (await selectAgents(db, tenantId, id))[0];
-    if (!saved) throw new FlipAiError('AGENT_NOT_FOUND', 500, 'Não foi possível confirmar o rascunho salvo.');
+    if (!saved) throw new FlipAiError('AGENT_NOT_FOUND', 500, 'Não foi possível confirmar o atendente salvo.');
     const knowledge = await selectKnowledgeSummaries(db, tenantId);
     return { ...saved, updatedAt: saved.updatedAt.toISOString(), knowledge: knowledge.get(saved.id) || null,
       publication: await inspectAgentPublicationReadiness(db, tenantId, saved.id) };

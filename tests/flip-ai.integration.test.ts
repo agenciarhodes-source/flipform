@@ -256,6 +256,16 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       action: 'publish', version: savedWithKnowledge.version,
     }, { openAiConfigured: true });
     assert.equal(publicationReplay.reused, true, 'publication replay must be idempotent');
+    const editedPublished = await saveAgentDraft(a.session, {
+      ...a.input, name: 'Helena publicada', primaryColor: '#864040',
+    }, { kind: 'update', id, version: published.version });
+    assert.equal(editedPublished.status, 'published', 'editing must keep the public chat online');
+    assert.equal(editedPublished.name, 'Helena publicada');
+    assert.equal(editedPublished.primaryColor, '#864040');
+    assert.equal(editedPublished.version, published.version + 1);
+    assert.equal(await prisma.auditLog.count({
+      where: { tenantId: a.tenant.id, entityId: id, action: 'updated', metadata: { equals: { status: 'published' } } },
+    }), 1, 'live edits must be auditable as published changes');
     const publishedWorkspace = await getAgentDraftWorkspace(a.session);
     assert.equal(publishedWorkspace.agents.find((agent) => agent.id === id)?.status, 'published');
     assert.equal(await prisma.auditLog.count({
@@ -587,7 +597,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const leadsBeforeUnpublish = await prisma.lead.count({ where: { tenantId: a.tenant.id } });
     const conversationsBeforeUnpublish = await prisma.conversation.count({ where: { tenantId: a.tenant.id } });
     const unpublished = await changeAgentPublication(a.session, id, {
-      action: 'unpublish', version: published.version,
+      action: 'unpublish', version: editedPublished.version,
     }, { openAiConfigured: true });
     assert.equal(unpublished.status, 'draft');
     assert.equal((await changeAgentPublication(a.session, id, {

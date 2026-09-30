@@ -66,3 +66,14 @@ def test_appearance_change_does_not_touch_leads_kanban_or_tracking():
         "TRUNCATE",
     ]:
         assert forbidden not in combined
+
+
+def test_published_agent_can_be_edited_without_being_taken_offline():
+    agents = read("lib/flip-ai/agents.ts")
+    editor = read("components/flip-ai/agent-draft-manager.tsx")
+    assert "status IN ('draft', 'published')" in agents
+    assert "status = 'draft' AND version" not in agents
+    assert "Este atendente está publicado. As alterações serão aplicadas sem retirar o chat do ar." in editor
+    assert "Alterações salvas. O chat permaneceu publicado." in editor
+    assert "onClick={() => editDraft(agent)}>Editar {agent.name}</Button>" in editor
+    assert "agent.status === 'draft' ? <Button variant=\"outline\" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}" not in editor
