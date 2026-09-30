@@ -30,6 +30,11 @@ type TopUpRow = {
   paymentProvider: string | null;
   providerPaymentId: string | null;
   paymentMethod: string | null;
+  stripeCheckoutSessionId: string | null;
+  stripeCheckoutAttempt: number;
+  stripeCheckoutRequestedAt: Date | null;
+  stripeCheckoutCreatedAt: Date | null;
+  stripeCheckoutExpiresAt: Date | null;
   paidAt: Date | null;
   creditedAt: Date | null;
   canceledAt: Date | null;
@@ -119,6 +124,11 @@ function toTopUp(row: TopUpRow) {
     paymentProvider: row.paymentProvider,
     providerPaymentId: row.providerPaymentId,
     paymentMethod: row.paymentMethod,
+    stripeCheckoutSessionId: row.stripeCheckoutSessionId,
+    stripeCheckoutAttempt: row.stripeCheckoutAttempt,
+    stripeCheckoutRequestedAt: row.stripeCheckoutRequestedAt?.toISOString() ?? null,
+    stripeCheckoutCreatedAt: row.stripeCheckoutCreatedAt?.toISOString() ?? null,
+    stripeCheckoutExpiresAt: row.stripeCheckoutExpiresAt?.toISOString() ?? null,
     paidAt: row.paidAt?.toISOString() ?? null,
     creditedAt: row.creditedAt?.toISOString() ?? null,
     canceledAt: row.canceledAt?.toISOString() ?? null,
@@ -149,6 +159,11 @@ async function loadTopUpRows(
       payment_provider AS "paymentProvider",
       provider_payment_id AS "providerPaymentId",
       payment_method AS "paymentMethod",
+      stripe_checkout_session_id AS "stripeCheckoutSessionId",
+      stripe_checkout_attempt AS "stripeCheckoutAttempt",
+      stripe_checkout_requested_at AS "stripeCheckoutRequestedAt",
+      stripe_checkout_created_at AS "stripeCheckoutCreatedAt",
+      stripe_checkout_expires_at AS "stripeCheckoutExpiresAt",
       paid_at AS "paidAt",
       credited_at AS "creditedAt",
       canceled_at AS "canceledAt",
@@ -182,6 +197,11 @@ async function lockTopUpOrder(
       payment_provider AS "paymentProvider",
       provider_payment_id AS "providerPaymentId",
       payment_method AS "paymentMethod",
+      stripe_checkout_session_id AS "stripeCheckoutSessionId",
+      stripe_checkout_attempt AS "stripeCheckoutAttempt",
+      stripe_checkout_requested_at AS "stripeCheckoutRequestedAt",
+      stripe_checkout_created_at AS "stripeCheckoutCreatedAt",
+      stripe_checkout_expires_at AS "stripeCheckoutExpiresAt",
       paid_at AS "paidAt",
       credited_at AS "creditedAt",
       canceled_at AS "canceledAt",
@@ -331,6 +351,13 @@ export async function markFlipAiTopUpPaid(input: {
     const order = await lockTopUpOrder(db, tenantId, orderId);
     if (order.status === 'canceled') {
       throw new FlipAiError('FLIP_AI_TOP_UP_CANCELED', 409, 'Uma recarga cancelada não pode ser marcada como paga.');
+    }
+    if (order.paymentProvider === 'stripe') {
+      throw new FlipAiError(
+        'FLIP_AI_TOP_UP_STRIPE_PAYMENT_REQUIRES_VERIFICATION',
+        409,
+        'Recargas vinculadas à Stripe não podem ser marcadas como pagas manualmente.',
+      );
     }
     if (order.status === 'paid' || order.status === 'credited') {
       const samePayment = order.paymentProvider === paymentProvider
