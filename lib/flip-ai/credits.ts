@@ -31,6 +31,11 @@ type CreditLedgerRow = {
   createdAt: Date;
 };
 
+export type FlipAiCreditDateRange = {
+  from: Date;
+  toExclusive: Date;
+};
+
 export type FlipAiCreditWallet = {
   available: boolean;
   balanceCredits: number;
@@ -120,8 +125,11 @@ function toWalletEntry(row: CreditLedgerRow) {
 export async function getFlipAiCreditWallet(
   session: SessionPayload,
   limit = 50,
+  range?: FlipAiCreditDateRange,
 ): Promise<FlipAiCreditWallet> {
   const safeLimit = Number.isSafeInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 50;
+  const rangeFrom = range?.from || new Date('1970-01-01T00:00:00.000Z');
+  const rangeUntil = range?.toExclusive || new Date('9999-12-31T23:59:59.999Z');
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
     if (!await creditSchemaReady(db)) {
@@ -162,6 +170,7 @@ export async function getFlipAiCreditWallet(
           AS "debitedCredits"
       FROM flip_ai_credit_ledger
       WHERE tenant_id = ${tenantId} AND account_id = ${account.id}
+        AND created_at >= ${rangeFrom} AND created_at < ${rangeUntil}
     `);
     const entries = await db.$queryRaw<CreditLedgerRow[]>(Prisma.sql`
       SELECT id, idempotency_key AS "idempotencyKey", entry_type AS "entryType",
@@ -169,6 +178,7 @@ export async function getFlipAiCreditWallet(
         source, reference_id AS "referenceId", created_at AS "createdAt"
       FROM flip_ai_credit_ledger
       WHERE tenant_id = ${tenantId} AND account_id = ${account.id}
+        AND created_at >= ${rangeFrom} AND created_at < ${rangeUntil}
       ORDER BY created_at DESC, id DESC
       LIMIT ${safeLimit}
     `);
