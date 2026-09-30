@@ -706,12 +706,12 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   }
   assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 17);
-  assert.equal(columns.size, 206);
-  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 35);
+  assert.equal(columns.size, 211);
+  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 39);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , , defaultDefinition]) =>
-    defaultDefinition !== null).length, 48);
-  assert.equal(indexes.size, 61);
-  assert.equal(constraints.size, 74);
+    defaultDefinition !== null).length, 49);
+  assert.equal(indexes.size, 62);
+  assert.equal(constraints.size, 75);
 });
 
 test('qualification check signatures survive PostgreSQL deparsing without losing boolean structure', () => {
