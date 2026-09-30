@@ -141,6 +141,27 @@ export default async function FlipAiUsagePage({
           </div>)}
         </div>}
 
+      {wallet.available && (wallet.balanceCredits <= 0 || usage.totals.insufficientBalanceOperations > 0) &&
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div><p className="font-medium">Saldo insuficiente</p>
+              <p className="mt-1">
+                {usage.totals.insufficientBalanceOperations > 0
+                  ? `${number.format(usage.totals.insufficientBalanceOperations)} operação(ões) confirmada(s) ficaram sem débito por falta de saldo.`
+                  : 'A carteira está sem créditos para novos débitos de consumo.'}
+                {' '}O atendimento e a criação válida de Leads não são desfeitos por falha financeira.
+              </p>
+            </div>
+          </div>
+        </div>}
+
+      {usage.totals.billingUnavailableOperations > 0 &&
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <p><strong>{number.format(usage.totals.billingUnavailableOperations)}</strong> operação(ões) confirmada(s) não puderam liquidar a cobrança por indisponibilidade da carteira.</p>
+          </div>
+        </div>}
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
           <p className="text-sm font-medium">Custo estimado OpenAI no período</p>
@@ -151,8 +172,9 @@ export default async function FlipAiUsagePage({
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
           <div className="flex gap-3"><AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <div><p className="font-medium">Estimativa separada da carteira</p>
-              <p className="mt-1">O valor usa a tabela oficial da OpenAI com referência em {usage.pricing.snapshot} e não gera débito. A sessão de voz registra somente a credencial Realtime; o áudio permanece fora da estimativa até a reconciliação do consumo real.</p>
+            <div><p className="font-medium">Cobrança auditável por consumo confirmado</p>
+              <p className="mt-1">Operações confirmadas e com preço integral geram um único débito idempotente na carteira. Resultados incertos, custos parciais e voz ainda não reconciliada não são debitados.</p>
+              <p className="mt-1">1 crédito técnico representa US$ 0,000001 de custo confirmado, com arredondamento para cima por evento. Não há recarga automática nesta etapa.</p>
               <a href={usage.pricing.source} target="_blank" rel="noreferrer"
                 className="mt-2 inline-block font-medium underline">Consultar tabela oficial</a>
             </div>

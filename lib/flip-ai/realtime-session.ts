@@ -8,6 +8,7 @@ import { ensureConversation } from '@/lib/conversations/core';
 import { FlipAiError } from './access';
 import type { PublicFlipAiRuntime } from './public-agent';
 import { buildPublicChatInstructions } from './public-chat';
+import { settleFlipAiUsageCharge } from './usage-billing';
 import {
   createOpenAiRealtimeClientSecret,
   FLIP_AI_REALTIME_MODEL,
@@ -253,6 +254,7 @@ export async function issuePublicRealtimeSession(
     throw new FlipAiError('REALTIME_SESSION_AMBIGUOUS', 409,
       'Não foi possível confirmar a sessão. Inicie uma nova tentativa explícita.');
   }
+  await settleFlipAiUsageCharge({ tenantId: runtime.tenantId, eventId: event.id });
 
   return {
     clientSecret: result.value,
