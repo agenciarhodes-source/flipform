@@ -210,7 +210,7 @@ function validateStripeSession(
     amount_total: number | null;
     currency: string | null;
     client_reference_id: string | null;
-    metadata: Record<string, string>;
+    metadata: Record<string, string> | null;
   },
   order: ReservedCheckout,
 ) {
