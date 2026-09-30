@@ -1098,6 +1098,10 @@ model FlipAiAgent {
   name String
   description String @default("")
   primaryColor String @default("#2563EB") @map("primary_color")
+  avatarUrl String? @map("avatar_url")
+  chatBackgroundColor String? @map("chat_background_color")
+  userMessageColor String? @map("user_message_color")
+  sendButtonColor String? @map("send_button_color")
   style String @default("welcoming")
   status String @default("draft")
   version Int @default(1)

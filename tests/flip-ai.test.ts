@@ -18,6 +18,7 @@ import {
 } from '../lib/flip-ai/openai-realtime';
 import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
 import { validateFlipAiCreditMutation } from '../lib/flip-ai/credits';
+import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
   sanitizeExternalSearchQuery,
   searchOpenAiWeb,
@@ -83,6 +84,23 @@ test('strict payload rejects tenant and integration overrides', () => {
   assert.equal(agentPublicationSchema.safeParse({ action: 'unpublish', version: 1 }).success, true);
   assert.equal(agentPublicationSchema.safeParse({ action: 'publish', version: 1, tenantId: 'tenant-injected' }).success, false);
   assert.equal(agentPublicationSchema.safeParse({ action: 'delete', version: 1 }).success, false);
+});
+
+test('Flip AI avatar accepts only bounded inline images and rejects remote tracking URLs', () => {
+  const avatar = `data:image/png;base64,${Buffer.from('safe-avatar').toString('base64')}`;
+  assert.equal(getFlipAiAvatarDataUrlSize(avatar), 11);
+  assert.equal(isValidFlipAiAvatar(avatar), true);
+  assert.equal(isValidFlipAiAvatar('https://tracker.invalid/avatar.png'), false);
+  assert.equal(isValidFlipAiAvatar('data:image/svg+xml;base64,PHN2Zz4='), false);
+});
+
+test('PR 321 appearance migration is additive and does not touch CRM or integrations', () => {
+  const sql = readFileSync(new URL('../prisma/migrations/20260930010000_flip_ai_agent_appearance/migration.sql', import.meta.url), 'utf8');
+  for (const column of ['avatar_url', 'chat_background_color', 'user_message_color', 'send_button_color']) {
+    assert.match(sql, new RegExp(`ADD COLUMN "${column}" TEXT`));
+  }
+  assert.doesNotMatch(sql, /\b(?:DROP|DELETE|UPDATE|TRUNCATE|ALTER\s+COLUMN)\b/i);
+  assert.doesNotMatch(sql, /\b(?:leads|conversations|tenant_meta|whatsapp|tracking)\b/i);
 });
 
 test('credit wallet accepts only bounded, positive and idempotent mutations', () => {
@@ -681,8 +699,8 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   }
   assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 16);
-  assert.equal(columns.size, 183);
-  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 23);
+  assert.equal(columns.size, 187);
+  assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 27);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , , defaultDefinition]) =>
     defaultDefinition !== null).length, 43);
   assert.equal(indexes.size, 57);

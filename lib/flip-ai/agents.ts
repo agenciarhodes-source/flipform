@@ -18,10 +18,23 @@ async function ensureSchema(db: FlipAiDb) {
   `);
   if (!rows[0]?.ready) throw new FlipAiError('FLIP_AI_SCHEMA_NOT_READY', 503, 'O Flip AI está em preparação. Tente novamente após a ativação.');
 }
+async function appearanceSchemaReady(db: FlipAiDb) {
+  const rows = await db.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
+    SELECT COUNT(*) = 4 AS ready
+    FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'flip_ai_agents'
+      AND column_name IN ('avatar_url', 'chat_background_color', 'user_message_color', 'send_button_color')
+  `);
+  return Boolean(rows[0]?.ready);
+}
 type AgentRow = Omit<AgentDraft, 'updatedAt' | 'knowledge' | 'publication'> & { updatedAt: Date };
 async function selectAgents(db: FlipAiDb, tenantId: string, id?: string): Promise<AgentRow[]> {
   return db.$queryRaw<AgentRow[]>(Prisma.sql`
-    SELECT a.id, a.name, a.description, a.primary_color AS "primaryColor", a.style,
+    SELECT a.id, a.name, a.description, a.primary_color AS "primaryColor",
+      to_jsonb(a)->>'avatar_url' AS "avatarUrl",
+      to_jsonb(a)->>'chat_background_color' AS "chatBackgroundColor",
+      to_jsonb(a)->>'user_message_color' AS "userMessageColor",
+      to_jsonb(a)->>'send_button_color' AS "sendButtonColor", a.style,
       a.pipeline_id AS "pipelineId", a.initial_stage_id AS "initialStageId", a.rotation_id AS "rotationId", e.slug,
       a.status, a.version, a.updated_at AS "updatedAt"
     FROM flip_ai_agents a JOIN flip_ai_endpoints e ON e.agent_id = a.id AND e.tenant_id = a.tenant_id
@@ -71,6 +84,7 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
   return prisma.$transaction(async (db) => {
     const { tenantId, accessMode } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
+    const appearanceReady = await appearanceSchemaReady(db);
     const [agents, pipelines, rotations, knowledge] = await Promise.all([
       selectAgents(db, tenantId),
       db.pipeline.findMany({ where: { tenantId, isArchived: false }, orderBy: { name: 'asc' }, select: {
@@ -87,6 +101,7 @@ export async function getAgentDraftWorkspace(session: SessionPayload): Promise<A
       inspectAgentPublicationReadiness(db, tenantId, agent.id)));
     return {
       accessMode,
+      appearanceReady,
       agents: agents.map((agent, index) => ({ ...agent, updatedAt: agent.updatedAt.toISOString(),
         knowledge: knowledge.get(agent.id) || null, publication: publications[index] })),
       pipelines,
@@ -108,6 +123,12 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
   return prisma.$transaction(async (db) => {
     const { tenantId, userId } = await requireFlipAiAccess(db, session);
     await ensureSchema(db);
+    const appearanceReady = await appearanceSchemaReady(db);
+    if (!appearanceReady && (input.avatarUrl || input.chatBackgroundColor
+      || input.userMessageColor || input.sendButtonColor)) {
+      throw new FlipAiError('FLIP_AI_APPEARANCE_SCHEMA_NOT_READY', 503,
+        'A personalização visual está em preparação. Tente novamente após a atualização segura do banco.');
+    }
     await db.$queryRaw(Prisma.sql`SELECT id FROM tenants WHERE id = ${tenantId} FOR UPDATE`);
     const id = operation.kind === 'create' ? operation.requestId : operation.id;
     const existing = (await selectAgents(db, tenantId, id))[0];
@@ -122,19 +143,37 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     if (operation.kind === 'update' && !existing) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
     await validateDestination(db, tenantId, input);
     if (operation.kind === 'create') {
-      await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
-        (id, tenant_id, name, description, primary_color, style, pipeline_id, initial_stage_id, rotation_id,
-         status, version, created_by, created_at, updated_at)
-        VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor}, ${input.style},
-          ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
+      if (appearanceReady) {
+        await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
+          (id, tenant_id, name, description, primary_color, avatar_url, chat_background_color,
+           user_message_color, send_button_color, style, pipeline_id, initial_stage_id, rotation_id,
+           status, version, created_by, created_at, updated_at)
+          VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor}, ${input.avatarUrl},
+            ${input.chatBackgroundColor}, ${input.userMessageColor}, ${input.sendButtonColor}, ${input.style},
+            ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
+      } else {
+        await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
+          (id, tenant_id, name, description, primary_color, style, pipeline_id, initial_stage_id, rotation_id,
+           status, version, created_by, created_at, updated_at)
+          VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor}, ${input.style},
+            ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
+      }
       await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_endpoints (id, tenant_id, agent_id, slug, created_at, updated_at)
         VALUES (${randomUUID()}, ${tenantId}, ${id}, ${input.slug}, NOW(), NOW())`);
     } else {
-      const changed = await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
-        description = ${input.description}, primary_color = ${input.primaryColor}, style = ${input.style},
-        pipeline_id = ${input.pipelineId}, initial_stage_id = ${input.initialStageId},
-        rotation_id = ${input.rotationId}, version = version + 1, updated_at = NOW()
-        WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`);
+      const changed = appearanceReady
+        ? await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
+            description = ${input.description}, primary_color = ${input.primaryColor}, avatar_url = ${input.avatarUrl},
+            chat_background_color = ${input.chatBackgroundColor}, user_message_color = ${input.userMessageColor},
+            send_button_color = ${input.sendButtonColor}, style = ${input.style}, pipeline_id = ${input.pipelineId},
+            initial_stage_id = ${input.initialStageId}, rotation_id = ${input.rotationId},
+            version = version + 1, updated_at = NOW()
+            WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`)
+        : await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
+            description = ${input.description}, primary_color = ${input.primaryColor}, style = ${input.style},
+            pipeline_id = ${input.pipelineId}, initial_stage_id = ${input.initialStageId},
+            rotation_id = ${input.rotationId}, version = version + 1, updated_at = NOW()
+            WHERE id = ${id} AND tenant_id = ${tenantId} AND status = 'draft' AND version = ${operation.version}`);
       if (changed !== 1) throw new FlipAiError('VERSION_CONFLICT', 409, 'Este atendente mudou em outra sessão. Atualize a lista antes de editar.');
       await db.$executeRaw(Prisma.sql`UPDATE flip_ai_endpoints SET slug = ${input.slug}, updated_at = NOW()
         WHERE agent_id = ${id} AND tenant_id = ${tenantId}`);
