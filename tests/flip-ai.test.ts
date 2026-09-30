@@ -1139,7 +1139,8 @@ test('PR 327 settlement is event-idempotent, refund-traceable and never bills un
   assert.match(billing, /event\.status !== 'confirmed'/);
   assert.match(billing, /estimate\.coverage !== 'full'/);
   assert.match(billing, /FLIP_AI_CREDIT_BALANCE_INSUFFICIENT/);
-  assert.match(billing, /status: 'insufficient_balance'/);
+  assert.match(billing, /const status: FlipAiUsageBillingStatus = insufficient/);
+  assert.match(billing, /\? 'insufficient_balance'/);
   assert.match(billing, /source: 'usage'/);
   assert.match(billing, /source: 'refund'/);
 
