@@ -248,6 +248,51 @@ test('commercial top-ups are tenant-isolated, payment-gated and idempotent', asy
   }
 });
 
+test('Stripe-linked top-up cannot be manually confirmed or credited', async () => {
+  assertDisposableDatabase();
+  const x = await fixture();
+  try {
+    const created = await createFlipAiTopUpOrder({
+      tenantId: x.tenant.id,
+      requestKey: `stripe-gate-ci:${randomUUID()}`,
+      amountCents: 19990,
+      credits: 100_000,
+      estimatedOpenAiCostCents: 890,
+      actorUserId: x.user.id,
+    });
+
+    await prisma.flipAiTopUpOrder.update({
+      where: { id: created.order.id },
+      data: {
+        paymentProvider: 'stripe',
+        paymentMethod: 'card_test_checkout',
+        stripeCheckoutAttempt: 1,
+      },
+    });
+
+    await assert.rejects(markFlipAiTopUpPaid({
+      tenantId: x.tenant.id,
+      orderId: created.order.id,
+      paymentProvider: 'stripe',
+      providerPaymentId: `pi_test_${randomUUID()}`,
+      paymentMethod: 'card',
+      actorUserId: x.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_STRIPE_PAYMENT_REQUIRES_VERIFICATION');
+
+    await assert.rejects(creditFlipAiTopUpOrder({
+      tenantId: x.tenant.id,
+      orderId: created.order.id,
+      actorUserId: x.user.id,
+    }), (error: unknown) => error instanceof FlipAiError
+      && error.code === 'FLIP_AI_TOP_UP_NOT_PAID');
+
+    assert.equal((await getFlipAiCreditWalletForTenant(x.tenant.id)).balanceCredits, 0);
+  } finally {
+    await cleanup(x);
+  }
+});
+
 test('drafts are tenant-isolated, idempotent and transactional', async () => {
   assertDisposableDatabase();
   const a = await fixture(); const b = await fixture(); const leads = await prisma.lead.count();
