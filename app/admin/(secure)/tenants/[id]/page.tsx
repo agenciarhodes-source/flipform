@@ -13,6 +13,8 @@ import { Loader2, ArrowLeft, Power, RotateCcw, ShieldOff, Ban, Save, Coins } fro
 import { StatusBadge } from '@/components/admin/status-badge';
 
 const number = new Intl.NumberFormat('pt-BR');
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
 const CREDIT_SOURCE_LABELS: Record<string, string> = {
   platform_admin_grant: 'Crédito concedido pelo Super Admin',
@@ -45,6 +47,17 @@ export default function TenantDetailPage() {
     reason: '',
     idempotencyIdentifier: '',
   });
+  const [topUps, setTopUps] = useState<any[]>([]);
+  const [topUpsAvailable, setTopUpsAvailable] = useState(true);
+  const [loadingTopUps, setLoadingTopUps] = useState(true);
+  const [creatingTopUp, setCreatingTopUp] = useState(false);
+  const [topUpActionId, setTopUpActionId] = useState<string | null>(null);
+  const [topUpForm, setTopUpForm] = useState({
+    amountBrl: '',
+    credits: '',
+    estimatedOpenAiCostUsd: '',
+    requestKey: '',
+  });
   const [planForm, setPlanForm] = useState<{ planId: string; nextDueDate: string; internalNotes: string }>({ planId: '', nextDueDate: '', internalNotes: '' });
 
   const load = async () => {
@@ -74,9 +87,27 @@ export default function TenantDetailPage() {
     }
   };
 
+  const loadTopUps = async () => {
+    setLoadingTopUps(true);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/flip-ai-top-ups`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível carregar as recargas comerciais.');
+      setTopUpsAvailable(data.available !== false);
+      setTopUps(data.orders || []);
+    } catch (e: any) {
+      setTopUps([]);
+      setTopUpsAvailable(false);
+      toast.error(e.message);
+    } finally {
+      setLoadingTopUps(false);
+    }
+  };
+
   useEffect(() => {
     load();
     loadWallet();
+    loadTopUps();
     fetch('/api/admin/plans').then((r) => r.json()).then((d) => setPlans(d.plans || []));
     /* eslint-disable-next-line */
   }, [id]);
@@ -140,6 +171,104 @@ export default function TenantDetailPage() {
       toast.error(e.message);
     } finally {
       setGrantingCredits(false);
+    }
+  };
+
+  const parseMoneyToCents = (value: string) => {
+    const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+    const amount = Number(normalized);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    const cents = Math.round(amount * 100);
+    return Number.isSafeInteger(cents) ? cents : null;
+  };
+
+  const createTopUp = async () => {
+    const amountCents = parseMoneyToCents(topUpForm.amountBrl);
+    const estimatedOpenAiCostCents = topUpForm.estimatedOpenAiCostUsd.trim()
+      ? parseMoneyToCents(topUpForm.estimatedOpenAiCostUsd)
+      : 0;
+    const credits = Number(topUpForm.credits);
+
+    if (!amountCents || amountCents <= 0) {
+      toast.error('Informe um valor comercial em reais maior que zero.');
+      return;
+    }
+    if (estimatedOpenAiCostCents == null) {
+      toast.error('Informe um custo estimado da OpenAI válido.');
+      return;
+    }
+    if (!Number.isSafeInteger(credits) || credits <= 0) {
+      toast.error('Informe uma quantidade inteira e positiva de créditos.');
+      return;
+    }
+
+    setCreatingTopUp(true);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/flip-ai-top-ups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amountCents,
+          credits,
+          estimatedOpenAiCostCents,
+          requestKey: topUpForm.requestKey,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível criar a recarga comercial.');
+      toast.success(data.reused
+        ? 'Essa recarga já existia. Nenhum pedido foi duplicado.'
+        : 'Recarga comercial criada como pendente.');
+      setTopUpForm({ amountBrl: '', credits: '', estimatedOpenAiCostUsd: '', requestKey: '' });
+      await loadTopUps();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setCreatingTopUp(false);
+    }
+  };
+
+  const actOnTopUp = async (order: any, action: 'mark_paid' | 'credit' | 'cancel') => {
+    let payload: any = { action };
+    if (action === 'mark_paid') {
+      const providerPaymentId = window.prompt(
+        'Referência idempotente do pagamento (ex.: ID do gateway ou comprovante interno):',
+        order.providerPaymentId || `manual:${order.requestKey}`,
+      );
+      if (!providerPaymentId) return;
+      const paymentMethod = window.prompt('Forma de pagamento (opcional):', order.paymentMethod || 'manual');
+      payload = {
+        action,
+        paymentProvider: order.paymentProvider || 'manual',
+        providerPaymentId,
+        paymentMethod: paymentMethod?.trim() || null,
+      };
+    }
+
+    setTopUpActionId(order.id);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/flip-ai-top-ups/${order.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível atualizar a recarga.');
+      if (action === 'credit') {
+        toast.success(data.reused
+          ? 'Os créditos dessa recarga já haviam sido lançados.'
+          : 'Pagamento convertido em créditos na carteira.');
+        await loadWallet();
+      } else if (action === 'mark_paid') {
+        toast.success(data.reused ? 'Pagamento já estava confirmado.' : 'Pagamento marcado como confirmado.');
+      } else {
+        toast.success(data.reused ? 'Recarga já estava cancelada.' : 'Recarga cancelada.');
+      }
+      await loadTopUps();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setTopUpActionId(null);
     }
   };
 
@@ -363,6 +492,159 @@ export default function TenantDetailPage() {
                       Adicionar créditos
                     </Button>
                   </div>
+                </Card>
+
+                <Card className="p-5 space-y-4">
+                  <div>
+                    <h3 className="font-semibold">Recargas comerciais</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Base segura para comercialização de créditos. Nesta versão não há cobrança automática:
+                      o pedido nasce pendente, o pagamento é confirmado separadamente e somente depois pode gerar créditos.
+                    </p>
+                  </div>
+
+                  {!topUpsAvailable ? (
+                    <div className="text-sm text-amber-900 border border-amber-200 bg-amber-50 rounded-md p-3">
+                      A estrutura de recargas comerciais ainda não está disponível neste ambiente. A migration deve ser revisada e aplicada separadamente.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                        <label className="space-y-1">
+                          <span className="text-sm font-medium">Valor comercial (R$)</span>
+                          <Input
+                            value={topUpForm.amountBrl}
+                            onChange={(e) => setTopUpForm((current) => ({ ...current, amountBrl: e.target.value }))}
+                            placeholder="Ex.: 199,90"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-sm font-medium">Créditos concedidos</span>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={topUpForm.credits}
+                            onChange={(e) => setTopUpForm((current) => ({ ...current, credits: e.target.value }))}
+                            placeholder="Ex.: 100000"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-sm font-medium">Custo OpenAI estimado (US$)</span>
+                          <Input
+                            value={topUpForm.estimatedOpenAiCostUsd}
+                            onChange={(e) => setTopUpForm((current) => ({ ...current, estimatedOpenAiCostUsd: e.target.value }))}
+                            placeholder="Ex.: 8,90"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-sm font-medium">Chave idempotente</span>
+                          <Input
+                            value={topUpForm.requestKey}
+                            onChange={(e) => setTopUpForm((current) => ({ ...current, requestKey: e.target.value }))}
+                            placeholder="Ex.: recarga-2026-09-001"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <p className="text-xs text-muted-foreground">
+                          Valor pago, créditos concedidos e custo bruto estimado ficam separados. Nenhum pagamento é criado no Asaas por esta tela.
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={createTopUp}
+                          disabled={creatingTopUp || !topUpForm.amountBrl || !topUpForm.credits || !topUpForm.requestKey}
+                        >
+                          {creatingTopUp && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+                          Criar recarga pendente
+                        </Button>
+                      </div>
+
+                      {loadingTopUps ? (
+                        <div className="py-5 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 inline animate-spin mr-2" />Carregando recargas...
+                        </div>
+                      ) : topUps.length === 0 ? (
+                        <div className="py-5 text-sm text-muted-foreground">Nenhuma recarga comercial registrada.</div>
+                      ) : (
+                        <div className="overflow-x-auto border rounded-md">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/40 border-b">
+                              <tr className="text-xs uppercase text-muted-foreground">
+                                <th className="text-left py-2 px-3">Criada</th>
+                                <th className="text-left py-2 px-3">Status</th>
+                                <th className="text-right py-2 px-3">Valor</th>
+                                <th className="text-right py-2 px-3">Créditos</th>
+                                <th className="text-right py-2 px-3">Custo est.</th>
+                                <th className="text-left py-2 px-3">Pagamento</th>
+                                <th className="text-right py-2 px-3">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topUps.map((order: any) => (
+                                <tr key={order.id} className="border-b last:border-0">
+                                  <td className="py-2 px-3 text-xs text-muted-foreground">
+                                    {new Date(order.createdAt).toLocaleString('pt-BR')}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    {order.status === 'pending' ? 'Pendente'
+                                      : order.status === 'paid' ? 'Pago'
+                                        : order.status === 'credited' ? 'Creditado'
+                                          : 'Cancelado'}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">{brl.format(order.amountCents / 100)}</td>
+                                  <td className="py-2 px-3 text-right">{number.format(order.credits)}</td>
+                                  <td className="py-2 px-3 text-right">
+                                    {usd.format(order.estimatedOpenAiCostCents / 100)}
+                                  </td>
+                                  <td className="py-2 px-3 text-xs text-muted-foreground">
+                                    {order.providerPaymentId || '—'}
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <div className="flex justify-end gap-2">
+                                      {order.status === 'pending' && (
+                                        <>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={topUpActionId === order.id}
+                                            onClick={() => actOnTopUp(order, 'mark_paid')}
+                                          >
+                                            Marcar pago
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            disabled={topUpActionId === order.id}
+                                            onClick={() => actOnTopUp(order, 'cancel')}
+                                          >
+                                            Cancelar
+                                          </Button>
+                                        </>
+                                      )}
+                                      {order.status === 'paid' && (
+                                        <Button
+                                          size="sm"
+                                          disabled={topUpActionId === order.id}
+                                          onClick={() => actOnTopUp(order, 'credit')}
+                                        >
+                                          {topUpActionId === order.id && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                                          Creditar carteira
+                                        </Button>
+                                      )}
+                                      {order.status === 'credited' && (
+                                        <span className="text-xs text-emerald-700">Ledger confirmado</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </Card>
 
                 <Card className="p-0 overflow-hidden">
