@@ -5,6 +5,12 @@ import type { SessionPayload } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { FlipAiError, requireFlipAiAccess } from './access';
 import {
+  estimateOpenAiUsageCost,
+  OPENAI_PRICE_SNAPSHOT,
+  OPENAI_PRICE_SOURCE,
+  type OpenAiCostCoverage,
+} from './openai-pricing';
+import {
   type FlipAiUsagePeriod,
   type FlipAiUsageRange,
   parseFlipAiUsagePeriod,
@@ -19,6 +25,7 @@ export {
 export type FlipAiUsageOperation = {
   operation: string;
   label: string;
+  model: string;
   events: number;
   confirmedEvents: number;
   ambiguousEvents: number;
@@ -27,6 +34,9 @@ export type FlipAiUsageOperation = {
   inputTokens: number;
   outputTokens: number;
   units: number;
+  estimatedCostNanoUsd: number;
+  costCoverage: OpenAiCostCoverage;
+  costReason: 'realtime_not_reconciled' | 'unknown_model' | null;
 };
 
 export type FlipAiUsageDashboard = {
@@ -49,6 +59,15 @@ export type FlipAiUsageDashboard = {
     inputTokens: number;
     outputTokens: number;
     realtimeSessions: number;
+  };
+  pricing: {
+    currency: 'USD';
+    snapshot: string;
+    source: string;
+    estimatedCostNanoUsd: number;
+    fullyPricedOperations: number;
+    partiallyPricedOperations: number;
+    unpricedOperations: number;
   };
   operations: FlipAiUsageOperation[];
   agents: Array<{
@@ -86,6 +105,7 @@ const OPERATION_LABELS: Record<string, string> = {
 
 type AggregateRow = {
   operation: string;
+  model: string;
   events: bigint | number | string;
   confirmedEvents: bigint | number | string;
   ambiguousEvents: bigint | number | string;
@@ -154,7 +174,7 @@ export async function getFlipAiUsageDashboard(
 
     const [aggregateRows, agentRows, recentRows] = await Promise.all([
       db.$queryRaw<AggregateRow[]>(Prisma.sql`
-        SELECT operation,
+        SELECT operation, model,
           COUNT(*) AS events,
           COUNT(*) FILTER (WHERE status = 'confirmed') AS "confirmedEvents",
           COUNT(*) FILTER (WHERE status = 'ambiguous') AS "ambiguousEvents",
@@ -165,8 +185,8 @@ export async function getFlipAiUsageDashboard(
           COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units
         FROM flip_ai_usage_events
         WHERE tenant_id = ${tenantId} AND created_at >= ${range.from} AND created_at < ${range.toExclusive}
-        GROUP BY operation
-        ORDER BY operation
+        GROUP BY operation, model
+        ORDER BY operation, model
       `),
       db.$queryRaw<AgentRow[]>(Prisma.sql`
         SELECT e.agent_id AS "agentId", a.name AS "agentName",
@@ -198,22 +218,43 @@ export async function getFlipAiUsageDashboard(
       `),
     ]);
 
-    const operations = aggregateRows.map((row): FlipAiUsageOperation => ({
-      operation: row.operation,
-      label: labelFlipAiUsageOperation(row.operation),
-      events: count(row.events),
-      confirmedEvents: count(row.confirmedEvents),
-      ambiguousEvents: count(row.ambiguousEvents),
-      processingEvents: count(row.processingEvents),
-      failedEvents: count(row.failedEvents),
-      inputTokens: count(row.inputTokens),
-      outputTokens: count(row.outputTokens),
-      units: count(row.units),
-    }));
+    const operations = aggregateRows.map((row): FlipAiUsageOperation => {
+      const confirmedEvents = count(row.confirmedEvents);
+      const inputTokens = count(row.inputTokens);
+      const outputTokens = count(row.outputTokens);
+      const cost = estimateOpenAiUsageCost({
+        operation: row.operation,
+        model: row.model,
+        confirmedEvents,
+        inputTokens,
+        outputTokens,
+      });
+      return {
+        operation: row.operation,
+        label: labelFlipAiUsageOperation(row.operation),
+        model: row.model,
+        events: count(row.events),
+        confirmedEvents,
+        ambiguousEvents: count(row.ambiguousEvents),
+        processingEvents: count(row.processingEvents),
+        failedEvents: count(row.failedEvents),
+        inputTokens,
+        outputTokens,
+        units: count(row.units),
+        estimatedCostNanoUsd: cost.costNanoUsd,
+        costCoverage: cost.coverage,
+        costReason: cost.reason,
+      };
+    });
     const sum = (field: keyof Pick<FlipAiUsageOperation,
       'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'inputTokens' | 'outputTokens'>) =>
       operations.reduce((total, operation) => total + operation[field], 0);
-    const realtime = operations.find((operation) => operation.operation === 'realtime_session');
+    const realtimeSessions = operations
+      .filter((operation) => operation.operation === 'realtime_session')
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+    const pricedCount = (coverage: OpenAiCostCoverage) => operations
+      .filter((operation) => operation.costCoverage === coverage)
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
 
     return {
       periodDays,
@@ -234,7 +275,18 @@ export async function getFlipAiUsageDashboard(
         failedOperations: sum('failedEvents'),
         inputTokens: sum('inputTokens'),
         outputTokens: sum('outputTokens'),
-        realtimeSessions: realtime?.confirmedEvents || 0,
+        realtimeSessions,
+      },
+      pricing: {
+        currency: 'USD',
+        snapshot: OPENAI_PRICE_SNAPSHOT,
+        source: OPENAI_PRICE_SOURCE,
+        estimatedCostNanoUsd: operations.reduce(
+          (total, operation) => total + operation.estimatedCostNanoUsd, 0,
+        ),
+        fullyPricedOperations: pricedCount('full'),
+        partiallyPricedOperations: pricedCount('partial'),
+        unpricedOperations: pricedCount('none'),
       },
       operations,
       agents: agentRows.map((row) => ({

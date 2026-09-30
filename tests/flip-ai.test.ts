@@ -18,6 +18,11 @@ import {
 } from '../lib/flip-ai/openai-realtime';
 import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
 import { validateFlipAiCreditMutation } from '../lib/flip-ai/credits';
+import {
+  estimateOpenAiUsageCost,
+  nanoUsdToUsd,
+  OPENAI_PRICE_SNAPSHOT,
+} from '../lib/flip-ai/openai-pricing';
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
@@ -1037,4 +1042,72 @@ test('PR 325 keeps usage and credit period queries tenant-scoped and bounded', (
   assert.match(credits, /tenant_id = \$\{tenantId\} AND account_id = \$\{account\.id\}/);
   assert.match(credits, /created_at >= \$\{rangeFrom\} AND created_at < \$\{rangeUntil\}/);
   assert.doesNotMatch(usage + credits, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
+});
+
+
+test('PR 326 estimates OpenAI USD costs from confirmed tenant usage', () => {
+  const text = estimateOpenAiUsageCost({
+    operation: 'chat_response',
+    model: 'gpt-5.6-luna',
+    confirmedEvents: 1,
+    inputTokens: 1_000,
+    outputTokens: 500,
+  });
+  assert.deepEqual(text, { costNanoUsd: 800_000, coverage: 'full', reason: null });
+  assert.equal(nanoUsdToUsd(text.costNanoUsd), 0.0008);
+
+  const embedding = estimateOpenAiUsageCost({
+    operation: 'knowledge_embedding',
+    model: 'text-embedding-3-small',
+    confirmedEvents: 1,
+    inputTokens: 1_000_000,
+    outputTokens: 0,
+  });
+  assert.deepEqual(embedding, { costNanoUsd: 20_000_000, coverage: 'full', reason: null });
+
+  const search = estimateOpenAiUsageCost({
+    operation: 'web_search',
+    model: 'gpt-5.6-luna',
+    confirmedEvents: 2,
+    inputTokens: 100,
+    outputTokens: 50,
+  });
+  assert.deepEqual(search, { costNanoUsd: 20_080_000, coverage: 'full', reason: null });
+  assert.equal(OPENAI_PRICE_SNAPSHOT, '2026-09-30');
+});
+
+test('PR 326 never invents unknown or unreconciled Realtime costs', () => {
+  assert.deepEqual(estimateOpenAiUsageCost({
+    operation: 'chat_response',
+    model: 'future-model',
+    confirmedEvents: 1,
+    inputTokens: 1_000,
+    outputTokens: 100,
+  }), { costNanoUsd: 0, coverage: 'none', reason: 'unknown_model' });
+
+  assert.deepEqual(estimateOpenAiUsageCost({
+    operation: 'web_search',
+    model: 'future-model',
+    confirmedEvents: 1,
+    inputTokens: 1_000,
+    outputTokens: 100,
+  }), { costNanoUsd: 10_000_000, coverage: 'partial', reason: 'unknown_model' });
+
+  assert.deepEqual(estimateOpenAiUsageCost({
+    operation: 'realtime_session',
+    model: 'gpt-realtime-2.1',
+    confirmedEvents: 1,
+    inputTokens: 99_999,
+    outputTokens: 99_999,
+  }), { costNanoUsd: 0, coverage: 'none', reason: 'realtime_not_reconciled' });
+});
+
+test('PR 326 cost aggregation remains tenant-scoped and migration-free', () => {
+  const usage = readFileSync(new URL('../lib/flip-ai/usage.ts', import.meta.url), 'utf8');
+  const pricing = readFileSync(new URL('../lib/flip-ai/openai-pricing.ts', import.meta.url), 'utf8');
+  assert.match(usage, /WHERE tenant_id = \$\{tenantId\}/);
+  assert.match(usage, /GROUP BY operation, model/);
+  assert.match(usage, /status = 'confirmed'/);
+  assert.match(pricing, /realtime_not_reconciled/);
+  assert.doesNotMatch(usage + pricing, /\b(?:DROP|TRUNCATE|DELETE\s+FROM|UPDATE\s+flip_ai_credit)/i);
 });
