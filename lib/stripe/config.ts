@@ -16,6 +16,8 @@ export type StripeFoundationReadiness = {
   testModeGuardActive: boolean;
   livePaymentsAllowed: boolean;
   readyForTestIntegration: boolean;
+  readyForWebhookValidation: boolean;
+  warnings: string[];
   errors: string[];
 };
 
@@ -49,6 +51,7 @@ export function inspectStripeFoundationConfiguration(
   const webhookConfigured = Boolean(String(env.STRIPE_WEBHOOK_SECRET || '').trim());
   const webhookValid = webhookSecretLooksValid(env.STRIPE_WEBHOOK_SECRET);
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (enabled) {
     if (mode !== 'test') {
@@ -58,7 +61,7 @@ export function inspectStripeFoundationConfiguration(
       errors.push('Use uma Restricted API Key de teste (rk_test_) nesta etapa.');
     }
     if (!webhookConfigured) {
-      errors.push('STRIPE_WEBHOOK_SECRET ainda não foi configurado.');
+      warnings.push('Webhook secret será configurado quando criarmos o endpoint assinado.');
     } else if (!webhookValid) {
       errors.push('STRIPE_WEBHOOK_SECRET não possui o formato esperado.');
     }
@@ -76,8 +79,13 @@ export function inspectStripeFoundationConfiguration(
     readyForTestIntegration: enabled
       && mode === 'test'
       && keyKind === 'test'
+      && errors.length === 0,
+    readyForWebhookValidation: enabled
+      && mode === 'test'
+      && keyKind === 'test'
       && webhookValid
       && errors.length === 0,
+    warnings,
     errors,
   };
 }
@@ -96,20 +104,11 @@ export function requireStripeTestConfiguration(env: NodeJS.ProcessEnv = process.
       'O PR #331 aceita somente Restricted API Key de teste.',
     );
   }
-  if (!readiness.webhookSecretLooksValid) {
-    throw new StripeFoundationConfigError(
-      'STRIPE_WEBHOOK_SECRET_MISSING',
-      'Configure o webhook secret de teste antes de habilitar a integração.',
-    );
-  }
-
   const restrictedKey = String(env.STRIPE_RESTRICTED_KEY || '').trim();
-  const webhookSecret = String(env.STRIPE_WEBHOOK_SECRET || '').trim();
 
   return {
     mode: 'test' as const,
     restrictedKey,
-    webhookSecret,
   };
 }
 
@@ -121,4 +120,15 @@ export class StripeFoundationConfigError extends Error {
     super(message);
     this.name = 'StripeFoundationConfigError';
   }
+}
+
+export function requireStripeWebhookSecret(env: NodeJS.ProcessEnv = process.env) {
+  const readiness = inspectStripeFoundationConfiguration(env);
+  if (!readiness.readyForWebhookValidation) {
+    throw new StripeFoundationConfigError(
+      'STRIPE_WEBHOOK_NOT_READY',
+      'A validação de webhook Stripe ainda não está pronta neste ambiente.',
+    );
+  }
+  return String(env.STRIPE_WEBHOOK_SECRET || '').trim();
 }
