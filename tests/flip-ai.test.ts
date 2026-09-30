@@ -1040,7 +1040,7 @@ test('PR 325 keeps usage and credit period queries tenant-scoped and bounded', (
   assert.match(usage, /tenant_id = \$\{tenantId\}/);
   assert.match(usage, /created_at >= \$\{range\.from\}/);
   assert.match(usage, /created_at < \$\{range\.toExclusive\}/);
-  assert.match(credits, /tenant_id = \$\{tenantId\} AND account_id = \$\{account\.id\}/);
+  assert.match(credits, /tenant_id = \$\{safeTenantId\} AND account_id = \$\{account\.id\}/);
   assert.match(credits, /created_at >= \$\{rangeFrom\} AND created_at < \$\{rangeUntil\}/);
   assert.doesNotMatch(usage + credits, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
 });
