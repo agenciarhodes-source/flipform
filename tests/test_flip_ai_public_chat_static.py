@@ -47,7 +47,9 @@ def test_public_shell_streams_through_server_without_tracking_or_secrets():
     route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
     engine = read("lib/flip-ai/public-chat.ts")
     adapter = read("lib/flip-ai/openai-responses.ts")
-    assert "Assistente de {agent.tenantName}" in shell
+    assert "Assistente da {agent.tenantName}" in shell
+    assert "Você está em ambiente virtual. Não envie senhas ou dados bancários." in shell
+    assert "Ao continuar, você conversa com um assistente virtual." not in shell
     assert "/api/flip-ai/public/" in shell
     assert "OPENAI_API_KEY" not in shell + route
     assert "process.env.OPENAI_API_KEY" in adapter
