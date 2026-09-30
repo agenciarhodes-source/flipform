@@ -18,6 +18,7 @@ import {
 } from '../lib/flip-ai/openai-realtime';
 import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
 import { validateFlipAiCreditMutation } from '../lib/flip-ai/credits';
+import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
   sanitizeExternalSearchQuery,
@@ -982,4 +983,58 @@ test('PR 277 Realtime foundation is migration-free and keeps the permanent key s
   assert.ok(sessionIssuer.indexOf('await consumeStableQuotas')
     < sessionIssuer.indexOf('const ensured = await ensureConversation'));
   assert.match(route, /clientIp: getClientIp\(request\)/);
+});
+
+
+test('PR 325 usage ranges follow São Paulo calendar days and fail closed', () => {
+  const now = new Date('2026-09-30T15:00:00.000Z');
+  const today = resolveFlipAiUsageRange({ range: 'today' }, now);
+  assert.deepEqual({
+    fromDate: today.fromDate,
+    toDate: today.toDate,
+    from: today.from.toISOString(),
+    until: today.toExclusive.toISOString(),
+  }, {
+    fromDate: '2026-09-30',
+    toDate: '2026-09-30',
+    from: '2026-09-30T03:00:00.000Z',
+    until: '2026-10-01T03:00:00.000Z',
+  });
+
+  const yesterday = resolveFlipAiUsageRange({ range: 'yesterday' }, now);
+  assert.equal(yesterday.from.toISOString(), '2026-09-29T03:00:00.000Z');
+  assert.equal(yesterday.toExclusive.toISOString(), '2026-09-30T03:00:00.000Z');
+
+  const custom = resolveFlipAiUsageRange({
+    range: 'custom',
+    from: '2026-09-10',
+    to: '2026-09-12',
+  }, now);
+  assert.equal(custom.kind, 'custom');
+  assert.equal(custom.label, '10/09/2026 a 12/09/2026');
+  assert.equal(custom.from.toISOString(), '2026-09-10T03:00:00.000Z');
+  assert.equal(custom.toExclusive.toISOString(), '2026-09-13T03:00:00.000Z');
+
+  assert.equal(resolveFlipAiUsageRange({ days: '7' }, now).preset, '7');
+  assert.equal(resolveFlipAiUsageRange({
+    range: 'custom',
+    from: '2026-10-01',
+    to: '2026-10-01',
+  }, now).preset, '30');
+  assert.equal(resolveFlipAiUsageRange({
+    range: 'custom',
+    from: '2026-09-12',
+    to: '2026-09-10',
+  }, now).preset, '30');
+});
+
+test('PR 325 keeps usage and credit period queries tenant-scoped and bounded', () => {
+  const usage = readFileSync(new URL('../lib/flip-ai/usage.ts', import.meta.url), 'utf8');
+  const credits = readFileSync(new URL('../lib/flip-ai/credits.ts', import.meta.url), 'utf8');
+  assert.match(usage, /tenant_id = \$\{tenantId\}/);
+  assert.match(usage, /created_at >= \$\{range\.from\}/);
+  assert.match(usage, /created_at < \$\{range\.toExclusive\}/);
+  assert.match(credits, /tenant_id = \$\{tenantId\} AND account_id = \$\{account\.id\}/);
+  assert.match(credits, /created_at >= \$\{rangeFrom\} AND created_at < \$\{rangeUntil\}/);
+  assert.doesNotMatch(usage + credits, /\b(?:DROP|TRUNCATE|DELETE\s+FROM)\b/i);
 });

@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, AudioLines, Bot, CircleDollarSign } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, AudioLines, Bot, CalendarDays, CircleDollarSign } from 'lucide-react';
 import { getSession } from '@/lib/auth';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { getFlipAiCreditWallet } from '@/lib/flip-ai/credits';
+import { getFlipAiUsageDashboard } from '@/lib/flip-ai/usage';
 import {
-  FLIP_AI_USAGE_PERIODS,
-  getFlipAiUsageDashboard,
-  parseFlipAiUsagePeriod,
-} from '@/lib/flip-ai/usage';
+  resolveFlipAiUsageRange,
+  type FlipAiUsageSearchParams,
+} from '@/lib/flip-ai/usage-range';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,16 +44,17 @@ function statusClass(status: string) {
 export default async function FlipAiUsagePage({
   searchParams,
 }: {
-  searchParams?: { days?: string | string[] };
+  searchParams?: FlipAiUsageSearchParams;
 }) {
   const session = await getSession();
   if (!session) redirect('/login');
-  const periodDays = parseFlipAiUsagePeriod(searchParams?.days);
+  const usageRange = resolveFlipAiUsageRange(searchParams);
+  const today = resolveFlipAiUsageRange({ range: 'today' }).toDate;
 
   try {
     const [usage, wallet] = await Promise.all([
-      getFlipAiUsageDashboard(session, periodDays),
-      getFlipAiCreditWallet(session),
+      getFlipAiUsageDashboard(session, usageRange),
+      getFlipAiCreditWallet(session, 50, usageRange),
     ]);
     return <section className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header className="space-y-3">
@@ -70,15 +71,45 @@ export default async function FlipAiUsagePage({
               Saldo, histórico de créditos e operações técnicas da sua empresa.
             </p>
           </div>
-          <nav className="flex rounded-lg border bg-card p-1" aria-label="Período do consumo">
-            {FLIP_AI_USAGE_PERIODS.map((days) => <Link key={days} href={`/flip-ai/usage?days=${days}`}
-              aria-current={days === usage.periodDays ? 'page' : undefined}
-              className={days === usage.periodDays
-                ? 'rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white'
-                : 'rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted'}>
-              {days} dias
-            </Link>)}
-          </nav>
+          <div className="space-y-3">
+            <nav className="flex flex-wrap rounded-lg border bg-card p-1" aria-label="Período do consumo">
+              {([
+                ['today', 'Hoje'],
+                ['yesterday', 'Ontem'],
+                ['7', '7 dias'],
+                ['30', '30 dias'],
+                ['90', '90 dias'],
+              ] as const).map(([preset, label]) => <Link key={preset}
+                href={`/flip-ai/usage?range=${preset}`}
+                aria-current={preset === usage.range.preset ? 'page' : undefined}
+                className={preset === usage.range.preset
+                  ? 'rounded-md bg-brand-600 px-3 py-2 text-sm font-medium text-white'
+                  : 'rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted'}>
+                {label}
+              </Link>)}
+            </nav>
+            <form method="get" className="flex flex-wrap items-end gap-2 rounded-lg border bg-card p-3">
+              <input type="hidden" name="range" value="custom" />
+              <CalendarDays className="mb-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                De
+                <input type="date" name="from" required max={today}
+                  defaultValue={usage.range.fromDate}
+                  className="rounded-md border bg-background px-3 py-2 text-sm text-foreground" />
+              </label>
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                Até
+                <input type="date" name="to" required max={today}
+                  defaultValue={usage.range.toDate}
+                  className="rounded-md border bg-background px-3 py-2 text-sm text-foreground" />
+              </label>
+              <button type="submit"
+                className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+                Aplicar
+              </button>
+            </form>
+            <p className="text-right text-xs text-muted-foreground">Período exibido: {usage.range.label}</p>
+          </div>
         </div>
       </header>
 
@@ -89,8 +120,8 @@ export default async function FlipAiUsagePage({
         : <div className="grid gap-4 sm:grid-cols-3">
           {[
             ['Saldo Flip AI', wallet.balanceCredits],
-            ['Créditos adicionados', wallet.creditedCredits],
-            ['Créditos consumidos', wallet.debitedCredits],
+            ['Créditos adicionados no período', wallet.creditedCredits],
+            ['Créditos consumidos no período', wallet.debitedCredits],
           ].map(([label, value]) => <div key={String(label)} className="rounded-lg border bg-card p-5">
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="mt-2 text-2xl font-semibold">{number.format(Number(value))}</p>
@@ -179,7 +210,7 @@ export default async function FlipAiUsagePage({
         {!wallet.available
           ? <p className="p-5 text-sm text-muted-foreground">Histórico disponível após a liberação segura do schema.</p>
           : !wallet.entries.length
-            ? <p className="p-5 text-sm text-muted-foreground">Nenhum lançamento de crédito.</p>
+            ? <p className="p-5 text-sm text-muted-foreground">Nenhum lançamento de crédito no período.</p>
             : <div className="overflow-x-auto"><table className="w-full text-left text-sm">
               <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>
                 <th className="px-4 py-3 font-medium">Data</th>
