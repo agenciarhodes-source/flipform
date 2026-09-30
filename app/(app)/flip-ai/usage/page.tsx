@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowLeft, AudioLines, Bot, CalendarDays, CircleDollarSi
 import { getSession } from '@/lib/auth';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { getFlipAiCreditWallet } from '@/lib/flip-ai/credits';
+import { nanoUsdToUsd } from '@/lib/flip-ai/openai-pricing';
 import { getFlipAiUsageDashboard } from '@/lib/flip-ai/usage';
 import {
   resolveFlipAiUsageRange,
@@ -13,6 +14,12 @@ import {
 export const dynamic = 'force-dynamic';
 
 const number = new Intl.NumberFormat('pt-BR');
+const usd = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 6,
+});
 const dateTime = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
   timeStyle: 'short',
@@ -33,6 +40,11 @@ const CREDIT_SOURCE_LABELS: Record<string, string> = {
   refund: 'Estorno',
   manual_adjustment: 'Ajuste manual',
 };
+
+function formatUsd(costNanoUsd: number) {
+  const value = nanoUsdToUsd(costNanoUsd);
+  return value > 0 && value < 0.000001 ? '< US$ 0,000001' : usd.format(value);
+}
 
 function statusClass(status: string) {
   if (status === 'confirmed') return 'bg-emerald-50 text-emerald-700';
@@ -129,12 +141,31 @@ export default async function FlipAiUsagePage({
           </div>)}
         </div>}
 
-      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-        <div className="flex gap-3"><AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-          <div><p className="font-medium">Carteira separada da medição técnica</p>
-            <p className="mt-1">Este PR não converte eventos em cobrança. “Sessão de voz emitida” registra somente a credencial Realtime e nunca será debitada como se fosse consumo final de áudio.</p></div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
+          <p className="text-sm font-medium">Custo estimado OpenAI no período</p>
+          <p className="mt-2 text-3xl font-semibold">{formatUsd(usage.pricing.estimatedCostNanoUsd)}</p>
+          <p className="mt-2 text-xs">
+            {number.format(usage.pricing.fullyPricedOperations)} operação(ões) com preço integral.
+          </p>
+        </div>
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+          <div className="flex gap-3"><AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <div><p className="font-medium">Estimativa separada da carteira</p>
+              <p className="mt-1">O valor usa a tabela oficial da OpenAI com referência em {usage.pricing.snapshot} e não gera débito. A sessão de voz registra somente a credencial Realtime; o áudio permanece fora da estimativa até a reconciliação do consumo real.</p>
+              <a href={usage.pricing.source} target="_blank" rel="noreferrer"
+                className="mt-2 inline-block font-medium underline">Consultar tabela oficial</a>
+            </div>
+          </div>
         </div>
       </div>
+
+      {(usage.pricing.partiallyPricedOperations > 0 || usage.pricing.unpricedOperations > 0) &&
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+            <p><strong>{number.format(usage.pricing.partiallyPricedOperations)}</strong> operação(ões) têm custo parcial e <strong>{number.format(usage.pricing.unpricedOperations)}</strong> ficaram fora da estimativa por modelo sem preço cadastrado ou voz ainda não reconciliada.</p>
+          </div>
+        </div>}
 
       {(usage.totals.ambiguousOperations > 0 || usage.totals.processingOperations > 0) &&
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
@@ -163,13 +194,22 @@ export default async function FlipAiUsagePage({
               <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>
                 <th className="px-4 py-3 font-medium">Operação</th><th className="px-4 py-3 font-medium">Confirmadas</th>
                 <th className="px-4 py-3 font-medium">Entrada</th><th className="px-4 py-3 font-medium">Saída</th>
+                <th className="px-4 py-3 font-medium">Estimativa</th>
               </tr></thead>
-              <tbody>{usage.operations.map((operation) => <tr key={operation.operation} className="border-t">
+              <tbody>{usage.operations.map((operation) => <tr key={`${operation.operation}:${operation.model}`} className="border-t">
                 <td className="px-4 py-3"><p className="font-medium">{operation.label}</p>
+                  <p className="mt-1 max-w-48 truncate text-xs text-muted-foreground" title={operation.model}>{operation.model}</p>
                   {operation.ambiguousEvents || operation.failedEvents ? <p className="mt-1 text-xs text-amber-700">{operation.ambiguousEvents} incerto(s) · {operation.failedEvents} falha(s)</p> : null}</td>
                 <td className="px-4 py-3">{number.format(operation.confirmedEvents)}</td>
                 <td className="px-4 py-3">{number.format(operation.inputTokens)}</td>
                 <td className="px-4 py-3">{number.format(operation.outputTokens)}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {operation.costCoverage === 'none'
+                    ? <span className="text-xs text-muted-foreground">Não calculado</span>
+                    : <span>{formatUsd(operation.estimatedCostNanoUsd)}
+                      {operation.costCoverage === 'partial' ? <sup title="Estimativa parcial">*</sup> : null}
+                    </span>}
+                </td>
               </tr>)}</tbody>
             </table></div>}
         </section>
