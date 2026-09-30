@@ -72,6 +72,41 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   addCheck('CRON_SECRET', hasValue(env.CRON_SECRET), 'CRON_SECRET configured', 'CRON_SECRET is required.');
   addCheck('INTERNAL_JOB_SECRET', hasValue(env.INTERNAL_JOB_SECRET), 'INTERNAL_JOB_SECRET configured', 'INTERNAL_JOB_SECRET is required.');
 
+  const stripeEnabled = String(env.STRIPE_ENABLED || '').trim().toLowerCase() === 'true';
+  const stripeMode = String(env.STRIPE_MODE || 'test').trim().toLowerCase();
+  const stripeRestrictedKey = String(env.STRIPE_RESTRICTED_KEY || '').trim();
+  const stripeWebhookSecret = String(env.STRIPE_WEBHOOK_SECRET || '').trim();
+  const stripeLiveAllowed = String(env.STRIPE_LIVE_PAYMENTS_ALLOWED || '').trim().toLowerCase() === 'true';
+
+  if (stripeEnabled) {
+    addCheck(
+      'STRIPE_MODE',
+      stripeMode === 'test',
+      'Stripe test mode enforced for PR #331',
+      'STRIPE_MODE must remain test during PR #331.',
+    );
+    addCheck(
+      'STRIPE_RESTRICTED_KEY',
+      stripeRestrictedKey.startsWith('rk_test_'),
+      'Stripe restricted test key configured',
+      'STRIPE_RESTRICTED_KEY must be a restricted test key (rk_test_) during PR #331.',
+    );
+    addCheck(
+      'STRIPE_LIVE_PAYMENTS_ALLOWED',
+      !stripeLiveAllowed,
+      'Stripe live payments blocked',
+      'STRIPE_LIVE_PAYMENTS_ALLOWED must remain false during PR #331.',
+    );
+    if (stripeWebhookSecret) {
+      addCheck(
+        'STRIPE_WEBHOOK_SECRET',
+        stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16,
+        'Stripe webhook secret format accepted',
+        'STRIPE_WEBHOOK_SECRET must use the whsec_ format when configured.',
+      );
+    }
+  }
+
   addCheck('NEXT_PUBLIC_MARKETING_URL format', isHttpsUrl(env.NEXT_PUBLIC_MARKETING_URL), 'NEXT_PUBLIC_MARKETING_URL valid URL', 'NEXT_PUBLIC_MARKETING_URL must be a valid https URL.');
   addCheck('NEXT_PUBLIC_APP_URL format', isHttpsUrl(env.NEXT_PUBLIC_APP_URL), 'NEXT_PUBLIC_APP_URL valid URL', 'NEXT_PUBLIC_APP_URL must be a valid https URL.');
   addCheck('NEXT_PUBLIC_ADMIN_URL format', isHttpsUrl(env.NEXT_PUBLIC_ADMIN_URL), 'NEXT_PUBLIC_ADMIN_URL valid URL', 'NEXT_PUBLIC_ADMIN_URL must be a valid https URL.');
@@ -134,6 +169,8 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
       'ASAAS_WEBHOOK_TOKEN',
       'CRON_SECRET',
       'INTERNAL_JOB_SECRET',
+      ...(stripeEnabled ? ['STRIPE_RESTRICTED_KEY'] as const : []),
+      ...(stripeEnabled && stripeWebhookSecret ? ['STRIPE_WEBHOOK_SECRET'] as const : []),
     ] as const;
 
     for (const key of sensitiveKeys) {
@@ -158,6 +195,12 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     asaas: hasValue(env.ASAAS_BASE_URL) && hasValue(env.ASAAS_API_KEY) && hasValue(env.ASAAS_WEBHOOK_TOKEN),
     email: hasValue(env.EMAIL_PROVIDER) && hasValue(env.EMAIL_FROM) && hasValue(env.EMAIL_REPLY_TO),
     internalJobs: hasValue(env.CRON_SECRET) && hasValue(env.INTERNAL_JOB_SECRET),
+    stripe: !stripeEnabled || (
+      stripeMode === 'test'
+      && stripeRestrictedKey.startsWith('rk_test_')
+      && !stripeLiveAllowed
+      && (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
+    ),
     observability: true,
   };
 
