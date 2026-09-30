@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidFlipAiAvatar } from './avatar';
 
 export const FLIP_AI_PLAN_SLUGS = ['premium', 'premium-pro'] as const;
 type Plan = { slug: string | null; isActive: boolean } | null;
@@ -35,6 +36,11 @@ export const agentDraftSchema = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(500).default(''),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  avatarUrl: z.string().refine(isValidFlipAiAvatar,
+    'Foto inválida. Envie PNG, JPG ou WebP de até 120 KB.').nullable().default(null),
+  chatBackgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
+  userMessageColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
+  sendButtonColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
   style: z.enum(['welcoming', 'professional', 'direct']),
   pipelineId: z.string().uuid(),
   initialStageId: z.string().uuid(),
@@ -47,7 +53,8 @@ export const agentPublicationSchema = z.object({
   action: z.enum(['publish', 'unpublish']),
   version: z.number().int().positive(),
 }).strict();
-export type AgentDraftInput = z.infer<typeof agentDraftSchema>;
+export type AgentDraftInput = z.input<typeof agentDraftSchema>;
+type AgentDraftValues = z.output<typeof agentDraftSchema>;
 export type KnowledgeMasterSummary = { title: string; revision: number; byteSize: number; contentHash: string; updatedAt: string };
 export type KnowledgeMaster = KnowledgeMasterSummary & { content: string };
 export const knowledgeMasterSchema = z.object({
@@ -84,7 +91,7 @@ export type AgentPublicationReadiness = {
   publicPath: string;
   checks: AgentPublicationCheck[];
 };
-export type AgentDraft = AgentDraftInput & {
+export type AgentDraft = AgentDraftValues & {
   id: string;
   version: number;
   status: 'draft' | 'published';
@@ -94,6 +101,7 @@ export type AgentDraft = AgentDraftInput & {
 };
 export type AgentWorkspace = {
   accessMode: 'plan' | 'pilot';
+  appearanceReady: boolean;
   agents: AgentDraft[];
   pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;
   rotations: Array<{ id: string; name: string; pipelineId: string; enabled: boolean }>;

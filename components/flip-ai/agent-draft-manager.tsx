@@ -1,16 +1,22 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRef, useState, type FormEvent } from 'react';
 import { BarChart3, Bot, BookOpen, CheckCircle2, CircleAlert, ExternalLink, Globe2, Plus, Power } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
 import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-editor';
+import { AgentAvatarPicker } from '@/components/flip-ai/agent-avatar-picker';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
 
 type Editor = { id?: string; version?: number; requestId: string; input: AgentDraftInput };
 const control = 'mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm';
+function readableTextColor(color: string) {
+  const [r, g, b] = [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 >= 150 ? '#0F172A' : '#FFFFFF';
+}
 export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: AgentWorkspace }) {
   const [workspace, setWorkspace] = useState(initialWorkspace);
   const [editor, setEditor] = useState<Editor | null>(null);
@@ -27,6 +33,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     setMessage('');
     setEditor({ requestId: crypto.randomUUID(), input: {
       name: '', description: '', primaryColor: '#2563EB', style: 'welcoming',
+      avatarUrl: null, chatBackgroundColor: null, userMessageColor: null, sendButtonColor: null,
       pipelineId: pipeline?.id || '', initialStageId: pipeline?.stages[0]?.id || '', rotationId: null, slug: '',
     } });
   }
@@ -34,6 +41,8 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     setMessage('');
     setEditor({ id: agent.id, version: agent.version, requestId: crypto.randomUUID(), input: {
       name: agent.name, description: agent.description, primaryColor: agent.primaryColor, style: agent.style,
+      avatarUrl: agent.avatarUrl, chatBackgroundColor: agent.chatBackgroundColor,
+      userMessageColor: agent.userMessageColor, sendButtonColor: agent.sendButtonColor,
       pipelineId: agent.pipelineId, initialStageId: agent.initialStageId, rotationId: agent.rotationId, slug: agent.slug,
     } });
   }
@@ -106,6 +115,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       <p className="font-medium">Modo piloto controlado</p>
       <p className="mt-1">Esta empresa foi autorizada no servidor para testar o Flip AI. Isso não altera o plano contratado nem libera o recurso para outros clientes.</p>
     </div> : null}
+    {!workspace.appearanceReady ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+      A identidade visual avançada será liberada após a atualização aditiva do banco. O chat continua usando a cor principal e as iniciais atuais.
+    </div> : null}
     <div className="rounded-lg border bg-muted/40 p-4 text-sm">A publicação só é liberada quando destino, conhecimento, OpenAI e carteira estiverem prontos. Retirar do ar é imediato e não apaga conversas ou Leads.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
       <Button variant="outline" disabled={busy} onClick={() => reload()}>Atualizar lista</Button></div>
@@ -116,7 +128,37 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <label className="text-sm" htmlFor="ai-style">Estilo de conversa<select id="ai-style" className={control} value={editor.input.style} onChange={(e) => change('style', e.target.value as AgentDraftInput['style'])}>
           <option value="welcoming">Acolhedor</option><option value="professional">Profissional</option><option value="direct">Direto</option></select></label>
         <label className="text-sm sm:col-span-2" htmlFor="ai-description">Descrição interna<textarea id="ai-description" className={control} rows={3} maxLength={500} value={editor.input.description} onChange={(e) => change('description', e.target.value)} /></label>
+        <AgentAvatarPicker value={editor.input.avatarUrl || ''} disabled={!workspace.appearanceReady}
+          onChange={(value) => change('avatarUrl', value || null)} />
         <label className="text-sm" htmlFor="ai-color">Cor de identidade<input id="ai-color" type="color" className="mt-1 block h-10 w-20 cursor-pointer rounded border" value={editor.input.primaryColor} onChange={(e) => change('primaryColor', e.target.value)} /></label>
+        <label className="text-sm" htmlFor="ai-chat-bg">Fundo do chat<div className="mt-1 flex items-center gap-2">
+          <input id="ai-chat-bg" type="color" className="h-10 w-20 cursor-pointer rounded border" disabled={!workspace.appearanceReady}
+            value={editor.input.chatBackgroundColor || '#F8FAFC'} onChange={(e) => change('chatBackgroundColor', e.target.value)} />
+          <Button type="button" size="sm" variant="ghost" disabled={!workspace.appearanceReady || !editor.input.chatBackgroundColor}
+            onClick={() => change('chatBackgroundColor', null)}>Padrão</Button>
+        </div></label>
+        <label className="text-sm" htmlFor="ai-user-color">Mensagem do cliente<div className="mt-1 flex items-center gap-2">
+          <input id="ai-user-color" type="color" className="h-10 w-20 cursor-pointer rounded border" disabled={!workspace.appearanceReady}
+            value={editor.input.userMessageColor || editor.input.primaryColor} onChange={(e) => change('userMessageColor', e.target.value)} />
+          <Button type="button" size="sm" variant="ghost" disabled={!workspace.appearanceReady || !editor.input.userMessageColor}
+            onClick={() => change('userMessageColor', null)}>Herdar</Button>
+        </div></label>
+        <label className="text-sm" htmlFor="ai-button-color">Botão de envio<div className="mt-1 flex items-center gap-2">
+          <input id="ai-button-color" type="color" className="h-10 w-20 cursor-pointer rounded border" disabled={!workspace.appearanceReady}
+            value={editor.input.sendButtonColor || editor.input.primaryColor} onChange={(e) => change('sendButtonColor', e.target.value)} />
+          <Button type="button" size="sm" variant="ghost" disabled={!workspace.appearanceReady || !editor.input.sendButtonColor}
+            onClick={() => change('sendButtonColor', null)}>Herdar</Button>
+        </div></label>
+        <div className="rounded-lg border p-3 sm:col-span-2" style={{ backgroundColor: editor.input.chatBackgroundColor || '#F8FAFC' }}>
+          <p className="mb-3 text-xs font-medium text-slate-600">Prévia do chat</p>
+          <div className="max-w-[80%] rounded-2xl rounded-bl-md border bg-white px-3 py-2 text-sm text-slate-800">Olá! Como posso ajudar?</div>
+          <div className="ml-auto mt-2 max-w-[80%] rounded-2xl rounded-br-md px-3 py-2 text-sm"
+            style={{ backgroundColor: editor.input.userMessageColor || editor.input.primaryColor,
+              color: readableTextColor(editor.input.userMessageColor || editor.input.primaryColor) }}>Quero saber mais.</div>
+          <div className="mt-3 flex justify-end"><span className="rounded-full px-3 py-2 text-xs font-medium"
+            style={{ backgroundColor: editor.input.sendButtonColor || editor.input.primaryColor,
+              color: readableTextColor(editor.input.sendButtonColor || editor.input.primaryColor) }}>Enviar</span></div>
+        </div>
         <label className="text-sm" htmlFor="ai-slug">Endereço reservado do chat<Input id="ai-slug" className="mt-1" required minLength={3} maxLength={64} pattern="[a-z0-9]+(-[a-z0-9]+)*" value={editor.input.slug} onChange={(e) => change('slug', e.target.value)} placeholder="helena-empresa" aria-describedby="ai-slug-help" />
           <span id="ai-slug-help" className="mt-1 block text-xs text-muted-foreground">Letras minúsculas, números e hífens. Reservar não publica o chat.</span></label>
         <label className="text-sm" htmlFor="ai-pipeline">Pipeline de destino<select id="ai-pipeline" className={control} required value={editor.input.pipelineId} onChange={(e) => {
@@ -148,7 +190,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     {!workspace.agents.length ? <div className="rounded-lg border border-dashed p-8 text-center"><h2 className="font-medium">Seu primeiro atendente começa aqui</h2>
       <p className="mt-2 text-sm text-muted-foreground">Defina sua identidade e o destino dos futuros leads no Kanban.</p></div> :
       <ul className="grid gap-4 md:grid-cols-2">{workspace.agents.map((agent) => <li key={agent.id} className="rounded-lg border bg-card p-5">
-        <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold" style={{ borderColor: agent.primaryColor }}>{agent.name.slice(0, 2).toUpperCase()}</div>
+        <div className="flex items-center gap-3">{agent.avatarUrl
+          ? <Image src={agent.avatarUrl} alt={`Foto de ${agent.name}`} width={40} height={40} unoptimized className="h-10 w-10 rounded-full border object-cover" />
+          : <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 font-semibold" style={{ borderColor: agent.primaryColor }}>{agent.name.slice(0, 2).toUpperCase()}</div>}
           <div className="min-w-0"><h2 className="truncate font-medium">{agent.name}</h2><span className="text-xs text-muted-foreground">{agent.status === 'published' ? 'Publicado' : 'Rascunho'}</span></div></div>
         {agent.description ? <p className="mt-3 break-words text-sm text-muted-foreground">{agent.description}</p> : null}
         <p className="mt-3 break-all text-xs text-muted-foreground">{agent.status === 'published' ? 'Chat público' : 'Endereço reservado'}: {agent.publication.publicPath}</p>

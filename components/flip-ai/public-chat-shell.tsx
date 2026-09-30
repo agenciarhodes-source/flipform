@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Bot, LoaderCircle, Mic, RotateCcw, Send, Square } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
@@ -7,6 +8,7 @@ import { FlipAiRealtimeVoiceClient, type FlipAiVoiceState } from '@/lib/flip-ai/
 import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
 import { fireMetaLeadPixel } from '@/lib/tracking/meta-pixel-client';
 import { firePublicGtmLeadEvent } from '@/lib/tracking/gtm-client';
+import { isValidFlipAiAvatar } from '@/lib/flip-ai/avatar';
 
 type ChatSource = { title: string; url: string; domain: string; consultedAt: string };
 type ChatMessage = {
@@ -21,6 +23,15 @@ type RetryTurn = { messageId: string; text: string; speakReply: boolean };
 
 function safeColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#2563EB';
+}
+
+function optionalColor(value: string | null | undefined, fallback: string) {
+  return value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+}
+
+function readableTextColor(color: string) {
+  const [r, g, b] = [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16));
+  return (r * 299 + g * 587 + b * 114) / 1000 >= 150 ? '#0F172A' : '#FFFFFF';
 }
 
 function parseEvent(block: string) {
@@ -46,6 +57,10 @@ const VOICE_LABEL: Record<FlipAiVoiceState, string> = {
 
 export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
   const color = safeColor(agent.primaryColor);
+  const backgroundColor = optionalColor(agent.chatBackgroundColor, '#F8FAFC');
+  const userMessageColor = optionalColor(agent.userMessageColor, color);
+  const sendButtonColor = optionalColor(agent.sendButtonColor, color);
+  const avatarUrl = agent.avatarUrl && isValidFlipAiAvatar(agent.avatarUrl) ? agent.avatarUrl : null;
   const initials = agent.name.trim().slice(0, 2).toUpperCase();
   const bottomRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
@@ -214,13 +229,15 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     <main className="min-h-dvh bg-slate-100 p-0 sm:flex sm:items-center sm:justify-center sm:p-6">
       <section className="flex min-h-dvh w-full flex-col overflow-hidden bg-white sm:min-h-[720px] sm:max-w-lg sm:rounded-2xl sm:border sm:shadow-xl">
         <header className="flex items-center gap-3 border-b bg-white px-4 py-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
-            style={{ backgroundColor: color }} aria-hidden="true">
-            {initials || <Bot className="h-5 w-5" />}
-          </div>
+          {avatarUrl ? <Image src={avatarUrl} alt={`Foto de ${agent.name}`} width={44} height={44} unoptimized
+            className="h-11 w-11 shrink-0 rounded-full border object-cover" />
+            : <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+              style={{ backgroundColor: color, color: readableTextColor(color) }} aria-hidden="true">
+              {initials || <Bot className="h-5 w-5" />}
+            </div>}
           <div className="min-w-0">
             <h1 className="truncate font-semibold text-slate-950">{agent.name}</h1>
-            <p className="text-xs text-slate-600">Assistente virtual de {agent.tenantName}</p>
+            <p className="text-xs text-slate-600">Assistente de {agent.tenantName}</p>
             <p className="mt-0.5 flex items-center gap-1 text-xs text-emerald-700">
               <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
               Online
@@ -228,13 +245,15 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
           </div>
         </header>
 
-        <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 px-4 py-6" aria-live="polite">
+        <div className="flex-1 space-y-4 overflow-y-auto px-4 py-6" style={{ backgroundColor }} aria-live="polite">
           {messages.map((message) => (
             <div key={message.id}
               className={message.role === 'user'
                 ? 'ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white shadow-sm'
                 : 'max-w-[85%] rounded-2xl rounded-bl-md border bg-white px-4 py-3 text-sm leading-relaxed text-slate-800 shadow-sm'}
-              style={message.role === 'user' ? { backgroundColor: color } : undefined}>
+              style={message.role === 'user' ? {
+                backgroundColor: userMessageColor, color: readableTextColor(userMessageColor),
+              } : undefined}>
               {message.text}
               {message.sources?.length ? <ul className="mt-3 space-y-1 border-t pt-2 text-xs">
                 {message.sources.map((source) => <li key={source.url}>
@@ -278,7 +297,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
             </button>
             <button disabled={sending || voiceActive || !input.trim()} type="submit" aria-label="Enviar mensagem"
               className="flex h-9 w-9 items-center justify-center rounded-full text-white disabled:opacity-50"
-              style={{ backgroundColor: color }}>
+              style={{ backgroundColor: sendButtonColor, color: readableTextColor(sendButtonColor) }}>
               {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>

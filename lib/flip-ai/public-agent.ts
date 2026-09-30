@@ -14,11 +14,35 @@ export type PublicFlipAiAgent = {
   slug: string;
   name: string;
   primaryColor: string;
+  avatarUrl?: string | null;
+  chatBackgroundColor?: string | null;
+  userMessageColor?: string | null;
+  sendButtonColor?: string | null;
   style: string;
   tenantName: string;
   tenantLogoUrl: string | null;
   knowledgeRevision: number;
 };
+
+async function resolveAgentAppearance(input: { tenantId: string; agentId: string }) {
+  const rows = await prisma.$queryRaw<Array<{
+    avatarUrl: string | null;
+    chatBackgroundColor: string | null;
+    userMessageColor: string | null;
+    sendButtonColor: string | null;
+  }>>(Prisma.sql`
+    SELECT to_jsonb(agent)->>'avatar_url' AS "avatarUrl",
+      to_jsonb(agent)->>'chat_background_color' AS "chatBackgroundColor",
+      to_jsonb(agent)->>'user_message_color' AS "userMessageColor",
+      to_jsonb(agent)->>'send_button_color' AS "sendButtonColor"
+    FROM flip_ai_agents AS agent
+    WHERE agent.tenant_id = ${input.tenantId} AND agent.id = ${input.agentId}
+    LIMIT 1
+  `);
+  return rows[0] || {
+    avatarUrl: null, chatBackgroundColor: null, userMessageColor: null, sendButtonColor: null,
+  };
+}
 
 export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   tenantId: string;
@@ -161,6 +185,10 @@ export async function resolvePublicFlipAiRuntime(input: {
     select: { id: true },
   });
   if (!index) return null;
+  const appearance = await resolveAgentAppearance({
+    tenantId: endpoint.agent.tenantId,
+    agentId: endpoint.agent.id,
+  });
 
   return {
     id: endpoint.agent.id,
@@ -168,6 +196,7 @@ export async function resolvePublicFlipAiRuntime(input: {
     name: endpoint.agent.name,
     description: endpoint.agent.description,
     primaryColor: endpoint.agent.primaryColor,
+    ...appearance,
     style: endpoint.agent.style,
     tenantId: endpoint.agent.tenantId,
     tenantName: endpoint.agent.tenant.name,
@@ -197,6 +226,10 @@ export async function resolvePublicFlipAiAgent(input: {
     slug: runtime.slug,
     name: runtime.name,
     primaryColor: runtime.primaryColor,
+    avatarUrl: runtime.avatarUrl,
+    chatBackgroundColor: runtime.chatBackgroundColor,
+    userMessageColor: runtime.userMessageColor,
+    sendButtonColor: runtime.sendButtonColor,
     style: runtime.style,
     tenantName: runtime.tenantName,
     tenantLogoUrl: runtime.tenantLogoUrl,
