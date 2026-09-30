@@ -47,7 +47,7 @@ const COLUMN_SPECS_BY_TABLE = {
   flip_ai_usage_events: 'id:text tenant_id:text agent_id:text? request_key:text operation:text provider:text model:text status:text input_tokens:int4? output_tokens:int4? units:int4=1 metadata:jsonb? created_at:timestamp=CURRENT_TIMESTAMP conversation_id:text?',
   flip_ai_credit_accounts: 'id:text tenant_id:text balance_credits:int4=0 version:int4=1 created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
   flip_ai_credit_ledger: 'id:text tenant_id:text account_id:text idempotency_key:text entry_type:text amount_credits:int4 balance_after_credits:int4 source:text reference_id:text? created_at:timestamp=CURRENT_TIMESTAMP',
-  flip_ai_top_up_orders: "id:text tenant_id:text request_key:text status:text='pending' amount_cents:int4 currency:text='BRL' credits:int4 estimated_openai_cost_cents:int4=0 estimated_openai_cost_currency:text='USD' payment_provider:text? provider_payment_id:text? payment_method:text? paid_at:timestamp? credited_at:timestamp? canceled_at:timestamp? credit_ledger_entry_id:text? created_by:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
+  flip_ai_top_up_orders: "id:text tenant_id:text request_key:text status:text='pending' amount_cents:int4 currency:text='BRL' credits:int4 estimated_openai_cost_cents:int4=0 estimated_openai_cost_currency:text='USD' payment_provider:text? provider_payment_id:text? payment_method:text? stripe_checkout_session_id:text? stripe_checkout_attempt:int4=0 stripe_checkout_requested_at:timestamp? stripe_checkout_created_at:timestamp? stripe_checkout_expires_at:timestamp? paid_at:timestamp? credited_at:timestamp? canceled_at:timestamp? credit_ledger_entry_id:text? created_by:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
   flip_ai_conversation_states: "id:text tenant_id:text agent_id:text conversation_id:text status:text='active' turn_count:int4=0 summary:text? summary_updated_at:timestamp? last_response_id:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
   flip_ai_rate_limit_buckets: 'id:text tenant_id:text scope:text scope_key:text window_start:timestamp request_count:int4=0 rejected_count:int4=0 last_request_at:timestamp=CURRENT_TIMESTAMP created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
   flip_ai_qualifications: "id:text tenant_id:text agent_id:text conversation_id:text lead_id:text? knowledge_index_id:text classification:text fit_score:int4 intent_score:int4 awareness_level:int4 journey_stage:text confidence:float8 summary:text reasons:_text next_action:text evidence_message_ids:_text=ARRAY[]::TEXT[] model:text qualified_lead_event_id:text? qualified_lead_tracking_status:text='not_applicable' qualified_lead_dispatched_at:timestamp? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
@@ -178,6 +178,7 @@ export const FLIP_AI_REQUIRED_INDEX_SPECS: readonly FlipAiRequiredIndexSpec[] = 
   index('flip_ai_top_up_orders', 'flip_ai_top_up_orders_tenant_id_request_key_key', true, 'tenant_id,request_key', `${T},${T}`),
   index('flip_ai_top_up_orders', 'flip_ai_top_up_orders_payment_provider_provider_payment_id_key', true, 'payment_provider,provider_payment_id', `${T},${T}`),
   index('flip_ai_top_up_orders', 'flip_ai_top_up_orders_tenant_id_status_created_at_idx', false, 'tenant_id,status,created_at', `${T},${T},${TS}`),
+  index('flip_ai_top_up_orders', 'flip_ai_top_up_orders_stripe_checkout_session_id_key', true, 'stripe_checkout_session_id', T),
   index('conversations', 'conversations_tenant_id_id_key', true, 'tenant_id,id', `${T},${T}`),
   index('flip_ai_conversation_states', 'flip_ai_conversation_states_conversation_id_key', true, 'conversation_id', T),
   index('flip_ai_conversation_states', 'flip_ai_conversation_states_tenant_id_id_key', true, 'tenant_id,id', `${T},${T}`),
@@ -400,6 +401,7 @@ const TOP_UP_STATUS_CHECK = `CHECK (
 const TOP_UP_AMOUNT_CHECK = 'CHECK (amount_cents > 0)';
 const TOP_UP_CREDITS_CHECK = 'CHECK (credits > 0)';
 const TOP_UP_ESTIMATED_COST_CHECK = 'CHECK (estimated_openai_cost_cents >= 0)';
+const TOP_UP_CHECKOUT_ATTEMPT_CHECK = 'CHECK (stripe_checkout_attempt >= 0)';
 
 export const FLIP_AI_REQUIRED_CONSTRAINT_SPECS: readonly FlipAiRequiredConstraintSpec[] = [
   primary('flip_ai_agents', 'flip_ai_agents_pkey'),
@@ -451,6 +453,7 @@ export const FLIP_AI_REQUIRED_CONSTRAINT_SPECS: readonly FlipAiRequiredConstrain
   check('flip_ai_top_up_orders', 'flip_ai_top_up_orders_amount_cents_check', 'amount_cents', TOP_UP_AMOUNT_CHECK),
   check('flip_ai_top_up_orders', 'flip_ai_top_up_orders_credits_check', 'credits', TOP_UP_CREDITS_CHECK),
   check('flip_ai_top_up_orders', 'flip_ai_top_up_orders_estimated_cost_check', 'estimated_openai_cost_cents', TOP_UP_ESTIMATED_COST_CHECK),
+  check('flip_ai_top_up_orders', 'flip_ai_top_up_orders_checkout_attempt_check', 'stripe_checkout_attempt', TOP_UP_CHECKOUT_ATTEMPT_CHECK),
   foreign('flip_ai_top_up_orders', 'flip_ai_top_up_orders_tenant_id_fkey', 'tenant_id', 'tenants', 'id', 'r'),
   foreign('flip_ai_top_up_orders', 'flip_ai_top_up_orders_created_by_fkey', 'created_by', 'users', 'id', 'n'),
   primary('flip_ai_conversation_states', 'flip_ai_conversation_states_pkey'),
