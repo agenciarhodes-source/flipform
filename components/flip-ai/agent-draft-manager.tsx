@@ -11,7 +11,7 @@ import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-edi
 import { AgentAvatarPicker } from '@/components/flip-ai/agent-avatar-picker';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
 
-type Editor = { id?: string; version?: number; requestId: string; input: AgentDraftInput };
+type Editor = { id?: string; version?: number; status?: AgentDraft['status']; requestId: string; input: AgentDraftInput };
 const control = 'mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm';
 function readableTextColor(color: string) {
   const [r, g, b] = [1, 3, 5].map((offset) => Number.parseInt(color.slice(offset, offset + 2), 16));
@@ -39,7 +39,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
   }
   function editDraft(agent: AgentDraft) {
     setMessage('');
-    setEditor({ id: agent.id, version: agent.version, requestId: crypto.randomUUID(), input: {
+    setEditor({ id: agent.id, version: agent.version, status: agent.status, requestId: crypto.randomUUID(), input: {
       name: agent.name, description: agent.description, primaryColor: agent.primaryColor, style: agent.style,
       avatarUrl: agent.avatarUrl, chatBackgroundColor: agent.chatBackgroundColor,
       userMessageColor: agent.userMessageColor, sendButtonColor: agent.sendButtonColor,
@@ -94,7 +94,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       if (!response.ok) throw new Error(data.error || 'Não foi possível salvar.');
       const agent = data.agent as AgentDraft;
       setWorkspace((current) => ({ ...current, agents: [agent, ...current.agents.filter((item) => item.id !== agent.id)] }));
-      setEditor(null); setMessage('Atendente salvo como rascunho.');
+      setEditor(null); setMessage(agent.status === 'published'
+        ? 'Alterações salvas. O chat permaneceu publicado.'
+        : 'Atendente salvo como rascunho.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Falha de conexão. Atualize a lista para conferir se o rascunho foi salvo.');
     } finally { inFlight.current = false; setBusy(false); }
@@ -123,6 +125,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       <Button variant="outline" disabled={busy} onClick={() => reload()}>Atualizar lista</Button></div>
     {editor ? <form onSubmit={save} className="rounded-lg border bg-card p-5">
       <h2 className="mb-4 text-lg font-medium">{editor.id ? 'Editar atendente' : 'Novo atendente'}</h2>
+      {editor.status === 'published' ? <p className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+        Este atendente está publicado. As alterações serão aplicadas sem retirar o chat do ar.
+      </p> : null}
       <fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2"><legend className="sr-only">Identidade e destino do atendente</legend>
         <label className="text-sm" htmlFor="ai-name">Nome<Input className="mt-1" id="ai-name" required minLength={2} maxLength={80} autoComplete="off" value={editor.input.name} onChange={(e) => change('name', e.target.value)} placeholder="Helena" /></label>
         <label className="text-sm" htmlFor="ai-style">Estilo de conversa<select id="ai-style" className={control} value={editor.input.style} onChange={(e) => change('style', e.target.value as AgentDraftInput['style'])}>
@@ -174,7 +179,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
           </option>)}
         </select><span className="mt-1 block text-xs text-muted-foreground">Reutiliza o rodízio já configurado em um formulário do mesmo pipeline.</span></label>
         {!stages.length ? <p className="text-sm text-muted-foreground sm:col-span-2">Configure um pipeline com etapas ativas para salvar o atendente.</p> : null}
-        <div className="flex gap-2 sm:col-span-2"><Button type="submit">{busy ? 'Salvando…' : 'Salvar rascunho'}</Button><Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancelar</Button></div>
+        <div className="flex gap-2 sm:col-span-2"><Button type="submit">{busy ? 'Salvando…' : editor.status === 'published' ? 'Salvar alterações' : 'Salvar rascunho'}</Button><Button type="button" variant="outline" onClick={() => setEditor(null)}>Cancelar</Button></div>
       </fieldset>
     </form> : null}
     {externalAgentId ? <ExternalSourcesEditor
@@ -206,7 +211,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
           </li>)}</ul>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button> : null}
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
           {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
             <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
           </Button> : null}
