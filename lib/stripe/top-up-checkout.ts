@@ -204,10 +204,13 @@ function validateStripeSession(
     id: string;
     livemode: boolean;
     status: string | null;
+    payment_status: string;
+    mode: string;
     url: string | null;
     amount_total: number | null;
     currency: string | null;
     client_reference_id: string | null;
+    metadata: Record<string, string>;
   },
   order: ReservedCheckout,
 ) {
@@ -232,11 +235,30 @@ function validateStripeSession(
       'A sessão Stripe não corresponde à recarga solicitada.',
     );
   }
+  if (
+    session.mode !== 'payment'
+    || session.metadata?.purpose !== 'flip_ai_top_up'
+    || session.metadata?.topUpOrderId !== order.orderId
+    || session.metadata?.tenantId !== order.tenantId
+  ) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_METADATA_MISMATCH',
+      502,
+      'A sessão Stripe não corresponde ao tenant e ao pedido esperados.',
+    );
+  }
   if (session.amount_total !== order.amountCents || session.currency?.toLowerCase() !== 'brl') {
     throw new StripeCheckoutTestError(
       'STRIPE_CHECKOUT_AMOUNT_MISMATCH',
       502,
       'Valor ou moeda retornados pela Stripe não correspondem à recarga.',
+    );
+  }
+  if (session.status === 'complete' || session.payment_status === 'paid') {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_COMPLETED_AWAITING_VERIFICATION',
+      409,
+      'A sessão de teste já foi concluída. O retorno do navegador não autoriza crédito; aguarde a verificação financeira.',
     );
   }
   if (session.status !== 'open' || !session.url) {
