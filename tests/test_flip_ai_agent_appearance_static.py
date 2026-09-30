@@ -75,5 +75,6 @@ def test_published_agent_can_be_edited_without_being_taken_offline():
     assert "status = 'draft' AND version" not in agents
     assert "Este atendente está publicado. As alterações serão aplicadas sem retirar o chat do ar." in editor
     assert "Alterações salvas. O chat permaneceu publicado." in editor
-    assert "onClick={() => editDraft(agent)}>Editar {agent.name}</Button>" in editor
+    assert "onClick={() => editDraft(agent)}>Editar</Button>" in editor
+    assert "Editar {agent.name}" not in editor
     assert "agent.status === 'draft' ? <Button variant=\"outline\" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}" not in editor

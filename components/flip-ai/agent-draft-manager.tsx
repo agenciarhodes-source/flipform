@@ -211,7 +211,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
           </li>)}</ul>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar {agent.name}</Button>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar</Button>
           {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
             <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
           </Button> : null}
