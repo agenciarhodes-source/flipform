@@ -37,7 +37,7 @@ def test_editor_and_public_chat_apply_visual_identity_with_safe_fallbacks():
     assert "Prévia do chat" in editor
     assert "Mensagem do cliente" in editor
     assert "Botão de envio" in editor
-    assert "Assistente de {agent.tenantName}" in shell
+    assert "Assistente da {agent.tenantName}" in shell
     assert "isValidFlipAiAvatar(agent.avatarUrl)" in shell
     assert "readableTextColor" in shell
     assert "style={{ backgroundColor }}" in shell
