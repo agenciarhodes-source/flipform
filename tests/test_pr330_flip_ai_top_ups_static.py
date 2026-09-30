@@ -15,7 +15,7 @@ def test_pr330_migration_is_additive_tenant_scoped_and_payment_gated():
     assert '"status" IN (\'pending\', \'paid\', \'credited\', \'canceled\')' in sql
     assert '"amount_cents" > 0' in sql
     assert '"credits" > 0' in sql
-    assert '"estimated_open_ai_cost_cents" >= 0' in sql
+    assert '"estimated_openai_cost_cents" >= 0' in sql
     assert 'ON DELETE RESTRICT' in sql
     assert 'flip_ai_top_up_orders_tenant_id_request_key_key' in sql
 
