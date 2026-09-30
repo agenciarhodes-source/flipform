@@ -45,7 +45,7 @@ def test_pr331_readiness_is_platform_admin_only_and_never_returns_secrets():
     assert "moneyMovementEnabled: false" in route
     assert "STRIPE_RESTRICTED_KEY" not in route
     assert "STRIPE_WEBHOOK_SECRET" not in route
-    assert "type="password"" not in card
+    assert 'type="password"' not in card
     assert "Nenhuma chave Stripe é retornada" in card
 
 
