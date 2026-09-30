@@ -175,7 +175,16 @@ export default function TenantDetailPage() {
   };
 
   const parseMoneyToCents = (value: string) => {
-    const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+    const raw = value.trim().replace(/\s/g, '');
+    if (!raw) return null;
+    let normalized = raw;
+    if (raw.includes(',') && raw.includes('.')) {
+      normalized = raw.lastIndexOf(',') > raw.lastIndexOf('.')
+        ? raw.replace(/\./g, '').replace(',', '.')
+        : raw.replace(/,/g, '');
+    } else if (raw.includes(',')) {
+      normalized = raw.replace(',', '.');
+    }
     const amount = Number(normalized);
     if (!Number.isFinite(amount) || amount < 0) return null;
     const cents = Math.round(amount * 100);
