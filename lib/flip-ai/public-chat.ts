@@ -16,6 +16,7 @@ import {
   type ExternalKnowledgeContext,
   type ExternalWebSource,
 } from './external-web-search';
+import { settleFlipAiUsageCharge } from './usage-billing';
 import {
   flipAiFinalQualificationSchema,
   type FlipAiFinalQualification,
@@ -678,7 +679,7 @@ export async function buildPublicChatContext(
         .filter((hit, index, all) => all.findIndex((item) => item.id === hit.id) === index)
         .slice(0, 7);
       const retrievalKey = `chat-retrieval:${turn.requestKey}`;
-      await prisma.flipAiUsageEvent.upsert({
+      const retrievalUsage = await prisma.flipAiUsageEvent.upsert({
         where: { requestKey: retrievalKey },
         create: {
           tenantId: turn.tenantId,
@@ -701,6 +702,7 @@ export async function buildPublicChatContext(
           outputTokens: 0,
         },
       });
+      await settleFlipAiUsageCharge({ tenantId: turn.tenantId, eventId: retrievalUsage.id });
       const changed = await prisma.$executeRaw(Prisma.sql`
         UPDATE flip_ai_usage_events
         SET metadata = metadata || ${JSON.stringify({
@@ -824,6 +826,7 @@ export async function completePublicChatTurn(
     });
     if (state.count !== 1) throw new OpenAiResponseError('ambiguous', 'CHAT_STATE_PERSISTENCE_AMBIGUOUS');
   });
+  await settleFlipAiUsageCharge({ tenantId: turn.tenantId, eventId: turn.eventId });
 }
 
 export async function failPublicChatTurn(

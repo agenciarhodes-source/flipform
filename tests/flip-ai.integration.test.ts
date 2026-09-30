@@ -16,6 +16,7 @@ import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
 import { getFlipAiCreditWallet, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
+import { refundFlipAiUsageCharge, settleFlipAiUsageCharge } from '../lib/flip-ai/usage-billing';
 import { changeAgentPublication } from '../lib/flip-ai/publication';
 
 function assertDisposableDatabase() {
@@ -409,6 +410,107 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(walletB.entries.some((entry) => entry.referenceId === 'usage-event-ci'), false,
       'wallet history must not include another tenant');
 
+    await recordFlipAiCreditEntry({
+      tenantId: a.tenant.id,
+      idempotencyKey: `top-up:billing-ci:${randomUUID()}`,
+      entryType: 'credit',
+      amountCredits: 2_000,
+      source: 'top_up',
+      referenceId: 'payment-billing-ci',
+    });
+    const billableUsage = await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId: a.tenant.id,
+        agentId: id,
+        requestKey: `usage-billing-ci:${randomUUID()}`,
+        operation: 'chat_response',
+        provider: 'openai',
+        model: 'gpt-5.6-luna',
+        status: 'confirmed',
+        inputTokens: 1_000,
+        outputTokens: 500,
+      },
+    });
+    const charged = await settleFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: billableUsage.id,
+    });
+    const chargedReplay = await settleFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: billableUsage.id,
+    });
+    assert.equal(charged.status, 'charged');
+    assert.equal(charged.amountCredits, 800);
+    assert.equal(chargedReplay.status, 'charged');
+    assert.equal(chargedReplay.ledgerEntryId, charged.ledgerEntryId);
+    assert.equal(chargedReplay.reused, true);
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, idempotencyKey: `usage:${billableUsage.id}` },
+    }), 1, 'one confirmed usage event must create one debit');
+
+    const refund = await refundFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: billableUsage.id,
+      reason: 'ci_reconciliation',
+    });
+    const refundReplay = await refundFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: billableUsage.id,
+      reason: 'ci_reconciliation',
+    });
+    assert.equal(refund.amountCredits, 800);
+    assert.equal(refundReplay.entryId, refund.entryId);
+    assert.equal(refundReplay.reused, true);
+    const settledAfterRefund = await settleFlipAiUsageCharge({ tenantId: a.tenant.id, eventId: billableUsage.id });
+    assert.equal(settledAfterRefund.status, 'refunded');
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, idempotencyKey: `usage-refund:${billableUsage.id}` },
+    }), 1, 'refund must also be idempotent');
+
+    const ambiguousUsage = await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId: a.tenant.id,
+        agentId: id,
+        requestKey: `usage-ambiguous-ci:${randomUUID()}`,
+        operation: 'chat_response',
+        provider: 'openai',
+        model: 'gpt-5.6-luna',
+        status: 'ambiguous',
+        inputTokens: 2_000,
+        outputTokens: 1_000,
+      },
+    });
+    const ambiguousSettlement = await settleFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: ambiguousUsage.id,
+    });
+    assert.equal(ambiguousSettlement.status, 'not_billable');
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, referenceId: ambiguousUsage.id },
+    }), 0, 'ambiguous usage must never debit the wallet');
+
+    const expensiveUsage = await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId: a.tenant.id,
+        agentId: id,
+        requestKey: `usage-insufficient-ci:${randomUUID()}`,
+        operation: 'chat_response',
+        provider: 'openai',
+        model: 'gpt-5.6-luna',
+        status: 'confirmed',
+        inputTokens: 20_000_000,
+        outputTokens: 0,
+      },
+    });
+    const insufficient = await settleFlipAiUsageCharge({
+      tenantId: a.tenant.id,
+      eventId: expensiveUsage.id,
+    });
+    assert.equal(insufficient.status, 'insufficient_balance');
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, referenceId: expensiveUsage.id },
+    }), 0, 'insufficient balance must leave no debit row');
+
     const realtimeWindow = new Date(Math.floor(Date.now() / 60_000) * 60_000);
     await prisma.flipAiRateLimitBucket.update({
       where: { tenantId_scope_scopeKey_windowStart: {
@@ -449,7 +551,8 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const replay = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
     assert.equal(replay.mode, 'replay');
     assert.equal(replay.mode === 'replay' ? replay.text : '', 'Claro, me conte o que aconteceu.');
-    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, operation: 'chat_response' } }), 1);
+    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, requestKey: turn.requestKey } }), 1,
+      'replaying the same chat turn must not create a second usage event');
     assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' } }), 1);
     assert.equal(await prisma.flipAiConversationState.count({ where: { tenantId: a.tenant.id, agentId: id, turnCount: 1 } }), 1);
 

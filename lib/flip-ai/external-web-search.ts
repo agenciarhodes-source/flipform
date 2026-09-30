@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { FLIP_AI_TEXT_MODEL } from './openai-responses';
 import type { PublicKnowledgeHit } from './public-knowledge';
+import { settleFlipAiUsageCharge } from './usage-billing';
 
 export const FLIP_AI_WEB_SEARCH_MODEL = process.env.OPENAI_FLIP_AI_SEARCH_MODEL || FLIP_AI_TEXT_MODEL;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
@@ -246,8 +247,9 @@ export async function getExternalKnowledgeContext(input: {
   const requestKey = `web-search:${input.chatRequestKey}:${queryHash}:${allowlistHash}`;
   const existing = await prisma.flipAiUsageEvent.findUnique({ where: { requestKey }, select: { id: true } });
   if (existing || !(await reserveSearchQuota(input.tenantId, input.agentId))) return null;
+  let usageEventId = '';
   try {
-    await prisma.flipAiUsageEvent.create({ data: {
+    const usageEvent = await prisma.flipAiUsageEvent.create({ data: {
       tenantId: input.tenantId,
       agentId: input.agentId,
       conversationId: input.conversationId,
@@ -259,6 +261,7 @@ export async function getExternalKnowledgeContext(input: {
       units: 1,
       metadata: { chatRequestKey: input.chatRequestKey, queryHash, allowlistHash, allowedDomainCount: domains.length },
     } });
+    usageEventId = usageEvent.id;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return null;
     throw error;
@@ -292,6 +295,7 @@ export async function getExternalKnowledgeContext(input: {
       });
       if (changed.count !== 1) throw new OpenAiWebSearchError('ambiguous', 'OPENAI_WEB_SEARCH_PERSISTENCE_AMBIGUOUS');
     });
+    await settleFlipAiUsageCharge({ tenantId: input.tenantId, eventId: usageEventId });
     return { text: result.text, sources: result.sources, cacheHit: false };
   } catch (error) {
     const failure = error instanceof OpenAiWebSearchError

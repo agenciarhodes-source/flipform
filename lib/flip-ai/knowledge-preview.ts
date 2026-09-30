@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import type { SessionPayload } from '@/lib/auth';
 import { FlipAiError, requireFlipAiAccess } from './access';
 import { searchKnowledgeByVector } from './indexing';
+import { settleFlipAiUsageCharge } from './usage-billing';
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_MODEL, OpenAiEmbeddingError,
   type EmbeddingResult } from './openai-embeddings';
 
@@ -116,6 +117,7 @@ export async function previewKnowledgeRetrieval(session: SessionPayload, agentId
       WHERE id = ${reservation.eventId} AND tenant_id = ${reservation.tenantId} AND status = 'processing'
         AND metadata->>'attemptToken' = ${reservation.attemptToken}`);
     if (changed !== 1) throw new OpenAiEmbeddingError('ambiguous', 'PREVIEW_PERSISTENCE_AMBIGUOUS');
+    await settleFlipAiUsageCharge({ tenantId: reservation.tenantId, eventId: reservation.eventId });
     return { requestId: input.requestId, cached: false, inputTokens: embedded.inputTokens, hits };
   } catch (error) {
     const failure = error instanceof OpenAiEmbeddingError ? error : new OpenAiEmbeddingError('ambiguous', 'PREVIEW_RESULT_AMBIGUOUS');

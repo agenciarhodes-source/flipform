@@ -31,6 +31,8 @@ export type FlipAiUsageOperation = {
   ambiguousEvents: number;
   processingEvents: number;
   failedEvents: number;
+  insufficientBalanceEvents: number;
+  billingUnavailableEvents: number;
   inputTokens: number;
   outputTokens: number;
   units: number;
@@ -56,6 +58,8 @@ export type FlipAiUsageDashboard = {
     ambiguousOperations: number;
     processingOperations: number;
     failedOperations: number;
+    insufficientBalanceOperations: number;
+    billingUnavailableOperations: number;
     inputTokens: number;
     outputTokens: number;
     realtimeSessions: number;
@@ -111,6 +115,8 @@ type AggregateRow = {
   ambiguousEvents: bigint | number | string;
   processingEvents: bigint | number | string;
   failedEvents: bigint | number | string;
+  insufficientBalanceEvents: bigint | number | string;
+  billingUnavailableEvents: bigint | number | string;
   inputTokens: bigint | number | string;
   outputTokens: bigint | number | string;
   units: bigint | number | string;
@@ -180,6 +186,8 @@ export async function getFlipAiUsageDashboard(
           COUNT(*) FILTER (WHERE status = 'ambiguous') AS "ambiguousEvents",
           COUNT(*) FILTER (WHERE status = 'processing') AS "processingEvents",
           COUNT(*) FILTER (WHERE status IN ('failed', 'definitive')) AS "failedEvents",
+          COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'insufficient_balance') AS "insufficientBalanceEvents",
+          COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'billing_unavailable') AS "billingUnavailableEvents",
           COALESCE(SUM(input_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "inputTokens",
           COALESCE(SUM(output_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "outputTokens",
           COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units
@@ -238,6 +246,8 @@ export async function getFlipAiUsageDashboard(
         ambiguousEvents: count(row.ambiguousEvents),
         processingEvents: count(row.processingEvents),
         failedEvents: count(row.failedEvents),
+        insufficientBalanceEvents: count(row.insufficientBalanceEvents),
+        billingUnavailableEvents: count(row.billingUnavailableEvents),
         inputTokens,
         outputTokens,
         units: count(row.units),
@@ -247,7 +257,7 @@ export async function getFlipAiUsageDashboard(
       };
     });
     const sum = (field: keyof Pick<FlipAiUsageOperation,
-      'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'inputTokens' | 'outputTokens'>) =>
+      'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'insufficientBalanceEvents' | 'billingUnavailableEvents' | 'inputTokens' | 'outputTokens'>) =>
       operations.reduce((total, operation) => total + operation[field], 0);
     const realtimeSessions = operations
       .filter((operation) => operation.operation === 'realtime_session')
@@ -273,6 +283,8 @@ export async function getFlipAiUsageDashboard(
         ambiguousOperations: sum('ambiguousEvents'),
         processingOperations: sum('processingEvents'),
         failedOperations: sum('failedEvents'),
+        insufficientBalanceOperations: sum('insufficientBalanceEvents'),
+        billingUnavailableOperations: sum('billingUnavailableEvents'),
         inputTokens: sum('inputTokens'),
         outputTokens: sum('outputTokens'),
         realtimeSessions,

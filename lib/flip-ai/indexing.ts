@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import type { SessionPayload } from '@/lib/auth';
 import { FlipAiError, requireFlipAiAccess, type FlipAiDb } from './access';
 import { batchKnowledgeChunks, chunkMasterMarkdown } from './chunking';
+import { settleFlipAiUsageCharge } from './usage-billing';
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, FLIP_AI_EMBEDDING_MODEL,
   OpenAiEmbeddingError, type EmbeddingResult } from './openai-embeddings';
 
@@ -135,7 +136,7 @@ export async function processNextKnowledgeIndexBatch(session: SessionPayload, ag
       result.embeddings.some((embedding) => embedding.length !== FLIP_AI_EMBEDDING_DIMENSIONS || embedding.some((value) => !Number.isFinite(value)))) {
       throw new OpenAiEmbeddingError('ambiguous', 'OPENAI_EMBEDDING_DIMENSION_MISMATCH');
     }
-    return await prisma.$transaction(async (db) => {
+    const completed = await prisma.$transaction(async (db) => {
       const { tenantId } = await requireFlipAiAccess(db, session);
       for (let position = 0; position < claim.batch!.chunks.length; position += 1) {
         const vector = `[${result.embeddings[position].join(',')}]`;
@@ -146,15 +147,17 @@ export async function processNextKnowledgeIndexBatch(session: SessionPayload, ag
       }
       await db.flipAiKnowledgeIndexBatch.update({ where: { id: claim.batch!.id }, data: { status: 'completed',
         inputTokens: result.inputTokens, completedAt: new Date(), lastErrorCode: null } });
-      await db.flipAiUsageEvent.create({ data: { tenantId, agentId, requestKey, operation: 'knowledge_embedding',
+      const usageEvent = await db.flipAiUsageEvent.create({ data: { tenantId, agentId, requestKey, operation: 'knowledge_embedding',
         provider: 'openai', model: result.model, status: 'confirmed', inputTokens: result.inputTokens,
         outputTokens: 0, units: claim.batch!.chunks.length, metadata: { indexId, batchId: claim.batch!.id } } });
       const remaining = await db.flipAiKnowledgeIndexBatch.count({ where: { tenantId, indexId, status: { not: 'completed' } } });
       const index = await db.flipAiKnowledgeIndex.update({ where: { id: indexId }, data: {
         status: remaining ? 'pending' : 'completed', inputTokens: { increment: result.inputTokens },
         completedAt: remaining ? null : new Date(), lastErrorCode: null }, include: { batches: { select: { status: true } } } });
-      return statusOf(index);
+      return { status: statusOf(index), usageEventId: usageEvent.id, tenantId };
     });
+    await settleFlipAiUsageCharge({ tenantId: completed.tenantId, eventId: completed.usageEventId });
+    return completed.status;
   } catch (error) {
     const failure = error instanceof OpenAiEmbeddingError ? error : new OpenAiEmbeddingError('ambiguous', 'INDEX_PERSISTENCE_AMBIGUOUS');
     await prisma.$transaction(async (db) => {

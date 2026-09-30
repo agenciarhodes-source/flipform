@@ -18,6 +18,7 @@ import {
 } from '../lib/flip-ai/openai-realtime';
 import { realtimeSessionRequestSchema } from '../lib/flip-ai/realtime-session';
 import { validateFlipAiCreditMutation } from '../lib/flip-ai/credits';
+import { FLIP_AI_NANO_USD_PER_CREDIT, nanoUsdToFlipAiCredits } from '../lib/flip-ai/usage-billing';
 import {
   estimateOpenAiUsageCost,
   nanoUsdToUsd,
@@ -1110,4 +1111,42 @@ test('PR 326 cost aggregation remains tenant-scoped and migration-free', () => {
   assert.match(usage, /status = 'confirmed'/);
   assert.match(pricing, /realtime_not_reconciled/);
   assert.doesNotMatch(usage + pricing, /\b(?:DROP|TRUNCATE|DELETE\s+FROM|UPDATE\s+flip_ai_credit)/i);
+});
+
+
+test('PR 327 converts only positive confirmed USD cost into technical credits', () => {
+  assert.equal(FLIP_AI_NANO_USD_PER_CREDIT, 1_000);
+  assert.equal(nanoUsdToFlipAiCredits(800_000), 800);
+  assert.equal(nanoUsdToFlipAiCredits(1), 1);
+  assert.equal(nanoUsdToFlipAiCredits(1_001), 2);
+  assert.equal(nanoUsdToFlipAiCredits(0), 0);
+  assert.equal(nanoUsdToFlipAiCredits(-1), 0);
+});
+
+test('PR 327 settlement is event-idempotent, refund-traceable and never bills uncertain usage', () => {
+  const billing = readFileSync(new URL('../lib/flip-ai/usage-billing.ts', import.meta.url), 'utf8');
+  const chat = readFileSync(new URL('../lib/flip-ai/public-chat.ts', import.meta.url), 'utf8');
+  const preview = readFileSync(new URL('../lib/flip-ai/knowledge-preview.ts', import.meta.url), 'utf8');
+  const indexing = readFileSync(new URL('../lib/flip-ai/indexing.ts', import.meta.url), 'utf8');
+  const web = readFileSync(new URL('../lib/flip-ai/external-web-search.ts', import.meta.url), 'utf8');
+  const realtime = readFileSync(new URL('../lib/flip-ai/realtime-session.ts', import.meta.url), 'utf8');
+  const leadCapture = readFileSync(new URL('../lib/flip-ai/lead-capture.ts', import.meta.url), 'utf8');
+
+  assert.match(billing, /idempotencyKey: `usage:\${event\.id}`/);
+  assert.match(billing, /idempotencyKey: `usage-refund:\${input\.eventId}`/);
+  assert.match(billing, /entryType: 'debit'/);
+  assert.match(billing, /entryType: 'refund'/);
+  assert.match(billing, /event\.status !== 'confirmed'/);
+  assert.match(billing, /estimate\.coverage !== 'full'/);
+  assert.match(billing, /FLIP_AI_CREDIT_BALANCE_INSUFFICIENT/);
+  assert.match(billing, /const status: FlipAiUsageBillingStatus = insufficient/);
+  assert.match(billing, /\? 'insufficient_balance'/);
+  assert.match(billing, /source: 'usage'/);
+  assert.match(billing, /source: 'refund'/);
+
+  for (const source of [chat, preview, indexing, web, realtime]) {
+    assert.match(source, /settleFlipAiUsageCharge/);
+  }
+  assert.doesNotMatch(leadCapture, /settleFlipAiUsageCharge|recordFlipAiCreditEntry|flip_ai_credit_/);
+  assert.doesNotMatch(billing, /auto.?recharge|creditCard|cvv|Asaas/i);
 });
