@@ -392,7 +392,7 @@ export async function createStripeTestCheckoutForTopUp(input: {
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    ui_mode: 'hosted',
+    ui_mode: 'hosted_page',
     client_reference_id: orderId,
     success_url: urls.successUrl,
     cancel_url: urls.cancelUrl,
