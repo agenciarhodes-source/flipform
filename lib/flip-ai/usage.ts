@@ -178,7 +178,8 @@ export async function getFlipAiUsageDashboard(
         LEFT JOIN flip_ai_agents a
           ON a.id = e.agent_id AND a.tenant_id = e.tenant_id
         WHERE e.tenant_id = ${tenantId}
-          AND e.created_at >= ${range.from} AND created_at < ${range.toExclusive}
+          AND e.created_at >= ${range.from}
+          AND e.created_at < ${range.toExclusive}
           AND e.status = 'confirmed'
         GROUP BY e.agent_id, a.name
         ORDER BY COUNT(*) DESC, a.name ASC NULLS LAST
@@ -190,7 +191,8 @@ export async function getFlipAiUsageDashboard(
         FROM flip_ai_usage_events e
         LEFT JOIN flip_ai_agents a
           ON a.id = e.agent_id AND a.tenant_id = e.tenant_id
-        WHERE e.tenant_id = ${tenantId} AND e.created_at >= ${range.from} AND created_at < ${range.toExclusive}
+        WHERE e.tenant_id = ${tenantId} AND e.created_at >= ${range.from}
+          AND e.created_at < ${range.toExclusive}
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT 50
       `),
