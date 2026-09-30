@@ -551,7 +551,8 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     const replay = await preparePublicChatTurn(chatRuntime, anonymous, chatInput);
     assert.equal(replay.mode, 'replay');
     assert.equal(replay.mode === 'replay' ? replay.text : '', 'Claro, me conte o que aconteceu.');
-    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, operation: 'chat_response' } }), 1);
+    assert.equal(await prisma.flipAiUsageEvent.count({ where: { tenantId: a.tenant.id, requestKey: turn.requestKey } }), 1,
+      'replaying the same chat turn must not create a second usage event');
     assert.equal(await prisma.conversation.count({ where: { tenantId: a.tenant.id, provider: 'flip_ai', channel: 'web' } }), 1);
     assert.equal(await prisma.flipAiConversationState.count({ where: { tenantId: a.tenant.id, agentId: id, turnCount: 1 } }), 1);
 
