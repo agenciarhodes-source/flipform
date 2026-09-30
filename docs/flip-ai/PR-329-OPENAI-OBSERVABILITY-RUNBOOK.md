@@ -97,3 +97,12 @@ Períodos disponíveis na primeira versão:
 - não implementa cobrança comercial.
 
 A recarga comercial do FlipForm permanece para um PR posterior.
+
+## Validação antes do merge
+
+- CI / Typecheck / Build verde;
+- Smoke Test verde;
+- Playwright E2E verde;
+- preview do `flipform` verde;
+- preview do `flipform-staging` verde;
+- nenhum conflito com a `main`.
