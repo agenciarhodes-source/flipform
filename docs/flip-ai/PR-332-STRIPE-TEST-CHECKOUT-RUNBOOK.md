@@ -49,7 +49,7 @@ O servidor lê esses dados diretamente de `flip_ai_top_up_orders`.
 A sessão usa:
 
 - `mode=payment`;
-- `ui_mode=hosted`;
+- `ui_mode=hosted_page`;
 - `client_reference_id=<topUpOrderId>`;
 - moeda BRL;
 - uma linha com o valor comercial persistido no pedido;
