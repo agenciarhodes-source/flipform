@@ -55,7 +55,7 @@ export function inspectStripeFoundationConfiguration(
 
   if (enabled) {
     if (mode !== 'test') {
-      errors.push('PR #331 mantém pagamentos Stripe live bloqueados por código.');
+      errors.push('A integração Stripe atual mantém pagamentos live bloqueados por código.');
     }
     if (keyKind !== 'test') {
       errors.push('Use uma Restricted API Key de teste (rk_test_) nesta etapa.');
@@ -101,7 +101,7 @@ export function requireStripeTestConfiguration(env: NodeJS.ProcessEnv = process.
   if (readiness.mode !== 'test' || readiness.restrictedKeyKind !== 'test') {
     throw new StripeFoundationConfigError(
       'STRIPE_TEST_MODE_REQUIRED',
-      'O PR #331 aceita somente Restricted API Key de teste.',
+      'A integração Stripe atual aceita somente Restricted API Key de teste.',
     );
   }
   const restrictedKey = String(env.STRIPE_RESTRICTED_KEY || '').trim();
