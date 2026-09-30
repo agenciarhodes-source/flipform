@@ -4,9 +4,17 @@ import { Prisma } from '@prisma/client';
 import type { SessionPayload } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { FlipAiError, requireFlipAiAccess } from './access';
+import {
+  type FlipAiUsagePeriod,
+  type FlipAiUsageRange,
+  parseFlipAiUsagePeriod,
+  resolveFlipAiUsageRange,
+} from './usage-range';
 
-export const FLIP_AI_USAGE_PERIODS = [7, 30, 90] as const;
-export type FlipAiUsagePeriod = (typeof FLIP_AI_USAGE_PERIODS)[number];
+export {
+  FLIP_AI_USAGE_PERIODS,
+  parseFlipAiUsagePeriod,
+} from './usage-range';
 
 export type FlipAiUsageOperation = {
   operation: string;
@@ -22,8 +30,16 @@ export type FlipAiUsageOperation = {
 };
 
 export type FlipAiUsageDashboard = {
-  periodDays: FlipAiUsagePeriod;
+  periodDays: FlipAiUsagePeriod | null;
+  range: {
+    kind: FlipAiUsageRange['kind'];
+    preset: FlipAiUsageRange['preset'];
+    fromDate: string;
+    toDate: string;
+    label: string;
+  };
   since: string;
+  until: string;
   generatedAt: string;
   totals: {
     confirmedOperations: number;
@@ -105,14 +121,6 @@ function count(value: bigint | number | string | null | undefined) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
-export function parseFlipAiUsagePeriod(value: unknown): FlipAiUsagePeriod {
-  const candidate = Array.isArray(value) ? value[0] : value;
-  const parsed = typeof candidate === 'string' ? Number(candidate) : candidate;
-  return FLIP_AI_USAGE_PERIODS.includes(parsed as FlipAiUsagePeriod)
-    ? parsed as FlipAiUsagePeriod
-    : 30;
-}
-
 export function labelFlipAiUsageOperation(operation: string) {
   return OPERATION_LABELS[operation] || 'Outra operação';
 }
@@ -130,11 +138,15 @@ async function ensureUsageSchema(db: Prisma.TransactionClient) {
 
 export async function getFlipAiUsageDashboard(
   session: SessionPayload,
-  periodDays: FlipAiUsagePeriod = 30,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
   now = new Date(),
 ): Promise<FlipAiUsageDashboard> {
-  const safePeriod = parseFlipAiUsagePeriod(String(periodDays));
-  const since = new Date(now.getTime() - safePeriod * 24 * 60 * 60 * 1_000);
+  const range = typeof periodOrRange === 'number'
+    ? resolveFlipAiUsageRange({ range: String(parseFlipAiUsagePeriod(periodOrRange)) }, now)
+    : periodOrRange;
+  const periodDays = range.preset && ['7', '30', '90'].includes(range.preset)
+    ? Number(range.preset) as FlipAiUsagePeriod
+    : null;
 
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
@@ -152,7 +164,7 @@ export async function getFlipAiUsageDashboard(
           COALESCE(SUM(output_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "outputTokens",
           COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units
         FROM flip_ai_usage_events
-        WHERE tenant_id = ${tenantId} AND created_at >= ${since}
+        WHERE tenant_id = ${tenantId} AND created_at >= ${range.from} AND created_at < ${range.toExclusive}
         GROUP BY operation
         ORDER BY operation
       `),
@@ -166,7 +178,7 @@ export async function getFlipAiUsageDashboard(
         LEFT JOIN flip_ai_agents a
           ON a.id = e.agent_id AND a.tenant_id = e.tenant_id
         WHERE e.tenant_id = ${tenantId}
-          AND e.created_at >= ${since}
+          AND e.created_at >= ${range.from} AND created_at < ${range.toExclusive}
           AND e.status = 'confirmed'
         GROUP BY e.agent_id, a.name
         ORDER BY COUNT(*) DESC, a.name ASC NULLS LAST
@@ -178,7 +190,7 @@ export async function getFlipAiUsageDashboard(
         FROM flip_ai_usage_events e
         LEFT JOIN flip_ai_agents a
           ON a.id = e.agent_id AND a.tenant_id = e.tenant_id
-        WHERE e.tenant_id = ${tenantId} AND e.created_at >= ${since}
+        WHERE e.tenant_id = ${tenantId} AND e.created_at >= ${range.from} AND created_at < ${range.toExclusive}
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT 50
       `),
@@ -202,8 +214,16 @@ export async function getFlipAiUsageDashboard(
     const realtime = operations.find((operation) => operation.operation === 'realtime_session');
 
     return {
-      periodDays: safePeriod,
-      since: since.toISOString(),
+      periodDays,
+      range: {
+        kind: range.kind,
+        preset: range.preset,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        label: range.label,
+      },
+      since: range.from.toISOString(),
+      until: range.toExclusive.toISOString(),
       generatedAt: now.toISOString(),
       totals: {
         confirmedOperations: sum('confirmedEvents'),
