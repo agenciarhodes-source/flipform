@@ -15,7 +15,7 @@ import { createExternalSource, listExternalSources, updateExternalSource } from 
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
 import { getFlipAiUsageDashboard } from '../lib/flip-ai/usage';
-import { getFlipAiCreditWallet, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
+import { getFlipAiCreditWallet, getFlipAiCreditWalletForTenant, grantFlipAiCreditsByPlatformAdmin, recordFlipAiCreditEntry } from '../lib/flip-ai/credits';
 import { refundFlipAiUsageCharge, settleFlipAiUsageCharge } from '../lib/flip-ai/usage-billing';
 import { changeAgentPublication } from '../lib/flip-ai/publication';
 
@@ -409,6 +409,42 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(walletB.entries.length, 1);
     assert.equal(walletB.entries.some((entry) => entry.referenceId === 'usage-event-ci'), false,
       'wallet history must not include another tenant');
+
+    const adminGrantKey = `ci-grant-${randomUUID()}`;
+    const adminGrant = await grantFlipAiCreditsByPlatformAdmin({
+      tenantId: a.tenant.id,
+      amountCredits: 1_000,
+      reason: 'Crédito administrativo de teste',
+      idempotencyIdentifier: adminGrantKey,
+      actorUserId: a.session.userId,
+    });
+    const adminGrantReplay = await grantFlipAiCreditsByPlatformAdmin({
+      tenantId: a.tenant.id,
+      amountCredits: 1_000,
+      reason: 'Crédito administrativo de teste',
+      idempotencyIdentifier: adminGrantKey,
+      actorUserId: a.session.userId,
+    });
+    assert.equal(adminGrantReplay.entryId, adminGrant.entryId);
+    assert.equal(adminGrantReplay.reused, true);
+    assert.equal(await prisma.flipAiCreditLedgerEntry.count({
+      where: { tenantId: a.tenant.id, idempotencyKey: `platform-admin:${adminGrantKey}` },
+    }), 1, 'platform admin replay must never duplicate credit');
+    assert.equal(await prisma.auditLog.count({
+      where: {
+        tenantId: a.tenant.id,
+        entityType: 'flip_ai_credit_ledger',
+        entityId: adminGrant.entryId,
+        action: 'platform.flip_ai_credits_granted',
+        userId: a.session.userId,
+      },
+    }), 1, 'admin credit grant must record one audit row with the actor');
+
+    const walletAfterAdminGrantA = await getFlipAiCreditWalletForTenant(a.tenant.id);
+    const walletAfterAdminGrantB = await getFlipAiCreditWalletForTenant(b.tenant.id);
+    assert.equal(walletAfterAdminGrantA.balanceCredits, 1_375);
+    assert.equal(walletAfterAdminGrantB.balanceCredits, 50,
+      'credits granted to tenant A must never increase tenant B balance');
 
     await recordFlipAiCreditEntry({
       tenantId: a.tenant.id,

@@ -35,6 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const CREDIT_SOURCE_LABELS: Record<string, string> = {
+  platform_admin_grant: 'Crédito concedido pelo FlipForm',
   top_up: 'Recarga',
   usage: 'Consumo',
   refund: 'Estorno',
@@ -81,6 +82,9 @@ export default async function FlipAiUsagePage({
             <h1 className="text-2xl font-semibold">Consumo do Flip AI</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Saldo, histórico de créditos e operações técnicas da sua empresa.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Esta carteira pertence somente à sua empresa no FlipForm e é separada do saldo operacional da OpenAI.
             </p>
           </div>
           <div className="space-y-3">
@@ -144,7 +148,7 @@ export default async function FlipAiUsagePage({
       {wallet.available && (wallet.balanceCredits <= 0 || usage.totals.insufficientBalanceOperations > 0) &&
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <div><p className="font-medium">Saldo insuficiente</p>
+            <div><p className="font-medium">{wallet.balanceCredits <= 0 ? 'Carteira Flip AI sem créditos' : 'Operações sem débito por saldo insuficiente'}</p>
               <p className="mt-1">
                 {usage.totals.insufficientBalanceOperations > 0
                   ? `${number.format(usage.totals.insufficientBalanceOperations)} operação(ões) confirmada(s) ficaram sem débito por falta de saldo.`
