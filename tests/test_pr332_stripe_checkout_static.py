@@ -31,7 +31,7 @@ def test_checkout_is_admin_only_environment_guarded_and_server_authoritative():
     assert "rateLimit" in route
     assert "import 'server-only'" in checkout
     assert "getStripeClient()" in checkout
-    assert "requireStripeConfiguration()" in checkout
+    assert "requireStripeCheckoutConfiguration()" in checkout
     assert "mode: 'payment'" in checkout
     assert "ui_mode: 'hosted_page'" in checkout
     assert "payment_method_types: ['card']" in checkout
