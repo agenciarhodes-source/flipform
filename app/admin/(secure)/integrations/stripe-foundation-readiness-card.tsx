@@ -73,8 +73,8 @@ export function StripeFoundationReadinessCard() {
             <p className="text-xs font-semibold text-violet-700">STRIPE · FUNDAÇÃO</p>
             <h2 className="font-heading text-xl font-semibold">Pagamentos da Carteira Flip AI</h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              PR #331 prepara somente a infraestrutura segura em modo de teste.
-              Checkout, webhooks financeiros e movimentação de dinheiro continuam bloqueados.
+              A integração Stripe permanece em modo de teste. Checkout hospedado e webhook assinado
+              podem operar quando as credenciais de servidor estiverem prontas; pagamentos live continuam bloqueados.
             </p>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function StripeFoundationReadinessCard() {
               {payload.readiness.restrictedKeyKind === 'test' ? 'Restricted key de teste' : 'Restricted key pendente'}
             </Badge>
             <Badge variant={payload.readiness.webhookSecretLooksValid ? 'secondary' : 'outline'}>
-              {payload.readiness.webhookSecretLooksValid ? 'Webhook secret preparado' : 'Webhook fica para etapa posterior'}
+              {payload.readiness.webhookSecretLooksValid ? 'Webhook secret preparado' : 'Webhook secret pendente'}
             </Badge>
           </div>
 
@@ -121,7 +121,7 @@ export function StripeFoundationReadinessCard() {
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Webhook financeiro</div>
               <div className="font-medium mt-1">{payload.policy.webhookProcessingEnabled ? 'Ativo' : 'Bloqueado'}</div>
-              <div className="text-xs text-muted-foreground mt-1">sem crédito automático</div>
+              <div className="text-xs text-muted-foreground mt-1">pagamento verificado e crédito idempotente em test mode</div>
             </div>
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Pagamentos live</div>
