@@ -83,10 +83,6 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     const stripeKeyMatchesMode = stripeMode === 'live'
       ? stripeRestrictedKey.startsWith('rk_live_')
       : stripeRestrictedKey.startsWith('rk_test_');
-    const stripeLiveGateMatchesMode = stripeMode === 'live'
-      ? stripeLiveAllowed
-      : !stripeLiveAllowed;
-
     addCheck(
       'STRIPE_MODE',
       stripeModeValid,
@@ -101,14 +97,22 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
         ? 'STRIPE_MODE=live requires a restricted live key (rk_live_).'
         : 'STRIPE_MODE=test requires a restricted test key (rk_test_).',
     );
-    addCheck(
-      'STRIPE_LIVE_PAYMENTS_ALLOWED',
-      stripeLiveGateMatchesMode,
-      stripeMode === 'live' ? 'Stripe live hard gate enabled' : 'Stripe live hard gate disabled in test mode',
-      stripeMode === 'live'
-        ? 'STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true.'
-        : 'STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false.',
-    );
+    if (stripeMode === 'test') {
+      addCheck(
+        'STRIPE_LIVE_PAYMENTS_ALLOWED',
+        !stripeLiveAllowed,
+        'Stripe live hard gate disabled in test mode',
+        'STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false.',
+      );
+    } else {
+      checks.push({
+        key: 'STRIPE_LIVE_PAYMENTS_ALLOWED',
+        ok: true,
+        message: stripeLiveAllowed
+          ? 'Stripe live checkout hard gate enabled'
+          : 'Stripe live checkout hard gate disabled; webhook settlement remains available',
+      });
+    }
     if (stripeWebhookSecret) {
       addCheck(
         'STRIPE_WEBHOOK_SECRET',
@@ -217,7 +221,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     stripe: !stripeEnabled || (
       (
         (stripeMode === 'test' && stripeRestrictedKey.startsWith('rk_test_') && !stripeLiveAllowed)
-        || (stripeMode === 'live' && stripeRestrictedKey.startsWith('rk_live_') && stripeLiveAllowed)
+        || (stripeMode === 'live' && stripeRestrictedKey.startsWith('rk_live_'))
       )
       && (
         stripeMode === 'live'
