@@ -393,6 +393,7 @@ export async function createStripeCheckoutForTopUp(input: {
     purpose: 'flip_ai_top_up',
     topUpOrderId: orderId,
     tenantId,
+    stripeMode: stripeConfig.mode,
   };
 
   const session = await stripe.checkout.sessions.create({
