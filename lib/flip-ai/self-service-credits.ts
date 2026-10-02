@@ -53,22 +53,22 @@ export async function getFlipAiCreditStorefront(session: SessionPayload) {
   ]);
   const packages = getPublicFlipAiCreditPackages();
   const stripe = inspectStripeFoundationConfiguration();
+  const purchaseReason: 'catalog_not_configured' | 'live_not_enabled' | 'stripe_not_ready' | null =
+    packages.length === 0
+      ? 'catalog_not_configured'
+      : stripe.mode !== 'live'
+        ? 'live_not_enabled'
+        : !stripe.readyForCheckout
+          ? 'stripe_not_ready'
+          : null;
 
   return {
     wallet,
     packages,
     orders: topUps.orders.map(publicOrder),
     purchases: {
-      available: packages.length > 0
-        && stripe.mode === 'live'
-        && stripe.readyForCheckout,
-      reason: packages.length === 0
-        ? 'catalog_not_configured'
-        : stripe.mode !== 'live'
-          ? 'live_not_enabled'
-          : !stripe.readyForCheckout
-            ? 'stripe_not_ready'
-            : null,
+      available: purchaseReason === null,
+      reason: purchaseReason,
     },
   };
 }
