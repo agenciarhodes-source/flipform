@@ -51,6 +51,7 @@ export type CreateFlipAiTopUpOrderInput = {
   credits: number;
   estimatedOpenAiCostCents?: number;
   actorUserId: string;
+  origin?: 'platform_admin' | 'tenant_self_service';
 };
 
 function boundedText(value: string, field: string, maxLength: number) {
@@ -88,10 +89,12 @@ export function validateCreateFlipAiTopUpOrder(input: CreateFlipAiTopUpOrderInpu
       'requestKey deve usar apenas letras, números, ponto, hífen, dois-pontos ou sublinhado.',
     );
   }
+  const origin = input.origin === 'tenant_self_service' ? 'tenant_self_service' : 'platform_admin';
   return {
     tenantId,
     actorUserId,
     requestKey,
+    origin,
     amountCents: positiveInt(input.amountCents, 'amountCents', MAX_AMOUNT_CENTS),
     credits: positiveInt(input.credits, 'credits', MAX_CREDITS),
     estimatedOpenAiCostCents: positiveInt(
@@ -312,13 +315,16 @@ export async function createFlipAiTopUpOrder(input: CreateFlipAiTopUpOrderInput)
       tenantId: validated.tenantId,
       actorUserId: validated.actorUserId,
       orderId: order.id,
-      action: 'platform.flip_ai_top_up_created',
+      action: validated.origin === 'tenant_self_service'
+        ? 'tenant.flip_ai_top_up_created'
+        : 'platform.flip_ai_top_up_created',
       metadata: {
         tenantName: tenant.name,
         requestKey: validated.requestKey,
         amountCents: validated.amountCents,
         credits: validated.credits,
         estimatedOpenAiCostCents: validated.estimatedOpenAiCostCents,
+        origin: validated.origin,
       },
     });
 
