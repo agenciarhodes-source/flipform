@@ -627,7 +627,7 @@ export default function TenantDetailPage() {
                                   <td className="py-2 px-3 text-xs text-muted-foreground">
                                     {order.providerPaymentId
                                       || order.stripeCheckoutSessionId
-                                      || (order.paymentProvider === 'stripe' ? 'Stripe teste preparado' : '—')}
+                                      || (order.paymentProvider === 'stripe' ? 'Stripe preparado' : '—')}
                                   </td>
                                   <td className="py-2 px-3">
                                     <div className="flex justify-end gap-2">
