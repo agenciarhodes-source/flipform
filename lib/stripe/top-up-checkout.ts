@@ -8,6 +8,9 @@ const PROVIDER = 'stripe';
 const PAYMENT_METHOD = 'card_checkout';
 const MAX_REFERENCE_LENGTH = 190;
 
+export type StripeCheckoutReturnTarget = 'platform_admin' | 'tenant_self_service';
+export type StripeCheckoutActorScope = 'platform_admin' | 'tenant_self_service';
+
 type ReservedCheckout = {
   orderId: string;
   tenantId: string;
@@ -43,13 +46,16 @@ function bounded(value: string, field: string) {
   return normalized;
 }
 
-function checkoutReturnUrls(tenantId: string, orderId: string) {
-  const configured = String(process.env.NEXT_PUBLIC_ADMIN_URL || '').trim();
+function parseReturnBase(
+  envKey: 'NEXT_PUBLIC_ADMIN_URL' | 'NEXT_PUBLIC_APP_URL',
+  label: string,
+) {
+  const configured = String(process.env[envKey] || '').trim();
   if (!configured) {
     throw new StripeCheckoutError(
       'STRIPE_CHECKOUT_RETURN_URL_MISSING',
       503,
-      'NEXT_PUBLIC_ADMIN_URL não está configurada.',
+      `${envKey} não está configurada.`,
     );
   }
 
@@ -63,13 +69,29 @@ function checkoutReturnUrls(tenantId: string, orderId: string) {
     throw new StripeCheckoutError(
       'STRIPE_CHECKOUT_RETURN_URL_INVALID',
       503,
-      'A URL administrativa configurada para retorno da Stripe é inválida.',
+      `A URL ${label} configurada para retorno da Stripe é inválida.`,
     );
   }
 
   const configuredPath = parsed.pathname.replace(/\/+$/, '');
-  const adminBasePath = configuredPath && configuredPath !== '/' ? configuredPath : '';
-  const base = `${parsed.origin}${adminBasePath}/tenants/${encodeURIComponent(tenantId)}`;
+  const basePath = configuredPath && configuredPath !== '/' ? configuredPath : '';
+  return { parsed, basePath };
+}
+
+function checkoutReturnUrls(
+  tenantId: string,
+  orderId: string,
+  returnTarget: StripeCheckoutReturnTarget,
+) {
+  let base: string;
+  if (returnTarget === 'tenant_self_service') {
+    const { parsed, basePath: appBasePath } = parseReturnBase('NEXT_PUBLIC_APP_URL', 'do aplicativo');
+    base = `${parsed.origin}${appBasePath}/flip-ai/credits`;
+  } else {
+    const { parsed, basePath: adminBasePath } = parseReturnBase('NEXT_PUBLIC_ADMIN_URL', 'administrativa');
+    base = `${parsed.origin}${adminBasePath}/tenants/${encodeURIComponent(tenantId)}`;
+  }
+
   return {
     successUrl: `${base}?stripe_checkout=return&top_up=${encodeURIComponent(orderId)}&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${base}?stripe_checkout=canceled&top_up=${encodeURIComponent(orderId)}`,
@@ -279,6 +301,7 @@ async function persistCheckoutSession(
   },
   actorUserId: string,
   stripeMode: StripeEnvironmentMode,
+  actorScope: StripeCheckoutActorScope,
 ) {
   await prisma.$transaction(async (db) => {
     const updated = await db.flipAiTopUpOrder.updateMany({
@@ -319,7 +342,9 @@ async function persistCheckoutSession(
         userId: actorUserId,
         entityType: 'flip_ai_top_up_order',
         entityId: order.orderId,
-        action: 'platform.flip_ai_stripe_checkout_created',
+        action: actorScope === 'tenant_self_service'
+          ? 'tenant.flip_ai_stripe_checkout_created'
+          : 'platform.flip_ai_stripe_checkout_created',
         metadata: {
           stripeCheckoutSessionId: session.id,
           attempt: order.attempt,
@@ -328,6 +353,7 @@ async function persistCheckoutSession(
           credits: order.credits,
           stripeMode,
           testMode: stripeMode === 'test',
+          actorScope,
         },
       },
     });
@@ -338,10 +364,18 @@ export async function createStripeCheckoutForTopUp(input: {
   tenantId: string;
   orderId: string;
   actorUserId: string;
+  returnTarget?: StripeCheckoutReturnTarget;
+  actorScope?: StripeCheckoutActorScope;
 }) {
   const tenantId = bounded(input.tenantId, 'tenantId');
   const orderId = bounded(input.orderId, 'orderId');
   const actorUserId = bounded(input.actorUserId, 'actorUserId');
+  const returnTarget = input.returnTarget === 'tenant_self_service'
+    ? 'tenant_self_service'
+    : 'platform_admin';
+  const actorScope = input.actorScope === 'tenant_self_service'
+    ? 'tenant_self_service'
+    : 'platform_admin';
 
   let stripe: ReturnType<typeof getStripeClient>;
   let stripeConfig: ReturnType<typeof requireStripeCheckoutConfiguration>;
@@ -387,7 +421,7 @@ export async function createStripeCheckoutForTopUp(input: {
     }
   }
 
-  const urls = checkoutReturnUrls(tenantId, orderId);
+  const urls = checkoutReturnUrls(tenantId, orderId, returnTarget);
   const idempotencyKey = `flip-ai-top-up:${orderId}:checkout:${reserved.attempt}`;
   const metadata = {
     purpose: 'flip_ai_top_up',
@@ -421,7 +455,7 @@ export async function createStripeCheckoutForTopUp(input: {
   });
 
   validateStripeSession(session, reserved, stripeConfig.mode);
-  await persistCheckoutSession(reserved, session, actorUserId, stripeConfig.mode);
+  await persistCheckoutSession(reserved, session, actorUserId, stripeConfig.mode, actorScope);
 
   return {
     checkoutUrl: session.url!,
