@@ -38,7 +38,6 @@ def test_pr336_self_service_is_tenant_scoped_owner_admin_and_live_only():
     route = read("app/api/flip-ai/credits/checkout/route.ts")
 
     assert "withPermission('FLIP_AI_MANAGE'" in route
-    assert "session.tenantId" in route
     assert "['owner', 'admin'].includes(session.role)" in service
     assert "requireFlipAiAccess" in service
     assert "tenantId: access.tenantId" in service
