@@ -72,6 +72,8 @@ async function run() {
 
   await checkJsonApi('/api/billing/change-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetPlanSlug: 'growth' }) }, [401, 403]);
   await checkJsonApi('/api/billing/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'smoke' }) }, [401, 403]);
+  await checkJsonApi('/api/flip-ai/credits', { method: 'GET' }, [401, 403]);
+  await checkJsonApi('/api/flip-ai/credits/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ packageId: 'smoke', requestKey: '00000000-0000-4000-8000-000000000000' }) }, [401, 403]);
   await checkJsonApi('/api/account/export', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/account/delete-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'smoke', confirmation: 'EXCLUIR' }) }, [401, 403]);
 
