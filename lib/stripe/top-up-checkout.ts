@@ -53,13 +53,12 @@ function checkoutReturnUrls(tenantId: string, orderId: string) {
     );
   }
 
-  let origin: string;
+  let parsed: URL;
   try {
-    const parsed = new URL(configured);
+    parsed = new URL(configured);
     const localHttp = parsed.protocol === 'http:'
       && ['localhost', '127.0.0.1'].includes(parsed.hostname);
     if (parsed.protocol !== 'https:' && !localHttp) throw new Error('insecure');
-    origin = parsed.origin;
   } catch {
     throw new StripeCheckoutTestError(
       'STRIPE_CHECKOUT_RETURN_URL_INVALID',
@@ -68,7 +67,9 @@ function checkoutReturnUrls(tenantId: string, orderId: string) {
     );
   }
 
-  const base = `${origin}/admin/tenants/${encodeURIComponent(tenantId)}`;
+  const configuredPath = parsed.pathname.replace(/\/+$/, '');
+  const adminBasePath = configuredPath && configuredPath !== '/' ? configuredPath : '';
+  const base = `${parsed.origin}${adminBasePath}/tenants/${encodeURIComponent(tenantId)}`;
   return {
     successUrl: `${base}?stripe_checkout=test_return&top_up=${encodeURIComponent(orderId)}&session_id={CHECKOUT_SESSION_ID}`,
     cancelUrl: `${base}?stripe_checkout=test_canceled&top_up=${encodeURIComponent(orderId)}`,

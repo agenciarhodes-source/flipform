@@ -77,6 +77,15 @@ def test_pr332_return_url_is_navigation_only_not_payment_authority():
     assert "stripe_checkout=test_return" not in page
 
 
+def test_pr334_checkout_return_respects_admin_url_base_path():
+    checkout = read("lib/stripe/top-up-checkout.ts")
+
+    assert "parsed.pathname.replace" in checkout
+    assert "adminBasePath" in checkout
+    assert "${parsed.origin}${adminBasePath}/tenants/" in checkout
+    assert "${origin}/admin/tenants/" not in checkout
+
+
 def test_pr332_does_not_add_webhook_or_live_payment_processing():
     checkout = read("lib/stripe/top-up-checkout.ts")
     readiness = read("app/api/admin/integrations/stripe/readiness/route.ts")
