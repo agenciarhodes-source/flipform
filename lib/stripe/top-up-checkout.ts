@@ -343,8 +343,8 @@ export async function createStripeCheckoutForTopUp(input: {
   const orderId = bounded(input.orderId, 'orderId');
   const actorUserId = bounded(input.actorUserId, 'actorUserId');
 
-  let stripe;
-  let stripeConfig;
+  let stripe: ReturnType<typeof getStripeClient>;
+  let stripeConfig: ReturnType<typeof requireStripeConfiguration>;
   try {
     stripeConfig = requireStripeConfiguration();
     stripe = getStripeClient();
