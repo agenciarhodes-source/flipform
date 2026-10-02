@@ -18,19 +18,19 @@ O navegador continua sem autoridade para confirmar pagamento ou liberar crédito
 
 ## Hard gate de produção
 
-Pagamentos live só ficam disponíveis quando as três condições abaixo são verdadeiras ao mesmo tempo:
+Novos Checkouts live só ficam disponíveis quando todas as condições abaixo estão coerentes:
 
 ```env
 STRIPE_ENABLED=true
 STRIPE_MODE=live
+STRIPE_RESTRICTED_KEY=rk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_LIVE_PAYMENTS_ALLOWED=true
 ```
 
-Além disso:
+Além disso, a sessão, o evento e o PaymentIntent precisam pertencer a `livemode=true`.
 
-- `STRIPE_RESTRICTED_KEY` precisa começar com `rk_live_`;
-- `STRIPE_WEBHOOK_SECRET` precisa ser o signing secret do endpoint **live**;
-- a sessão, o evento e o PaymentIntent precisam pertencer a `livemode=true`.
+O hard gate `STRIPE_LIVE_PAYMENTS_ALLOWED` controla **somente a criação de novos Checkouts live**. O processamento do webhook continua habilitado quando o gate é desligado, desde que a integração live e o signing secret permaneçam válidos. Isso permite liquidar com segurança pagamentos que já estavam em andamento antes de um bloqueio operacional.
 
 Qualquer mistura entre credenciais/objetos de teste e live é bloqueada.
 
@@ -114,10 +114,11 @@ e fazer redeploy.
 Com o hard gate desligado:
 
 - novos Checkouts live são bloqueados;
-- o ambiente deixa de ser considerado pronto;
+- webhooks live assinados continuam sendo processados para pagamentos já iniciados;
+- o crédito idempotente e o ledger continuam disponíveis para liquidar transações pendentes;
 - credenciais permanecem armazenadas para investigação/rollback controlado.
 
-Se necessário, também definir `STRIPE_ENABLED=false`.
+Use `STRIPE_ENABLED=false` somente quando também for aceitável interromper o processamento de webhooks. Para um bloqueio comercial normal, prefira apenas `STRIPE_LIVE_PAYMENTS_ALLOWED=false`.
 
 ## Fora do escopo deste PR
 
