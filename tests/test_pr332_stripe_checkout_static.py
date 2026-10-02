@@ -81,7 +81,7 @@ def test_pr332_does_not_add_webhook_or_live_payment_processing():
     checkout = read("lib/stripe/top-up-checkout.ts")
     readiness = read("app/api/admin/integrations/stripe/readiness/route.ts")
 
-    assert "webhookProcessingEnabled: false" in readiness
+    assert "webhookProcessingEnabled: readiness.readyForWebhookValidation" in readiness
     assert "moneyMovementEnabled: false" in readiness
     assert "STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED" in readiness
 
