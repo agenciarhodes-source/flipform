@@ -16,9 +16,10 @@ def test_pr335_live_requires_live_key_and_explicit_hard_gate():
     assert "Pagamentos live exigem STRIPE_LIVE_PAYMENTS_ALLOWED=true." in config
     assert "stripeMode === 'live'" in validator
     assert "stripeRestrictedKey.startsWith('rk_live_')" in validator
-    assert "STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true." in validator
+    assert "Stripe live checkout hard gate disabled; webhook settlement remains available" in validator
     assert "STRIPE_MODE=live requires STRIPE_WEBHOOK_SECRET before accepting real payments." in validator
     assert "STRIPE_MODE=live exige STRIPE_WEBHOOK_SECRET configurado antes de aceitar pagamentos reais." in config
+    assert "Novos Checkouts live estão bloqueados por STRIPE_LIVE_PAYMENTS_ALLOWED=false." in config
 
 
 def test_pr335_checkout_and_webhook_require_environment_match():
@@ -50,3 +51,16 @@ def test_pr335_admin_readiness_exposes_commercial_state_without_secrets():
     assert "commercialPaymentsEnabled: readiness.readyForCheckout && readiness.mode === 'live'" in route
     assert "STRIPE_RESTRICTED_KEY" not in route
     assert "STRIPE_WEBHOOK_SECRET" not in route
+
+
+def test_pr335_live_kill_switch_blocks_new_checkout_but_keeps_webhook_settlement_ready():
+    config = read("lib/stripe/config.ts")
+    checkout = read("lib/stripe/top-up-checkout.ts")
+    webhook_route = read("app/api/webhooks/stripe/route.ts")
+
+    assert "requireStripeCheckoutConfiguration" in checkout
+    assert "requireStripeConfiguration" in config
+    assert "readyForWebhookValidation: environmentReady && webhookValid" in config
+    assert "readyForCheckout: environmentReady" in config
+    assert "mode === 'test' || livePaymentsAllowed" in config
+    assert "getStripeClient().webhooks.constructEvent" in webhook_route
