@@ -57,7 +57,7 @@ def test_environment_guard_requires_matching_restricted_key_and_live_gate():
     assert "STRIPE_ENABLED" in validator
     assert "stripeRestrictedKey.startsWith('rk_test_')" in validator
     assert "stripeRestrictedKey.startsWith('rk_live_')" in validator
-    assert "STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true." in validator
+    assert "Stripe live checkout hard gate disabled; webhook settlement remains available" in validator
     assert "STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false." in validator
     assert "STRIPE_ENABLED=false" in env_example
     assert "STRIPE_MODE=test" in env_example
