@@ -79,23 +79,35 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   const stripeLiveAllowed = String(env.STRIPE_LIVE_PAYMENTS_ALLOWED || '').trim().toLowerCase() === 'true';
 
   if (stripeEnabled) {
+    const stripeModeValid = stripeMode === 'test' || stripeMode === 'live';
+    const stripeKeyMatchesMode = stripeMode === 'live'
+      ? stripeRestrictedKey.startsWith('rk_live_')
+      : stripeRestrictedKey.startsWith('rk_test_');
+    const stripeLiveGateMatchesMode = stripeMode === 'live'
+      ? stripeLiveAllowed
+      : !stripeLiveAllowed;
+
     addCheck(
       'STRIPE_MODE',
-      stripeMode === 'test',
-      'Stripe test mode enforced for PR #331',
-      'STRIPE_MODE must remain test during PR #331.',
+      stripeModeValid,
+      'Stripe mode accepted',
+      'STRIPE_MODE must be test or live.',
     );
     addCheck(
       'STRIPE_RESTRICTED_KEY',
-      stripeRestrictedKey.startsWith('rk_test_'),
-      'Stripe restricted test key configured',
-      'STRIPE_RESTRICTED_KEY must be a restricted test key (rk_test_) during PR #331.',
+      stripeKeyMatchesMode,
+      'Stripe restricted key matches configured mode',
+      stripeMode === 'live'
+        ? 'STRIPE_MODE=live requires a restricted live key (rk_live_).'
+        : 'STRIPE_MODE=test requires a restricted test key (rk_test_).',
     );
     addCheck(
       'STRIPE_LIVE_PAYMENTS_ALLOWED',
-      !stripeLiveAllowed,
-      'Stripe live payments blocked',
-      'STRIPE_LIVE_PAYMENTS_ALLOWED must remain false during PR #331.',
+      stripeLiveGateMatchesMode,
+      stripeMode === 'live' ? 'Stripe live hard gate enabled' : 'Stripe live hard gate disabled in test mode',
+      stripeMode === 'live'
+        ? 'STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true.'
+        : 'STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false.',
     );
     if (stripeWebhookSecret) {
       addCheck(
@@ -196,9 +208,10 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     email: hasValue(env.EMAIL_PROVIDER) && hasValue(env.EMAIL_FROM) && hasValue(env.EMAIL_REPLY_TO),
     internalJobs: hasValue(env.CRON_SECRET) && hasValue(env.INTERNAL_JOB_SECRET),
     stripe: !stripeEnabled || (
-      stripeMode === 'test'
-      && stripeRestrictedKey.startsWith('rk_test_')
-      && !stripeLiveAllowed
+      (
+        (stripeMode === 'test' && stripeRestrictedKey.startsWith('rk_test_') && !stripeLiveAllowed)
+        || (stripeMode === 'live' && stripeRestrictedKey.startsWith('rk_live_') && stripeLiveAllowed)
+      )
       && (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
     ),
     observability: true,
