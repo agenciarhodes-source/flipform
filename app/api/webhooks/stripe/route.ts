@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { captureServerException } from '@/lib/observability';
-import { getStripeTestClient } from '@/lib/stripe/client';
+import { getStripeClient } from '@/lib/stripe/client';
 import { requireStripeWebhookSecret, StripeFoundationConfigError } from '@/lib/stripe/config';
 import {
   applyVerifiedStripeTopUpPayment,
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = getStripeTestClient().webhooks.constructEvent(rawBody, signature, webhookSecret);
+    event = getStripeClient().webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch {
     return NextResponse.json({ error: 'invalid_signature' }, { status: 400 });
   }

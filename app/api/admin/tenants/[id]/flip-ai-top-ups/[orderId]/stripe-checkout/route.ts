@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { withPlatformAdmin } from '@/lib/auth';
 import {
-  createStripeTestCheckoutForTopUp,
-  StripeCheckoutTestError,
+  createStripeCheckoutForTopUp,
+  StripeCheckoutError,
 } from '@/lib/stripe/top-up-checkout';
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
@@ -12,14 +12,14 @@ export const POST = withPlatformAdmin(async (
   ctx: { params: { id: string; orderId: string } },
 ) => {
   const rl = rateLimit({
-    key: `admin:stripe-test-checkout:${session.userId}`,
+    key: `admin:stripe-checkout:${session.userId}`,
     limit: 20,
     windowMs: 60 * 1000,
   });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   try {
-    const result = await createStripeTestCheckoutForTopUp({
+    const result = await createStripeCheckoutForTopUp({
       tenantId: ctx.params.id,
       orderId: ctx.params.orderId,
       actorUserId: session.userId,
@@ -29,14 +29,14 @@ export const POST = withPlatformAdmin(async (
       { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
     );
   } catch (error) {
-    if (error instanceof StripeCheckoutTestError) {
+    if (error instanceof StripeCheckoutError) {
       return NextResponse.json(
         { error: error.message, code: error.code },
         { status: error.status },
       );
     }
     return NextResponse.json(
-      { error: 'Não foi possível criar o Checkout de teste da Stripe.' },
+      { error: 'Não foi possível criar o Checkout da Stripe.' },
       { status: 500 },
     );
   }

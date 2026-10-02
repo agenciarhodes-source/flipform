@@ -80,6 +80,7 @@ test('verified Stripe payment credits one tenant exactly once', async () => {
       currency: 'BRL',
       paymentMethod: 'card',
       eventCreatedAt: new Date(),
+      stripeMode: 'test' as const,
     };
 
     const first = await applyVerifiedStripeTopUpPayment(verified);
@@ -146,6 +147,7 @@ test('verified Stripe payment rejects mismatched amount without crediting wallet
         currency: 'BRL',
         paymentMethod: 'card',
         eventCreatedAt: new Date(),
+      stripeMode: 'test' as const,
       }),
       (error: unknown) => error instanceof StripeTopUpWebhookError
         && error.code === 'STRIPE_WEBHOOK_ORDER_MISMATCH',

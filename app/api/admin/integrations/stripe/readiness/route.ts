@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withPlatformAdmin } from '@/lib/auth';
-import {
-  inspectStripeFoundationConfiguration,
-  STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED,
-} from '@/lib/stripe/config';
+import { inspectStripeFoundationConfiguration } from '@/lib/stripe/config';
 import { getStripeServerSdkMetadata } from '@/lib/stripe/client';
 
 export const dynamic = 'force-dynamic';
@@ -16,10 +13,10 @@ export const GET = withPlatformAdmin(async () => {
       readiness,
       sdk: getStripeServerSdkMetadata(),
       policy: {
-        livePaymentsAllowed: STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED,
-        checkoutCreationEnabled: readiness.readyForTestIntegration,
+        livePaymentsAllowed: readiness.livePaymentsAllowed,
+        checkoutCreationEnabled: readiness.readyForCheckout,
         webhookProcessingEnabled: readiness.readyForWebhookValidation,
-        moneyMovementEnabled: false,
+        commercialPaymentsEnabled: readiness.readyForCheckout && readiness.mode === 'live',
       },
     },
     {

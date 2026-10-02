@@ -17,7 +17,7 @@ def test_pr333_webhook_requires_raw_body_and_stripe_signature():
     assert "rateLimit" in route
 
 
-def test_pr333_verifies_checkout_and_payment_intent_server_to_server():
+def test_webhook_verifies_checkout_and_payment_intent_server_to_server():
     webhook = read("lib/stripe/top-up-webhook.ts")
     assert "stripe.checkout.sessions.retrieve(sessionId)" in webhook
     assert "stripe.paymentIntents.retrieve(paymentIntentId)" in webhook
@@ -26,7 +26,9 @@ def test_pr333_verifies_checkout_and_payment_intent_server_to_server():
     assert "paymentIntent.status !== 'succeeded'" in webhook
     assert "paymentIntent.amount_received !== session.amount_total" in webhook
     assert "session.client_reference_id !== orderId" in webhook
-    assert "STRIPE_WEBHOOK_LIVE_EVENT_BLOCKED" in webhook
+    assert "STRIPE_WEBHOOK_ENVIRONMENT_MISMATCH" in webhook
+    assert "event.livemode !== expectedLivemode" in webhook
+    assert "paymentIntent.livemode !== expectedLivemode" in webhook
 
 
 def test_pr333_binds_tenant_order_session_amount_and_currency_before_credit():
@@ -53,18 +55,17 @@ def test_pr333_replay_and_double_credit_are_idempotent():
     assert "processedAt: now" in webhook
 
 
-def test_pr333_remains_test_only_and_does_not_add_refunds_or_live_money_movement():
+def test_webhook_uses_active_environment_client_and_has_no_refund_or_transfer_actions():
     route = read("app/api/webhooks/stripe/route.ts")
     webhook = read("lib/stripe/top-up-webhook.ts").lower()
     readiness = read("app/api/admin/integrations/stripe/readiness/route.ts")
     assert "webhookProcessingEnabled: readiness.readyForWebhookValidation" in readiness
-    assert "moneyMovementEnabled: false" in readiness
-    assert "getStripeTestClient" in route
+    assert "getStripeClient" in route
     for forbidden in [
         "refunds.create",
         "payouts.create",
         "transfers.create",
-        "rk_live_",
         "sk_live_",
+        "sk_test_",
     ]:
         assert forbidden not in webhook

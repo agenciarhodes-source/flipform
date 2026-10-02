@@ -79,30 +79,53 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   const stripeLiveAllowed = String(env.STRIPE_LIVE_PAYMENTS_ALLOWED || '').trim().toLowerCase() === 'true';
 
   if (stripeEnabled) {
+    const stripeModeValid = stripeMode === 'test' || stripeMode === 'live';
+    const stripeKeyMatchesMode = stripeMode === 'live'
+      ? stripeRestrictedKey.startsWith('rk_live_')
+      : stripeRestrictedKey.startsWith('rk_test_');
     addCheck(
       'STRIPE_MODE',
-      stripeMode === 'test',
-      'Stripe test mode enforced for PR #331',
-      'STRIPE_MODE must remain test during PR #331.',
+      stripeModeValid,
+      'Stripe mode accepted',
+      'STRIPE_MODE must be test or live.',
     );
     addCheck(
       'STRIPE_RESTRICTED_KEY',
-      stripeRestrictedKey.startsWith('rk_test_'),
-      'Stripe restricted test key configured',
-      'STRIPE_RESTRICTED_KEY must be a restricted test key (rk_test_) during PR #331.',
+      stripeKeyMatchesMode,
+      'Stripe restricted key matches configured mode',
+      stripeMode === 'live'
+        ? 'STRIPE_MODE=live requires a restricted live key (rk_live_).'
+        : 'STRIPE_MODE=test requires a restricted test key (rk_test_).',
     );
-    addCheck(
-      'STRIPE_LIVE_PAYMENTS_ALLOWED',
-      !stripeLiveAllowed,
-      'Stripe live payments blocked',
-      'STRIPE_LIVE_PAYMENTS_ALLOWED must remain false during PR #331.',
-    );
+    if (stripeMode === 'test') {
+      addCheck(
+        'STRIPE_LIVE_PAYMENTS_ALLOWED',
+        !stripeLiveAllowed,
+        'Stripe live hard gate disabled in test mode',
+        'STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false.',
+      );
+    } else {
+      checks.push({
+        key: 'STRIPE_LIVE_PAYMENTS_ALLOWED',
+        ok: true,
+        message: stripeLiveAllowed
+          ? 'Stripe live checkout hard gate enabled'
+          : 'Stripe live checkout hard gate disabled; webhook settlement remains available',
+      });
+    }
     if (stripeWebhookSecret) {
       addCheck(
         'STRIPE_WEBHOOK_SECRET',
         stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16,
         'Stripe webhook secret format accepted',
         'STRIPE_WEBHOOK_SECRET must use the whsec_ format when configured.',
+      );
+    } else if (stripeMode === 'live') {
+      addCheck(
+        'STRIPE_WEBHOOK_SECRET',
+        false,
+        'Stripe live webhook configured',
+        'STRIPE_MODE=live requires STRIPE_WEBHOOK_SECRET before accepting real payments.',
       );
     }
   }
@@ -196,10 +219,15 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     email: hasValue(env.EMAIL_PROVIDER) && hasValue(env.EMAIL_FROM) && hasValue(env.EMAIL_REPLY_TO),
     internalJobs: hasValue(env.CRON_SECRET) && hasValue(env.INTERNAL_JOB_SECRET),
     stripe: !stripeEnabled || (
-      stripeMode === 'test'
-      && stripeRestrictedKey.startsWith('rk_test_')
-      && !stripeLiveAllowed
-      && (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
+      (
+        (stripeMode === 'test' && stripeRestrictedKey.startsWith('rk_test_') && !stripeLiveAllowed)
+        || (stripeMode === 'live' && stripeRestrictedKey.startsWith('rk_live_'))
+      )
+      && (
+        stripeMode === 'live'
+          ? (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16)
+          : (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
+      )
     ),
     observability: true,
   };

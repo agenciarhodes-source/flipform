@@ -14,9 +14,9 @@ type StripeReadinessPayload = {
     restrictedKeyKind: 'missing' | 'test' | 'live' | 'invalid';
     webhookSecretConfigured: boolean;
     webhookSecretLooksValid: boolean;
-    testModeGuardActive: boolean;
+    environmentGuardActive: boolean;
     livePaymentsAllowed: boolean;
-    readyForTestIntegration: boolean;
+    readyForCheckout: boolean;
     readyForWebhookValidation: boolean;
     warnings: string[];
     errors: string[];
@@ -33,7 +33,7 @@ type StripeReadinessPayload = {
     livePaymentsAllowed: boolean;
     checkoutCreationEnabled: boolean;
     webhookProcessingEnabled: boolean;
-    moneyMovementEnabled: boolean;
+    commercialPaymentsEnabled: boolean;
   };
 };
 
@@ -62,6 +62,11 @@ export function StripeFoundationReadinessCard() {
 
   useEffect(() => { void load(); }, []);
 
+  const isLive = payload?.readiness.mode === 'live';
+  const keyMatchesMode = Boolean(payload)
+    && ((isLive && payload!.readiness.restrictedKeyKind === 'live')
+      || (!isLive && payload!.readiness.restrictedKeyKind === 'test'));
+
   return (
     <Card className="p-6 space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -70,11 +75,11 @@ export function StripeFoundationReadinessCard() {
             <CreditCard className="w-5 h-5 text-violet-700" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-violet-700">STRIPE · FUNDAÇÃO</p>
+            <p className="text-xs font-semibold text-violet-700">STRIPE · PAGAMENTOS</p>
             <h2 className="font-heading text-xl font-semibold">Pagamentos da Carteira Flip AI</h2>
             <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-              A integração Stripe permanece em modo de teste. Checkout hospedado e webhook assinado
-              podem operar quando as credenciais de servidor estiverem prontas; pagamentos live continuam bloqueados.
+              Checkout hospedado e webhook assinado operam no ambiente Stripe configurado.
+              O modo live só é habilitado quando a restricted key, o webhook e o hard gate comercial estão coerentes.
             </p>
           </div>
         </div>
@@ -96,11 +101,13 @@ export function StripeFoundationReadinessCard() {
             <Badge variant={payload.readiness.enabled ? 'secondary' : 'outline'}>
               {payload.readiness.enabled ? 'Integração habilitada' : 'Integração desabilitada'}
             </Badge>
-            <Badge variant={payload.readiness.mode === 'test' ? 'secondary' : 'destructive'}>
-              {payload.readiness.mode === 'test' ? 'Modo teste' : 'Modo live bloqueado'}
+            <Badge variant={isLive ? 'default' : 'secondary'}>
+              {isLive ? 'Modo produção' : 'Modo teste'}
             </Badge>
-            <Badge variant={payload.readiness.restrictedKeyKind === 'test' ? 'secondary' : 'outline'}>
-              {payload.readiness.restrictedKeyKind === 'test' ? 'Restricted key de teste' : 'Restricted key pendente'}
+            <Badge variant={keyMatchesMode ? 'secondary' : 'destructive'}>
+              {keyMatchesMode
+                ? `Restricted key ${isLive ? 'live' : 'de teste'}`
+                : 'Restricted key incompatível'}
             </Badge>
             <Badge variant={payload.readiness.webhookSecretLooksValid ? 'secondary' : 'outline'}>
               {payload.readiness.webhookSecretLooksValid ? 'Webhook secret preparado' : 'Webhook secret pendente'}
@@ -116,17 +123,19 @@ export function StripeFoundationReadinessCard() {
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Checkout</div>
               <div className="font-medium mt-1">{payload.policy.checkoutCreationEnabled ? 'Ativo' : 'Bloqueado'}</div>
-              <div className="text-xs text-muted-foreground mt-1">somente Checkout hospedado em modo de teste</div>
+              <div className="text-xs text-muted-foreground mt-1">Checkout hospedado no ambiente selecionado</div>
             </div>
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Webhook financeiro</div>
               <div className="font-medium mt-1">{payload.policy.webhookProcessingEnabled ? 'Ativo' : 'Bloqueado'}</div>
-              <div className="text-xs text-muted-foreground mt-1">pagamento verificado e crédito idempotente em test mode</div>
+              <div className="text-xs text-muted-foreground mt-1">assinatura, pagamento e crédito idempotente</div>
             </div>
             <div className="rounded-md border p-3">
-              <div className="text-xs text-muted-foreground">Pagamentos live</div>
-              <div className="font-medium mt-1">{payload.policy.livePaymentsAllowed ? 'Ativos' : 'Bloqueados'}</div>
-              <div className="text-xs text-muted-foreground mt-1">hard gate de segurança permanece ativo</div>
+              <div className="text-xs text-muted-foreground">Uso comercial</div>
+              <div className="font-medium mt-1">{payload.policy.commercialPaymentsEnabled ? 'Ativo' : 'Bloqueado'}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {isLive ? 'hard gate live verificado' : 'indisponível enquanto estiver em test mode'}
+              </div>
             </div>
           </div>
 
@@ -134,7 +143,7 @@ export function StripeFoundationReadinessCard() {
             <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0" />
             <span>
               Nenhuma chave Stripe é retornada por este endpoint ou exibida nesta tela.
-              As credenciais serão configuradas somente como secrets de servidor.
+              As credenciais permanecem somente como secrets de servidor.
             </span>
           </div>
 
