@@ -233,6 +233,24 @@ export async function applyVerifiedStripeTopUpPayment(input: VerifiedStripeTopUp
       );
     }
 
+    if (order.status === 'credited' && order.creditLedgerEntryId
+      && order.providerPaymentId === input.paymentIntentId) {
+      const now = new Date();
+      await db.webhookEvent.update({
+        where: { id: webhook.id },
+        data: {
+          processedAt: now,
+          tenantId: input.tenantId,
+          providerPaymentId: input.paymentIntentId,
+        },
+      });
+      return {
+        reused: true,
+        status: order.status,
+        ledgerEntryId: order.creditLedgerEntryId,
+      };
+    }
+
     const mutation = validateFlipAiCreditMutation({
       tenantId: input.tenantId,
       idempotencyKey: `top-up:${order.id}`,
@@ -251,7 +269,7 @@ export async function applyVerifiedStripeTopUpPayment(input: VerifiedStripeTopUp
         paymentProvider: PROVIDER,
         providerPaymentId: input.paymentIntentId,
         paymentMethod: input.paymentMethod,
-        paidAt: now,
+        paidAt: input.eventCreatedAt,
         creditedAt: now,
         creditLedgerEntryId: credit.entryId,
       },
