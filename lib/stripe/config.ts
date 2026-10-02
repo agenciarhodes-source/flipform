@@ -76,7 +76,11 @@ export function inspectStripeFoundationConfiguration(
     }
 
     if (!webhookConfigured) {
-      warnings.push('STRIPE_WEBHOOK_SECRET ainda não está configurado.');
+      if (mode === 'live') {
+        errors.push('STRIPE_MODE=live exige STRIPE_WEBHOOK_SECRET configurado antes de aceitar pagamentos reais.');
+      } else {
+        warnings.push('STRIPE_WEBHOOK_SECRET ainda não está configurado.');
+      }
     } else if (!webhookValid) {
       errors.push('STRIPE_WEBHOOK_SECRET não possui o formato esperado.');
     }
