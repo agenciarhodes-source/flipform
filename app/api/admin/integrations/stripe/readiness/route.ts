@@ -18,7 +18,7 @@ export const GET = withPlatformAdmin(async () => {
       policy: {
         livePaymentsAllowed: STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED,
         checkoutCreationEnabled: readiness.readyForTestIntegration,
-        webhookProcessingEnabled: false,
+        webhookProcessingEnabled: readiness.readyForWebhookValidation,
         moneyMovementEnabled: false,
       },
     },
