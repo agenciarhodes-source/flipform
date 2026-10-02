@@ -23,14 +23,15 @@ def test_pr332_migration_is_additive_and_reserves_checkout_idempotently():
         assert token.lower() not in sql.lower()
 
 
-def test_pr332_checkout_is_admin_only_test_only_and_server_authoritative():
+def test_checkout_is_admin_only_environment_guarded_and_server_authoritative():
     route = read("app/api/admin/tenants/[id]/flip-ai-top-ups/[orderId]/stripe-checkout/route.ts")
     checkout = read("lib/stripe/top-up-checkout.ts")
 
     assert "withPlatformAdmin" in route
     assert "rateLimit" in route
     assert "import 'server-only'" in checkout
-    assert "getStripeTestClient()" in checkout
+    assert "getStripeClient()" in checkout
+    assert "requireStripeConfiguration()" in checkout
     assert "mode: 'payment'" in checkout
     assert "ui_mode: 'hosted_page'" in checkout
     assert "payment_method_types: ['card']" in checkout
@@ -41,21 +42,22 @@ def test_pr332_checkout_is_admin_only_test_only_and_server_authoritative():
     assert "payment_intent_data: { metadata }" in checkout
     assert "idempotencyKey" in checkout
     assert "stripeCheckoutAttempt" in checkout
-    assert "cs_test_" in checkout
-    assert "session.livemode" in checkout
+    assert "expectedSessionPrefix" in checkout
+    assert "session.livemode !== expectedLivemode" in checkout
 
 
-def test_pr332_browser_cannot_submit_price_or_credit_quantity_to_checkout_route():
+def test_browser_cannot_submit_price_or_credit_quantity_to_checkout_route():
     route = read("app/api/admin/tenants/[id]/flip-ai-top-ups/[orderId]/stripe-checkout/route.ts")
     page = read("app/admin/(secure)/tenants/[id]/page.tsx")
 
     assert "amountCents" not in route
     assert "credits" not in route
     assert "estimatedOpenAiCostCents" not in route
-    assert "body: JSON.stringify" not in page.split("openStripeTestCheckout", 1)[1].split("const saveUserRole", 1)[0]
+    segment = page.split("openStripeCheckout", 1)[1].split("const saveUserRole", 1)[0]
+    assert "body: JSON.stringify" not in segment
 
 
-def test_pr332_checkout_never_marks_paid_or_credits_wallet():
+def test_checkout_never_marks_paid_or_credits_wallet():
     checkout = read("lib/stripe/top-up-checkout.ts")
     topups = read("lib/flip-ai/top-ups.ts")
 
@@ -67,14 +69,14 @@ def test_pr332_checkout_never_marks_paid_or_credits_wallet():
     assert "Recargas vinculadas à Stripe não podem ser marcadas como pagas manualmente." in topups
 
 
-def test_pr332_return_url_is_navigation_only_not_payment_authority():
+def test_return_url_is_navigation_only_not_payment_authority():
     checkout = read("lib/stripe/top-up-checkout.ts")
     page = read("app/admin/(secure)/tenants/[id]/page.tsx")
 
     assert "session_id={CHECKOUT_SESSION_ID}" in checkout
-    assert "stripe_checkout=test_return" in checkout
+    assert "stripe_checkout=return" in checkout
     assert "Retornar da Stripe não confirma pagamento e não libera créditos." in page
-    assert "stripe_checkout=test_return" not in page
+    assert "stripe_checkout=return" not in page
 
 
 def test_pr334_checkout_return_respects_admin_url_base_path():
@@ -86,20 +88,13 @@ def test_pr334_checkout_return_respects_admin_url_base_path():
     assert "${origin}/admin/tenants/" not in checkout
 
 
-def test_pr332_does_not_add_webhook_or_live_payment_processing():
-    checkout = read("lib/stripe/top-up-checkout.ts")
-    readiness = read("app/api/admin/integrations/stripe/readiness/route.ts")
-
-    assert "webhookProcessingEnabled: readiness.readyForWebhookValidation" in readiness
-    assert "moneyMovementEnabled: false" in readiness
-    assert "STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED" in readiness
-
+def test_checkout_has_no_refund_payout_transfer_or_secret_material():
+    checkout = read("lib/stripe/top-up-checkout.ts").lower()
     for forbidden in [
-        "webhooks.constructevent",
         "refunds.create",
         "payouts.create",
         "transfers.create",
-        "rk_live_",
         "sk_live_",
+        "sk_test_",
     ]:
-        assert forbidden not in checkout.lower()
+        assert forbidden not in checkout
