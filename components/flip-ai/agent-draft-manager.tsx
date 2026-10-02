@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRef, useState, type FormEvent } from 'react';
-import { BarChart3, Bot, BookOpen, CheckCircle2, CircleAlert, ExternalLink, Globe2, Plus, Power } from 'lucide-react';
+import { BarChart3, Bot, BookOpen, CheckCircle2, CircleAlert, Coins, ExternalLink, Globe2, Plus, Power } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
@@ -107,6 +107,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       <div><div className="mb-2 flex items-center gap-2 text-sm text-brand-600"><Bot className="h-5 w-5" aria-hidden="true" /> Premium</div>
         <h1 className="text-2xl font-semibold">Flip AI</h1><p className="mt-1 text-sm text-muted-foreground">Prepare os atendentes virtuais da sua empresa.</p></div>
       <div className="flex flex-wrap gap-2">
+        <Link href="/flip-ai/credits" className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted">
+          <Coins className="h-4 w-4" aria-hidden="true" />Carteira
+        </Link>
         <Link href="/flip-ai/usage" className="inline-flex h-10 items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-muted">
           <BarChart3 className="h-4 w-4" aria-hidden="true" />Consumo
         </Link>
