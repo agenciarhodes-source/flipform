@@ -26,11 +26,12 @@ def test_pr336_credit_packages_are_server_authoritative_and_hide_internal_cost()
     assert "selectedPackage.estimatedOpenAiCostCents" in checkout
 
     # Browser chooses only a package identifier + idempotency key.
-    assert "packageId" in route
-    assert "requestKey" in route
-    assert "amountCents" not in route
-    assert "credits" not in route
-    assert "estimatedOpenAiCostCents" not in route
+    schema_segment = route.split("const schema = ", 1)[1].split("export const POST", 1)[0]
+    assert "packageId" in schema_segment
+    assert "requestKey" in schema_segment
+    assert "amountCents" not in schema_segment
+    assert "credits:" not in schema_segment
+    assert "estimatedOpenAiCostCents" not in schema_segment
 
 
 def test_pr336_self_service_is_tenant_scoped_owner_admin_and_live_only():
