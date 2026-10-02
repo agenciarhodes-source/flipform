@@ -85,7 +85,9 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
   const tenantId = metadataValue(session.metadata, 'tenantId');
   const orderId = metadataValue(session.metadata, 'topUpOrderId');
   const purpose = metadataValue(session.metadata, 'purpose');
-  if (!tenantId || !orderId || purpose !== PURPOSE || session.client_reference_id !== orderId) {
+  if (!tenantId || !orderId || purpose !== PURPOSE
+    || metadataValue(session.metadata, 'stripeMode') !== stripeConfig.mode
+    || session.client_reference_id !== orderId) {
     throw new StripeTopUpWebhookError(
       'STRIPE_WEBHOOK_SESSION_BINDING_INVALID',
       400,
@@ -125,7 +127,8 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
     || paymentIntent.currency.toLowerCase() !== 'brl'
     || metadataValue(paymentIntent.metadata, 'tenantId') !== tenantId
     || metadataValue(paymentIntent.metadata, 'topUpOrderId') !== orderId
-    || metadataValue(paymentIntent.metadata, 'purpose') !== PURPOSE) {
+    || metadataValue(paymentIntent.metadata, 'purpose') !== PURPOSE
+    || metadataValue(paymentIntent.metadata, 'stripeMode') !== stripeConfig.mode) {
     throw new StripeTopUpWebhookError(
       'STRIPE_WEBHOOK_PAYMENT_INTENT_MISMATCH',
       400,
