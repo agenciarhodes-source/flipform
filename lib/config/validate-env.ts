@@ -116,6 +116,13 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
         'Stripe webhook secret format accepted',
         'STRIPE_WEBHOOK_SECRET must use the whsec_ format when configured.',
       );
+    } else if (stripeMode === 'live') {
+      addCheck(
+        'STRIPE_WEBHOOK_SECRET',
+        false,
+        'Stripe live webhook configured',
+        'STRIPE_MODE=live requires STRIPE_WEBHOOK_SECRET before accepting real payments.',
+      );
     }
   }
 
@@ -212,7 +219,11 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
         (stripeMode === 'test' && stripeRestrictedKey.startsWith('rk_test_') && !stripeLiveAllowed)
         || (stripeMode === 'live' && stripeRestrictedKey.startsWith('rk_live_') && stripeLiveAllowed)
       )
-      && (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
+      && (
+        stripeMode === 'live'
+          ? (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16)
+          : (!stripeWebhookSecret || (stripeWebhookSecret.startsWith('whsec_') && stripeWebhookSecret.length >= 16))
+      )
     ),
     observability: true,
   };
