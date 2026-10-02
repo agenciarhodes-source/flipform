@@ -19,44 +19,46 @@ def test_pr331_pins_official_stripe_server_sdk():
     assert stripe_lock["integrity"] == "sha512-PwRE2scocvXqDKPiskMa5vRJEAEkq46W69XyUYmAwrNSLr675lQnfqLwnsndAWizwgihOWw/irLmoFRo3ez7ew=="
 
 
-def test_pr331_is_server_only_test_only_and_live_is_hard_blocked():
+def test_stripe_client_is_server_only_and_environment_guarded():
     config = read("lib/stripe/config.ts")
     client = read("lib/stripe/client.ts")
 
     assert "import 'server-only'" in config
     assert "import 'server-only'" in client
-    assert "STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED = false" in config
     assert "rk_test_" in config
     assert "rk_live_" in config
-    assert "requireStripeTestConfiguration" in client
+    assert "STRIPE_LIVE_PAYMENTS_ALLOWED" in config
+    assert "requireStripeConfiguration" in client
     assert "maxNetworkRetries: 0" in client
     assert "telemetry: false" in client
     assert "process.env.STRIPE_RESTRICTED_KEY" not in client
 
 
-def test_pr331_readiness_is_platform_admin_only_and_never_returns_secrets():
+def test_stripe_readiness_is_platform_admin_only_and_never_returns_secrets():
     route = read("app/api/admin/integrations/stripe/readiness/route.ts")
     card = read("app/admin/(secure)/integrations/stripe-foundation-readiness-card.tsx")
 
     assert "withPlatformAdmin" in route
     assert "private, no-store" in route
-    assert "checkoutCreationEnabled: readiness.readyForTestIntegration" in route
+    assert "checkoutCreationEnabled: readiness.readyForCheckout" in route
     assert "webhookProcessingEnabled: readiness.readyForWebhookValidation" in route
-    assert "moneyMovementEnabled: false" in route
+    assert "commercialPaymentsEnabled" in route
     assert "STRIPE_RESTRICTED_KEY" not in route
     assert "STRIPE_WEBHOOK_SECRET" not in route
     assert 'type="password"' not in card
     assert "Nenhuma chave Stripe é retornada" in card
 
 
-def test_pr331_environment_guard_requires_restricted_test_key_when_enabled():
+def test_environment_guard_requires_matching_restricted_key_and_live_gate():
     validator = read("lib/config/validate-env.ts")
     env_example = read(".env.example")
     env_prod = read(".env.production.example")
 
     assert "STRIPE_ENABLED" in validator
     assert "stripeRestrictedKey.startsWith('rk_test_')" in validator
-    assert "STRIPE_LIVE_PAYMENTS_ALLOWED must remain false" in validator
+    assert "stripeRestrictedKey.startsWith('rk_live_')" in validator
+    assert "STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true." in validator
+    assert "STRIPE_MODE=test requires STRIPE_LIVE_PAYMENTS_ALLOWED=false." in validator
     assert "STRIPE_ENABLED=false" in env_example
     assert "STRIPE_MODE=test" in env_example
     assert "STRIPE_LIVE_PAYMENTS_ALLOWED=false" in env_example
@@ -64,7 +66,7 @@ def test_pr331_environment_guard_requires_restricted_test_key_when_enabled():
     assert "STRIPE_RESTRICTED_KEY=\n" in env_prod
 
 
-def test_pr331_does_not_create_checkout_payment_intent_or_money_movement():
+def test_foundation_layers_do_not_create_payments_or_move_funds():
     paths = [
         "lib/stripe/config.ts",
         "lib/stripe/client.ts",
