@@ -17,6 +17,8 @@ def test_pr335_live_requires_live_key_and_explicit_hard_gate():
     assert "stripeMode === 'live'" in validator
     assert "stripeRestrictedKey.startsWith('rk_live_')" in validator
     assert "STRIPE_MODE=live requires STRIPE_LIVE_PAYMENTS_ALLOWED=true." in validator
+    assert "STRIPE_MODE=live requires STRIPE_WEBHOOK_SECRET before accepting real payments." in validator
+    assert "STRIPE_MODE=live exige STRIPE_WEBHOOK_SECRET configurado antes de aceitar pagamentos reais." in config
 
 
 def test_pr335_checkout_and_webhook_require_environment_match():
