@@ -67,7 +67,7 @@ function checkoutReturnUrls(tenantId: string, orderId: string) {
     );
   }
 
-  const configuredPath = parsed.pathname.replace(/\\/+$/, '');
+  const configuredPath = parsed.pathname.replace(/\/+$/, '');
   const adminBasePath = configuredPath && configuredPath !== '/' ? configuredPath : '';
   const base = `${parsed.origin}${adminBasePath}/tenants/${encodeURIComponent(tenantId)}`;
   return {
