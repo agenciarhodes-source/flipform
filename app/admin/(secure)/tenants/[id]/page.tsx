@@ -281,14 +281,14 @@ export default function TenantDetailPage() {
     }
   };
 
-  const openStripeTestCheckout = async (order: any) => {
+  const openStripeCheckout = async (order: any) => {
     setTopUpActionId(order.id);
     try {
       const res = await fetch(`/api/admin/tenants/${id}/flip-ai-top-ups/${order.id}/stripe-checkout`, {
         method: 'POST',
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Não foi possível abrir o Checkout de teste.');
+      if (!res.ok) throw new Error(data.error || 'Não foi possível abrir o Checkout da Stripe.');
       if (!data.checkoutUrl || typeof data.checkoutUrl !== 'string') {
         throw new Error('A Stripe não retornou uma URL de Checkout válida.');
       }
@@ -525,8 +525,8 @@ export default function TenantDetailPage() {
                   <div>
                     <h3 className="font-semibold">Recargas comerciais</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Base segura para comercialização de créditos. O Checkout hospedado da Stripe pode ser aberto
-                      somente em modo de teste. Retornar da Stripe não confirma pagamento e não libera créditos.
+                      Base segura para comercialização de créditos. O Checkout hospedado da Stripe usa o ambiente
+                      configurado pela plataforma. Retornar da Stripe não confirma pagamento e não libera créditos.
                     </p>
                   </div>
 
@@ -637,10 +637,10 @@ export default function TenantDetailPage() {
                                             size="sm"
                                             variant="outline"
                                             disabled={topUpActionId === order.id}
-                                            onClick={() => openStripeTestCheckout(order)}
+                                            onClick={() => openStripeCheckout(order)}
                                           >
                                             {topUpActionId === order.id && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
-                                            Checkout Stripe teste
+                                            Checkout Stripe
                                           </Button>
                                           {order.paymentProvider !== 'stripe' && (
                                             <Button
