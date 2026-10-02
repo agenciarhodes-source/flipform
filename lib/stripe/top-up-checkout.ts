@@ -79,6 +79,7 @@ function checkoutReturnUrls(tenantId: string, orderId: string) {
 async function reserveCheckout(
   tenantId: string,
   orderId: string,
+  stripeMode: StripeEnvironmentMode,
 ): Promise<ReservedCheckout> {
   return prisma.$transaction(async (db) => {
     const rows = await db.$queryRaw<Array<{
@@ -150,8 +151,10 @@ async function reserveCheckout(
     }
 
     const now = new Date();
+    const expectedSessionPrefix = stripeMode === 'live' ? 'cs_live_' : 'cs_test_';
     const existingUsable = Boolean(
       order.stripeCheckoutSessionId
+      && order.stripeCheckoutSessionId.startsWith(expectedSessionPrefix)
       && order.stripeCheckoutExpiresAt
       && order.stripeCheckoutExpiresAt.getTime() > now.getTime() + 60_000,
     );
@@ -352,7 +355,7 @@ export async function createStripeCheckoutForTopUp(input: {
     throw error;
   }
 
-  let reserved = await reserveCheckout(tenantId, orderId);
+  let reserved = await reserveCheckout(tenantId, orderId, stripeConfig.mode);
 
   if (reserved.existingSessionId) {
     const existing = await stripe.checkout.sessions.retrieve(reserved.existingSessionId);
@@ -380,7 +383,7 @@ export async function createStripeCheckoutForTopUp(input: {
         },
         data: { stripeCheckoutExpiresAt: new Date(0) },
       });
-      reserved = await reserveCheckout(tenantId, orderId);
+      reserved = await reserveCheckout(tenantId, orderId, stripeConfig.mode);
     }
   }
 
