@@ -1,7 +1,6 @@
 import 'server-only';
 
 export const STRIPE_SDK_VERSION = '22.6.2' as const;
-export const STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED = false as const;
 
 export type StripeEnvironmentMode = 'test' | 'live';
 export type StripeRestrictedKeyKind = 'missing' | 'test' | 'live' | 'invalid';
@@ -13,9 +12,9 @@ export type StripeFoundationReadiness = {
   restrictedKeyKind: StripeRestrictedKeyKind;
   webhookSecretConfigured: boolean;
   webhookSecretLooksValid: boolean;
-  testModeGuardActive: boolean;
+  environmentGuardActive: boolean;
   livePaymentsAllowed: boolean;
-  readyForTestIntegration: boolean;
+  readyForCheckout: boolean;
   readyForWebhookValidation: boolean;
   warnings: string[];
   errors: string[];
@@ -50,22 +49,36 @@ export function inspectStripeFoundationConfiguration(
   const keyKind = restrictedKeyKind(env.STRIPE_RESTRICTED_KEY);
   const webhookConfigured = Boolean(String(env.STRIPE_WEBHOOK_SECRET || '').trim());
   const webhookValid = webhookSecretLooksValid(env.STRIPE_WEBHOOK_SECRET);
+  const livePaymentsAllowed = parseBoolean(env.STRIPE_LIVE_PAYMENTS_ALLOWED);
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (enabled) {
-    if (mode !== 'test') {
-      errors.push('A integração Stripe atual mantém pagamentos live bloqueados por código.');
+    if (keyKind === 'missing') {
+      errors.push('STRIPE_RESTRICTED_KEY não está configurada.');
+    } else if (keyKind === 'invalid') {
+      errors.push('STRIPE_RESTRICTED_KEY deve ser uma Restricted API Key da Stripe.');
+    } else if (mode === 'test' && keyKind !== 'test') {
+      errors.push('STRIPE_MODE=test exige uma Restricted API Key rk_test_.');
+    } else if (mode === 'live' && keyKind !== 'live') {
+      errors.push('STRIPE_MODE=live exige uma Restricted API Key rk_live_.');
     }
-    if (keyKind !== 'test') {
-      errors.push('Use uma Restricted API Key de teste (rk_test_) nesta etapa.');
+
+    if (mode === 'live' && !livePaymentsAllowed) {
+      errors.push('Pagamentos live exigem STRIPE_LIVE_PAYMENTS_ALLOWED=true.');
     }
+
     if (!webhookConfigured) {
-      warnings.push('Webhook secret será configurado quando criarmos o endpoint assinado.');
+      warnings.push('STRIPE_WEBHOOK_SECRET ainda não está configurado.');
     } else if (!webhookValid) {
       errors.push('STRIPE_WEBHOOK_SECRET não possui o formato esperado.');
     }
   }
+
+  const readyForCheckout = enabled
+    && ((mode === 'test' && keyKind === 'test')
+      || (mode === 'live' && keyKind === 'live' && livePaymentsAllowed))
+    && errors.length === 0;
 
   return {
     enabled,
@@ -74,23 +87,16 @@ export function inspectStripeFoundationConfiguration(
     restrictedKeyKind: keyKind,
     webhookSecretConfigured: webhookConfigured,
     webhookSecretLooksValid: webhookValid,
-    testModeGuardActive: true,
-    livePaymentsAllowed: STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED,
-    readyForTestIntegration: enabled
-      && mode === 'test'
-      && keyKind === 'test'
-      && errors.length === 0,
-    readyForWebhookValidation: enabled
-      && mode === 'test'
-      && keyKind === 'test'
-      && webhookValid
-      && errors.length === 0,
+    environmentGuardActive: mode === 'test' || !livePaymentsAllowed,
+    livePaymentsAllowed,
+    readyForCheckout,
+    readyForWebhookValidation: readyForCheckout && webhookValid,
     warnings,
     errors,
   };
 }
 
-export function requireStripeTestConfiguration(env: NodeJS.ProcessEnv = process.env) {
+export function requireStripeConfiguration(env: NodeJS.ProcessEnv = process.env) {
   const readiness = inspectStripeFoundationConfiguration(env);
   if (!readiness.enabled) {
     throw new StripeFoundationConfigError(
@@ -98,18 +104,18 @@ export function requireStripeTestConfiguration(env: NodeJS.ProcessEnv = process.
       'A integração Stripe está desativada.',
     );
   }
-  if (readiness.mode !== 'test' || readiness.restrictedKeyKind !== 'test') {
+  if (!readiness.readyForCheckout) {
     throw new StripeFoundationConfigError(
-      'STRIPE_TEST_MODE_REQUIRED',
-      'A integração Stripe atual aceita somente Restricted API Key de teste.',
+      'STRIPE_ENVIRONMENT_NOT_READY',
+      readiness.errors[0] || 'A integração Stripe não está pronta neste ambiente.',
     );
   }
-  const restrictedKey = String(env.STRIPE_RESTRICTED_KEY || '').trim();
 
   return {
-    mode: 'test' as const,
-    restrictedKey,
-  };
+    mode: readiness.mode,
+    restrictedKey: String(env.STRIPE_RESTRICTED_KEY || '').trim(),
+    livePaymentsAllowed: readiness.livePaymentsAllowed,
+  } as const;
 }
 
 export class StripeFoundationConfigError extends Error {
@@ -127,7 +133,7 @@ export function requireStripeWebhookSecret(env: NodeJS.ProcessEnv = process.env)
   if (!readiness.readyForWebhookValidation) {
     throw new StripeFoundationConfigError(
       'STRIPE_WEBHOOK_NOT_READY',
-      'A validação de webhook Stripe ainda não está pronta neste ambiente.',
+      readiness.errors[0] || 'A validação de webhook Stripe ainda não está pronta neste ambiente.',
     );
   }
   return String(env.STRIPE_WEBHOOK_SECRET || '').trim();
