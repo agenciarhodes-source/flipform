@@ -89,9 +89,10 @@ export async function createFlipAiSelfServiceCheckout(input: {
   }
 
   const selectedPackage = requireFlipAiCreditPackage(input.packageId);
+  const serverRequestKey = `tenant-self:${selectedPackage.id}:${input.requestKey}`;
   const created = await createFlipAiTopUpOrder({
     tenantId: access.tenantId,
-    requestKey: input.requestKey,
+    requestKey: serverRequestKey,
     amountCents: selectedPackage.amountCents,
     credits: selectedPackage.credits,
     estimatedOpenAiCostCents: selectedPackage.estimatedOpenAiCostCents,
