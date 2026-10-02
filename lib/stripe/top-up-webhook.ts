@@ -4,7 +4,8 @@ import Stripe from 'stripe';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { recordFlipAiCreditEntryWithDb, validateFlipAiCreditMutation } from '@/lib/flip-ai/credits';
-import { getStripeTestClient } from './client';
+import { getStripeClient } from './client';
+import { requireStripeConfiguration, type StripeEnvironmentMode } from './config';
 
 const PROVIDER = 'stripe';
 const PURPOSE = 'flip_ai_top_up';
@@ -31,14 +32,15 @@ export type VerifiedStripeTopUpPayment = {
   currency: string;
   paymentMethod: string;
   eventCreatedAt: Date;
+  stripeMode: StripeEnvironmentMode;
 };
 
-function ensureTestId(value: string, prefix: string, field: string) {
+function ensureObjectId(value: string, prefix: string, field: string) {
   if (!value.startsWith(prefix)) {
     throw new StripeTopUpWebhookError(
-      'STRIPE_WEBHOOK_TEST_OBJECT_REQUIRED',
+      'STRIPE_WEBHOOK_OBJECT_ENVIRONMENT_MISMATCH',
       400,
-      `${field} não pertence ao ambiente de teste.`,
+      `${field} não pertence ao ambiente Stripe configurado.`,
     );
   }
   return value;
@@ -53,11 +55,13 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
   if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(event.type)) {
     return null;
   }
-  if (event.livemode) {
+  const stripeConfig = requireStripeConfiguration();
+  const expectedLivemode = stripeConfig.mode === 'live';
+  if (event.livemode !== expectedLivemode) {
     throw new StripeTopUpWebhookError(
-      'STRIPE_WEBHOOK_LIVE_EVENT_BLOCKED',
+      'STRIPE_WEBHOOK_ENVIRONMENT_MISMATCH',
       400,
-      'Eventos Stripe live continuam bloqueados nesta etapa.',
+      'O evento recebido não pertence ao ambiente Stripe configurado.',
     );
   }
 
@@ -65,11 +69,12 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
   if (!object || typeof object !== 'object' || !('id' in object) || typeof object.id !== 'string') {
     throw new StripeTopUpWebhookError('STRIPE_WEBHOOK_SESSION_MISSING', 400, 'Evento Stripe sem Checkout Session válida.');
   }
-  const sessionId = ensureTestId(object.id, 'cs_test_', 'Checkout Session');
-  const stripe = getStripeTestClient();
+  const expectedSessionPrefix = stripeConfig.mode === 'live' ? 'cs_live_' : 'cs_test_';
+  const sessionId = ensureObjectId(object.id, expectedSessionPrefix, 'Checkout Session');
+  const stripe = getStripeClient();
 
   const session = await stripe.checkout.sessions.retrieve(sessionId);
-  if (session.livemode || session.mode !== 'payment' || session.status !== 'complete' || session.payment_status !== 'paid') {
+  if (session.livemode !== expectedLivemode || session.mode !== 'payment' || session.status !== 'complete' || session.payment_status !== 'paid') {
     throw new StripeTopUpWebhookError(
       'STRIPE_WEBHOOK_SESSION_NOT_PAID',
       409,
@@ -106,10 +111,10 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
       'A sessão paga não possui PaymentIntent confirmado.',
     );
   }
-  ensureTestId(paymentIntentId, 'pi_', 'PaymentIntent');
+  ensureObjectId(paymentIntentId, 'pi_', 'PaymentIntent');
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
-  if (paymentIntent.livemode || paymentIntent.status !== 'succeeded') {
+  if (paymentIntent.livemode !== expectedLivemode || paymentIntent.status !== 'succeeded') {
     throw new StripeTopUpWebhookError(
       'STRIPE_WEBHOOK_PAYMENT_INTENT_NOT_SUCCEEDED',
       409,
@@ -139,6 +144,7 @@ export async function retrieveVerifiedStripeTopUpPayment(event: Stripe.Event): P
     currency: 'BRL',
     paymentMethod: paymentIntent.payment_method_types?.[0] || 'card',
     eventCreatedAt: new Date(event.created * 1000),
+    stripeMode: stripeConfig.mode,
   };
 }
 
@@ -168,7 +174,8 @@ export async function applyVerifiedStripeTopUpPayment(input: VerifiedStripeTopUp
         rawPayload: {
           sessionId: input.sessionId,
           paymentIntentId: input.paymentIntentId,
-          testMode: true,
+          stripeMode: input.stripeMode,
+          testMode: input.stripeMode === 'test',
         },
       },
       update: {},
@@ -292,7 +299,8 @@ export async function applyVerifiedStripeTopUpPayment(input: VerifiedStripeTopUp
           credits: order.credits,
           ledgerEntryId: credit.entryId,
           balanceAfterCredits: credit.balanceCredits,
-          testMode: true,
+          stripeMode: input.stripeMode,
+          testMode: input.stripeMode === 'test',
         },
       },
     });
