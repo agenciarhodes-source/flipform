@@ -11,9 +11,9 @@ def test_pr335_live_requires_live_key_and_explicit_hard_gate():
     config = read("lib/stripe/config.ts")
     validator = read("lib/config/validate-env.ts")
 
-    assert "mode === 'live' && keyKind === 'live' && livePaymentsAllowed" in config
+    assert "mode === 'live' && keyKind === 'live'" in config
     assert "STRIPE_MODE=live exige uma Restricted API Key rk_live_." in config
-    assert "Pagamentos live exigem STRIPE_LIVE_PAYMENTS_ALLOWED=true." in config
+    assert "mode === 'test' || livePaymentsAllowed" in config
     assert "stripeMode === 'live'" in validator
     assert "stripeRestrictedKey.startsWith('rk_live_')" in validator
     assert "Stripe live checkout hard gate disabled; webhook settlement remains available" in validator
