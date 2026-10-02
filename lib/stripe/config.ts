@@ -45,6 +45,7 @@ export function inspectStripeFoundationConfiguration(
   env: NodeJS.ProcessEnv = process.env,
 ): StripeFoundationReadiness {
   const enabled = parseBoolean(env.STRIPE_ENABLED);
+  const rawMode = String(env.STRIPE_MODE || 'test').trim().toLowerCase();
   const mode = parseMode(env.STRIPE_MODE);
   const keyKind = restrictedKeyKind(env.STRIPE_RESTRICTED_KEY);
   const webhookConfigured = Boolean(String(env.STRIPE_WEBHOOK_SECRET || '').trim());
@@ -54,6 +55,9 @@ export function inspectStripeFoundationConfiguration(
   const warnings: string[] = [];
 
   if (enabled) {
+    if (!['test', 'live'].includes(rawMode)) {
+      errors.push('STRIPE_MODE deve ser test ou live.');
+    }
     if (keyKind === 'missing') {
       errors.push('STRIPE_RESTRICTED_KEY não está configurada.');
     } else if (keyKind === 'invalid') {
@@ -66,6 +70,9 @@ export function inspectStripeFoundationConfiguration(
 
     if (mode === 'live' && !livePaymentsAllowed) {
       errors.push('Pagamentos live exigem STRIPE_LIVE_PAYMENTS_ALLOWED=true.');
+    }
+    if (mode === 'test' && livePaymentsAllowed) {
+      errors.push('STRIPE_MODE=test exige STRIPE_LIVE_PAYMENTS_ALLOWED=false.');
     }
 
     if (!webhookConfigured) {
