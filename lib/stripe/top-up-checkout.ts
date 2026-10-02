@@ -2,7 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { getStripeClient } from '@/lib/stripe/client';
-import { requireStripeConfiguration, StripeFoundationConfigError, type StripeEnvironmentMode } from '@/lib/stripe/config';
+import { requireStripeCheckoutConfiguration, StripeFoundationConfigError, type StripeEnvironmentMode } from '@/lib/stripe/config';
 
 const PROVIDER = 'stripe';
 const PAYMENT_METHOD = 'card_checkout';
@@ -344,9 +344,9 @@ export async function createStripeCheckoutForTopUp(input: {
   const actorUserId = bounded(input.actorUserId, 'actorUserId');
 
   let stripe: ReturnType<typeof getStripeClient>;
-  let stripeConfig: ReturnType<typeof requireStripeConfiguration>;
+  let stripeConfig: ReturnType<typeof requireStripeCheckoutConfiguration>;
   try {
-    stripeConfig = requireStripeConfiguration();
+    stripeConfig = requireStripeCheckoutConfiguration();
     stripe = getStripeClient();
   } catch (error) {
     if (error instanceof StripeFoundationConfigError) {
