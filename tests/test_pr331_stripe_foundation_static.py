@@ -40,7 +40,7 @@ def test_pr331_readiness_is_platform_admin_only_and_never_returns_secrets():
 
     assert "withPlatformAdmin" in route
     assert "private, no-store" in route
-    assert "checkoutCreationEnabled: false" in route
+    assert "checkoutCreationEnabled: readiness.readyForTestIntegration" in route
     assert "webhookProcessingEnabled: false" in route
     assert "moneyMovementEnabled: false" in route
     assert "STRIPE_RESTRICTED_KEY" not in route

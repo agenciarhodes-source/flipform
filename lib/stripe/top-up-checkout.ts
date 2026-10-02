@@ -1,0 +1,427 @@
+import 'server-only';
+
+import { prisma } from '@/lib/prisma';
+import { getStripeTestClient } from '@/lib/stripe/client';
+import { StripeFoundationConfigError } from '@/lib/stripe/config';
+
+const PROVIDER = 'stripe';
+const PAYMENT_METHOD = 'card_test_checkout';
+const MAX_REFERENCE_LENGTH = 190;
+
+type ReservedCheckout = {
+  orderId: string;
+  tenantId: string;
+  requestKey: string;
+  amountCents: number;
+  currency: string;
+  credits: number;
+  attempt: number;
+  existingSessionId: string | null;
+  existingExpiresAt: Date | null;
+};
+
+export class StripeCheckoutTestError extends Error {
+  constructor(
+    public readonly code: string,
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'StripeCheckoutTestError';
+  }
+}
+
+function bounded(value: string, field: string) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.length > MAX_REFERENCE_LENGTH) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_INVALID_REFERENCE',
+      400,
+      `${field} inválido.`,
+    );
+  }
+  return normalized;
+}
+
+function checkoutReturnUrls(tenantId: string, orderId: string) {
+  const configured = String(process.env.NEXT_PUBLIC_ADMIN_URL || '').trim();
+  if (!configured) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_RETURN_URL_MISSING',
+      503,
+      'NEXT_PUBLIC_ADMIN_URL não está configurada.',
+    );
+  }
+
+  let origin: string;
+  try {
+    const parsed = new URL(configured);
+    const localHttp = parsed.protocol === 'http:'
+      && ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    if (parsed.protocol !== 'https:' && !localHttp) throw new Error('insecure');
+    origin = parsed.origin;
+  } catch {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_RETURN_URL_INVALID',
+      503,
+      'A URL administrativa configurada para retorno da Stripe é inválida.',
+    );
+  }
+
+  const base = `${origin}/admin/tenants/${encodeURIComponent(tenantId)}`;
+  return {
+    successUrl: `${base}?stripe_checkout=test_return&top_up=${encodeURIComponent(orderId)}&session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${base}?stripe_checkout=test_canceled&top_up=${encodeURIComponent(orderId)}`,
+  };
+}
+
+async function reserveCheckout(
+  tenantId: string,
+  orderId: string,
+): Promise<ReservedCheckout> {
+  return prisma.$transaction(async (db) => {
+    const rows = await db.$queryRaw<Array<{
+      id: string;
+      tenantId: string;
+      requestKey: string;
+      status: string;
+      amountCents: number;
+      currency: string;
+      credits: number;
+      paymentProvider: string | null;
+      providerPaymentId: string | null;
+      stripeCheckoutSessionId: string | null;
+      stripeCheckoutAttempt: number;
+      stripeCheckoutExpiresAt: Date | null;
+    }>>`
+      SELECT
+        id,
+        tenant_id AS "tenantId",
+        request_key AS "requestKey",
+        status,
+        amount_cents AS "amountCents",
+        currency,
+        credits,
+        payment_provider AS "paymentProvider",
+        provider_payment_id AS "providerPaymentId",
+        stripe_checkout_session_id AS "stripeCheckoutSessionId",
+        stripe_checkout_attempt AS "stripeCheckoutAttempt",
+        stripe_checkout_expires_at AS "stripeCheckoutExpiresAt"
+      FROM flip_ai_top_up_orders
+      WHERE tenant_id = ${tenantId} AND id = ${orderId}
+      FOR UPDATE
+    `;
+    const order = rows[0];
+    if (!order) {
+      throw new StripeCheckoutTestError(
+        'STRIPE_CHECKOUT_TOP_UP_NOT_FOUND',
+        404,
+        'Recarga não encontrada.',
+      );
+    }
+    if (order.status !== 'pending') {
+      throw new StripeCheckoutTestError(
+        'STRIPE_CHECKOUT_TOP_UP_NOT_PENDING',
+        409,
+        'Somente recargas pendentes podem abrir um Checkout de teste.',
+      );
+    }
+    if (order.providerPaymentId) {
+      throw new StripeCheckoutTestError(
+        'STRIPE_CHECKOUT_PAYMENT_ALREADY_LINKED',
+        409,
+        'Esta recarga já possui uma referência de pagamento.',
+      );
+    }
+    if (order.paymentProvider && order.paymentProvider !== PROVIDER) {
+      throw new StripeCheckoutTestError(
+        'STRIPE_CHECKOUT_PROVIDER_CONFLICT',
+        409,
+        'Esta recarga já está vinculada a outro provedor.',
+      );
+    }
+    if (order.currency.toUpperCase() !== 'BRL') {
+      throw new StripeCheckoutTestError(
+        'STRIPE_CHECKOUT_CURRENCY_NOT_ALLOWED',
+        409,
+        'O Checkout de teste aceita somente recargas em BRL.',
+      );
+    }
+
+    const now = new Date();
+    const existingUsable = Boolean(
+      order.stripeCheckoutSessionId
+      && order.stripeCheckoutExpiresAt
+      && order.stripeCheckoutExpiresAt.getTime() > now.getTime() + 60_000,
+    );
+
+    if (existingUsable) {
+      return {
+        orderId: order.id,
+        tenantId: order.tenantId,
+        requestKey: order.requestKey,
+        amountCents: order.amountCents,
+        currency: order.currency,
+        credits: order.credits,
+        attempt: Math.max(1, order.stripeCheckoutAttempt),
+        existingSessionId: order.stripeCheckoutSessionId,
+        existingExpiresAt: order.stripeCheckoutExpiresAt,
+      };
+    }
+
+    let attempt = order.stripeCheckoutAttempt;
+    if (order.stripeCheckoutSessionId || attempt === 0) attempt += 1;
+
+    await db.flipAiTopUpOrder.update({
+      where: { id: order.id },
+      data: {
+        paymentProvider: PROVIDER,
+        paymentMethod: PAYMENT_METHOD,
+        stripeCheckoutAttempt: attempt,
+        stripeCheckoutRequestedAt: now,
+        stripeCheckoutSessionId: null,
+        stripeCheckoutCreatedAt: null,
+        stripeCheckoutExpiresAt: null,
+      },
+    });
+
+    return {
+      orderId: order.id,
+      tenantId: order.tenantId,
+      requestKey: order.requestKey,
+      amountCents: order.amountCents,
+      currency: order.currency,
+      credits: order.credits,
+      attempt,
+      existingSessionId: null,
+      existingExpiresAt: null,
+    };
+  });
+}
+
+function validateStripeSession(
+  session: {
+    id: string;
+    livemode: boolean;
+    status: string | null;
+    payment_status: string;
+    mode: string;
+    url: string | null;
+    amount_total: number | null;
+    currency: string | null;
+    client_reference_id: string | null;
+    metadata: Record<string, string> | null;
+  },
+  order: ReservedCheckout,
+) {
+  if (session.livemode) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_LIVE_SESSION_BLOCKED',
+      502,
+      'A Stripe retornou uma sessão live; a operação foi bloqueada.',
+    );
+  }
+  if (!session.id.startsWith('cs_test_')) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_TEST_SESSION_REQUIRED',
+      502,
+      'A sessão retornada não pertence ao modo de teste.',
+    );
+  }
+  if (session.client_reference_id !== order.orderId) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_REFERENCE_MISMATCH',
+      502,
+      'A sessão Stripe não corresponde à recarga solicitada.',
+    );
+  }
+  if (
+    session.mode !== 'payment'
+    || session.metadata?.purpose !== 'flip_ai_top_up'
+    || session.metadata?.topUpOrderId !== order.orderId
+    || session.metadata?.tenantId !== order.tenantId
+  ) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_METADATA_MISMATCH',
+      502,
+      'A sessão Stripe não corresponde ao tenant e ao pedido esperados.',
+    );
+  }
+  if (session.amount_total !== order.amountCents || session.currency?.toLowerCase() !== 'brl') {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_AMOUNT_MISMATCH',
+      502,
+      'Valor ou moeda retornados pela Stripe não correspondem à recarga.',
+    );
+  }
+  if (session.status === 'complete' || session.payment_status === 'paid') {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_COMPLETED_AWAITING_VERIFICATION',
+      409,
+      'A sessão de teste já foi concluída. O retorno do navegador não autoriza crédito; aguarde a verificação financeira.',
+    );
+  }
+  if (session.status !== 'open' || !session.url) {
+    throw new StripeCheckoutTestError(
+      'STRIPE_CHECKOUT_SESSION_NOT_OPEN',
+      409,
+      'A sessão Stripe não está mais aberta.',
+    );
+  }
+}
+
+async function persistCheckoutSession(
+  order: ReservedCheckout,
+  session: {
+    id: string;
+    created: number;
+    expires_at: number;
+  },
+  actorUserId: string,
+) {
+  await prisma.$transaction(async (db) => {
+    const updated = await db.flipAiTopUpOrder.updateMany({
+      where: {
+        id: order.orderId,
+        tenantId: order.tenantId,
+        status: 'pending',
+        stripeCheckoutAttempt: order.attempt,
+        stripeCheckoutSessionId: null,
+      },
+      data: {
+        paymentProvider: PROVIDER,
+        paymentMethod: PAYMENT_METHOD,
+        stripeCheckoutSessionId: session.id,
+        stripeCheckoutCreatedAt: new Date(session.created * 1000),
+        stripeCheckoutExpiresAt: new Date(session.expires_at * 1000),
+      },
+    });
+
+    if (updated.count !== 1) {
+      const current = await db.flipAiTopUpOrder.findFirst({
+        where: { id: order.orderId, tenantId: order.tenantId },
+        select: { stripeCheckoutSessionId: true },
+      });
+      if (current?.stripeCheckoutSessionId !== session.id) {
+        throw new StripeCheckoutTestError(
+          'STRIPE_CHECKOUT_RESERVATION_CONFLICT',
+          409,
+          'Outra tentativa de Checkout alterou esta recarga.',
+        );
+      }
+      return;
+    }
+
+    await db.auditLog.create({
+      data: {
+        tenantId: order.tenantId,
+        userId: actorUserId,
+        entityType: 'flip_ai_top_up_order',
+        entityId: order.orderId,
+        action: 'platform.flip_ai_stripe_test_checkout_created',
+        metadata: {
+          stripeCheckoutSessionId: session.id,
+          attempt: order.attempt,
+          amountCents: order.amountCents,
+          currency: 'BRL',
+          credits: order.credits,
+          testMode: true,
+        },
+      },
+    });
+  });
+}
+
+export async function createStripeTestCheckoutForTopUp(input: {
+  tenantId: string;
+  orderId: string;
+  actorUserId: string;
+}) {
+  const tenantId = bounded(input.tenantId, 'tenantId');
+  const orderId = bounded(input.orderId, 'orderId');
+  const actorUserId = bounded(input.actorUserId, 'actorUserId');
+
+  let stripe;
+  try {
+    stripe = getStripeTestClient();
+  } catch (error) {
+    if (error instanceof StripeFoundationConfigError) {
+      throw new StripeCheckoutTestError(error.code, 503, error.message);
+    }
+    throw error;
+  }
+
+  let reserved = await reserveCheckout(tenantId, orderId);
+
+  if (reserved.existingSessionId) {
+    const existing = await stripe.checkout.sessions.retrieve(reserved.existingSessionId);
+    try {
+      validateStripeSession(existing, reserved);
+      return {
+        checkoutUrl: existing.url!,
+        sessionId: existing.id,
+        expiresAt: new Date(existing.expires_at * 1000).toISOString(),
+        reused: true,
+        testMode: true,
+      };
+    } catch (error) {
+      if (!(error instanceof StripeCheckoutTestError)
+        || error.code !== 'STRIPE_CHECKOUT_SESSION_NOT_OPEN') {
+        throw error;
+      }
+      await prisma.flipAiTopUpOrder.updateMany({
+        where: {
+          id: reserved.orderId,
+          tenantId: reserved.tenantId,
+          status: 'pending',
+          stripeCheckoutSessionId: existing.id,
+        },
+        data: { stripeCheckoutExpiresAt: new Date(0) },
+      });
+      reserved = await reserveCheckout(tenantId, orderId);
+    }
+  }
+
+  const urls = checkoutReturnUrls(tenantId, orderId);
+  const idempotencyKey = `flip-ai-top-up:${orderId}:checkout:${reserved.attempt}`;
+  const metadata = {
+    purpose: 'flip_ai_top_up',
+    topUpOrderId: orderId,
+    tenantId,
+  };
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    ui_mode: 'hosted_page',
+    client_reference_id: orderId,
+    success_url: urls.successUrl,
+    cancel_url: urls.cancelUrl,
+    payment_method_types: ['card'],
+    line_items: [{
+      quantity: 1,
+      price_data: {
+        currency: 'brl',
+        unit_amount: reserved.amountCents,
+        product_data: {
+          name: `Flip AI — ${reserved.credits.toLocaleString('pt-BR')} créditos`,
+          description: 'Recarga de créditos Flip AI em ambiente de teste.',
+        },
+      },
+    }],
+    metadata,
+    payment_intent_data: { metadata },
+  }, {
+    idempotencyKey,
+  });
+
+  validateStripeSession(session, reserved);
+  await persistCheckoutSession(reserved, session, actorUserId);
+
+  return {
+    checkoutUrl: session.url!,
+    sessionId: session.id,
+    expiresAt: new Date(session.expires_at * 1000).toISOString(),
+    reused: false,
+    testMode: true,
+  };
+}

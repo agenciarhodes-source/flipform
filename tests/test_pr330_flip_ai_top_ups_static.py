@@ -45,9 +45,9 @@ def test_pr330_admin_routes_do_not_create_real_gateway_payments():
     assert "withPlatformAdmin" in collection
     assert "withPlatformAdmin" in item
     assert "Criar recarga pendente" in page
-    assert "Nenhum pagamento é criado no Asaas por esta tela." in page
 
     combined = collection + item + page
+    assert "@/lib/asaas" not in combined
     for forbidden in ["createPayment(", "creditCard", "cvv", "autoRecharge", "auto-reload"]:
         assert forbidden not in combined
 

@@ -281,6 +281,24 @@ export default function TenantDetailPage() {
     }
   };
 
+  const openStripeTestCheckout = async (order: any) => {
+    setTopUpActionId(order.id);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/flip-ai-top-ups/${order.id}/stripe-checkout`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível abrir o Checkout de teste.');
+      if (!data.checkoutUrl || typeof data.checkoutUrl !== 'string') {
+        throw new Error('A Stripe não retornou uma URL de Checkout válida.');
+      }
+      window.location.assign(data.checkoutUrl);
+    } catch (e: any) {
+      toast.error(e.message);
+      setTopUpActionId(null);
+    }
+  };
+
   const saveUserRole = async (tenantUser: any) => {
     const role = roleDrafts[tenantUser.id] || tenantUser.role;
     if (role === tenantUser.role) return;
@@ -507,8 +525,8 @@ export default function TenantDetailPage() {
                   <div>
                     <h3 className="font-semibold">Recargas comerciais</h3>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Base segura para comercialização de créditos. Nesta versão não há cobrança automática:
-                      o pedido nasce pendente, o pagamento é confirmado separadamente e somente depois pode gerar créditos.
+                      Base segura para comercialização de créditos. O Checkout hospedado da Stripe pode ser aberto
+                      somente em modo de teste. Retornar da Stripe não confirma pagamento e não libera créditos.
                     </p>
                   </div>
 
@@ -557,7 +575,7 @@ export default function TenantDetailPage() {
                       </div>
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <p className="text-xs text-muted-foreground">
-                          Valor pago, créditos concedidos e custo bruto estimado ficam separados. Nenhum pagamento é criado no Asaas por esta tela.
+                          Valor comercial, créditos e custo bruto estimado permanecem separados. O Checkout Stripe desta etapa usa somente dados do pedido já salvo no servidor.
                         </p>
                         <Button
                           variant="outline"
@@ -607,7 +625,9 @@ export default function TenantDetailPage() {
                                     {usd.format(order.estimatedOpenAiCostCents / 100)}
                                   </td>
                                   <td className="py-2 px-3 text-xs text-muted-foreground">
-                                    {order.providerPaymentId || '—'}
+                                    {order.providerPaymentId
+                                      || order.stripeCheckoutSessionId
+                                      || (order.paymentProvider === 'stripe' ? 'Stripe teste preparado' : '—')}
                                   </td>
                                   <td className="py-2 px-3">
                                     <div className="flex justify-end gap-2">
@@ -617,10 +637,26 @@ export default function TenantDetailPage() {
                                             size="sm"
                                             variant="outline"
                                             disabled={topUpActionId === order.id}
-                                            onClick={() => actOnTopUp(order, 'mark_paid')}
+                                            onClick={() => openStripeTestCheckout(order)}
                                           >
-                                            Marcar pago
+                                            {topUpActionId === order.id && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                                            Checkout Stripe teste
                                           </Button>
+                                          {order.paymentProvider !== 'stripe' && (
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={topUpActionId === order.id}
+                                              onClick={() => actOnTopUp(order, 'mark_paid')}
+                                            >
+                                              Marcar pago
+                                            </Button>
+                                          )}
+                                          {order.paymentProvider === 'stripe' && (
+                                            <span className="text-xs text-amber-700 self-center">
+                                              confirmação manual bloqueada
+                                            </span>
+                                          )}
                                           <Button
                                             size="sm"
                                             variant="ghost"

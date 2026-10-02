@@ -17,7 +17,7 @@ export const GET = withPlatformAdmin(async () => {
       sdk: getStripeServerSdkMetadata(),
       policy: {
         livePaymentsAllowed: STRIPE_FOUNDATION_LIVE_PAYMENTS_ALLOWED,
-        checkoutCreationEnabled: false,
+        checkoutCreationEnabled: readiness.readyForTestIntegration,
         webhookProcessingEnabled: false,
         moneyMovementEnabled: false,
       },

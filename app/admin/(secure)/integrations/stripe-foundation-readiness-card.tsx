@@ -116,7 +116,7 @@ export function StripeFoundationReadinessCard() {
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Checkout</div>
               <div className="font-medium mt-1">{payload.policy.checkoutCreationEnabled ? 'Ativo' : 'Bloqueado'}</div>
-              <div className="text-xs text-muted-foreground mt-1">nenhuma cobrança criada neste PR</div>
+              <div className="text-xs text-muted-foreground mt-1">somente Checkout hospedado em modo de teste</div>
             </div>
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Webhook financeiro</div>
@@ -126,7 +126,7 @@ export function StripeFoundationReadinessCard() {
             <div className="rounded-md border p-3">
               <div className="text-xs text-muted-foreground">Pagamentos live</div>
               <div className="font-medium mt-1">{payload.policy.livePaymentsAllowed ? 'Ativos' : 'Bloqueados'}</div>
-              <div className="text-xs text-muted-foreground mt-1">hard gate de segurança</div>
+              <div className="text-xs text-muted-foreground mt-1">hard gate de segurança permanece ativo</div>
             </div>
           </div>
 
