@@ -823,12 +823,24 @@ export async function buildPublicChatContext(
   runtime: PublicFlipAiRuntime,
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   embedder: Embedder = (inputs) => createOpenAiEmbeddings(inputs, { timeoutMs: 20_000 }),
-): Promise<OpenAiConversationInput & { evidenceMessageIds: string[]; sources: ExternalWebSource[] }> {
+): Promise<OpenAiConversationInput & {
+  evidenceMessageIds: string[];
+  sources: ExternalWebSource[];
+  memorySnapshot: FlipAiConversationMemorySnapshot | null;
+}> {
   const usage = await prisma.flipAiUsageEvent.findFirstOrThrow({
     where: { id: turn.eventId, tenantId: turn.tenantId, conversationId: turn.conversationId },
   });
   const metadata = metadataOf(usage.metadata);
   const entryContext = buildPublicEntryContext(turn.attribution);
+  const memorySnapshot = metadata.memorySnapshot
+    ? parseConversationMemorySnapshot(metadata.memorySnapshot)
+    : await loadLatestConversationMemory({
+      tenantId: turn.tenantId,
+      conversationId: turn.conversationId,
+      excludeEventId: turn.eventId,
+    });
+  const memoryContext = conversationMemoryPrompt(memorySnapshot);
   const intelligentHarnessEnabled = isJevEnabledForTenant({
     tenantId: turn.tenantId,
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
@@ -838,7 +850,7 @@ export async function buildPublicChatContext(
   let decisionStatus = metadata.decisionStatus || (intelligentHarnessEnabled ? 'not_attempted' : 'disabled');
 
   if (!decision && intelligentHarnessEnabled) {
-    const decisionState = await buildJevDecisionState(turn, entryContext);
+    const decisionState = await buildJevDecisionState(turn, entryContext, memorySnapshot);
     const decisionRun = await runJevConversationDecision({
       tenantId: turn.tenantId,
       agentId: turn.agentId,
@@ -868,6 +880,7 @@ export async function buildPublicChatContext(
         ? buildHarnessRetrievalQueries({
           message: turn.text,
           entryContext,
+          memoryContext,
           decision,
         })
         : {
@@ -1007,7 +1020,11 @@ export async function buildPublicChatContext(
     content: message.text,
   }] : []);
   const budgetedHistory = intelligentHarnessEnabled
-    ? buildBudgetedHistory(chronological)
+    ? buildBudgetedHistory(
+      chronological,
+      memorySnapshot ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined,
+      memorySnapshot ? FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES : undefined,
+    )
     : {
       messages: chronological.slice(-14),
       metrics: null,
@@ -1026,7 +1043,18 @@ export async function buildPublicChatContext(
       decisionEngine: decision ? 'jev' : null,
       decisionStatus,
       decisionSnapshot: decision,
-      ...(budgetedHistory.metrics ? { historyMetrics: budgetedHistory.metrics } : {}),
+      memoryVersion: FLIP_AI_CONVERSATION_MEMORY_VERSION,
+      ...(memorySnapshot ? { memorySnapshot } : {}),
+      ...(budgetedHistory.metrics ? {
+        historyMetrics: budgetedHistory.metrics,
+        memoryMetrics: {
+          facts: memorySnapshot?.facts.length || 0,
+          pending: memorySnapshot?.pending.length || 0,
+          promptChars: memoryContext.length,
+          historyAvoidedChars: budgetedHistory.metrics.avoidedChars || 0,
+          historyAvoidedTokensEstimate: budgetedHistory.metrics.avoidedTokensEstimate || 0,
+        },
+      } : {}),
     })}::jsonb
     WHERE id = ${turn.eventId}
       AND tenant_id = ${turn.tenantId}
@@ -1040,10 +1068,11 @@ export async function buildPublicChatContext(
         && isValidBrazilianPhone(identity.lead.phone)), external, entryContext, {
           completedTurns: state?.turnCount || 0,
           inboundMessages,
-        }, decision, turn.inputMode),
+        }, decision, turn.inputMode, memorySnapshot),
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],
+    memorySnapshot,
   };
 }
 
