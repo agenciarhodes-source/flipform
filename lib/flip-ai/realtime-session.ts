@@ -10,6 +10,7 @@ import type { PublicFlipAiRuntime } from './public-agent';
 import { buildPublicChatInstructions } from './public-chat';
 import { settleFlipAiUsageCharge } from './usage-billing';
 import { FLIP_AI_HUMAN_VOICE_POLICY_VERSION } from './conversation-style';
+import { assertFlipAiConversationRuntimeReady } from './conversation-runtime';
 import {
   createOpenAiRealtimeClientSecret,
   FLIP_AI_REALTIME_MODEL,
@@ -121,6 +122,9 @@ export async function issuePublicRealtimeSession(
     throw new FlipAiError('INVALID_PUBLIC_CHAT_SESSION', 400, 'Sessão inválida.');
   }
 
+  // Voice must obey the same commercial hard gate as text before opening a billable provider session.
+  await assertFlipAiConversationRuntimeReady({ tenantId: runtime.tenantId });
+
   const sessionHash = digest(sessionToken);
   const requestKey =
     `realtime-session:${runtime.tenantId}:${runtime.id}:${sessionHash}:${parsed.data.requestId}`;
@@ -198,7 +202,17 @@ export async function issuePublicRealtimeSession(
   }
 
   const instructions = [
-    buildPublicChatInstructions(runtime, [], state.summary, Boolean(ensured.identity.leadId)),
+    buildPublicChatInstructions(
+      runtime,
+      [],
+      state.summary,
+      Boolean(ensured.identity.leadId),
+      null,
+      null,
+      undefined,
+      null,
+      'voice',
+    ),
     'Esta é uma sessão de voz do mesmo atendente e da mesma conversa do chat por texto.',
     'Não crie Lead, não dispare tracking e não alegue qualificação. Essas decisões pertencem ao backend.',
     'O backend controlará as respostas e fornecerá contexto recuperado antes de cada resposta.',
