@@ -15,7 +15,7 @@ function assertDisposableDatabase() {
 
 async function getPremiumPlanForFixture() {
   return prisma.$transaction(async (db) => {
-    await db.$queryRaw`SELECT pg_advisory_xact_lock(3420001)`;
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(3420001)`;
     return db.plan.upsert({
       where: { slug: 'premium' },
       update: {},
