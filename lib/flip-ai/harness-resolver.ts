@@ -9,7 +9,7 @@ export type HarnessCandidate = {
   heading: string | null;
   content: string;
   score: number;
-  tokenEstimate: number;
+  tokenEstimate?: number;
 };
 
 function compact(value: string, max = 2_000) {
