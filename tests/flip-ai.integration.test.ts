@@ -473,10 +473,26 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       initialStageId: a.pipeline.stages[0].id, rotationId: null };
     const anonymous = getOrCreatePublicSessionToken(null).token;
     const realtimeRequest = { requestId: randomUUID() };
+    const realtimeGateKey = `realtime-gate:${randomUUID()}`;
+    await recordFlipAiCreditEntry({
+      tenantId: a.tenant.id,
+      idempotencyKey: realtimeGateKey,
+      entryType: 'credit',
+      amountCredits: 1,
+      source: 'adjustment',
+      referenceId: 'realtime-gate-ci',
+      metadata: { reason: 'temporary CI wallet gate credit' },
+    });
     let realtimeCalls = 0;
     const realtime = await issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, {}, async () => {
       realtimeCalls += 1;
-      return { value: 'ek_ci_ephemeral_secret', expiresAt: Math.floor(Date.now() / 1_000) + 60, model: 'realtime-test' };
+      return {
+        value: 'ek_ci_ephemeral_secret',
+        expiresAt: Math.floor(Date.now() / 1_000) + 60,
+        model: 'realtime-test',
+        voice: 'marin',
+        transcriptionModel: 'gpt-4o-mini-transcribe',
+      };
     });
     assert.equal(realtime.clientSecret, 'ek_ci_ephemeral_secret');
     assert.equal(realtimeCalls, 1);
@@ -498,6 +514,12 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(await prisma.flipAiUsageEvent.count({
       where: { tenantId: a.tenant.id, operation: 'realtime_session', status: 'confirmed' },
     }), 1);
+    await prisma.flipAiCreditLedgerEntry.deleteMany({
+      where: { tenantId: a.tenant.id, idempotencyKey: realtimeGateKey },
+    });
+    await prisma.flipAiCreditAccount.deleteMany({
+      where: { tenantId: a.tenant.id },
+    });
 
     await prisma.flipAiUsageEvent.create({
       data: {
