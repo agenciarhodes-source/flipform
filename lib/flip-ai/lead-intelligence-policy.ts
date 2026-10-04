@@ -132,9 +132,9 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
     classification = 'insufficient';
   }
 
-  const temperature: FlipAiLeadTemperature = score >= 75
+  const temperature: FlipAiLeadTemperature = classification === 'qualified'
     ? 'hot'
-    : score >= 50
+    : classification === 'nurture' && score >= 50
       ? 'warm'
       : 'cold';
 
