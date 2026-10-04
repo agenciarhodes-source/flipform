@@ -25,7 +25,7 @@ export type FlipAiLeadIntelligenceSnapshot = {
   fitScore: number;
   intentScore: number;
   urgencyScore: number;
-  journeyScore: number;
+  readinessScore: number;
   confidenceScore: number;
   intent: FlipAiConversationDecision['intent'];
   objection: FlipAiConversationDecision['objection'];
@@ -78,7 +78,9 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     || !oneOf(raw.journeyStage, JEV_JOURNEY_STAGES)
     || !oneOf(raw.nextAction, JEV_NEXT_ACTIONS)
     || typeof raw.fitScore !== 'number'
+    || (raw.intentScore !== undefined && typeof raw.intentScore !== 'number')
     || typeof raw.urgencyScore !== 'number'
+    || (raw.readinessScore !== undefined && typeof raw.readinessScore !== 'number')
     || typeof raw.needsHuman !== 'boolean'
     || typeof raw.confidence !== 'number'
     || typeof raw.intentConfidence !== 'number'
@@ -95,7 +97,9 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     journeyStage: raw.journeyStage,
     nextAction: raw.nextAction,
     fitScore: boundScore(raw.fitScore),
+    ...(typeof raw.intentScore === 'number' ? { intentScore: boundScore(raw.intentScore) } : {}),
     urgencyScore: boundScore(raw.urgencyScore),
+    ...(typeof raw.readinessScore === 'number' ? { readinessScore: boundScore(raw.readinessScore) } : {}),
     needsHuman: raw.needsHuman,
     confidence: Math.max(0, Math.min(1, raw.confidence)),
     intentConfidence: Math.max(0, Math.min(1, raw.intentConfidence)),
@@ -106,17 +110,21 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
 
 export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
   const fitScore = boundScore(decision.fitScore);
-  const intentScore = INTENT_STRENGTH[decision.intent];
+  const intentScore = typeof decision.intentScore === 'number'
+    ? boundScore(decision.intentScore)
+    : INTENT_STRENGTH[decision.intent];
   const urgencyScore = boundScore(decision.urgencyScore);
-  const journeyScore = JOURNEY_STRENGTH[decision.journeyStage];
+  const readinessScore = typeof decision.readinessScore === 'number'
+    ? boundScore(decision.readinessScore)
+    : JOURNEY_STRENGTH[decision.journeyStage];
   const confidenceScore = boundScore(decision.confidence * 100);
 
   const score = boundScore(
     fitScore * 0.40
-      + intentScore * 0.25
+      + intentScore * 0.30
       + urgencyScore * 0.15
-      + journeyScore * 0.10
-      + confidenceScore * 0.10,
+      + readinessScore * 0.10
+      + confidenceScore * 0.05,
   );
 
   let classification: FlipAiLiveClassification;
@@ -146,7 +154,7 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
       fitScore,
       intentScore,
       urgencyScore,
-      journeyScore,
+      readinessScore,
       confidenceScore,
     },
   };
