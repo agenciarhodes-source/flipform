@@ -1319,7 +1319,9 @@ test('PR 342 deterministic lead score is derived from JEV signals, not free-form
     journeyStage: 'decision' as const,
     nextAction: 'handoff' as const,
     fitScore: 80,
+    intentScore: 90,
     urgencyScore: 75,
+    readinessScore: 80,
     needsHuman: true,
     confidence: 0.8,
     intentConfidence: 0.9,
@@ -1327,14 +1329,14 @@ test('PR 342 deterministic lead score is derived from JEV signals, not free-form
     stageConfidence: 0.9,
   };
   const result = calculateFlipAiLeadScore(decision);
-  assert.equal(result.score, 86);
+  assert.equal(result.score, 82);
   assert.equal(result.classification, 'qualified');
   assert.equal(result.temperature, 'hot');
   assert.deepEqual(result.components, {
     fitScore: 80,
-    intentScore: 100,
+    intentScore: 90,
     urgencyScore: 75,
-    journeyScore: 100,
+    readinessScore: 80,
     confidenceScore: 80,
   });
 });
