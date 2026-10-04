@@ -27,6 +27,10 @@ import {
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
 import { getFlipAiConversationExecutionPlan } from '../lib/flip-ai/conversation-runtime';
 import {
+  buildFlipAiLeadIntelligenceSnapshot,
+  calculateFlipAiLeadScore,
+} from '../lib/flip-ai/lead-intelligence-policy';
+import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
   normalizeJevOrdinalScore,
@@ -1302,4 +1306,121 @@ test('PR 341 history budget keeps recent context instead of unbounded transcript
   assert.ok(result.metrics.selectedChars <= 4_000);
   assert.equal(result.messages.at(-1)?.id, 'm13');
   assert.ok(!result.messages.some((message) => message.id === 'm0'));
+});
+
+
+test('PR 342 deterministic lead score is derived from JEV signals, not free-form LLM output', () => {
+  const decision = {
+    engine: 'jev' as const,
+    engineVersion: 'test',
+    model: 'jev-latest',
+    intent: 'purchase' as const,
+    objection: 'none' as const,
+    journeyStage: 'decision' as const,
+    nextAction: 'handoff' as const,
+    fitScore: 80,
+    urgencyScore: 75,
+    needsHuman: true,
+    confidence: 0.8,
+    intentConfidence: 0.9,
+    objectionConfidence: 0.8,
+    stageConfidence: 0.9,
+  };
+  const result = calculateFlipAiLeadScore(decision);
+  assert.equal(result.score, 86);
+  assert.equal(result.classification, 'qualified');
+  assert.equal(result.temperature, 'hot');
+  assert.deepEqual(result.components, {
+    fitScore: 80,
+    intentScore: 100,
+    urgencyScore: 75,
+    journeyScore: 100,
+    confidenceScore: 80,
+  });
+});
+
+test('PR 342 low-fit confident profiles fail closed as disqualified', () => {
+  const decision = {
+    engine: 'jev' as const,
+    engineVersion: 'test',
+    model: 'jev-latest',
+    intent: 'information' as const,
+    objection: 'eligibility' as const,
+    journeyStage: 'discovery' as const,
+    nextAction: 'answer_directly' as const,
+    fitScore: 20,
+    urgencyScore: 25,
+    needsHuman: false,
+    confidence: 0.8,
+    intentConfidence: 0.8,
+    objectionConfidence: 0.8,
+    stageConfidence: 0.8,
+  };
+  const result = calculateFlipAiLeadScore(decision);
+  assert.equal(result.classification, 'disqualified');
+  assert.equal(result.temperature, 'cold');
+});
+
+test('PR 342 low-confidence decisions never become qualified or hot', () => {
+  const decision = {
+    engine: 'jev' as const,
+    engineVersion: 'test',
+    model: 'jev-latest',
+    intent: 'purchase' as const,
+    objection: 'none' as const,
+    journeyStage: 'decision' as const,
+    nextAction: 'handoff' as const,
+    fitScore: 100,
+    urgencyScore: 100,
+    needsHuman: true,
+    confidence: 0.4,
+    intentConfidence: 0.4,
+    objectionConfidence: 0.4,
+    stageConfidence: 0.4,
+  };
+  const result = calculateFlipAiLeadScore(decision);
+  assert.equal(result.classification, 'insufficient');
+  assert.equal(result.temperature, 'cold');
+});
+
+test('PR 342 live intelligence exposes deterministic score trend across JEV decisions', () => {
+  const base = {
+    engine: 'jev' as const,
+    engineVersion: 'test',
+    model: 'jev-latest',
+    objection: 'none' as const,
+    nextAction: 'ask_one_question' as const,
+    needsHuman: false,
+    intentConfidence: 0.8,
+    objectionConfidence: 0.8,
+    stageConfidence: 0.8,
+  };
+  const previous = {
+    ...base,
+    intent: 'information' as const,
+    journeyStage: 'discovery' as const,
+    fitScore: 60,
+    urgencyScore: 25,
+    confidence: 0.8,
+  };
+  const current = {
+    ...base,
+    intent: 'scheduling' as const,
+    journeyStage: 'decision' as const,
+    nextAction: 'schedule' as const,
+    fitScore: 85,
+    urgencyScore: 75,
+    confidence: 0.9,
+  };
+  const snapshot = buildFlipAiLeadIntelligenceSnapshot({
+    decision: current,
+    previousDecision: previous,
+    updatedAt: new Date('2026-10-04T20:00:00.000Z'),
+    conversationId: 'conversation-1',
+    usageEventId: 'usage-1',
+  });
+  assert.equal(snapshot.score, 87);
+  assert.ok(snapshot.scoreDelta != null && snapshot.scoreDelta > 0);
+  assert.equal(snapshot.classification, 'qualified');
+  assert.equal(snapshot.nextAction, 'schedule');
 });
