@@ -122,17 +122,6 @@ export async function issuePublicRealtimeSession(
     throw new FlipAiError('INVALID_PUBLIC_CHAT_SESSION', 400, 'Sessão inválida.');
   }
 
-  // Voice must obey the same commercial hard gate as text before opening a billable provider session.
-  const wallet = await getFlipAiCreditBalanceForTenant(runtime.tenantId).catch(() => null);
-  if (!wallet?.available) {
-    throw new FlipAiError('FLIP_AI_RUNTIME_BILLING_UNAVAILABLE', 503,
-      'A carteira Flip AI está temporariamente indisponível.');
-  }
-  if (wallet.balanceCredits <= 0) {
-    throw new FlipAiError('FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
-      'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.');
-  }
-
   const sessionHash = digest(sessionToken);
   const requestKey =
     `realtime-session:${runtime.tenantId}:${runtime.id}:${sessionHash}:${parsed.data.requestId}`;
@@ -145,6 +134,17 @@ export async function issuePublicRealtimeSession(
     }
     throw new FlipAiError('REALTIME_SESSION_ALREADY_REQUESTED', 409,
       'Crie uma nova solicitação explícita para iniciar outra sessão de voz.');
+  }
+
+  // Voice must obey the same commercial hard gate as text before opening a billable provider session.
+  const wallet = await getFlipAiCreditBalanceForTenant(runtime.tenantId).catch(() => null);
+  if (!wallet?.available) {
+    throw new FlipAiError('FLIP_AI_RUNTIME_BILLING_UNAVAILABLE', 503,
+      'A carteira Flip AI está temporariamente indisponível.');
+  }
+  if (wallet.balanceCredits <= 0) {
+    throw new FlipAiError('FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
+      'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.');
   }
 
   // These server-controlled quotas run before any identity/conversation row or billable secret is created.
