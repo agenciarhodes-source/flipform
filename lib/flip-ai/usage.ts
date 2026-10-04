@@ -25,6 +25,7 @@ export {
 export type FlipAiUsageOperation = {
   operation: string;
   label: string;
+  provider: string;
   model: string;
   events: number;
   confirmedEvents: number;
@@ -38,7 +39,7 @@ export type FlipAiUsageOperation = {
   units: number;
   estimatedCostNanoUsd: number;
   costCoverage: OpenAiCostCoverage;
-  costReason: 'realtime_not_reconciled' | 'unknown_model' | null;
+  costReason: 'realtime_not_reconciled' | 'unknown_model' | 'non_openai_provider' | null;
 };
 
 export type FlipAiUsageDashboard = {
@@ -114,10 +115,12 @@ const OPERATION_LABELS: Record<string, string> = {
   chat_response: 'Conversa por texto',
   web_search: 'Busca externa',
   realtime_session: 'Sessão de voz emitida',
+  conversation_decision: 'Classificação JEV',
 };
 
 type AggregateRow = {
   operation: string;
+  provider: string;
   model: string;
   events: bigint | number | string;
   confirmedEvents: bigint | number | string;
@@ -220,7 +223,7 @@ async function buildFlipAiUsageDashboardForTenant(
 
     const [aggregateRows, agentRows, recentRows] = await Promise.all([
       db.$queryRaw<AggregateRow[]>(Prisma.sql`
-        SELECT operation, model,
+        SELECT operation, provider, model,
           COUNT(*) AS events,
           COUNT(*) FILTER (WHERE status = 'confirmed') AS "confirmedEvents",
           COUNT(*) FILTER (WHERE status = 'ambiguous') AS "ambiguousEvents",
@@ -238,8 +241,8 @@ async function buildFlipAiUsageDashboardForTenant(
           COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'charged') AS "billedOperations"
         FROM flip_ai_usage_events
         WHERE tenant_id = ${tenantId} AND created_at >= ${range.from} AND created_at < ${range.toExclusive}
-        GROUP BY operation, model
-        ORDER BY operation, model
+        GROUP BY operation, provider, model
+        ORDER BY operation, provider, model
       `),
       db.$queryRaw<AgentRow[]>(Prisma.sql`
         SELECT e.agent_id AS "agentId", a.name AS "agentName",
@@ -275,16 +278,23 @@ async function buildFlipAiUsageDashboardForTenant(
       const confirmedEvents = count(row.confirmedEvents);
       const inputTokens = count(row.inputTokens);
       const outputTokens = count(row.outputTokens);
-      const cost = estimateOpenAiUsageCost({
-        operation: row.operation,
-        model: row.model,
-        confirmedEvents,
-        inputTokens,
-        outputTokens,
-      });
+      const cost = row.provider === 'openai'
+        ? estimateOpenAiUsageCost({
+          operation: row.operation,
+          model: row.model,
+          confirmedEvents,
+          inputTokens,
+          outputTokens,
+        })
+        : {
+          costNanoUsd: 0,
+          coverage: 'none' as const,
+          reason: 'non_openai_provider' as const,
+        };
       return {
         operation: row.operation,
         label: labelFlipAiUsageOperation(row.operation),
+        provider: row.provider,
         model: row.model,
         events: count(row.events),
         confirmedEvents,
@@ -367,7 +377,7 @@ async function buildFlipAiUsageDashboardForTenant(
         const inputTokens = count(row.inputTokens);
         const outputTokens = count(row.outputTokens);
         const billing = readBillingMetadata(row.metadata);
-        const estimated = row.status === 'confirmed'
+        const estimated = row.status === 'confirmed' && row.provider === 'openai'
           ? estimateOpenAiUsageCost({
             operation: row.operation,
             model: row.model,
