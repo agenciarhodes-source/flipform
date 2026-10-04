@@ -734,14 +734,15 @@ export async function buildPublicChatContext(
   });
   const metadata = metadataOf(usage.metadata);
   const entryContext = buildPublicEntryContext(turn.attribution);
-  let decision: FlipAiConversationDecision | null = metadata.decisionSnapshot || null;
-  let decisionStatus = metadata.decisionStatus || 'not_attempted';
-
-  if (!decision && isJevEnabledForTenant({
+  const intelligentHarnessEnabled = isJevEnabledForTenant({
     tenantId: turn.tenantId,
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
     tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
-  })) {
+  });
+  let decision: FlipAiConversationDecision | null = metadata.decisionSnapshot || null;
+  let decisionStatus = metadata.decisionStatus || (intelligentHarnessEnabled ? 'not_attempted' : 'disabled');
+
+  if (!decision && intelligentHarnessEnabled) {
     const decisionState = await buildJevDecisionState(turn, entryContext);
     const decisionRun = await runJevConversationDecision({
       tenantId: turn.tenantId,
@@ -768,11 +769,21 @@ export async function buildPublicChatContext(
   } else {
     await assertFlipAiConversationRuntimeReady({ tenantId: turn.tenantId });
     try {
-      const retrievalQueries = buildHarnessRetrievalQueries({
-        message: turn.text,
-        entryContext,
-        decision,
-      });
+      const retrievalQueries = intelligentHarnessEnabled
+        ? buildHarnessRetrievalQueries({
+          message: turn.text,
+          entryContext,
+          decision,
+        })
+        : {
+          conversationQuery: [
+            turn.text,
+            entryContext ? `Contexto de entrada: ${entryContext}` : '',
+          ].filter(Boolean).join('\n'),
+          qualificationQuery:
+            'Critérios de qualificação, perfil ideal, quem não atendemos, urgência, intenção, timing e próxima ação.',
+          decisionApplied: false,
+        };
       const embedded = await embedder([
         retrievalQueries.conversationQuery,
         retrievalQueries.qualificationQuery,
@@ -797,10 +808,17 @@ export async function buildPublicChatContext(
         }),
       ]);
       currentQueryHits = conversationHits;
-      const harness = selectHarnessHits(
-        [...conversationHits, ...qualificationHits],
-        resolveHarnessTokenBudget(process.env.FLIP_AI_HARNESS_TOKEN_BUDGET),
-      );
+      const candidates = [...conversationHits, ...qualificationHits]
+        .filter((hit, index, all) => all.findIndex((item) => item.id === hit.id) === index);
+      const harness = intelligentHarnessEnabled
+        ? selectHarnessHits(
+          candidates,
+          resolveHarnessTokenBudget(process.env.FLIP_AI_HARNESS_TOKEN_BUDGET),
+        )
+        : {
+          hits: candidates.slice(0, 7),
+          metrics: null,
+        };
       hits = harness.hits;
       const retrievalKey = `chat-retrieval:${turn.requestKey}`;
       const retrievalUsage = await prisma.flipAiUsageEvent.upsert({
@@ -822,7 +840,7 @@ export async function buildPublicChatContext(
             decisionEngine: decision ? 'jev' : null,
             decisionStatus,
             decisionApplied: retrievalQueries.decisionApplied,
-            harnessMetrics: harness.metrics,
+            ...(harness.metrics ? { harnessMetrics: harness.metrics } : {}),
           },
         },
         update: {
@@ -842,7 +860,7 @@ export async function buildPublicChatContext(
           decisionEngine: decision ? 'jev' : null,
           decisionStatus,
           decisionSnapshot: decision,
-          harnessMetrics: harness.metrics,
+          ...(harness.metrics ? { harnessMetrics: harness.metrics } : {}),
         })}::jsonb
         WHERE id = ${turn.eventId}
           AND tenant_id = ${turn.tenantId}
@@ -891,8 +909,16 @@ export async function buildPublicChatContext(
     role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
     content: message.text,
   }] : []);
-  const budgetedHistory = buildBudgetedHistory(chronological);
-  const messages = budgetedHistory.messages.map(({ role, content }) => ({ role, content }));
+  const budgetedHistory = intelligentHarnessEnabled
+    ? buildBudgetedHistory(chronological)
+    : {
+      messages: chronological.slice(-14),
+      metrics: null,
+    };
+  const messages = budgetedHistory.messages.map(({ role, content }) => ({
+    role,
+    content: intelligentHarnessEnabled ? content : content.slice(0, 2_500),
+  }));
   const inboundMessages = history.filter((message) => message.direction === 'inbound').length;
   const evidenceMessageIds = budgetedHistory.messages
     .flatMap((message) => message.id ? [message.id] : []);
@@ -903,7 +929,7 @@ export async function buildPublicChatContext(
       decisionEngine: decision ? 'jev' : null,
       decisionStatus,
       decisionSnapshot: decision,
-      historyMetrics: budgetedHistory.metrics,
+      ...(budgetedHistory.metrics ? { historyMetrics: budgetedHistory.metrics } : {}),
     })}::jsonb
     WHERE id = ${turn.eventId}
       AND tenant_id = ${turn.tenantId}
