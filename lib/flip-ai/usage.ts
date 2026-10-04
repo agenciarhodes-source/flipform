@@ -69,6 +69,9 @@ export type FlipAiUsageDashboard = {
     snapshot: string;
     source: string;
     estimatedCostNanoUsd: number;
+    billedCostNanoUsd: number;
+    chargedCredits: number;
+    billedOperations: number;
     fullyPricedOperations: number;
     partiallyPricedOperations: number;
     unpricedOperations: number;
@@ -126,6 +129,9 @@ type AggregateRow = {
   inputTokens: bigint | number | string;
   outputTokens: bigint | number | string;
   units: bigint | number | string;
+  billedCostNanoUsd: bigint | number | string;
+  chargedCredits: bigint | number | string;
+  billedOperations: bigint | number | string;
 };
 
 type AgentRow = {
@@ -224,7 +230,12 @@ async function buildFlipAiUsageDashboardForTenant(
           COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'billing_unavailable') AS "billingUnavailableEvents",
           COALESCE(SUM(input_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "inputTokens",
           COALESCE(SUM(output_tokens) FILTER (WHERE status = 'confirmed'), 0) AS "outputTokens",
-          COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units
+          COALESCE(SUM(units) FILTER (WHERE status = 'confirmed'), 0) AS units,
+          COALESCE(SUM((metadata->'billing'->>'costNanoUsd')::bigint)
+            FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'charged'), 0) AS "billedCostNanoUsd",
+          COALESCE(SUM((metadata->'billing'->>'amountCredits')::bigint)
+            FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'charged'), 0) AS "chargedCredits",
+          COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'charged') AS "billedOperations"
         FROM flip_ai_usage_events
         WHERE tenant_id = ${tenantId} AND created_at >= ${range.from} AND created_at < ${range.toExclusive}
         GROUP BY operation, model
@@ -329,6 +340,15 @@ async function buildFlipAiUsageDashboardForTenant(
         source: OPENAI_PRICE_SOURCE,
         estimatedCostNanoUsd: operations.reduce(
           (total, operation) => total + operation.estimatedCostNanoUsd, 0,
+        ),
+        billedCostNanoUsd: aggregateRows.reduce(
+          (total, row) => total + count(row.billedCostNanoUsd), 0,
+        ),
+        chargedCredits: aggregateRows.reduce(
+          (total, row) => total + count(row.chargedCredits), 0,
+        ),
+        billedOperations: aggregateRows.reduce(
+          (total, row) => total + count(row.billedOperations), 0,
         ),
         fullyPricedOperations: pricedCount('full'),
         partiallyPricedOperations: pricedCount('partial'),
