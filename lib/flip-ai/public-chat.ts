@@ -34,6 +34,8 @@ import { runJevConversationDecision } from './jev-decision-engine';
 import {
   buildBudgetedHistory,
   buildHarnessRetrievalQueries,
+  FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET,
+  FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES,
   resolveHarnessTokenBudget,
   selectHarnessHits,
 } from './harness-resolver';
@@ -235,6 +237,10 @@ type StoredChatMetadata = {
     selectedMessages: number;
     selectedChars: number;
     charBudget: number;
+    maxMessages?: number;
+    availableChars?: number;
+    avoidedChars?: number;
+    avoidedTokensEstimate?: number;
   };
 };
 type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
