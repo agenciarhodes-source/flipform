@@ -64,10 +64,12 @@ def test_pr339_openai_balance_limitation_is_explicit_and_auto_reload_is_external
 
 
 def test_pr339_buffer_is_server_side_and_documented():
+    treasury = read("lib/flip-ai/treasury.ts")
     policy = read("lib/flip-ai/treasury-policy.ts")
     env = read(".env.example")
     prod = read(".env.production.example")
-    assert "FLIP_AI_TREASURY_BUFFER_PERCENT" in policy
+    assert "process.env.FLIP_AI_TREASURY_BUFFER_PERCENT" in treasury
+    assert "resolveTreasuryBufferPercent" in policy
     assert "FLIP_AI_TREASURY_BUFFER_PERCENT=20" in env
     assert "FLIP_AI_TREASURY_BUFFER_PERCENT=20" in prod
     assert "FLIP_AI_TREASURY_BUFFER_PERCENT" not in read("app/admin/(secure)/treasury/page.tsx")
