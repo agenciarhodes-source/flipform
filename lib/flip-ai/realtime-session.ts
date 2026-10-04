@@ -10,7 +10,7 @@ import type { PublicFlipAiRuntime } from './public-agent';
 import { buildPublicChatInstructions } from './public-chat';
 import { settleFlipAiUsageCharge } from './usage-billing';
 import { FLIP_AI_HUMAN_VOICE_POLICY_VERSION } from './conversation-style';
-import { assertFlipAiConversationRuntimeReady } from './conversation-runtime';
+import { getFlipAiCreditBalanceForTenant } from './credits';
 import {
   createOpenAiRealtimeClientSecret,
   FLIP_AI_REALTIME_MODEL,
@@ -123,7 +123,15 @@ export async function issuePublicRealtimeSession(
   }
 
   // Voice must obey the same commercial hard gate as text before opening a billable provider session.
-  await assertFlipAiConversationRuntimeReady({ tenantId: runtime.tenantId });
+  const wallet = await getFlipAiCreditBalanceForTenant(runtime.tenantId).catch(() => null);
+  if (!wallet?.available) {
+    throw new FlipAiError('FLIP_AI_RUNTIME_BILLING_UNAVAILABLE', 503,
+      'A carteira Flip AI está temporariamente indisponível.');
+  }
+  if (wallet.balanceCredits <= 0) {
+    throw new FlipAiError('FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
+      'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.');
+  }
 
   const sessionHash = digest(sessionToken);
   const requestKey =
