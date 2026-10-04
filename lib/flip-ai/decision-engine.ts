@@ -49,7 +49,9 @@ export type FlipAiConversationDecision = {
   journeyStage: typeof JEV_JOURNEY_STAGES[number];
   nextAction: typeof JEV_NEXT_ACTIONS[number];
   fitScore: number;
+  intentScore?: number;
   urgencyScore: number;
+  readinessScore?: number;
   needsHuman: boolean;
   confidence: number;
   intentConfidence: number;
@@ -109,7 +111,9 @@ export function decisionHint(decision: FlipAiConversationDecision | null) {
     `objeção=${decision.objection}`,
     `estágio=${decision.journeyStage}`,
     `fit=${decision.fitScore}/100`,
+    ...(typeof decision.intentScore === 'number' ? [`força_intenção=${decision.intentScore}/100`] : []),
     `urgência=${decision.urgencyScore}/100`,
+    ...(typeof decision.readinessScore === 'number' ? [`prontidão=${decision.readinessScore}/100`] : []),
     `próxima_ação=${decision.nextAction}`,
     `humano=${decision.needsHuman ? 'sim' : 'não'}`,
     `confiança=${decision.confidence.toFixed(2)}`,
