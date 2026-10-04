@@ -25,6 +25,7 @@ import {
   OPENAI_PRICE_SNAPSHOT,
 } from '../lib/flip-ai/openai-pricing';
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
+import { buildTreasuryReservePolicy, calculateTreasuryCoverage, resolveTreasuryBufferPercent } from '../lib/flip-ai/treasury-policy';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
   sanitizeExternalSearchQuery,
@@ -1149,4 +1150,57 @@ test('PR 327 settlement is event-idempotent, refund-traceable and never bills un
   }
   assert.doesNotMatch(leadCapture, /settleFlipAiUsageCharge|recordFlipAiCreditEntry|flip_ai_credit_/);
   assert.doesNotMatch(billing, /auto.?recharge|creditCard|cvv|Asaas/i);
+});
+
+
+test('PR 339 derives a conservative reserve rate from active commercial packages', () => {
+  const policy = buildTreasuryReservePolicy([
+    { id: 'essential', name: 'Essencial', credits: 1_000_000, estimatedOpenAiCostCents: 200 },
+    { id: 'professional', name: 'Profissional', credits: 3_000_000, estimatedOpenAiCostCents: 750 },
+    { id: 'scale', name: 'Escala', credits: 10_000_000, estimatedOpenAiCostCents: 2_000 },
+  ], 20);
+
+  assert.equal(policy.status, 'complete');
+  assert.equal(policy.referencePackageId, 'professional');
+  assert.equal(policy.reserveUsdPerMillionCredits, 2.5);
+  assert.equal(policy.bufferPercent, 20);
+});
+
+test('PR 339 coverage statuses distinguish buffer shortfall from principal risk', () => {
+  const healthy = calculateTreasuryCoverage({
+    creditsInCirculation: 10_000_000,
+    reserveUsdPerMillionCredits: 2,
+    bufferPercent: 20,
+    operationalBalanceUsd: 30,
+  });
+  assert.equal(healthy.liabilityUsd, 20);
+  assert.equal(healthy.requiredReserveUsd, 24);
+  assert.equal(healthy.status, 'healthy');
+  assert.equal(healthy.recommendedTopUpUsd, 0);
+
+  const attention = calculateTreasuryCoverage({
+    creditsInCirculation: 10_000_000,
+    reserveUsdPerMillionCredits: 2,
+    bufferPercent: 20,
+    operationalBalanceUsd: 22,
+  });
+  assert.equal(attention.status, 'attention');
+  assert.equal(attention.recommendedTopUpUsd, 2);
+
+  const risk = calculateTreasuryCoverage({
+    creditsInCirculation: 10_000_000,
+    reserveUsdPerMillionCredits: 2,
+    bufferPercent: 20,
+    operationalBalanceUsd: 15,
+  });
+  assert.equal(risk.status, 'risk');
+  assert.equal(risk.recommendedTopUpUsd, 9);
+});
+
+test('PR 339 treasury buffer is bounded and defaults safely', () => {
+  assert.equal(resolveTreasuryBufferPercent(undefined), 20);
+  assert.equal(resolveTreasuryBufferPercent('25'), 25);
+  assert.equal(resolveTreasuryBufferPercent('12,5'), 12.5);
+  assert.equal(resolveTreasuryBufferPercent('-1'), 20);
+  assert.equal(resolveTreasuryBufferPercent('101'), 20);
 });
