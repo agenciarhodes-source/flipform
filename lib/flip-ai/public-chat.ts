@@ -863,6 +863,8 @@ export async function buildPublicChatContext(
           units: 1,
           metadata: {
             chatRequestKey: turn.requestKey,
+            inputMode: turn.inputMode,
+            humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
             decisionEngine: decision ? 'jev' : null,
             decisionStatus,
             decisionApplied: retrievalQueries.decisionApplied,
@@ -998,6 +1000,8 @@ export async function completePublicChatTurn(
       model: result.model,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      inputMode: turn.inputMode,
+      humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
       ...(externalSources.length ? { externalSources } : {}),
       ...(decision ? {
         leadIdentity: decision.identity,
