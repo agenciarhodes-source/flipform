@@ -27,6 +27,43 @@ const journeyLabels: Record<string, string> = {
   discovery: 'Descoberta',
   consideration: 'Consideração',
   decision: 'Decisão',
+  post_sale: 'Pós-venda',
+  unknown: 'Ainda indefinido',
+};
+
+const intentLabels: Record<string, string> = {
+  information: 'Buscando informação',
+  qualification: 'Em qualificação',
+  objection: 'Objeção ativa',
+  scheduling: 'Quer agendar',
+  purchase: 'Intenção de avançar',
+  support: 'Suporte',
+  handoff: 'Quer atendimento humano',
+  other: 'Outra intenção',
+};
+const objectionLabels: Record<string, string> = {
+  none: 'Nenhuma',
+  price: 'Preço',
+  trust: 'Confiança',
+  timing: 'Momento/prazo',
+  documentation: 'Documentação',
+  eligibility: 'Elegibilidade/perfil',
+  competitor: 'Concorrente/alternativa',
+  uncertainty: 'Indecisão',
+  other: 'Outra',
+};
+const nextActionLabels: Record<string, string> = {
+  answer_directly: 'Responder diretamente',
+  ask_one_question: 'Fazer uma pergunta curta',
+  handle_objection: 'Tratar objeção',
+  request_contact: 'Solicitar contato',
+  schedule: 'Avançar para agenda/visita',
+  handoff: 'Encaminhar para atendimento humano',
+};
+const temperatureLabels: Record<string, string> = {
+  hot: 'Quente',
+  warm: 'Morno',
+  cold: 'Frio',
 };
 
 export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId: string; stages: Stage[]; onClose: () => void; onChange: () => void }) {
@@ -194,7 +231,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           <TabsList className="my-4 h-auto flex-wrap">
             <TabsTrigger value="info">Dados</TabsTrigger>
             <TabsTrigger value="answers">Respostas</TabsTrigger>
-            {lead.flipAiQualifications?.length > 0 && (
+            {(lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0) && (
               <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
             )}
             <TabsTrigger value="history">Histórico</TabsTrigger>
@@ -258,6 +295,82 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </TabsContent>
 
           <TabsContent value="flip-ai" className="pb-6 space-y-4">
+            {lead.flipAiLiveIntelligence && (
+              <section className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-blue-700" />
+                      <h3 className="font-heading text-sm font-semibold">Inteligência em tempo real</h3>
+                      <Badge variant="outline">
+                        {qualificationLabels[lead.flipAiLiveIntelligence.classification] || lead.flipAiLiveIntelligence.classification}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Atualizado em {formatDateTime(lead.flipAiLiveIntelligence.updatedAt)} • política {lead.flipAiLiveIntelligence.policyVersion}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    JEV • confiança {Math.round(Number(lead.flipAiLiveIntelligence.confidence || 0) * 100)}%
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Score</div>
+                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.score}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {lead.flipAiLiveIntelligence.scoreDelta == null
+                        ? 'Primeira leitura'
+                        : `${lead.flipAiLiveIntelligence.scoreDelta >= 0 ? '+' : ''}${lead.flipAiLiveIntelligence.scoreDelta} desde a leitura anterior`}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
+                    <div className="text-xl font-bold">{temperatureLabels[lead.flipAiLiveIntelligence.temperature] || lead.flipAiLiveIntelligence.temperature}</div>
+                    <div className="text-xs text-muted-foreground">Não altera o CRM automaticamente</div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Fit</div>
+                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.fitScore}</div>
+                    <div className="text-xs text-muted-foreground">peso 40%</div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Intenção</div>
+                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.intentScore}</div>
+                    <div className="text-xs text-muted-foreground">peso 25%</div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Leitura atual</div>
+                    <div className="mt-2 space-y-1">
+                      <div><strong>Intenção:</strong> {intentLabels[lead.flipAiLiveIntelligence.intent] || lead.flipAiLiveIntelligence.intent}</div>
+                      <div><strong>Objeção:</strong> {objectionLabels[lead.flipAiLiveIntelligence.objection] || lead.flipAiLiveIntelligence.objection}</div>
+                      <div><strong>Jornada:</strong> {journeyLabels[lead.flipAiLiveIntelligence.journeyStage] || lead.flipAiLiveIntelligence.journeyStage}</div>
+                      <div><strong>Urgência:</strong> {lead.flipAiLiveIntelligence.urgencyScore}/100</div>
+                      <div><strong>Prontidão:</strong> {lead.flipAiLiveIntelligence.readinessScore}/100</div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Próxima ação sugerida</div>
+                    <p className="mt-2 font-medium">
+                      {nextActionLabels[lead.flipAiLiveIntelligence.nextAction] || lead.flipAiLiveIntelligence.nextAction}
+                    </p>
+                    {lead.flipAiLiveIntelligence.needsHuman && (
+                      <p className="mt-2 text-amber-700">O JEV sinalizou necessidade de atendimento humano.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
+                  O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
+                  Esta leitura não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
+                </div>
+              </section>
+            )}
+
             {lead.flipAiQualifications?.map((qualification: any) => (
               <section key={qualification.id} className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">

@@ -80,9 +80,20 @@ test('schema readiness catalog inspection executes read-only against disposable 
   assert.ok(Array.isArray(readiness.incompatibleConstraints));
 });
 
+async function getPremiumPlanForFixture() {
+  return prisma.$transaction(async (db) => {
+    await db.$executeRaw`SELECT pg_advisory_xact_lock(3420001)`;
+    return db.plan.upsert({
+      where: { slug: 'premium' },
+      update: {},
+      create: { name: 'Premium CI', slug: 'premium', price: 797 },
+    });
+  });
+}
+
 async function fixture() {
   const suffix = randomUUID();
-  const plan = await prisma.plan.upsert({ where: { slug: 'premium' }, update: {}, create: { name: 'Premium CI', slug: 'premium', price: 797 } });
+  const plan = await getPremiumPlanForFixture();
   const user = await prisma.user.create({ data: { name: 'Flip AI CI', email: suffix + '@example.invalid', passwordHash: 'unused' } });
   const tenant = await prisma.tenant.create({ data: { name: 'Flip AI CI', slug: 'flip-ai-ci-' + suffix, planId: plan.id, status: 'active' } });
   await prisma.tenantUser.create({ data: { tenantId: tenant.id, userId: user.id, role: 'owner' } });
