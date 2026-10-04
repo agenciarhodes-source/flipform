@@ -46,7 +46,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
   const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1_000);
 
   const [tenantBalances, localUsageRows, sales30d] = await Promise.all([
-    prisma.$queryRaw<TenantBalanceRow[]>(Prisma.sql\`
+    prisma.$queryRaw<TenantBalanceRow[]>(Prisma.sql`
       SELECT
         a.tenant_id AS "tenantId",
         t.name AS "tenantName",
@@ -56,8 +56,8 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       INNER JOIN tenants t ON t.id = a.tenant_id
       WHERE a.balance_credits > 0
       ORDER BY a.balance_credits DESC, t.name ASC
-    \`),
-    prisma.$queryRaw<UsageSpendRow[]>(Prisma.sql\`
+    `),
+    prisma.$queryRaw<UsageSpendRow[]>(Prisma.sql`
       SELECT
         COALESCE(SUM(
           CASE
@@ -74,8 +74,8 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
             AND metadata->'billing'->>'status' = 'charged'
         ) AS "chargedOperations"
       FROM flip_ai_usage_events
-      WHERE created_at >= \${since30d} AND created_at <= \${now}
-    \`),
+      WHERE created_at >= ${since30d} AND created_at <= ${now}
+    `),
     prisma.flipAiTopUpOrder.aggregate({
       where: {
         status: 'credited',
