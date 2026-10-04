@@ -22,7 +22,7 @@ def test_pr340_public_chat_route_uses_runtime_instead_of_calling_openai_directly
     assert "assertFlipAiConversationRuntimeReady" in route
     assert "streamOpenAiText" not in route
     assert route.index("await assertFlipAiConversationRuntimeReady") < route.index("buildPublicChatContext(runtimeContext, turn)")
-    assert route.index("buildPublicChatContext(runtimeContext, turn)") < route.index("executeFlipAiConversationResponse")
+    assert route.index("buildPublicChatContext(runtimeContext, turn)") < route.index("const rawResult = await executeFlipAiConversationResponse")
 
 
 def test_pr340_runtime_preflight_is_server_side_and_credit_gated():
