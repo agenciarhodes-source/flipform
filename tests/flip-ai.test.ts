@@ -26,6 +26,18 @@ import {
 } from '../lib/flip-ai/openai-pricing';
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
 import { getFlipAiConversationExecutionPlan } from '../lib/flip-ai/conversation-runtime';
+import {
+  combineDecisionConfidence,
+  isJevEnabledForTenant,
+  normalizeJevOrdinalScore,
+  parseJevTenantIds,
+} from '../lib/flip-ai/decision-engine';
+import {
+  buildBudgetedHistory,
+  buildHarnessRetrievalQueries,
+  resolveHarnessTokenBudget,
+  selectHarnessHits,
+} from '../lib/flip-ai/harness-resolver';
 import { buildTreasuryReservePolicy, calculateTreasuryCoverage, resolveTreasuryBufferPercent } from '../lib/flip-ai/treasury-policy';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
@@ -1214,4 +1226,79 @@ test('PR 340 conversation runtime is OpenAI-only and model routing is disabled',
   assert.equal(plan.task, 'customer_conversation');
   assert.equal(plan.modelRouting, 'disabled');
   assert.equal(plan.model, process.env.OPENAI_FLIP_AI_TEXT_MODEL || 'gpt-5.6-luna');
+});
+
+
+test('PR 341 JEV activation is explicit and tenant allowlisted', () => {
+  const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'false', tenantIdsRaw: tenantId }), false);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: tenantId }), true);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '' }), false);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '*' }), false);
+  assert.equal(parseJevTenantIds(`${tenantId},${tenantId}`).valid, false);
+});
+
+test('PR 341 JEV scores are normalized but business rules remain deterministic', () => {
+  assert.equal(normalizeJevOrdinalScore(0), 0);
+  assert.equal(normalizeJevOrdinalScore(2), 50);
+  assert.equal(normalizeJevOrdinalScore(4), 100);
+  assert.equal(normalizeJevOrdinalScore(8), 100);
+  assert.equal(combineDecisionConfidence([0.8, 0.6, 1]), 0.8);
+});
+
+test('PR 341 harness retrieval becomes decision-aware only above confidence floor', () => {
+  const decision = {
+    engine: 'jev' as const,
+    engineVersion: 'test',
+    model: 'jev-latest',
+    intent: 'objection' as const,
+    objection: 'price' as const,
+    journeyStage: 'consideration' as const,
+    nextAction: 'handle_objection' as const,
+    fitScore: 75,
+    urgencyScore: 50,
+    needsHuman: false,
+    confidence: 0.8,
+    intentConfidence: 0.9,
+    objectionConfidence: 0.8,
+    stageConfidence: 0.7,
+  };
+  const focused = buildHarnessRetrievalQueries({ message: 'Achei caro', decision });
+  assert.equal(focused.decisionApplied, true);
+  assert.match(focused.conversationQuery, /Objeção atual: price/);
+  assert.match(focused.qualificationQuery, /objeção de price/);
+
+  const fallback = buildHarnessRetrievalQueries({
+    message: 'Achei caro',
+    decision: { ...decision, confidence: 0.4 },
+  });
+  assert.equal(fallback.decisionApplied, false);
+});
+
+test('PR 341 harness selector enforces a token budget and reports savings', () => {
+  const result = selectHarnessHits([
+    { id: 'a', heading: 'A', content: 'a', score: 0.9, tokenEstimate: 600 },
+    { id: 'b', heading: 'B', content: 'b', score: 0.8, tokenEstimate: 500 },
+    { id: 'c', heading: 'C', content: 'c', score: 0.7, tokenEstimate: 500 },
+  ], 1_000);
+  assert.deepEqual(result.hits.map((hit) => hit.id), ['a']);
+  assert.equal(result.metrics.selectedTokens, 600);
+  assert.equal(result.metrics.candidateTokens, 1_600);
+  assert.equal(result.metrics.avoidedTokens, 1_000);
+  assert.equal(result.metrics.savingsPercent, 62.5);
+  assert.equal(resolveHarnessTokenBudget('200'), 1_200);
+  assert.equal(resolveHarnessTokenBudget('1600'), 1_600);
+});
+
+test('PR 341 history budget keeps recent context instead of unbounded transcripts', () => {
+  const messages = Array.from({ length: 14 }, (_, index) => ({
+    id: `m${index}`,
+    role: index % 2 ? 'assistant' as const : 'user' as const,
+    content: `message-${index}-` + 'x'.repeat(900),
+  }));
+  const result = buildBudgetedHistory(messages, 4_000);
+  assert.ok(result.messages.length <= 10);
+  assert.ok(result.metrics.selectedChars <= 4_000);
+  assert.equal(result.messages.at(-1)?.id, 'm13');
+  assert.ok(!result.messages.some((message) => message.id === 'm0'));
 });
