@@ -13,13 +13,20 @@ function assertDisposableDatabase() {
   }
 }
 
+async function getPremiumPlanForFixture() {
+  return prisma.$transaction(async (db) => {
+    await db.$queryRaw`SELECT pg_advisory_xact_lock(3420001)`;
+    return db.plan.upsert({
+      where: { slug: 'premium' },
+      update: {},
+      create: { name: 'Premium CI', slug: 'premium', price: 797 },
+    });
+  });
+}
+
 async function fixture() {
   const suffix = randomUUID();
-  const plan = await prisma.plan.upsert({
-    where: { slug: 'premium' },
-    update: {},
-    create: { name: 'Premium CI', slug: 'premium', price: 797 },
-  });
+  const plan = await getPremiumPlanForFixture();
   const user = await prisma.user.create({
     data: { name: 'Stripe CI', email: suffix + '@example.invalid', passwordHash: 'unused' },
   });
