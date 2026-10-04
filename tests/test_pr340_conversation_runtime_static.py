@@ -21,7 +21,7 @@ def test_pr340_public_chat_route_uses_runtime_instead_of_calling_openai_directly
     assert "executeFlipAiConversationResponse" in route
     assert "assertFlipAiConversationRuntimeReady" in route
     assert "streamOpenAiText" not in route
-    assert route.index("assertFlipAiConversationRuntimeReady") < route.index("buildPublicChatContext(runtimeContext, turn)")
+    assert route.index("await assertFlipAiConversationRuntimeReady") < route.index("buildPublicChatContext(runtimeContext, turn)")
     assert route.index("buildPublicChatContext(runtimeContext, turn)") < route.index("executeFlipAiConversationResponse")
 
 
@@ -57,6 +57,7 @@ def test_pr340_usage_event_records_runtime_identity_without_schema_change():
     assert "modelRouting" in chat
     assert "provider: executionPlan.provider" in chat
     assert "model: executionPlan.model" in chat
+    assert "await assertFlipAiConversationRuntimeReady({ tenantId: turn.tenantId })" in chat
 
 
 def test_pr340_does_not_change_commercial_credit_formula_or_create_schema():
