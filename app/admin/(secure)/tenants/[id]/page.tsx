@@ -764,9 +764,9 @@ export default function TenantDetailPage() {
             <Card className="p-4">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                  <h3 className="font-medium">Ledger de consumo da OpenAI</h3>
+                  <h3 className="font-medium">Ledger de consumo de IA</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Leitura isolada deste tenant: tokens, modelo, custo de API calculado e créditos Flip AI debitados.
+                    Leitura isolada deste tenant: OpenAI, decisões JEV, tokens, modelos, custo contabilizado e créditos Flip AI.
                   </p>
                 </div>
                 <div className="min-w-[160px]">
@@ -825,6 +825,40 @@ export default function TenantDetailPage() {
                   </Card>
                 </div>
 
+                {(usage.optimization?.jevConfirmedDecisions > 0 || usage.optimization?.optimizedResponses > 0) && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Card className="p-4">
+                      <div className="text-xs text-muted-foreground">Decisões JEV</div>
+                      <div className="font-heading text-2xl font-bold mt-1">
+                        {number.format(usage.optimization.jevConfirmedDecisions)}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {number.format(usage.optimization.jevInputTokens)} tokens de entrada · {number.format(usage.optimization.jevOutputTokens)} saída
+                      </div>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="text-xs text-muted-foreground">Contexto evitado pelo Harness</div>
+                      <div className="font-heading text-2xl font-bold mt-1">
+                        {number.format(usage.optimization.harnessAvoidedTokens)}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        tokens estimados que não precisaram ir para a OpenAI
+                      </div>
+                    </Card>
+                    <Card className="p-4">
+                      <div className="text-xs text-muted-foreground">Economia de contexto</div>
+                      <div className="font-heading text-2xl font-bold mt-1">
+                        {usage.optimization.harnessSavingsPercent == null
+                          ? '—'
+                          : usage.optimization.harnessSavingsPercent.toFixed(1) + '%'}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {number.format(usage.optimization.harnessSelectedTokens)} de {number.format(usage.optimization.harnessCandidateTokens)} tokens de conhecimento selecionados
+                      </div>
+                    </Card>
+                  </div>
+                )}
+
                 <Card className="p-4 border-blue-200 bg-blue-50/60 text-sm text-blue-950">
                   O custo contabilizado usa o consumo confirmado de cada chamada e o snapshot de preço registrado na liquidação.
                   A estimativa técnica do período é {formatNanoUsd(usage.pricing.estimatedCostNanoUsd)}.
@@ -843,7 +877,7 @@ export default function TenantDetailPage() {
                         <thead className="bg-muted/40 border-b">
                           <tr className="text-xs uppercase text-muted-foreground">
                             <th className="text-left py-3 px-4">Operação</th>
-                            <th className="text-left py-3 px-4">Modelo</th>
+                            <th className="text-left py-3 px-4">Provider / modelo</th>
                             <th className="text-right py-3 px-4">Chamadas</th>
                             <th className="text-right py-3 px-4">Entrada</th>
                             <th className="text-right py-3 px-4">Saída</th>
@@ -852,9 +886,9 @@ export default function TenantDetailPage() {
                         </thead>
                         <tbody>
                           {usage.operations.map((operation: any) => (
-                            <tr key={`${operation.operation}:${operation.model}`} className="border-b last:border-0">
+                            <tr key={`${operation.provider}:${operation.operation}:${operation.model}`} className="border-b last:border-0">
                               <td className="py-3 px-4">{operation.label}</td>
-                              <td className="py-3 px-4 text-xs">{operation.model}</td>
+                              <td className="py-3 px-4 text-xs">{operation.provider}/{operation.model}</td>
                               <td className="py-3 px-4 text-right">{number.format(operation.confirmedEvents)}</td>
                               <td className="py-3 px-4 text-right">{number.format(operation.inputTokens)}</td>
                               <td className="py-3 px-4 text-right">{number.format(operation.outputTokens)}</td>

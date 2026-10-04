@@ -25,6 +25,7 @@ export {
 export type FlipAiUsageOperation = {
   operation: string;
   label: string;
+  provider: string;
   model: string;
   events: number;
   confirmedEvents: number;
@@ -38,7 +39,7 @@ export type FlipAiUsageOperation = {
   units: number;
   estimatedCostNanoUsd: number;
   costCoverage: OpenAiCostCoverage;
-  costReason: 'realtime_not_reconciled' | 'unknown_model' | null;
+  costReason: 'realtime_not_reconciled' | 'unknown_model' | 'non_openai_provider' | null;
 };
 
 export type FlipAiUsageDashboard = {
@@ -75,6 +76,16 @@ export type FlipAiUsageDashboard = {
     fullyPricedOperations: number;
     partiallyPricedOperations: number;
     unpricedOperations: number;
+  };
+  optimization: {
+    jevConfirmedDecisions: number;
+    jevInputTokens: number;
+    jevOutputTokens: number;
+    optimizedResponses: number;
+    harnessCandidateTokens: number;
+    harnessSelectedTokens: number;
+    harnessAvoidedTokens: number;
+    harnessSavingsPercent: number | null;
   };
   operations: FlipAiUsageOperation[];
   agents: Array<{
@@ -114,10 +125,12 @@ const OPERATION_LABELS: Record<string, string> = {
   chat_response: 'Conversa por texto',
   web_search: 'Busca externa',
   realtime_session: 'Sessão de voz emitida',
+  conversation_decision: 'Classificação JEV',
 };
 
 type AggregateRow = {
   operation: string;
+  provider: string;
   model: string;
   events: bigint | number | string;
   confirmedEvents: bigint | number | string;
@@ -132,6 +145,16 @@ type AggregateRow = {
   billedCostNanoUsd: bigint | number | string;
   chargedCredits: bigint | number | string;
   billedOperations: bigint | number | string;
+};
+
+type OptimizationRow = {
+  jevConfirmedDecisions: bigint | number | string;
+  jevInputTokens: bigint | number | string;
+  jevOutputTokens: bigint | number | string;
+  optimizedResponses: bigint | number | string;
+  harnessCandidateTokens: bigint | number | string;
+  harnessSelectedTokens: bigint | number | string;
+  harnessAvoidedTokens: bigint | number | string;
 };
 
 type AgentRow = {
@@ -218,9 +241,9 @@ async function buildFlipAiUsageDashboardForTenant(
   return prisma.$transaction(async (db) => {
     await ensureUsageSchema(db);
 
-    const [aggregateRows, agentRows, recentRows] = await Promise.all([
+    const [aggregateRows, agentRows, recentRows, optimizationRows] = await Promise.all([
       db.$queryRaw<AggregateRow[]>(Prisma.sql`
-        SELECT operation, model,
+        SELECT operation, provider, model,
           COUNT(*) AS events,
           COUNT(*) FILTER (WHERE status = 'confirmed') AS "confirmedEvents",
           COUNT(*) FILTER (WHERE status = 'ambiguous') AS "ambiguousEvents",
@@ -238,8 +261,8 @@ async function buildFlipAiUsageDashboardForTenant(
           COUNT(*) FILTER (WHERE status = 'confirmed' AND metadata->'billing'->>'status' = 'charged') AS "billedOperations"
         FROM flip_ai_usage_events
         WHERE tenant_id = ${tenantId} AND created_at >= ${range.from} AND created_at < ${range.toExclusive}
-        GROUP BY operation, model
-        ORDER BY operation, model
+        GROUP BY operation, provider, model
+        ORDER BY operation, provider, model
       `),
       db.$queryRaw<AgentRow[]>(Prisma.sql`
         SELECT e.agent_id AS "agentId", a.name AS "agentName",
@@ -269,22 +292,68 @@ async function buildFlipAiUsageDashboardForTenant(
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT 50
       `),
+      db.$queryRaw<OptimizationRow[]>(Prisma.sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ) AS "jevConfirmedDecisions",
+          COALESCE(SUM(input_tokens) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ), 0) AS "jevInputTokens",
+          COALESCE(SUM(output_tokens) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ), 0) AS "jevOutputTokens",
+          COUNT(*) FILTER (
+            WHERE operation = 'chat_response'
+              AND metadata->>'decisionEngine' = 'jev'
+              AND metadata->'harnessMetrics' IS NOT NULL
+          ) AS "optimizedResponses",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'candidateTokens' ~ '^[0-9]+$'
+              THEN (metadata->'harnessMetrics'->>'candidateTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessCandidateTokens",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'selectedTokens' ~ '^[0-9]+$'
+              THEN (metadata->'harnessMetrics'->>'selectedTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessSelectedTokens",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'avoidedTokens' ~ '^[0-9]+$'
+              THEN (metadata->'harnessMetrics'->>'avoidedTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessAvoidedTokens"
+        FROM flip_ai_usage_events
+        WHERE tenant_id = ${tenantId}
+          AND created_at >= ${range.from}
+          AND created_at < ${range.toExclusive}
+      `),
     ]);
 
     const operations = aggregateRows.map((row): FlipAiUsageOperation => {
       const confirmedEvents = count(row.confirmedEvents);
       const inputTokens = count(row.inputTokens);
       const outputTokens = count(row.outputTokens);
-      const cost = estimateOpenAiUsageCost({
-        operation: row.operation,
-        model: row.model,
-        confirmedEvents,
-        inputTokens,
-        outputTokens,
-      });
+      const cost = row.provider === 'openai'
+        ? estimateOpenAiUsageCost({
+          operation: row.operation,
+          model: row.model,
+          confirmedEvents,
+          inputTokens,
+          outputTokens,
+        })
+        : {
+          costNanoUsd: 0,
+          coverage: 'none' as const,
+          reason: 'non_openai_provider' as const,
+        };
       return {
         operation: row.operation,
         label: labelFlipAiUsageOperation(row.operation),
+        provider: row.provider,
         model: row.model,
         events: count(row.events),
         confirmedEvents,
@@ -354,6 +423,24 @@ async function buildFlipAiUsageDashboardForTenant(
         partiallyPricedOperations: pricedCount('partial'),
         unpricedOperations: pricedCount('none'),
       },
+      optimization: (() => {
+        const row = optimizationRows[0];
+        const candidateTokens = count(row?.harnessCandidateTokens);
+        const selectedTokens = count(row?.harnessSelectedTokens);
+        const avoidedTokens = count(row?.harnessAvoidedTokens);
+        return {
+          jevConfirmedDecisions: count(row?.jevConfirmedDecisions),
+          jevInputTokens: count(row?.jevInputTokens),
+          jevOutputTokens: count(row?.jevOutputTokens),
+          optimizedResponses: count(row?.optimizedResponses),
+          harnessCandidateTokens: candidateTokens,
+          harnessSelectedTokens: selectedTokens,
+          harnessAvoidedTokens: avoidedTokens,
+          harnessSavingsPercent: candidateTokens > 0
+            ? Math.round((avoidedTokens / candidateTokens) * 10_000) / 100
+            : null,
+        };
+      })(),
       operations,
       agents: agentRows.map((row) => ({
         agentId: row.agentId,
@@ -367,7 +454,7 @@ async function buildFlipAiUsageDashboardForTenant(
         const inputTokens = count(row.inputTokens);
         const outputTokens = count(row.outputTokens);
         const billing = readBillingMetadata(row.metadata);
-        const estimated = row.status === 'confirmed'
+        const estimated = row.status === 'confirmed' && row.provider === 'openai'
           ? estimateOpenAiUsageCost({
             operation: row.operation,
             model: row.model,

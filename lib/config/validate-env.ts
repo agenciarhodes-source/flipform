@@ -1,3 +1,5 @@
+import { parseJevTenantIds } from '@/lib/flip-ai/decision-engine';
+
 export type EnvCheck = {
   key: string;
   ok: boolean;
@@ -77,6 +79,34 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   const stripeRestrictedKey = String(env.STRIPE_RESTRICTED_KEY || '').trim();
   const stripeWebhookSecret = String(env.STRIPE_WEBHOOK_SECRET || '').trim();
   const stripeLiveAllowed = String(env.STRIPE_LIVE_PAYMENTS_ALLOWED || '').trim().toLowerCase() === 'true';
+
+  const jevEnabled = String(env.FLIP_AI_JEV_ENABLED || '').trim().toLowerCase() === 'true';
+  const jevTenants = parseJevTenantIds(env.FLIP_AI_JEV_TENANT_IDS);
+  const harnessBudgetRaw = String(env.FLIP_AI_HARNESS_TOKEN_BUDGET || '').trim();
+  const harnessBudget = harnessBudgetRaw ? Number.parseInt(harnessBudgetRaw, 10) : 1_200;
+
+  if (jevEnabled) {
+    addCheck(
+      'TYPESAFE_API_KEY',
+      hasValue(env.TYPESAFE_API_KEY),
+      'TypeSafe JEV API key configured',
+      'FLIP_AI_JEV_ENABLED=true requires TYPESAFE_API_KEY.',
+    );
+    addCheck(
+      'FLIP_AI_JEV_TENANT_IDS',
+      jevTenants.configured && jevTenants.valid && jevTenants.tenantIds.length > 0,
+      'JEV tenant allowlist configured',
+      'FLIP_AI_JEV_ENABLED=true requires a valid non-empty FLIP_AI_JEV_TENANT_IDS allowlist.',
+    );
+  }
+  if (harnessBudgetRaw) {
+    addCheck(
+      'FLIP_AI_HARNESS_TOKEN_BUDGET',
+      Number.isSafeInteger(harnessBudget) && harnessBudget >= 400 && harnessBudget <= 3_000,
+      'Flip AI harness token budget accepted',
+      'FLIP_AI_HARNESS_TOKEN_BUDGET must be an integer between 400 and 3000.',
+    );
+  }
 
   if (stripeEnabled) {
     const stripeModeValid = stripeMode === 'test' || stripeMode === 'live';
@@ -194,6 +224,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
       'INTERNAL_JOB_SECRET',
       ...(stripeEnabled ? ['STRIPE_RESTRICTED_KEY'] as const : []),
       ...(stripeEnabled && stripeWebhookSecret ? ['STRIPE_WEBHOOK_SECRET'] as const : []),
+      ...(jevEnabled ? ['TYPESAFE_API_KEY'] as const : []),
     ] as const;
 
     for (const key of sensitiveKeys) {
@@ -218,6 +249,12 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     asaas: hasValue(env.ASAAS_BASE_URL) && hasValue(env.ASAAS_API_KEY) && hasValue(env.ASAAS_WEBHOOK_TOKEN),
     email: hasValue(env.EMAIL_PROVIDER) && hasValue(env.EMAIL_FROM) && hasValue(env.EMAIL_REPLY_TO),
     internalJobs: hasValue(env.CRON_SECRET) && hasValue(env.INTERNAL_JOB_SECRET),
+    jev: !jevEnabled || (
+      hasValue(env.TYPESAFE_API_KEY)
+      && jevTenants.configured
+      && jevTenants.valid
+      && jevTenants.tenantIds.length > 0
+    ),
     stripe: !stripeEnabled || (
       (
         (stripeMode === 'test' && stripeRestrictedKey.startsWith('rk_test_') && !stripeLiveAllowed)

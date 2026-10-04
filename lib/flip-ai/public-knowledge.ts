@@ -9,6 +9,7 @@ export type PublicKnowledgeHit = {
   heading: string | null;
   content: string;
   score: number;
+  tokenEstimate?: number;
 };
 
 export async function searchPublicKnowledge(input: {
@@ -25,7 +26,7 @@ export async function searchPublicKnowledge(input: {
   const take = Math.max(1, Math.min(5, Math.trunc(input.limit || 5)));
   const vector = `[${input.embedding.join(',')}]`;
   const rows = await prisma.$queryRaw<PublicKnowledgeHit[]>(Prisma.sql`
-    SELECT c.id, c.heading, c.content,
+    SELECT c.id, c.heading, c.content, c.token_estimate AS "tokenEstimate",
       1 - (c.embedding <=> ${vector}::vector) AS score
     FROM flip_ai_knowledge_chunks c
     JOIN flip_ai_knowledge_indexes i
@@ -50,7 +51,8 @@ export async function hydratePublicKnowledge(input: {
   const ids = [...new Set(input.ids)].slice(0, 5);
   if (!ids.length) return [];
   const rows = await prisma.$queryRaw<Array<PublicKnowledgeHit & { ordinal: number }>>(Prisma.sql`
-    SELECT c.id, c.heading, c.content, 1::double precision AS score, c.ordinal
+    SELECT c.id, c.heading, c.content, c.token_estimate AS "tokenEstimate",
+      1::double precision AS score, c.ordinal
     FROM flip_ai_knowledge_chunks c
     JOIN flip_ai_knowledge_indexes i
       ON i.id = c.index_id AND i.tenant_id = c.tenant_id
@@ -63,6 +65,12 @@ export async function hydratePublicKnowledge(input: {
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.flatMap((id) => {
     const row = byId.get(id);
-    return row ? [{ id: row.id, heading: row.heading, content: row.content, score: row.score }] : [];
+    return row ? [{
+      id: row.id,
+      heading: row.heading,
+      content: row.content,
+      score: row.score,
+      tokenEstimate: row.tokenEstimate,
+    }] : [];
   });
 }
