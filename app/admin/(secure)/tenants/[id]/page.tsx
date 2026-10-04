@@ -14,7 +14,8 @@ import { StatusBadge } from '@/components/admin/status-badge';
 
 const number = new Intl.NumberFormat('pt-BR');
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 6 });
+const formatNanoUsd = (value: number) => usd.format(Math.max(0, Number(value || 0)) / 1_000_000_000);
 
 const CREDIT_SOURCE_LABELS: Record<string, string> = {
   platform_admin_grant: 'Crédito concedido pelo Super Admin',
@@ -41,6 +42,9 @@ export default function TenantDetailPage() {
   const [savingUserRole, setSavingUserRole] = useState<string | null>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [loadingWallet, setLoadingWallet] = useState(true);
+  const [usage, setUsage] = useState<any>(null);
+  const [loadingUsage, setLoadingUsage] = useState(true);
+  const [usageRange, setUsageRange] = useState('30');
   const [grantingCredits, setGrantingCredits] = useState(false);
   const [creditGrant, setCreditGrant] = useState({
     amountCredits: '',
@@ -87,6 +91,21 @@ export default function TenantDetailPage() {
     }
   };
 
+  const loadUsage = async (range = usageRange) => {
+    setLoadingUsage(true);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/flip-ai-usage?range=${encodeURIComponent(range)}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível carregar o consumo de IA.');
+      setUsage(data.usage);
+    } catch (e: any) {
+      setUsage(null);
+      toast.error(e.message);
+    } finally {
+      setLoadingUsage(false);
+    }
+  };
+
   const loadTopUps = async () => {
     setLoadingTopUps(true);
     try {
@@ -107,6 +126,7 @@ export default function TenantDetailPage() {
   useEffect(() => {
     load();
     loadWallet();
+    loadUsage('30');
     loadTopUps();
     fetch('/api/admin/plans').then((r) => r.json()).then((d) => setPlans(d.plans || []));
     /* eslint-disable-next-line */
@@ -355,6 +375,7 @@ export default function TenantDetailPage() {
           <TabsTrigger value="plan">Plano & Cobrança</TabsTrigger>
           <TabsTrigger value="users">Usuários ({tenant.tenantUsers.length})</TabsTrigger>
           <TabsTrigger value="flip-ai-wallet">Carteira Flip AI</TabsTrigger>
+          <TabsTrigger value="flip-ai-usage">Consumo IA</TabsTrigger>
           <TabsTrigger value="history">Histórico de status</TabsTrigger>
           <TabsTrigger value="notes">Notas internas</TabsTrigger>
         </TabsList>
@@ -727,6 +748,160 @@ export default function TenantDetailPage() {
                                 {entry.entryType === 'debit' ? '−' : '+'}{number.format(entry.amountCredits)}
                               </td>
                               <td className="py-2 px-4 text-right">{number.format(entry.balanceAfterCredits)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+              </>
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent value="flip-ai-usage">
+          <div className="space-y-4">
+            <Card className="p-4">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h3 className="font-medium">Ledger de consumo da OpenAI</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Leitura isolada deste tenant: tokens, modelo, custo de API calculado e créditos Flip AI debitados.
+                  </p>
+                </div>
+                <div className="min-w-[160px]">
+                  <label className="text-xs text-muted-foreground">Período</label>
+                  <Select
+                    value={usageRange}
+                    onValueChange={(value) => {
+                      setUsageRange(value);
+                      loadUsage(value);
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">7 dias</SelectItem>
+                      <SelectItem value="30">30 dias</SelectItem>
+                      <SelectItem value="90">90 dias</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </Card>
+
+            {loadingUsage ? (
+              <Card className="p-8 text-center text-muted-foreground">
+                <Loader2 className="w-5 h-5 inline animate-spin mr-2" />Carregando consumo...
+              </Card>
+            ) : !usage ? (
+              <Card className="p-5 text-sm text-muted-foreground">Não foi possível carregar o consumo deste cliente.</Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <Card className="p-4">
+                    <div className="text-xs text-muted-foreground">Operações confirmadas</div>
+                    <div className="font-heading text-2xl font-bold mt-1">{number.format(usage.totals.confirmedOperations)}</div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-xs text-muted-foreground">Tokens processados</div>
+                    <div className="font-heading text-2xl font-bold mt-1">
+                      {number.format(Number(usage.totals.inputTokens || 0) + Number(usage.totals.outputTokens || 0))}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {number.format(usage.totals.inputTokens)} entrada · {number.format(usage.totals.outputTokens)} saída
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-xs text-muted-foreground">Custo API contabilizado</div>
+                    <div className="font-heading text-2xl font-bold mt-1">{formatNanoUsd(usage.pricing.billedCostNanoUsd)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {number.format(usage.pricing.billedOperations)} operação(ões) liquidadas
+                    </div>
+                  </Card>
+                  <Card className="p-4">
+                    <div className="text-xs text-muted-foreground">Créditos debitados</div>
+                    <div className="font-heading text-2xl font-bold mt-1">{number.format(usage.pricing.chargedCredits)}</div>
+                    <div className="text-xs text-muted-foreground mt-1">no período selecionado</div>
+                  </Card>
+                </div>
+
+                <Card className="p-4 border-blue-200 bg-blue-50/60 text-sm text-blue-950">
+                  O custo contabilizado usa o consumo confirmado de cada chamada e o snapshot de preço registrado na liquidação.
+                  A estimativa técnica do período é {formatNanoUsd(usage.pricing.estimatedCostNanoUsd)}.
+                  Voz em tempo real continua separada até a reconciliação específica de áudio.
+                </Card>
+
+                <Card className="p-0 overflow-hidden">
+                  <div className="p-4 border-b">
+                    <h3 className="font-medium">Consumo por operação e modelo</h3>
+                  </div>
+                  {usage.operations.length === 0 ? (
+                    <div className="p-6 text-sm text-muted-foreground">Nenhuma operação registrada no período.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 border-b">
+                          <tr className="text-xs uppercase text-muted-foreground">
+                            <th className="text-left py-3 px-4">Operação</th>
+                            <th className="text-left py-3 px-4">Modelo</th>
+                            <th className="text-right py-3 px-4">Chamadas</th>
+                            <th className="text-right py-3 px-4">Entrada</th>
+                            <th className="text-right py-3 px-4">Saída</th>
+                            <th className="text-right py-3 px-4">Custo estimado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {usage.operations.map((operation: any) => (
+                            <tr key={`${operation.operation}:${operation.model}`} className="border-b last:border-0">
+                              <td className="py-3 px-4">{operation.label}</td>
+                              <td className="py-3 px-4 text-xs">{operation.model}</td>
+                              <td className="py-3 px-4 text-right">{number.format(operation.confirmedEvents)}</td>
+                              <td className="py-3 px-4 text-right">{number.format(operation.inputTokens)}</td>
+                              <td className="py-3 px-4 text-right">{number.format(operation.outputTokens)}</td>
+                              <td className="py-3 px-4 text-right">{formatNanoUsd(operation.estimatedCostNanoUsd)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </Card>
+
+                <Card className="p-0 overflow-hidden">
+                  <div className="p-4 border-b">
+                    <h3 className="font-medium">Eventos recentes</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Sem conteúdo de mensagens, prompts ou chaves técnicas sensíveis.
+                    </p>
+                  </div>
+                  {usage.recent.length === 0 ? (
+                    <div className="p-6 text-sm text-muted-foreground">Nenhum evento registrado no período.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/40 border-b">
+                          <tr className="text-xs uppercase text-muted-foreground">
+                            <th className="text-left py-3 px-4">Data</th>
+                            <th className="text-left py-3 px-4">Operação</th>
+                            <th className="text-left py-3 px-4">Modelo</th>
+                            <th className="text-right py-3 px-4">Tokens</th>
+                            <th className="text-right py-3 px-4">Custo</th>
+                            <th className="text-right py-3 px-4">Créditos</th>
+                            <th className="text-left py-3 px-4">Liquidação</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {usage.recent.map((event: any) => (
+                            <tr key={event.id} className="border-b last:border-0">
+                              <td className="py-3 px-4 text-xs whitespace-nowrap">{new Date(event.createdAt).toLocaleString('pt-BR')}</td>
+                              <td className="py-3 px-4">{event.operationLabel}</td>
+                              <td className="py-3 px-4 text-xs">{event.provider}/{event.model}</td>
+                              <td className="py-3 px-4 text-right">
+                                {number.format(Number(event.inputTokens || 0) + Number(event.outputTokens || 0))}
+                              </td>
+                              <td className="py-3 px-4 text-right">{formatNanoUsd(event.estimatedCostNanoUsd)}</td>
+                              <td className="py-3 px-4 text-right">{number.format(event.chargedCredits || 0)}</td>
+                              <td className="py-3 px-4 text-xs">{event.billingStatus || event.status}</td>
                             </tr>
                           ))}
                         </tbody>
