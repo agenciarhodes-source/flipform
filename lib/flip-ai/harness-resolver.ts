@@ -114,12 +114,12 @@ export function selectHarnessHits(
 }
 
 export function buildBudgetedHistory(
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  messages: Array<{ id?: string; role: 'user' | 'assistant'; content: string }>,
   charBudget = FLIP_AI_HISTORY_DEFAULT_CHAR_BUDGET,
 ) {
   const budget = Math.max(2_000, Math.min(16_000, Math.trunc(charBudget)));
   const newestFirst = [...messages].reverse();
-  const selected: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  const selected: Array<{ id?: string; role: 'user' | 'assistant'; content: string }> = [];
   let chars = 0;
 
   for (const message of newestFirst) {
@@ -129,7 +129,7 @@ export function buildBudgetedHistory(
     const remaining = budget - chars;
     if (remaining <= 0) break;
     const bounded = content.slice(Math.max(0, content.length - remaining));
-    selected.push({ role: message.role, content: bounded });
+    selected.push({ id: message.id, role: message.role, content: bounded });
     chars += bounded.length;
   }
 
