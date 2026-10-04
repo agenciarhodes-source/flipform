@@ -343,6 +343,29 @@ function storedLeadIdentity(value: unknown) {
   return parsed.success ? parsed.data : null;
 }
 
+async function loadStoredConversationIdentity(input: {
+  tenantId: string;
+  conversationId: string;
+}) {
+  const messages = await prisma.message.findMany({
+    where: {
+      tenantId: input.tenantId,
+      conversationId: input.conversationId,
+      provider: 'flip_ai',
+      channel: 'web',
+      direction: 'outbound',
+    },
+    orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
+    take: 8,
+    select: { metadata: true },
+  });
+  for (const message of messages) {
+    const identity = storedLeadIdentity(metadataOf(message.metadata).leadIdentity);
+    if (identity?.name || identity?.phone) return identity;
+  }
+  return null;
+}
+
 function storedQualification(value: unknown) {
   const parsed = flipAiFinalQualificationSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -768,6 +791,7 @@ export function buildPublicChatInstructions(
   decision?: FlipAiConversationDecision | null,
   inputMode: FlipAiInputMode = 'text',
   memorySnapshot: FlipAiConversationMemorySnapshot | null = null,
+  knownIdentity: { name: string | null; phone: string | null } | null = null,
 ) {
   const style = runtime.style === 'direct' ? 'direta e objetiva'
     : runtime.style === 'professional' ? 'profissional e clara' : 'acolhedora e natural';
@@ -822,7 +846,9 @@ export function buildPublicChatInstructions(
     linkedIdentityVerified
       ? 'O backend confirma que esta conversa já possui nome e telefone validados e um Lead vinculado. Não peça esses dados novamente.'
       : 'O backend ainda não confirma nome e telefone validados para esta conversa.',
-    'Use o histórico inteiro para reconhecer nome e telefone já informados. Se apenas um dos dois estiver disponível, pergunte somente o dado que falta em reply.',
+    knownIdentity?.name ? `Identidade já observada nesta conversa — nome: ${safeReference(knownIdentity.name)}. Não pergunte o nome novamente.` : '',
+    knownIdentity?.phone ? `Identidade já observada nesta conversa — telefone: ${safeReference(knownIdentity.phone)}. Não pergunte o telefone novamente.` : '',
+    'Use a memória compacta, a identidade já observada e o histórico recente juntos. Se apenas nome ou telefone estiver disponível, pergunte somente o dado que falta em reply.',
     'Depois de pedir contato, não acrescente outra pergunta de diagnóstico na mesma resposta. Se a pessoa recusar, respeite e continue apenas com o essencial; não pressione nem repita o pedido imediatamente.',
     'qualification deve ser null enquanto ainda faltarem informações relevantes ou a conversa estiver em andamento.',
     'Finalize qualification somente quando houver evidência suficiente, quando a pessoa encerrar o assunto ou quando for necessário entregar para atendimento humano.',
