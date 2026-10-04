@@ -64,9 +64,10 @@ export function buildHarnessRetrievalQueries(input: {
   };
 }
 
-function estimatedTokens(candidate: HarnessCandidate) {
-  if (Number.isSafeInteger(candidate.tokenEstimate) && candidate.tokenEstimate > 0) {
-    return candidate.tokenEstimate;
+function estimatedTokens(candidate: HarnessCandidate): number {
+  const tokenEstimate = candidate.tokenEstimate;
+  if (typeof tokenEstimate === 'number' && Number.isSafeInteger(tokenEstimate) && tokenEstimate > 0) {
+    return tokenEstimate;
   }
   return Math.max(1, Math.ceil(candidate.content.length / 4));
 }
@@ -92,9 +93,10 @@ export function selectHarnessHits(
     if (selected.length >= 5 || selectedTokens >= budget) break;
   }
 
-  if (!selected.length && unique.length) {
-    selected.push(unique[0]);
-    selectedTokens = Math.min(estimatedTokens(unique[0]), budget);
+  const firstCandidate = unique[0];
+  if (!selected.length && firstCandidate) {
+    selected.push(firstCandidate);
+    selectedTokens = Math.min(estimatedTokens(firstCandidate), budget);
   }
 
   return {
