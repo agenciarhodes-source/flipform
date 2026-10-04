@@ -45,7 +45,9 @@ def test_pr342_lead_api_exposes_snapshot_after_rbac_check():
     api = read("app/api/leads/[id]/route.ts")
     assert "assertCanAccessLead(session, lead)" in api
     assert "getFlipAiLeadIntelligence" in api
-    assert api.index("assertCanAccessLead(session, lead)") < api.index("getFlipAiLeadIntelligence({ tenantId: session.tenantId")
+    assert api.index("assertCanAccessLead(session, lead)") < api.index("const flipAiLiveIntelligence = await getFlipAiLeadIntelligence({")
+    assert "tenantId: session.tenantId" in api
+    assert "leadId: lead.id" in api
     assert "flipAiLiveIntelligence" in api
 
 

@@ -6,6 +6,7 @@ import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
+import { getFlipAiHumanHandoff } from '@/lib/flip-ai/human-handoff';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const qualificationSchemaReady = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -54,7 +55,11 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   try { assertCanAccessLead(session, lead); } catch { return NextResponse.json({ error: 'Você não tem permissão para acessar este lead.' }, { status: 403 }); }
-  const [activeAgents, saleValueAuditLogs, flipAiLiveIntelligence] = await Promise.all([
+  const flipAiLiveIntelligence = await getFlipAiLeadIntelligence({
+    tenantId: session.tenantId,
+    leadId: lead.id,
+  }).catch(() => null);
+  const [activeAgents, saleValueAuditLogs, flipAiHumanHandoff] = await Promise.all([
     ['owner', 'admin', 'manager'].includes(session.role)
       ? prisma.tenantUser.findMany({
         where: { tenantId: session.tenantId, role: 'agent', status: 'active' },
@@ -67,11 +72,16 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
       orderBy: { createdAt: 'asc' },
       select: { id: true, userId: true, metadata: true, createdAt: true },
     }),
-    getFlipAiLeadIntelligence({ tenantId: session.tenantId, leadId: lead.id }).catch(() => null),
+    getFlipAiHumanHandoff({
+      tenantId: session.tenantId,
+      leadId: lead.id,
+      intelligence: flipAiLiveIntelligence,
+    }).catch(() => null),
   ]);
   return NextResponse.json({ lead: { ...lead,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
+    flipAiHumanHandoff,
     saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 

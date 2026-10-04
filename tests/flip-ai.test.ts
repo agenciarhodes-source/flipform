@@ -30,6 +30,7 @@ import {
   buildFlipAiLeadIntelligenceSnapshot,
   calculateFlipAiLeadScore,
 } from '../lib/flip-ai/lead-intelligence-policy';
+import { buildFlipAiHumanHandoffSnapshot } from '../lib/flip-ai/human-handoff-policy';
 import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
@@ -1425,4 +1426,113 @@ test('PR 342 live intelligence exposes deterministic score trend across JEV deci
   assert.ok(snapshot.scoreDelta != null && snapshot.scoreDelta > 0);
   assert.equal(snapshot.classification, 'qualified');
   assert.equal(snapshot.nextAction, 'schedule');
+});
+
+
+test('PR 343 handoff prefers the existing qualification summary without another model call', () => {
+  const intelligence = {
+    source: 'jev' as const,
+    policyVersion: 'test',
+    score: 84,
+    classification: 'qualified' as const,
+    temperature: 'hot' as const,
+    fitScore: 82,
+    intentScore: 90,
+    urgencyScore: 70,
+    readinessScore: 80,
+    confidenceScore: 90,
+    intent: 'purchase' as const,
+    objection: 'price' as const,
+    journeyStage: 'decision' as const,
+    nextAction: 'handoff' as const,
+    needsHuman: true,
+    confidence: 0.9,
+    scoreDelta: 8,
+    updatedAt: '2026-10-04T21:00:00.000Z',
+    conversationId: 'conversation-1',
+    usageEventId: 'usage-1',
+  };
+  const result = buildFlipAiHumanHandoffSnapshot({
+    leadName: 'Maria',
+    hasPhone: true,
+    hasEmail: false,
+    answers: [{ questionLabel: 'Cidade', answer: 'Parnaíba' }],
+    qualification: {
+      summary: 'Maria quer avançar e apresentou objeção de preço.',
+      reasons: ['Perfil aderente.', 'Intenção alta.'],
+      nextAction: 'Atendimento humano para fechamento.',
+    },
+    stateSummary: 'Resumo antigo.',
+    intelligence,
+    conversationId: 'conversation-1',
+    updatedAt: new Date('2026-10-04T21:10:00.000Z'),
+  });
+  assert.equal(result.summarySource, 'qualification');
+  assert.equal(result.summary, 'Maria quer avançar e apresentou objeção de preço.');
+  assert.equal(result.priority, 'high');
+  assert.equal(result.recommended, true);
+  assert.match(result.resumeGuidance, /evite repetir perguntas já respondidas/);
+  assert.match(result.resumeGuidance, /objeção de preço/);
+  assert.ok(result.knownFacts.includes('Telefone já capturado.'));
+  assert.ok(result.knownFacts.includes('Cidade: Parnaíba'));
+});
+
+test('PR 343 handoff reuses conversation-state summary before deterministic fallback', () => {
+  const result = buildFlipAiHumanHandoffSnapshot({
+    leadName: 'João',
+    hasPhone: true,
+    hasEmail: false,
+    answers: [],
+    qualification: null,
+    stateSummary: 'João explicou sua necessidade e ainda está em qualificação.',
+    intelligence: null,
+    conversationId: 'conversation-2',
+    updatedAt: new Date('2026-10-04T21:15:00.000Z'),
+  });
+  assert.equal(result.summarySource, 'conversation_state');
+  assert.equal(result.summary, 'João explicou sua necessidade e ainda está em qualificação.');
+  assert.equal(result.recommended, false);
+  assert.equal(result.priority, 'low');
+});
+
+test('PR 343 handoff has a deterministic fallback when no semantic summary exists', () => {
+  const intelligence = {
+    source: 'jev' as const,
+    policyVersion: 'test',
+    score: 58,
+    classification: 'nurture' as const,
+    temperature: 'warm' as const,
+    fitScore: 65,
+    intentScore: 55,
+    urgencyScore: 40,
+    readinessScore: 50,
+    confidenceScore: 80,
+    intent: 'objection' as const,
+    objection: 'trust' as const,
+    journeyStage: 'consideration' as const,
+    nextAction: 'handle_objection' as const,
+    needsHuman: false,
+    confidence: 0.8,
+    scoreDelta: null,
+    updatedAt: '2026-10-04T21:00:00.000Z',
+    conversationId: 'conversation-3',
+    usageEventId: 'usage-3',
+  };
+  const result = buildFlipAiHumanHandoffSnapshot({
+    leadName: 'Carlos',
+    hasPhone: true,
+    hasEmail: true,
+    answers: [],
+    qualification: null,
+    stateSummary: null,
+    intelligence,
+    conversationId: 'conversation-3',
+    updatedAt: new Date('2026-10-04T21:20:00.000Z'),
+  });
+  assert.equal(result.summarySource, 'deterministic');
+  assert.match(result.summary, /score 58\/100/);
+  assert.match(result.summary, /confiança/);
+  assert.equal(result.priority, 'normal');
+  assert.equal(result.recommended, false);
+  assert.match(result.nextAction, /Tratar a objeção atual/);
 });

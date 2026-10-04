@@ -66,6 +66,12 @@ const temperatureLabels: Record<string, string> = {
   cold: 'Frio',
 };
 
+const handoffPriorityLabels: Record<string, string> = {
+  high: 'Prioridade alta',
+  normal: 'Prioridade normal',
+  low: 'Prioridade baixa',
+};
+
 export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId: string; stages: Stage[]; onClose: () => void; onChange: () => void }) {
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -231,7 +237,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           <TabsList className="my-4 h-auto flex-wrap">
             <TabsTrigger value="info">Dados</TabsTrigger>
             <TabsTrigger value="answers">Respostas</TabsTrigger>
-            {(lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0) && (
+            {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0) && (
               <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
             )}
             <TabsTrigger value="history">Histórico</TabsTrigger>
@@ -295,6 +301,72 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </TabsContent>
 
           <TabsContent value="flip-ai" className="pb-6 space-y-4">
+            {lead.flipAiHumanHandoff && (
+              <section className="space-y-4 rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-emerald-700" />
+                      <h3 className="font-heading text-sm font-semibold">Resumo para atendimento</h3>
+                      <Badge variant="outline">
+                        {handoffPriorityLabels[lead.flipAiHumanHandoff.priority] || lead.flipAiHumanHandoff.priority}
+                      </Badge>
+                      {lead.flipAiHumanHandoff.recommended && (
+                        <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
+                          Encaminhamento recomendado
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Atualizado em {formatDateTime(lead.flipAiHumanHandoff.updatedAt)} • sem nova chamada de IA
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo executivo</div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{lead.flipAiHumanHandoff.summary}</p>
+                </div>
+
+                <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Como retomar</div>
+                  <p className="mt-1 text-sm font-medium">{lead.flipAiHumanHandoff.resumeGuidance}</p>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informações já disponíveis</div>
+                    {lead.flipAiHumanHandoff.knownFacts?.length ? (
+                      <ul className="mt-2 list-disc space-y-1 pl-5">
+                        {lead.flipAiHumanHandoff.knownFacts.map((fact: string, index: number) => <li key={index}>{fact}</li>)}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-muted-foreground">Ainda não há informações estruturadas suficientes.</p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Encaminhamento</div>
+                    <p className="mt-2"><strong>Motivo:</strong> {lead.flipAiHumanHandoff.reason}</p>
+                    <p className="mt-2"><strong>Próxima ação:</strong> {lead.flipAiHumanHandoff.nextAction}</p>
+                  </div>
+                </div>
+
+                {lead.flipAiHumanHandoff.reasons?.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sinais relevantes</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                      {lead.flipAiHumanHandoff.reasons.map((reason: string, index: number) => <li key={index}>{reason}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="rounded-lg border border-emerald-200 bg-white p-3 text-xs text-muted-foreground">
+                  Este resumo reaproveita o estado da conversa, decisões JEV e qualificação já existentes.
+                  Ele não move o lead, não atribui vendedor e não envia mensagem automaticamente.
+                </div>
+              </section>
+            )}
+
             {lead.flipAiLiveIntelligence && (
               <section className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -338,7 +410,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Intenção</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.intentScore}</div>
-                    <div className="text-xs text-muted-foreground">peso 25%</div>
+                    <div className="text-xs text-muted-foreground">peso 30%</div>
                   </div>
                 </div>
 
