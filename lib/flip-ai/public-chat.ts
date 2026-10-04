@@ -1036,7 +1036,7 @@ export async function buildPublicChatContext(
     hits: currentQueryHits,
   }).catch(() => null);
 
-  const [state, history, identity] = await Promise.all([
+  const [state, history, identity, storedIdentity] = await Promise.all([
     prisma.flipAiConversationState.findFirst({
       where: { tenantId: turn.tenantId, agentId: turn.agentId, conversationId: turn.conversationId },
       select: { summary: true, turnCount: true },
@@ -1050,6 +1050,10 @@ export async function buildPublicChatContext(
     prisma.conversation.findFirst({
       where: { tenantId: turn.tenantId, id: turn.conversationId, provider: 'flip_ai', channel: 'web' },
       select: { lead: { select: { name: true, phone: true } } },
+    }),
+    loadStoredConversationIdentity({
+      tenantId: turn.tenantId,
+      conversationId: turn.conversationId,
     }),
   ]);
   const chronological = history.reverse().flatMap((message) => message.text ? [{
@@ -1072,6 +1076,9 @@ export async function buildPublicChatContext(
     content: intelligentHarnessEnabled ? content : content.slice(0, 2_500),
   }));
   const inboundMessages = history.filter((message) => message.direction === 'inbound').length;
+  const knownIdentity = identity?.lead
+    ? { name: identity.lead.name || null, phone: identity.lead.phone || null }
+    : storedIdentity;
   const evidenceMessageIds = budgetedHistory.messages
     .flatMap((message) => message.id ? [message.id] : []);
 
@@ -1106,7 +1113,7 @@ export async function buildPublicChatContext(
         && isValidBrazilianPhone(identity.lead.phone)), external, entryContext, {
           completedTurns: state?.turnCount || 0,
           inboundMessages,
-        }, decision, turn.inputMode, memorySnapshot),
+        }, decision, turn.inputMode, memorySnapshot, knownIdentity),
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],
