@@ -768,7 +768,9 @@ async function buildJevDecisionState(
   return {
     latestMessage: sanitizeDecisionStateText(turn.text, 1_200),
     inputMode: turn.inputMode,
-    compactMemory: memorySnapshot ? conversationMemoryPrompt(memorySnapshot) : null,
+    compactMemory: memorySnapshot
+      ? sanitizeDecisionStateText(conversationMemoryPrompt(memorySnapshot), 1_600)
+      : null,
     conversationSummary: state?.summary ? sanitizeDecisionStateText(state.summary, 1_200) : null,
     completedTurns: state?.turnCount || 0,
     entryContext: entryContext ? sanitizeDecisionStateText(entryContext, 500) : null,
