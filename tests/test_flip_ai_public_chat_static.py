@@ -189,7 +189,8 @@ def test_qualification_retrieval_and_output_are_structured_and_bounded():
     assert "Critérios de qualificação, perfil ideal" in chat
     assert "embeddings.length !== 2" in chat
     assert ".slice(0, 7)" in chat
-    assert "evidenceMessageIds: history.map" in chat
+    assert "const evidenceMessageIds = budgetedHistory.messages" in chat
+    assert "flatMap((message) => message.id ? [message.id] : [])" in chat
     assert "qualificationEvidenceMessageIds" in chat
     assert "Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados" in chat
 
