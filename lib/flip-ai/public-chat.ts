@@ -9,7 +9,10 @@ import { recordInboundMessage, recordOutboundMessage } from '@/lib/conversations
 import { FlipAiError } from './access';
 import { createOpenAiEmbeddings, OpenAiEmbeddingError, type EmbeddingResult } from './openai-embeddings';
 import { OpenAiResponseError, type OpenAiConversationInput, type OpenAiTextResult } from './openai-responses';
-import { getFlipAiConversationExecutionPlan } from './conversation-runtime';
+import {
+  assertFlipAiConversationRuntimeReady,
+  getFlipAiConversationExecutionPlan,
+} from './conversation-runtime';
 import { hydratePublicKnowledge, searchPublicKnowledge, type PublicKnowledgeHit } from './public-knowledge';
 import type { PublicFlipAiRuntime } from './public-agent';
 import {
@@ -667,6 +670,7 @@ export async function buildPublicChatContext(
     });
     currentQueryHits = restoreCurrentQueryKnowledgeHits(hits, metadata.currentQueryKnowledgeHits);
   } else {
+    await assertFlipAiConversationRuntimeReady({ tenantId: turn.tenantId });
     try {
       const embedded = await embedder([
         [turn.text, entryContext ? `Contexto de entrada: ${entryContext}` : ''].filter(Boolean).join('\n'),
