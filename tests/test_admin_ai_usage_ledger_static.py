@@ -42,7 +42,9 @@ def test_admin_usage_exposes_operational_metrics_without_message_content():
     assert "Tokens processados" in page
     assert "Custo API contabilizado" in page
     assert "Créditos debitados" in page
-    assert "prompt" not in route_response_contract(page)
+    usage_tab = route_response_contract(page)
+    for sensitive_binding in ["event.prompt", "event.message", "event.requestkey", "event.metadata"]:
+        assert sensitive_binding not in usage_tab
 
 
 def route_response_contract(page: str) -> str:
