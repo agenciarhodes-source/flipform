@@ -215,6 +215,27 @@ export async function getFlipAiCreditWalletForTenant(
     loadFlipAiCreditWalletForTenant(db, tenantId, limit, range));
 }
 
+export async function getFlipAiCreditBalanceForTenant(
+  tenantId: string,
+): Promise<{ available: boolean; balanceCredits: number }> {
+  const safeTenantId = boundedText(tenantId, 'tenantId', MAX_REFERENCE_LENGTH);
+  return prisma.$transaction(async (db) => {
+    if (!await creditSchemaReady(db)) {
+      return { available: false, balanceCredits: 0 };
+    }
+    const accounts = await db.$queryRaw<CreditAccountRow[]>(Prisma.sql`
+      SELECT id, balance_credits AS "balanceCredits", version
+      FROM flip_ai_credit_accounts
+      WHERE tenant_id = ${safeTenantId}
+      LIMIT 1
+    `);
+    return {
+      available: true,
+      balanceCredits: accounts[0]?.balanceCredits || 0,
+    };
+  });
+}
+
 export async function recordFlipAiCreditEntryWithDb(
   db: Prisma.TransactionClient,
   mutation: ReturnType<typeof validateFlipAiCreditMutation>,
