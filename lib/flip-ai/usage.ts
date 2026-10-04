@@ -87,10 +87,16 @@ export type FlipAiUsageDashboard = {
     agentName: string;
     operation: string;
     operationLabel: string;
+    provider: string;
+    model: string;
     status: string;
     inputTokens: number;
     outputTokens: number;
     units: number;
+    estimatedCostNanoUsd: number;
+    chargedCredits: number;
+    billingStatus: string | null;
+    priceSnapshot: string | null;
     createdAt: string;
   }>;
   metering: {
@@ -135,11 +141,21 @@ type RecentRow = {
   id: string;
   agentName: string | null;
   operation: string;
+  provider: string;
+  model: string;
   status: string;
   inputTokens: number | null;
   outputTokens: number | null;
   units: number;
+  metadata: Prisma.JsonValue | null;
   createdAt: Date;
+};
+
+type BillingMetadata = {
+  status: string | null;
+  amountCredits: number;
+  costNanoUsd: number;
+  priceSnapshot: string | null;
 };
 
 function count(value: bigint | number | string | null | undefined) {
@@ -149,6 +165,25 @@ function count(value: bigint | number | string | null | undefined) {
 
 export function labelFlipAiUsageOperation(operation: string) {
   return OPERATION_LABELS[operation] || 'Outra operação';
+}
+
+function readBillingMetadata(value: Prisma.JsonValue | null): BillingMetadata | null {
+  if (!value || Array.isArray(value) || typeof value !== 'object') return null;
+  const billing = (value as Prisma.JsonObject).billing;
+  if (!billing || Array.isArray(billing) || typeof billing !== 'object') return null;
+  const data = billing as Prisma.JsonObject;
+  const amountCredits = typeof data.amountCredits === 'number' && Number.isSafeInteger(data.amountCredits)
+    ? Math.max(0, data.amountCredits)
+    : 0;
+  const costNanoUsd = typeof data.costNanoUsd === 'number' && Number.isSafeInteger(data.costNanoUsd)
+    ? Math.max(0, data.costNanoUsd)
+    : 0;
+  return {
+    status: typeof data.status === 'string' ? data.status : null,
+    amountCredits,
+    costNanoUsd,
+    priceSnapshot: typeof data.priceSnapshot === 'string' ? data.priceSnapshot : null,
+  };
 }
 
 async function ensureUsageSchema(db: Prisma.TransactionClient) {
@@ -162,8 +197,8 @@ async function ensureUsageSchema(db: Prisma.TransactionClient) {
   }
 }
 
-export async function getFlipAiUsageDashboard(
-  session: SessionPayload,
+async function buildFlipAiUsageDashboardForTenant(
+  tenantId: string,
   periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
   now = new Date(),
 ): Promise<FlipAiUsageDashboard> {
@@ -175,7 +210,6 @@ export async function getFlipAiUsageDashboard(
     : null;
 
   return prisma.$transaction(async (db) => {
-    const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureUsageSchema(db);
 
     const [aggregateRows, agentRows, recentRows] = await Promise.all([
@@ -213,9 +247,9 @@ export async function getFlipAiUsageDashboard(
         ORDER BY COUNT(*) DESC, a.name ASC NULLS LAST
       `),
       db.$queryRaw<RecentRow[]>(Prisma.sql`
-        SELECT e.id, a.name AS "agentName", e.operation, e.status,
+        SELECT e.id, a.name AS "agentName", e.operation, e.provider, e.model, e.status,
           e.input_tokens AS "inputTokens", e.output_tokens AS "outputTokens",
-          e.units, e.created_at AS "createdAt"
+          e.units, e.metadata, e.created_at AS "createdAt"
         FROM flip_ai_usage_events e
         LEFT JOIN flip_ai_agents a
           ON a.id = e.agent_id AND a.tenant_id = e.tenant_id
@@ -309,18 +343,66 @@ export async function getFlipAiUsageDashboard(
         outputTokens: count(row.outputTokens),
         units: count(row.units),
       })),
-      recent: recentRows.map((row) => ({
-        id: row.id,
-        agentName: row.agentName || 'Operação sem atendente',
-        operation: row.operation,
-        operationLabel: labelFlipAiUsageOperation(row.operation),
-        status: row.status,
-        inputTokens: count(row.inputTokens),
-        outputTokens: count(row.outputTokens),
-        units: count(row.units),
-        createdAt: row.createdAt.toISOString(),
-      })),
+      recent: recentRows.map((row) => {
+        const inputTokens = count(row.inputTokens);
+        const outputTokens = count(row.outputTokens);
+        const billing = readBillingMetadata(row.metadata);
+        const estimated = row.status === 'confirmed'
+          ? estimateOpenAiUsageCost({
+            operation: row.operation,
+            model: row.model,
+            confirmedEvents: 1,
+            inputTokens,
+            outputTokens,
+          })
+          : { costNanoUsd: 0 };
+        return {
+          id: row.id,
+          agentName: row.agentName || 'Operação sem atendente',
+          operation: row.operation,
+          operationLabel: labelFlipAiUsageOperation(row.operation),
+          provider: row.provider,
+          model: row.model,
+          status: row.status,
+          inputTokens,
+          outputTokens,
+          units: count(row.units),
+          estimatedCostNanoUsd: billing?.costNanoUsd ?? estimated.costNanoUsd,
+          chargedCredits: billing?.amountCredits ?? 0,
+          billingStatus: billing?.status ?? null,
+          priceSnapshot: billing?.priceSnapshot ?? null,
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
       metering: { realtimeAudioReconciled: false },
     };
   });
+}
+
+
+export async function getFlipAiUsageDashboard(
+  session: SessionPayload,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenantId = await prisma.$transaction(async (db) => {
+    const access = await requireFlipAiAccess(db, session);
+    return access.tenantId;
+  });
+  return buildFlipAiUsageDashboardForTenant(tenantId, periodOrRange, now);
+}
+
+export async function getFlipAiUsageDashboardForTenant(
+  tenantId: string,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    throw new FlipAiError('TENANT_NOT_FOUND', 404, 'Cliente não encontrado.');
+  }
+  return buildFlipAiUsageDashboardForTenant(tenant.id, periodOrRange, now);
 }
