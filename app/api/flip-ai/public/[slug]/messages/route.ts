@@ -186,6 +186,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   try {
     context = await buildPublicChatContext(runtimeContext, turn);
   } catch (error) {
+    if (error instanceof FlipAiConversationRuntimeError) {
+      await failPublicChatTurn(turn, error, 'runtime').catch(() => undefined);
+    }
     return jsonError(error, session.token, session.created);
   }
 
