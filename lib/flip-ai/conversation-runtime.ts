@@ -47,7 +47,16 @@ export async function assertFlipAiConversationRuntimeReady(input: {
     );
   }
 
-  const wallet = await getFlipAiCreditBalanceForTenant(input.tenantId);
+  let wallet: Awaited<ReturnType<typeof getFlipAiCreditBalanceForTenant>>;
+  try {
+    wallet = await getFlipAiCreditBalanceForTenant(input.tenantId);
+  } catch {
+    throw new FlipAiConversationRuntimeError(
+      'FLIP_AI_RUNTIME_BILLING_UNAVAILABLE',
+      503,
+      'A carteira Flip AI está temporariamente indisponível.',
+    );
+  }
   if (!wallet.available) {
     throw new FlipAiConversationRuntimeError(
       'FLIP_AI_RUNTIME_BILLING_UNAVAILABLE',
