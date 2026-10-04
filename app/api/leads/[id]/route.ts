@@ -5,6 +5,7 @@ import { withPermission, canDeleteLead, canEditLead, assertCanAccessLead } from 
 import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const qualificationSchemaReady = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -53,14 +54,24 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
   });
   if (!lead) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
   try { assertCanAccessLead(session, lead); } catch { return NextResponse.json({ error: 'Você não tem permissão para acessar este lead.' }, { status: 403 }); }
-  const activeAgents = ['owner', 'admin', 'manager'].includes(session.role) ? await prisma.tenantUser.findMany({ where: { tenantId: session.tenantId, role: 'agent', status: 'active' }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'asc' } }) : [];
-  const saleValueAuditLogs = await prisma.auditLog.findMany({
-    where: { tenantId: session.tenantId, entityType: 'lead', entityId: lead.id, action: 'lead.sale_value_updated' },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true, userId: true, metadata: true, createdAt: true },
-  });
+  const [activeAgents, saleValueAuditLogs, flipAiLiveIntelligence] = await Promise.all([
+    ['owner', 'admin', 'manager'].includes(session.role)
+      ? prisma.tenantUser.findMany({
+        where: { tenantId: session.tenantId, role: 'agent', status: 'active' },
+        include: { user: { select: { id: true, name: true, email: true } } },
+        orderBy: { createdAt: 'asc' },
+      })
+      : Promise.resolve([]),
+    prisma.auditLog.findMany({
+      where: { tenantId: session.tenantId, entityType: 'lead', entityId: lead.id, action: 'lead.sale_value_updated' },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, userId: true, metadata: true, createdAt: true },
+    }),
+    getFlipAiLeadIntelligence({ tenantId: session.tenantId, leadId: lead.id }).catch(() => null),
+  ]);
   return NextResponse.json({ lead: { ...lead,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
+    flipAiLiveIntelligence,
     saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 
