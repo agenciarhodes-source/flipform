@@ -1121,7 +1121,8 @@ test('PR 326 cost aggregation remains tenant-scoped and migration-free', () => {
   const usage = readFileSync(new URL('../lib/flip-ai/usage.ts', import.meta.url), 'utf8');
   const pricing = readFileSync(new URL('../lib/flip-ai/openai-pricing.ts', import.meta.url), 'utf8');
   assert.match(usage, /WHERE tenant_id = \$\{tenantId\}/);
-  assert.match(usage, /GROUP BY operation, model/);
+  assert.match(usage, /GROUP BY operation, provider, model/);
+  assert.match(usage, /provider === 'openai'/);
   assert.match(usage, /status = 'confirmed'/);
   assert.match(pricing, /realtime_not_reconciled/);
   assert.doesNotMatch(usage + pricing, /\b(?:DROP|TRUNCATE|DELETE\s+FROM|UPDATE\s+flip_ai_credit)/i);
