@@ -37,6 +37,11 @@ import {
   resolveHarnessTokenBudget,
   selectHarnessHits,
 } from './harness-resolver';
+import {
+  buildHumanConversationGuidance,
+  FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
+  type FlipAiInputMode,
+} from './conversation-style';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const QUOTA_WINDOW_MS = 60_000;
@@ -60,6 +65,7 @@ export const publicChatMessageSchema = z.object({
   messageId: z.string().uuid(),
   text: z.string().trim().min(1).max(2_000),
   confirmRetry: z.boolean().optional().default(false),
+  inputMode: z.enum(['text', 'voice']).optional().default('text'),
   attribution: publicAttributionSchema.optional(),
 }).strict();
 
@@ -155,6 +161,8 @@ type StoredChatMetadata = {
   runtimeTask?: string;
   runtimeModality?: string;
   modelRouting?: string;
+  inputMode?: FlipAiInputMode;
+  humanConversationPolicyVersion?: string;
   decisionEngine?: string;
   decisionStatus?: string;
   decisionSnapshot?: FlipAiConversationDecision;
@@ -188,6 +196,7 @@ export type PreparedPublicChatTurn =
       qualificationEvidenceMessageIds: string[];
       sources: ExternalWebSource[];
       attribution: PublicChatInput['attribution'];
+      inputMode: FlipAiInputMode;
     }
   | {
       mode: 'execute';
@@ -198,6 +207,7 @@ export type PreparedPublicChatTurn =
       eventId: string;
       messageId: string;
       text: string;
+      inputMode: FlipAiInputMode;
       attemptToken: string;
       knowledgeIndexId: string;
       outboundExternalId: string;
@@ -413,7 +423,11 @@ export async function preparePublicChatTurn(
   const externalUserId = `agent:${runtime.id}:session:${sessionHash}`;
   const inboundExternalId = `web:${sessionHash}:${input.messageId}`;
   const outboundExternalId = `ai:${sessionHash}:${input.messageId}`;
-  const inputHash = digest(JSON.stringify({ text: input.text, attribution: input.attribution || null }));
+  const inputHash = digest(JSON.stringify({
+    text: input.text,
+    inputMode: input.inputMode,
+    attribution: input.attribution || null,
+  }));
   const requestKey = `chat:${runtime.tenantId}:${runtime.id}:${sessionHash}:${input.messageId}`;
   const executionPlan = getFlipAiConversationExecutionPlan();
 
@@ -428,6 +442,7 @@ export async function preparePublicChatTurn(
     metadata: {
       agentId: runtime.id,
       clientMessageId: input.messageId,
+      inputMode: input.inputMode,
       ...(input.attribution ? { entryAttribution: input.attribution } : {}),
     },
   });
@@ -499,6 +514,9 @@ export async function preparePublicChatTurn(
           ? outboundMetadata.qualificationEvidenceMessageIds.filter((id): id is string => typeof id === 'string').slice(-20)
           : [],
         attribution: entryAttribution,
+        inputMode: typeof outboundMetadata.inputMode === 'string'
+          && (outboundMetadata.inputMode === 'voice' || outboundMetadata.inputMode === 'text')
+          ? outboundMetadata.inputMode : input.inputMode,
       };
     }
     if (existing.status === 'confirmed') {
@@ -534,6 +552,8 @@ export async function preparePublicChatTurn(
       runtimeTask: executionPlan.task,
       runtimeModality: executionPlan.modality,
       modelRouting: executionPlan.modelRouting,
+      inputMode: input.inputMode,
+      humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
     };
     await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
       conversationId: inbound.conversation.id }, async (db) => {
@@ -555,6 +575,7 @@ export async function preparePublicChatTurn(
       eventId: existing.id,
       messageId: input.messageId,
       text: input.text,
+      inputMode: input.inputMode,
       attemptToken,
       knowledgeIndexId: runtime.knowledgeIndexId,
       outboundExternalId,
@@ -586,6 +607,8 @@ export async function preparePublicChatTurn(
           runtimeTask: executionPlan.task,
           runtimeModality: executionPlan.modality,
           modelRouting: executionPlan.modelRouting,
+          inputMode: input.inputMode,
+          humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
         },
       },
     }));
@@ -598,6 +621,7 @@ export async function preparePublicChatTurn(
       eventId: event.id,
       messageId: input.messageId,
       text: input.text,
+      inputMode: input.inputMode,
       attemptToken,
       knowledgeIndexId: runtime.knowledgeIndexId,
       outboundExternalId,
@@ -646,6 +670,7 @@ async function buildJevDecisionState(
 
   return {
     latestMessage: sanitizeDecisionStateText(turn.text, 1_200),
+    inputMode: turn.inputMode,
     conversationSummary: state?.summary ? sanitizeDecisionStateText(state.summary, 1_200) : null,
     completedTurns: state?.turnCount || 0,
     entryContext: entryContext ? sanitizeDecisionStateText(entryContext, 500) : null,
@@ -666,6 +691,7 @@ export function buildPublicChatInstructions(
   entryContext?: string | null,
   progress?: { completedTurns: number; inboundMessages: number },
   decision?: FlipAiConversationDecision | null,
+  inputMode: FlipAiInputMode = 'text',
 ) {
   const style = runtime.style === 'direct' ? 'direta e objetiva'
     : runtime.style === 'professional' ? 'profissional e clara' : 'acolhedora e natural';
@@ -689,6 +715,7 @@ export function buildPublicChatInstructions(
     `Você é ${runtime.name}, assistente virtual de ${runtime.tenantName}.`,
     runtime.description ? `Contexto autorizado do agente: ${safeReference(runtime.description)}` : '',
     `Converse de forma ${style}, em português do Brasil, adaptando-se à linguagem da pessoa.`,
+    ...buildHumanConversationGuidance(inputMode),
     'Ouça antes de perguntar. Faça somente uma pergunta por vez. Não repita o que a pessoa já informou.',
     'Seja concisa: normalmente use no máximo três frases curtas e cerca de 70 palavras. Não faça mini-consultorias, listas ou explicações longas quando uma resposta direta basta.',
     'Não funcione como formulário disfarçado. Entenda primeiro o problema, mas não espere concluir toda a qualificação antes de pedir nome e telefone.',
@@ -837,6 +864,8 @@ export async function buildPublicChatContext(
           units: 1,
           metadata: {
             chatRequestKey: turn.requestKey,
+            inputMode: turn.inputMode,
+            humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
             decisionEngine: decision ? 'jev' : null,
             decisionStatus,
             decisionApplied: retrievalQueries.decisionApplied,
@@ -943,7 +972,7 @@ export async function buildPublicChatContext(
         && isValidBrazilianPhone(identity.lead.phone)), external, entryContext, {
           completedTurns: state?.turnCount || 0,
           inboundMessages,
-        }, decision),
+        }, decision, turn.inputMode),
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],
@@ -972,6 +1001,8 @@ export async function completePublicChatTurn(
       model: result.model,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
+      inputMode: turn.inputMode,
+      humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
       ...(externalSources.length ? { externalSources } : {}),
       ...(decision ? {
         leadIdentity: decision.identity,

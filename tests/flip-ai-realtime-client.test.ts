@@ -32,8 +32,11 @@ test('Realtime transcript parser accepts only completed, identified audio turns'
   assert.deepEqual(parseFlipAiRealtimeServerEvent('{invalid'), { kind: 'ignored' });
 });
 
-test('approved backend reply is spoken out of band with no tools or conversation context', () => {
-  const event = buildApprovedReplySpeechEvent('turn-1', 'Resposta validada pelo backend.');
+test('approved backend reply is spoken out of band with humanized prosody and no business side effects', () => {
+  const event = buildApprovedReplySpeechEvent(
+    'turn-1',
+    '**Entendi.** Vamos seguir com calma. [Fonte externa 1]',
+  );
   assert.equal(event.type, 'response.create');
   assert.equal(event.response.conversation, 'none');
   assert.deepEqual(event.response.input, []);
@@ -43,7 +46,12 @@ test('approved backend reply is spoken out of band with no tools or conversation
     flip_ai_kind: 'approved_reply',
     turn_id: 'turn-1',
   });
-  assert.match(event.response.instructions, /Resposta validada pelo backend\./);
+  assert.match(event.response.instructions, /voz humana, natural, acolhedora e profissional/);
+  assert.match(event.response.instructions, /cadência conversacional/);
+  assert.match(event.response.instructions, /Evite tom de locutor/);
+  assert.match(event.response.instructions, /Entendi\. Vamos seguir com calma\./);
+  assert.doesNotMatch(event.response.instructions, /\[Fonte externa 1\]/);
+  assert.doesNotMatch(event.response.instructions, /\*\*/);
   assert.deepEqual(parseFlipAiRealtimeServerEvent({
     type: 'response.done',
     response: { status: 'completed', metadata: event.response.metadata },

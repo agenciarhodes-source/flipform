@@ -9,6 +9,8 @@ import { FlipAiError } from './access';
 import type { PublicFlipAiRuntime } from './public-agent';
 import { buildPublicChatInstructions } from './public-chat';
 import { settleFlipAiUsageCharge } from './usage-billing';
+import { FLIP_AI_HUMAN_VOICE_POLICY_VERSION } from './conversation-style';
+import { getFlipAiCreditBalanceForTenant } from './credits';
 import {
   createOpenAiRealtimeClientSecret,
   FLIP_AI_REALTIME_MODEL,
@@ -134,6 +136,17 @@ export async function issuePublicRealtimeSession(
       'Crie uma nova solicitação explícita para iniciar outra sessão de voz.');
   }
 
+  // Voice must obey the same commercial hard gate as text before opening a billable provider session.
+  const wallet = await getFlipAiCreditBalanceForTenant(runtime.tenantId).catch(() => null);
+  if (!wallet?.available) {
+    throw new FlipAiError('FLIP_AI_RUNTIME_BILLING_UNAVAILABLE', 503,
+      'A carteira Flip AI está temporariamente indisponível.');
+  }
+  if (wallet.balanceCredits <= 0) {
+    throw new FlipAiError('FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
+      'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.');
+  }
+
   // These server-controlled quotas run before any identity/conversation row or billable secret is created.
   await consumeStableQuotas(runtime, context);
 
@@ -197,7 +210,17 @@ export async function issuePublicRealtimeSession(
   }
 
   const instructions = [
-    buildPublicChatInstructions(runtime, [], state.summary, Boolean(ensured.identity.leadId)),
+    buildPublicChatInstructions(
+      runtime,
+      [],
+      state.summary,
+      Boolean(ensured.identity.leadId),
+      null,
+      null,
+      undefined,
+      null,
+      'voice',
+    ),
     'Esta é uma sessão de voz do mesmo atendente e da mesma conversa do chat por texto.',
     'Não crie Lead, não dispare tracking e não alegue qualificação. Essas decisões pertencem ao backend.',
     'O backend controlará as respostas e fornecerá contexto recuperado antes de cada resposta.',
@@ -247,6 +270,9 @@ export async function issuePublicRealtimeSession(
         knowledgeIndexId: runtime.knowledgeIndexId,
         phase: 'client_secret',
         expiresAt: result.expiresAt,
+        voice: result.voice,
+        transcriptionModel: result.transcriptionModel,
+        voicePolicyVersion: FLIP_AI_HUMAN_VOICE_POLICY_VERSION,
       },
     },
   });

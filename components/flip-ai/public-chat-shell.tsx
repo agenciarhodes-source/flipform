@@ -19,7 +19,12 @@ type ChatMessage = {
   sources?: ChatSource[];
 };
 
-type RetryTurn = { messageId: string; text: string; speakReply: boolean };
+type RetryTurn = {
+  messageId: string;
+  text: string;
+  speakReply: boolean;
+  inputMode: 'text' | 'voice';
+};
 
 function safeColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#2563EB';
@@ -92,7 +97,13 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     voiceRef.current = null;
   }, []);
 
-  async function sendTurn(messageId: string, text: string, confirmRetry: boolean, speakReply = false) {
+  async function sendTurn(
+    messageId: string,
+    text: string,
+    confirmRetry: boolean,
+    speakReply = false,
+    inputMode: 'text' | 'voice' = 'text',
+  ) {
     if (sendingRef.current) return;
     const assistantId = `ai:${messageId}`;
     sendingRef.current = true;
@@ -118,6 +129,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
           messageId,
           text,
           confirmRetry,
+          inputMode,
           attribution: buildPublicAttribution(window.location.href, document.referrer),
         }),
       });
@@ -185,7 +197,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     } catch (failure) {
       setMessages((current) => current.map((message) =>
         message.id === assistantId ? { ...message, streaming: false } : message));
-      setRetryTurn({ messageId, text, speakReply });
+      setRetryTurn({ messageId, text, speakReply, inputMode });
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar sua mensagem.');
     } finally {
       sendingRef.current = false;
@@ -198,7 +210,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     const text = input.trim();
     if (!text || sendingRef.current || voiceActive) return;
     setInput('');
-    void sendTurn(crypto.randomUUID(), text, false);
+    void sendTurn(crypto.randomUUID(), text, false, false, 'text');
   }
 
   async function toggleVoice() {
@@ -217,7 +229,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
       },
       onTranscript: ({ transcript }) => {
         voiceTurnQueueRef.current = voiceTurnQueueRef.current.then(() =>
-          sendTurn(crypto.randomUUID(), transcript, false, true));
+          sendTurn(crypto.randomUUID(), transcript, false, true, 'voice'));
         return voiceTurnQueueRef.current;
       },
     });
@@ -270,7 +282,13 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
               <p>{error}</p>
               {retryTurn && (
                 <button type="button" disabled={sending}
-                  onClick={() => void sendTurn(retryTurn.messageId, retryTurn.text, true, retryTurn.speakReply)}
+                  onClick={() => void sendTurn(
+                    retryTurn.messageId,
+                    retryTurn.text,
+                    true,
+                    retryTurn.speakReply,
+                    retryTurn.inputMode,
+                  )}
                   className="mt-2 inline-flex items-center gap-2 font-medium underline underline-offset-2">
                   <RotateCcw className="h-4 w-4" /> Confirmar nova tentativa
                 </button>

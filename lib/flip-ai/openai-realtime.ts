@@ -6,6 +6,8 @@ export const FLIP_AI_REALTIME_MODEL =
   process.env.OPENAI_FLIP_AI_REALTIME_MODEL?.trim() || 'gpt-realtime-2.1';
 export const FLIP_AI_REALTIME_VOICE =
   process.env.OPENAI_FLIP_AI_REALTIME_VOICE?.trim() || 'marin';
+export const FLIP_AI_REALTIME_TRANSCRIPTION_MODEL =
+  process.env.OPENAI_FLIP_AI_TRANSCRIPTION_MODEL?.trim() || 'gpt-4o-mini-transcribe';
 
 export class OpenAiRealtimeError extends Error {
   constructor(
@@ -21,6 +23,8 @@ export type OpenAiRealtimeClientSecret = {
   value: string;
   expiresAt: number;
   model: string;
+  voice: string;
+  transcriptionModel: string;
 };
 
 type RealtimeOptions = {
@@ -39,6 +43,8 @@ function safetyIdentifier(value: string) {
 function parseClientSecret(
   payload: unknown,
   expectedModel: string,
+  voice: string,
+  transcriptionModel: string,
   now: number,
 ): OpenAiRealtimeClientSecret {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -62,7 +68,7 @@ function parseClientSecret(
     throw new OpenAiRealtimeError('ambiguous', 'OPENAI_REALTIME_INVALID_RESPONSE',
       'A OpenAI não confirmou uma credencial Realtime utilizável.');
   }
-  return { value: secret, expiresAt, model: expectedModel };
+  return { value: secret, expiresAt, model: expectedModel, voice, transcriptionModel };
 }
 
 export async function createOpenAiRealtimeClientSecret(
@@ -77,6 +83,7 @@ export async function createOpenAiRealtimeClientSecret(
 
   const model = options.model?.trim() || FLIP_AI_REALTIME_MODEL;
   const voice = options.voice?.trim() || FLIP_AI_REALTIME_VOICE;
+  const transcriptionModel = FLIP_AI_REALTIME_TRANSCRIPTION_MODEL;
   const fetchImpl = options.fetchImpl ?? fetch;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
@@ -101,7 +108,7 @@ export async function createOpenAiRealtimeClientSecret(
           audio: {
             input: {
               noise_reduction: { type: 'near_field' },
-              transcription: { model: 'gpt-4o-mini-transcribe', language: 'pt' },
+              transcription: { model: transcriptionModel, language: 'pt' },
               turn_detection: {
                 type: 'server_vad',
                 create_response: false,
@@ -134,5 +141,5 @@ export async function createOpenAiRealtimeClientSecret(
     throw new OpenAiRealtimeError('ambiguous', 'OPENAI_REALTIME_INVALID_RESPONSE',
       'A resposta da OpenAI não pôde ser confirmada.');
   }
-  return parseClientSecret(payload, model, (options.now ?? Date.now)());
+  return parseClientSecret(payload, model, voice, transcriptionModel, (options.now ?? Date.now)());
 }
