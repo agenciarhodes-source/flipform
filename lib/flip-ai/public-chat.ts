@@ -8,7 +8,8 @@ import { isValidBrazilianPhone } from '@/lib/leads';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
 import { FlipAiError } from './access';
 import { createOpenAiEmbeddings, OpenAiEmbeddingError, type EmbeddingResult } from './openai-embeddings';
-import { FLIP_AI_TEXT_MODEL, OpenAiResponseError, type OpenAiConversationInput, type OpenAiTextResult } from './openai-responses';
+import { OpenAiResponseError, type OpenAiConversationInput, type OpenAiTextResult } from './openai-responses';
+import { getFlipAiConversationExecutionPlan } from './conversation-runtime';
 import { hydratePublicKnowledge, searchPublicKnowledge, type PublicKnowledgeHit } from './public-knowledge';
 import type { PublicFlipAiRuntime } from './public-agent';
 import {
@@ -134,6 +135,11 @@ type StoredChatMetadata = {
   qualificationModel?: string;
   qualificationEvidenceMessageIds?: string[];
   externalSources?: ExternalWebSource[];
+  runtimeVersion?: string;
+  runtimeProvider?: string;
+  runtimeTask?: string;
+  runtimeModality?: string;
+  modelRouting?: string;
 };
 type Embedder = (inputs: string[]) => Promise<EmbeddingResult>;
 
@@ -376,6 +382,7 @@ export async function preparePublicChatTurn(
   const outboundExternalId = `ai:${sessionHash}:${input.messageId}`;
   const inputHash = digest(JSON.stringify({ text: input.text, attribution: input.attribution || null }));
   const requestKey = `chat:${runtime.tenantId}:${runtime.id}:${sessionHash}:${input.messageId}`;
+  const executionPlan = getFlipAiConversationExecutionPlan();
 
   const inbound = await recordInboundMessage({
     tenantId: runtime.tenantId,
@@ -489,12 +496,17 @@ export async function preparePublicChatTurn(
       attemptToken,
       attemptStartedAt: new Date().toISOString(),
       phase: metadata.knowledgeHitIds ? 'response' : 'retrieval',
+      runtimeVersion: executionPlan.runtimeVersion,
+      runtimeProvider: executionPlan.provider,
+      runtimeTask: executionPlan.task,
+      runtimeModality: executionPlan.modality,
+      modelRouting: executionPlan.modelRouting,
     };
     await withPublicQuota({ tenantId: runtime.tenantId, agentId: runtime.id,
       conversationId: inbound.conversation.id }, async (db) => {
       const claimed = await db.flipAiUsageEvent.updateMany({
         where: { id: existing.id, tenantId: runtime.tenantId, status: { in: ['ambiguous', 'failed'] } },
-        data: { status: 'processing', model: FLIP_AI_TEXT_MODEL, inputTokens: null, outputTokens: null,
+        data: { status: 'processing', model: executionPlan.model, inputTokens: null, outputTokens: null,
           metadata: nextMetadata as Prisma.InputJsonValue },
       });
       if (claimed.count !== 1) {
@@ -527,8 +539,8 @@ export async function preparePublicChatTurn(
         conversationId: inbound.conversation.id,
         requestKey,
         operation: 'chat_response',
-        provider: 'openai',
-        model: FLIP_AI_TEXT_MODEL,
+        provider: executionPlan.provider,
+        model: executionPlan.model,
         status: 'processing',
         units: 1,
         metadata: {
@@ -536,6 +548,11 @@ export async function preparePublicChatTurn(
           attemptToken,
           attemptStartedAt: new Date().toISOString(),
           phase: 'retrieval',
+          runtimeVersion: executionPlan.runtimeVersion,
+          runtimeProvider: executionPlan.provider,
+          runtimeTask: executionPlan.task,
+          runtimeModality: executionPlan.modality,
+          modelRouting: executionPlan.modelRouting,
         },
       },
     }));
@@ -831,8 +848,8 @@ export async function completePublicChatTurn(
 
 export async function failPublicChatTurn(
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
-  error: OpenAiEmbeddingError | OpenAiResponseError,
-  phase: 'retrieval' | 'response',
+  error: { kind: 'definitive' | 'ambiguous'; code: string },
+  phase: 'runtime' | 'retrieval' | 'response',
 ) {
   const status = error.kind === 'ambiguous' ? 'ambiguous' : 'failed';
   await prisma.$executeRaw(Prisma.sql`
