@@ -350,6 +350,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div><strong>Objeção:</strong> {objectionLabels[lead.flipAiLiveIntelligence.objection] || lead.flipAiLiveIntelligence.objection}</div>
                       <div><strong>Jornada:</strong> {journeyLabels[lead.flipAiLiveIntelligence.journeyStage] || lead.flipAiLiveIntelligence.journeyStage}</div>
                       <div><strong>Urgência:</strong> {lead.flipAiLiveIntelligence.urgencyScore}/100</div>
+                      <div><strong>Prontidão:</strong> {lead.flipAiLiveIntelligence.readinessScore}/100</div>
                     </div>
                   </div>
                   <div className="rounded-lg border bg-white p-3 text-sm">
@@ -364,7 +365,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 </div>
 
                 <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
-                  O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 25% + Urgência 15% + Jornada 10% + Confiança 10%.
+                  O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
                   Esta leitura não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
                 </div>
               </section>
