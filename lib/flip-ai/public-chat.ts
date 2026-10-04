@@ -42,6 +42,16 @@ import {
   FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
   type FlipAiInputMode,
 } from './conversation-style';
+import {
+  conversationMemoryPrompt,
+  flipAiConversationMemoryPatchSchema,
+  FLIP_AI_CONVERSATION_MEMORY_VERSION,
+  memoryPatchInstructions,
+  mergeConversationMemory,
+  parseConversationMemorySnapshot,
+  type FlipAiConversationMemorySnapshot,
+} from './conversation-memory-policy';
+import { loadLatestConversationMemory } from './conversation-memory';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const QUOTA_WINDOW_MS = 60_000;
@@ -76,6 +86,7 @@ export const publicChatDecisionSchema = z.object({
     phone: z.string().trim().min(8).max(40).nullable(),
   }).strict(),
   qualification: flipAiFinalQualificationSchema.nullable(),
+  memoryPatch: flipAiConversationMemoryPatchSchema,
 }).strict();
 
 export const PUBLIC_CHAT_DECISION_FORMAT = {
@@ -85,7 +96,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['reply', 'identity', 'qualification'],
+    required: ['reply', 'identity', 'qualification', 'memoryPatch'],
     properties: {
       reply: { type: 'string' },
       identity: {
@@ -120,6 +131,41 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
             },
           },
         ],
+      },
+      memoryPatch: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['facts', 'pending'],
+        properties: {
+          facts: {
+            type: 'array',
+            maxItems: 8,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['action', 'key', 'value'],
+              properties: {
+                action: { type: 'string', enum: ['upsert', 'remove'] },
+                key: { type: 'string', minLength: 2, maxLength: 64 },
+                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 280 }, { type: 'null' }] },
+              },
+            },
+          },
+          pending: {
+            type: 'array',
+            maxItems: 6,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['action', 'key', 'value'],
+              properties: {
+                action: { type: 'string', enum: ['upsert', 'remove'] },
+                key: { type: 'string', minLength: 2, maxLength: 64 },
+                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 280 }, { type: 'null' }] },
+              },
+            },
+          },
+        },
       },
     },
   },
@@ -163,6 +209,15 @@ type StoredChatMetadata = {
   modelRouting?: string;
   inputMode?: FlipAiInputMode;
   humanConversationPolicyVersion?: string;
+  memoryVersion?: string;
+  memorySnapshot?: FlipAiConversationMemorySnapshot;
+  memoryMetrics?: {
+    facts: number;
+    pending: number;
+    promptChars: number;
+    historyAvoidedChars: number;
+    historyAvoidedTokensEstimate: number;
+  };
   decisionEngine?: string;
   decisionStatus?: string;
   decisionSnapshot?: FlipAiConversationDecision;
