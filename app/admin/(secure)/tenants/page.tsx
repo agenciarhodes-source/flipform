@@ -46,8 +46,10 @@ export default function AdminTenantsPage() {
     <div className="p-8 space-y-5">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-bold">Clientes (Tenants)</h1>
-          <p className="text-sm text-muted-foreground">Gerenciar acesso, planos e status.</p>
+          <h1 className="font-heading text-2xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">
+            Uma empresa por linha. Apenas contas com nível Dono da empresa (owner) aparecem como responsáveis; os demais usuários permanecem como acessos internos do cliente.
+          </p>
         </div>
       </div>
       <Card className="p-4">
@@ -56,7 +58,13 @@ export default function AdminTenantsPage() {
             <label className="text-xs text-muted-foreground">Buscar</label>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome ou slug..." className="pl-8" onKeyDown={(e) => e.key === 'Enter' && load()} />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Empresa, slug, dono ou e-mail..."
+                className="pl-8"
+                onKeyDown={(e) => e.key === 'Enter' && load()}
+              />
             </div>
           </div>
           <div className="min-w-[180px]">
@@ -82,16 +90,17 @@ export default function AdminTenantsPage() {
         {loading ? (
           <div className="p-10 text-center text-muted-foreground"><Loader2 className="w-5 h-5 inline animate-spin mr-2" />Carregando...</div>
         ) : tenants.length === 0 ? (
-          <div className="p-10 text-center text-muted-foreground">Nenhum tenant encontrado.</div>
+          <div className="p-10 text-center text-muted-foreground">Nenhum cliente encontrado.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b">
                 <tr className="text-xs uppercase text-muted-foreground">
                   <th className="text-left py-3 px-4">Cliente</th>
+                  <th className="text-left py-3 px-4">Dono da empresa</th>
                   <th className="text-left py-3 px-4">Status</th>
                   <th className="text-left py-3 px-4">Plano</th>
-                  <th className="text-right py-3 px-4">Usuários</th>
+                  <th className="text-right py-3 px-4">Acessos</th>
                   <th className="text-right py-3 px-4">Formulários</th>
                   <th className="text-right py-3 px-4">Leads</th>
                   <th className="text-left py-3 px-4">Último login</th>
@@ -105,6 +114,26 @@ export default function AdminTenantsPage() {
                     <td className="py-3 px-4">
                       <Link href={`/admin/tenants/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
                       <div className="text-xs text-muted-foreground">{t.slug}</div>
+                    </td>
+                    <td className="py-3 px-4 min-w-[220px]">
+                      {t.owners?.length ? (
+                        <div className="space-y-1.5">
+                          {t.owners.map((owner: any) => (
+                            <div key={owner.tenantUserId}>
+                              <div className="font-medium">{owner.name}</div>
+                              <div className="text-xs text-muted-foreground">{owner.email}</div>
+                              {owner.status !== 'active' && (
+                                <div className="text-[11px] text-amber-700">Acesso owner: {owner.status}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="text-sm font-medium text-amber-700">Sem dono cadastrado</div>
+                          <div className="text-xs text-muted-foreground">Revise os acessos deste cliente.</div>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4"><StatusBadge status={t.status} /></td>
                     <td className="py-3 px-4">{t.planName ? <span>{t.planName} <span className="text-xs text-muted-foreground">(R$ {Number(t.planPrice).toFixed(2)})</span></span> : <span className="text-muted-foreground">—</span>}</td>
