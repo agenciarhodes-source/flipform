@@ -27,6 +27,8 @@ const journeyLabels: Record<string, string> = {
   discovery: 'Descoberta',
   consideration: 'Consideração',
   decision: 'Decisão',
+  post_sale: 'Pós-venda',
+  unknown: 'Ainda indefinido',
 };
 
 const intentLabels: Record<string, string> = {
