@@ -11,7 +11,12 @@ import {
   parsePublicChatDecision,
   PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
-import { OpenAiResponseError, streamOpenAiText } from '@/lib/flip-ai/openai-responses';
+import { OpenAiResponseError } from '@/lib/flip-ai/openai-responses';
+import {
+  assertFlipAiConversationRuntimeReady,
+  executeFlipAiConversationResponse,
+  FlipAiConversationRuntimeError,
+} from '@/lib/flip-ai/conversation-runtime';
 import { captureFlipAiLead, type FlipAiIdentityDecision } from '@/lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '@/lib/flip-ai/qualification';
 import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
@@ -168,21 +173,35 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     }), session.token, session.created);
   }
 
+  try {
+    await assertFlipAiConversationRuntimeReady({ tenantId: turn.tenantId });
+  } catch (error) {
+    if (error instanceof FlipAiConversationRuntimeError) {
+      await failPublicChatTurn(turn, error, 'runtime').catch(() => undefined);
+    }
+    return jsonError(error, session.token, session.created);
+  }
+
   let context;
   try {
     context = await buildPublicChatContext(runtimeContext, turn);
   } catch (error) {
+    if (error instanceof FlipAiConversationRuntimeError) {
+      await failPublicChatTurn(turn, error, 'runtime').catch(() => undefined);
+    }
     return jsonError(error, session.token, session.created);
   }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const rawResult = await streamOpenAiText(context, () => undefined, {
-          timeoutMs: 55_000,
+        const rawResult = await executeFlipAiConversationResponse({
+          tenantId: turn.tenantId,
+          conversationId: turn.conversationId,
+          agentId: turn.agentId,
+          context,
           textFormat: PUBLIC_CHAT_DECISION_FORMAT,
-          safetyIdentifier: turn.conversationId,
-          promptCacheKey: turn.agentId,
+          timeoutMs: 55_000,
         });
         const decision = parsePublicChatDecision(rawResult.text);
         const result = { ...rawResult, text: decision.reply };
@@ -217,7 +236,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           replayed: false,
         })));
       } catch (error) {
-        const failure = error instanceof OpenAiResponseError
+        const failure = error instanceof OpenAiResponseError || error instanceof FlipAiConversationRuntimeError
           ? error : new OpenAiResponseError('ambiguous', 'PUBLIC_CHAT_RESULT_AMBIGUOUS');
         try {
           await failPublicChatTurn(turn, failure, 'response');
@@ -227,9 +246,11 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         controller.enqueue(encoder.encode(sseData('error', {
           code: failure.code,
           retryRequiresConfirmation: true,
-          message: failure.kind === 'ambiguous'
-            ? 'A resposta ficou incerta. Confirme antes de tentar novamente.'
-            : 'Não foi possível responder agora. Confirme uma nova tentativa.',
+          message: failure instanceof FlipAiConversationRuntimeError
+            ? failure.message
+            : failure.kind === 'ambiguous'
+              ? 'A resposta ficou incerta. Confirme antes de tentar novamente.'
+              : 'Não foi possível responder agora. Confirme uma nova tentativa.',
         })));
       } finally {
         controller.close();

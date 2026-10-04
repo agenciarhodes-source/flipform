@@ -25,6 +25,7 @@ import {
   OPENAI_PRICE_SNAPSHOT,
 } from '../lib/flip-ai/openai-pricing';
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
+import { getFlipAiConversationExecutionPlan } from '../lib/flip-ai/conversation-runtime';
 import { buildTreasuryReservePolicy, calculateTreasuryCoverage, resolveTreasuryBufferPercent } from '../lib/flip-ai/treasury-policy';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
@@ -1203,4 +1204,14 @@ test('PR 339 treasury buffer is bounded and defaults safely', () => {
   assert.equal(resolveTreasuryBufferPercent('12,5'), 12.5);
   assert.equal(resolveTreasuryBufferPercent('-1'), 20);
   assert.equal(resolveTreasuryBufferPercent('101'), 20);
+});
+
+
+test('PR 340 conversation runtime is OpenAI-only and model routing is disabled', () => {
+  const plan = getFlipAiConversationExecutionPlan();
+  assert.equal(plan.provider, 'openai');
+  assert.equal(plan.modality, 'text');
+  assert.equal(plan.task, 'customer_conversation');
+  assert.equal(plan.modelRouting, 'disabled');
+  assert.equal(plan.model, process.env.OPENAI_FLIP_AI_TEXT_MODEL || 'gpt-5.6-luna');
 });

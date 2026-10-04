@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { FLIP_AI_TEXT_MODEL } from './openai-responses';
 import type { PublicKnowledgeHit } from './public-knowledge';
 import { settleFlipAiUsageCharge } from './usage-billing';
+import { assertFlipAiConversationRuntimeReady } from './conversation-runtime';
 
 export const FLIP_AI_WEB_SEARCH_MODEL = process.env.OPENAI_FLIP_AI_SEARCH_MODEL || FLIP_AI_TEXT_MODEL;
 const CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
@@ -243,6 +244,9 @@ export async function getExternalKnowledgeContext(input: {
       if (verified.length) return { text: cached.resultText, sources: verified, cacheHit: true };
     }
   }
+
+  // Optional external searches must never spend provider capacity after the tenant wallet is exhausted.
+  await assertFlipAiConversationRuntimeReady({ tenantId: input.tenantId });
 
   const requestKey = `web-search:${input.chatRequestKey}:${queryHash}:${allowlistHash}`;
   const existing = await prisma.flipAiUsageEvent.findUnique({ where: { requestKey }, select: { id: true } });
