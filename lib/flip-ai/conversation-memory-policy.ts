@@ -58,6 +58,17 @@ function normalizeValue(value: string) {
   return value.replace(/\s+/g, ' ').trim().slice(0, 280);
 }
 
+const BLOCKED_MEMORY_KEYS = new Set([
+  'nome', 'name', 'telefone', 'phone', 'celular', 'whatsapp', 'email',
+  'cpf', 'rg', 'cnpj', 'document_number', 'numero_documento',
+  'senha', 'password', 'passcode', 'pin', 'otp', 'token', 'access_token',
+  'api_key', 'cartao', 'card_number', 'cvv',
+]);
+
+function memoryKeyAllowed(key: string) {
+  return !BLOCKED_MEMORY_KEYS.has(key);
+}
+
 function applyOperations(
   previous: FlipAiConversationMemoryItem[],
   operations: Array<{ action: 'upsert' | 'remove'; key: string; value: string | null }>,
@@ -66,7 +77,7 @@ function applyOperations(
   const map = new Map(previous.map((item) => [normalizeKey(item.key), normalizeValue(item.value)]));
   for (const operation of operations) {
     const key = normalizeKey(operation.key);
-    if (!key) continue;
+    if (!key || !memoryKeyAllowed(key)) continue;
     if (operation.action === 'remove') {
       map.delete(key);
       continue;
