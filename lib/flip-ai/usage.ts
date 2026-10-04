@@ -77,6 +77,16 @@ export type FlipAiUsageDashboard = {
     partiallyPricedOperations: number;
     unpricedOperations: number;
   };
+  optimization: {
+    jevConfirmedDecisions: number;
+    jevInputTokens: number;
+    jevOutputTokens: number;
+    optimizedResponses: number;
+    harnessCandidateTokens: number;
+    harnessSelectedTokens: number;
+    harnessAvoidedTokens: number;
+    harnessSavingsPercent: number | null;
+  };
   operations: FlipAiUsageOperation[];
   agents: Array<{
     agentId: string | null;
@@ -135,6 +145,16 @@ type AggregateRow = {
   billedCostNanoUsd: bigint | number | string;
   chargedCredits: bigint | number | string;
   billedOperations: bigint | number | string;
+};
+
+type OptimizationRow = {
+  jevConfirmedDecisions: bigint | number | string;
+  jevInputTokens: bigint | number | string;
+  jevOutputTokens: bigint | number | string;
+  optimizedResponses: bigint | number | string;
+  harnessCandidateTokens: bigint | number | string;
+  harnessSelectedTokens: bigint | number | string;
+  harnessAvoidedTokens: bigint | number | string;
 };
 
 type AgentRow = {
@@ -221,7 +241,7 @@ async function buildFlipAiUsageDashboardForTenant(
   return prisma.$transaction(async (db) => {
     await ensureUsageSchema(db);
 
-    const [aggregateRows, agentRows, recentRows] = await Promise.all([
+    const [aggregateRows, agentRows, recentRows, optimizationRows] = await Promise.all([
       db.$queryRaw<AggregateRow[]>(Prisma.sql`
         SELECT operation, provider, model,
           COUNT(*) AS events,
@@ -271,6 +291,555 @@ async function buildFlipAiUsageDashboardForTenant(
           AND e.created_at < ${range.toExclusive}
         ORDER BY e.created_at DESC, e.id DESC
         LIMIT 50
+      `),
+      db.$queryRaw<OptimizationRow[]>(Prisma.sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ) AS "jevConfirmedDecisions",
+          COALESCE(SUM(input_tokens) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ), 0) AS "jevInputTokens",
+          COALESCE(SUM(output_tokens) FILTER (
+            WHERE operation = 'conversation_decision'
+              AND provider = 'typesafe'
+              AND status = 'confirmed'
+          ), 0) AS "jevOutputTokens",
+          COUNT(*) FILTER (
+            WHERE operation = 'chat_response'
+              AND metadata->>'decisionEngine' = 'jev'
+              AND metadata->'harnessMetrics' IS NOT NULL
+          ) AS "optimizedResponses",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'candidateTokens' ~ '^[0-9]+
+
+    const operations = aggregateRows.map((row): FlipAiUsageOperation => {
+      const confirmedEvents = count(row.confirmedEvents);
+      const inputTokens = count(row.inputTokens);
+      const outputTokens = count(row.outputTokens);
+      const cost = row.provider === 'openai'
+        ? estimateOpenAiUsageCost({
+          operation: row.operation,
+          model: row.model,
+          confirmedEvents,
+          inputTokens,
+          outputTokens,
+        })
+        : {
+          costNanoUsd: 0,
+          coverage: 'none' as const,
+          reason: 'non_openai_provider' as const,
+        };
+      return {
+        operation: row.operation,
+        label: labelFlipAiUsageOperation(row.operation),
+        provider: row.provider,
+        model: row.model,
+        events: count(row.events),
+        confirmedEvents,
+        ambiguousEvents: count(row.ambiguousEvents),
+        processingEvents: count(row.processingEvents),
+        failedEvents: count(row.failedEvents),
+        insufficientBalanceEvents: count(row.insufficientBalanceEvents),
+        billingUnavailableEvents: count(row.billingUnavailableEvents),
+        inputTokens,
+        outputTokens,
+        units: count(row.units),
+        estimatedCostNanoUsd: cost.costNanoUsd,
+        costCoverage: cost.coverage,
+        costReason: cost.reason,
+      };
+    });
+    const sum = (field: keyof Pick<FlipAiUsageOperation,
+      'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'insufficientBalanceEvents' | 'billingUnavailableEvents' | 'inputTokens' | 'outputTokens'>) =>
+      operations.reduce((total, operation) => total + operation[field], 0);
+    const realtimeSessions = operations
+      .filter((operation) => operation.operation === 'realtime_session')
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+    const pricedCount = (coverage: OpenAiCostCoverage) => operations
+      .filter((operation) => operation.costCoverage === coverage)
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+
+    return {
+      periodDays,
+      range: {
+        kind: range.kind,
+        preset: range.preset,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        label: range.label,
+      },
+      since: range.from.toISOString(),
+      until: range.toExclusive.toISOString(),
+      generatedAt: now.toISOString(),
+      totals: {
+        confirmedOperations: sum('confirmedEvents'),
+        ambiguousOperations: sum('ambiguousEvents'),
+        processingOperations: sum('processingEvents'),
+        failedOperations: sum('failedEvents'),
+        insufficientBalanceOperations: sum('insufficientBalanceEvents'),
+        billingUnavailableOperations: sum('billingUnavailableEvents'),
+        inputTokens: sum('inputTokens'),
+        outputTokens: sum('outputTokens'),
+        realtimeSessions,
+      },
+      pricing: {
+        currency: 'USD',
+        snapshot: OPENAI_PRICE_SNAPSHOT,
+        source: OPENAI_PRICE_SOURCE,
+        estimatedCostNanoUsd: operations.reduce(
+          (total, operation) => total + operation.estimatedCostNanoUsd, 0,
+        ),
+        billedCostNanoUsd: aggregateRows.reduce(
+          (total, row) => total + count(row.billedCostNanoUsd), 0,
+        ),
+        chargedCredits: aggregateRows.reduce(
+          (total, row) => total + count(row.chargedCredits), 0,
+        ),
+        billedOperations: aggregateRows.reduce(
+          (total, row) => total + count(row.billedOperations), 0,
+        ),
+        fullyPricedOperations: pricedCount('full'),
+        partiallyPricedOperations: pricedCount('partial'),
+        unpricedOperations: pricedCount('none'),
+      },
+      optimization: (() => {
+        const row = optimizationRows[0];
+        const candidateTokens = count(row?.harnessCandidateTokens);
+        const selectedTokens = count(row?.harnessSelectedTokens);
+        const avoidedTokens = count(row?.harnessAvoidedTokens);
+        return {
+          jevConfirmedDecisions: count(row?.jevConfirmedDecisions),
+          jevInputTokens: count(row?.jevInputTokens),
+          jevOutputTokens: count(row?.jevOutputTokens),
+          optimizedResponses: count(row?.optimizedResponses),
+          harnessCandidateTokens: candidateTokens,
+          harnessSelectedTokens: selectedTokens,
+          harnessAvoidedTokens: avoidedTokens,
+          harnessSavingsPercent: candidateTokens > 0
+            ? Math.round((avoidedTokens / candidateTokens) * 10_000) / 100
+            : null,
+        };
+      })(),
+      operations,
+      agents: agentRows.map((row) => ({
+        agentId: row.agentId,
+        agentName: row.agentName || 'Operação sem atendente',
+        confirmedOperations: count(row.confirmedOperations),
+        inputTokens: count(row.inputTokens),
+        outputTokens: count(row.outputTokens),
+        units: count(row.units),
+      })),
+      recent: recentRows.map((row) => {
+        const inputTokens = count(row.inputTokens);
+        const outputTokens = count(row.outputTokens);
+        const billing = readBillingMetadata(row.metadata);
+        const estimated = row.status === 'confirmed' && row.provider === 'openai'
+          ? estimateOpenAiUsageCost({
+            operation: row.operation,
+            model: row.model,
+            confirmedEvents: 1,
+            inputTokens,
+            outputTokens,
+          })
+          : { costNanoUsd: 0 };
+        return {
+          id: row.id,
+          agentName: row.agentName || 'Operação sem atendente',
+          operation: row.operation,
+          operationLabel: labelFlipAiUsageOperation(row.operation),
+          provider: row.provider,
+          model: row.model,
+          status: row.status,
+          inputTokens,
+          outputTokens,
+          units: count(row.units),
+          estimatedCostNanoUsd: billing?.costNanoUsd ?? estimated.costNanoUsd,
+          chargedCredits: billing?.amountCredits ?? 0,
+          billingStatus: billing?.status ?? null,
+          priceSnapshot: billing?.priceSnapshot ?? null,
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
+      metering: { realtimeAudioReconciled: false },
+    };
+  });
+}
+
+
+export async function getFlipAiUsageDashboard(
+  session: SessionPayload,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenantId = await prisma.$transaction(async (db) => {
+    const access = await requireFlipAiAccess(db, session);
+    return access.tenantId;
+  });
+  return buildFlipAiUsageDashboardForTenant(tenantId, periodOrRange, now);
+}
+
+export async function getFlipAiUsageDashboardForTenant(
+  tenantId: string,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    throw new FlipAiError('TENANT_NOT_FOUND', 404, 'Cliente não encontrado.');
+  }
+  return buildFlipAiUsageDashboardForTenant(tenant.id, periodOrRange, now);
+}
+
+              THEN (metadata->'harnessMetrics'->>'candidateTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessCandidateTokens",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'selectedTokens' ~ '^[0-9]+
+
+    const operations = aggregateRows.map((row): FlipAiUsageOperation => {
+      const confirmedEvents = count(row.confirmedEvents);
+      const inputTokens = count(row.inputTokens);
+      const outputTokens = count(row.outputTokens);
+      const cost = row.provider === 'openai'
+        ? estimateOpenAiUsageCost({
+          operation: row.operation,
+          model: row.model,
+          confirmedEvents,
+          inputTokens,
+          outputTokens,
+        })
+        : {
+          costNanoUsd: 0,
+          coverage: 'none' as const,
+          reason: 'non_openai_provider' as const,
+        };
+      return {
+        operation: row.operation,
+        label: labelFlipAiUsageOperation(row.operation),
+        provider: row.provider,
+        model: row.model,
+        events: count(row.events),
+        confirmedEvents,
+        ambiguousEvents: count(row.ambiguousEvents),
+        processingEvents: count(row.processingEvents),
+        failedEvents: count(row.failedEvents),
+        insufficientBalanceEvents: count(row.insufficientBalanceEvents),
+        billingUnavailableEvents: count(row.billingUnavailableEvents),
+        inputTokens,
+        outputTokens,
+        units: count(row.units),
+        estimatedCostNanoUsd: cost.costNanoUsd,
+        costCoverage: cost.coverage,
+        costReason: cost.reason,
+      };
+    });
+    const sum = (field: keyof Pick<FlipAiUsageOperation,
+      'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'insufficientBalanceEvents' | 'billingUnavailableEvents' | 'inputTokens' | 'outputTokens'>) =>
+      operations.reduce((total, operation) => total + operation[field], 0);
+    const realtimeSessions = operations
+      .filter((operation) => operation.operation === 'realtime_session')
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+    const pricedCount = (coverage: OpenAiCostCoverage) => operations
+      .filter((operation) => operation.costCoverage === coverage)
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+
+    return {
+      periodDays,
+      range: {
+        kind: range.kind,
+        preset: range.preset,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        label: range.label,
+      },
+      since: range.from.toISOString(),
+      until: range.toExclusive.toISOString(),
+      generatedAt: now.toISOString(),
+      totals: {
+        confirmedOperations: sum('confirmedEvents'),
+        ambiguousOperations: sum('ambiguousEvents'),
+        processingOperations: sum('processingEvents'),
+        failedOperations: sum('failedEvents'),
+        insufficientBalanceOperations: sum('insufficientBalanceEvents'),
+        billingUnavailableOperations: sum('billingUnavailableEvents'),
+        inputTokens: sum('inputTokens'),
+        outputTokens: sum('outputTokens'),
+        realtimeSessions,
+      },
+      pricing: {
+        currency: 'USD',
+        snapshot: OPENAI_PRICE_SNAPSHOT,
+        source: OPENAI_PRICE_SOURCE,
+        estimatedCostNanoUsd: operations.reduce(
+          (total, operation) => total + operation.estimatedCostNanoUsd, 0,
+        ),
+        billedCostNanoUsd: aggregateRows.reduce(
+          (total, row) => total + count(row.billedCostNanoUsd), 0,
+        ),
+        chargedCredits: aggregateRows.reduce(
+          (total, row) => total + count(row.chargedCredits), 0,
+        ),
+        billedOperations: aggregateRows.reduce(
+          (total, row) => total + count(row.billedOperations), 0,
+        ),
+        fullyPricedOperations: pricedCount('full'),
+        partiallyPricedOperations: pricedCount('partial'),
+        unpricedOperations: pricedCount('none'),
+      },
+      operations,
+      agents: agentRows.map((row) => ({
+        agentId: row.agentId,
+        agentName: row.agentName || 'Operação sem atendente',
+        confirmedOperations: count(row.confirmedOperations),
+        inputTokens: count(row.inputTokens),
+        outputTokens: count(row.outputTokens),
+        units: count(row.units),
+      })),
+      recent: recentRows.map((row) => {
+        const inputTokens = count(row.inputTokens);
+        const outputTokens = count(row.outputTokens);
+        const billing = readBillingMetadata(row.metadata);
+        const estimated = row.status === 'confirmed' && row.provider === 'openai'
+          ? estimateOpenAiUsageCost({
+            operation: row.operation,
+            model: row.model,
+            confirmedEvents: 1,
+            inputTokens,
+            outputTokens,
+          })
+          : { costNanoUsd: 0 };
+        return {
+          id: row.id,
+          agentName: row.agentName || 'Operação sem atendente',
+          operation: row.operation,
+          operationLabel: labelFlipAiUsageOperation(row.operation),
+          provider: row.provider,
+          model: row.model,
+          status: row.status,
+          inputTokens,
+          outputTokens,
+          units: count(row.units),
+          estimatedCostNanoUsd: billing?.costNanoUsd ?? estimated.costNanoUsd,
+          chargedCredits: billing?.amountCredits ?? 0,
+          billingStatus: billing?.status ?? null,
+          priceSnapshot: billing?.priceSnapshot ?? null,
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
+      metering: { realtimeAudioReconciled: false },
+    };
+  });
+}
+
+
+export async function getFlipAiUsageDashboard(
+  session: SessionPayload,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenantId = await prisma.$transaction(async (db) => {
+    const access = await requireFlipAiAccess(db, session);
+    return access.tenantId;
+  });
+  return buildFlipAiUsageDashboardForTenant(tenantId, periodOrRange, now);
+}
+
+export async function getFlipAiUsageDashboardForTenant(
+  tenantId: string,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    throw new FlipAiError('TENANT_NOT_FOUND', 404, 'Cliente não encontrado.');
+  }
+  return buildFlipAiUsageDashboardForTenant(tenant.id, periodOrRange, now);
+}
+
+              THEN (metadata->'harnessMetrics'->>'selectedTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessSelectedTokens",
+          COALESCE(SUM(
+            CASE WHEN metadata->'harnessMetrics'->>'avoidedTokens' ~ '^[0-9]+
+
+    const operations = aggregateRows.map((row): FlipAiUsageOperation => {
+      const confirmedEvents = count(row.confirmedEvents);
+      const inputTokens = count(row.inputTokens);
+      const outputTokens = count(row.outputTokens);
+      const cost = row.provider === 'openai'
+        ? estimateOpenAiUsageCost({
+          operation: row.operation,
+          model: row.model,
+          confirmedEvents,
+          inputTokens,
+          outputTokens,
+        })
+        : {
+          costNanoUsd: 0,
+          coverage: 'none' as const,
+          reason: 'non_openai_provider' as const,
+        };
+      return {
+        operation: row.operation,
+        label: labelFlipAiUsageOperation(row.operation),
+        provider: row.provider,
+        model: row.model,
+        events: count(row.events),
+        confirmedEvents,
+        ambiguousEvents: count(row.ambiguousEvents),
+        processingEvents: count(row.processingEvents),
+        failedEvents: count(row.failedEvents),
+        insufficientBalanceEvents: count(row.insufficientBalanceEvents),
+        billingUnavailableEvents: count(row.billingUnavailableEvents),
+        inputTokens,
+        outputTokens,
+        units: count(row.units),
+        estimatedCostNanoUsd: cost.costNanoUsd,
+        costCoverage: cost.coverage,
+        costReason: cost.reason,
+      };
+    });
+    const sum = (field: keyof Pick<FlipAiUsageOperation,
+      'confirmedEvents' | 'ambiguousEvents' | 'processingEvents' | 'failedEvents' | 'insufficientBalanceEvents' | 'billingUnavailableEvents' | 'inputTokens' | 'outputTokens'>) =>
+      operations.reduce((total, operation) => total + operation[field], 0);
+    const realtimeSessions = operations
+      .filter((operation) => operation.operation === 'realtime_session')
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+    const pricedCount = (coverage: OpenAiCostCoverage) => operations
+      .filter((operation) => operation.costCoverage === coverage)
+      .reduce((total, operation) => total + operation.confirmedEvents, 0);
+
+    return {
+      periodDays,
+      range: {
+        kind: range.kind,
+        preset: range.preset,
+        fromDate: range.fromDate,
+        toDate: range.toDate,
+        label: range.label,
+      },
+      since: range.from.toISOString(),
+      until: range.toExclusive.toISOString(),
+      generatedAt: now.toISOString(),
+      totals: {
+        confirmedOperations: sum('confirmedEvents'),
+        ambiguousOperations: sum('ambiguousEvents'),
+        processingOperations: sum('processingEvents'),
+        failedOperations: sum('failedEvents'),
+        insufficientBalanceOperations: sum('insufficientBalanceEvents'),
+        billingUnavailableOperations: sum('billingUnavailableEvents'),
+        inputTokens: sum('inputTokens'),
+        outputTokens: sum('outputTokens'),
+        realtimeSessions,
+      },
+      pricing: {
+        currency: 'USD',
+        snapshot: OPENAI_PRICE_SNAPSHOT,
+        source: OPENAI_PRICE_SOURCE,
+        estimatedCostNanoUsd: operations.reduce(
+          (total, operation) => total + operation.estimatedCostNanoUsd, 0,
+        ),
+        billedCostNanoUsd: aggregateRows.reduce(
+          (total, row) => total + count(row.billedCostNanoUsd), 0,
+        ),
+        chargedCredits: aggregateRows.reduce(
+          (total, row) => total + count(row.chargedCredits), 0,
+        ),
+        billedOperations: aggregateRows.reduce(
+          (total, row) => total + count(row.billedOperations), 0,
+        ),
+        fullyPricedOperations: pricedCount('full'),
+        partiallyPricedOperations: pricedCount('partial'),
+        unpricedOperations: pricedCount('none'),
+      },
+      operations,
+      agents: agentRows.map((row) => ({
+        agentId: row.agentId,
+        agentName: row.agentName || 'Operação sem atendente',
+        confirmedOperations: count(row.confirmedOperations),
+        inputTokens: count(row.inputTokens),
+        outputTokens: count(row.outputTokens),
+        units: count(row.units),
+      })),
+      recent: recentRows.map((row) => {
+        const inputTokens = count(row.inputTokens);
+        const outputTokens = count(row.outputTokens);
+        const billing = readBillingMetadata(row.metadata);
+        const estimated = row.status === 'confirmed' && row.provider === 'openai'
+          ? estimateOpenAiUsageCost({
+            operation: row.operation,
+            model: row.model,
+            confirmedEvents: 1,
+            inputTokens,
+            outputTokens,
+          })
+          : { costNanoUsd: 0 };
+        return {
+          id: row.id,
+          agentName: row.agentName || 'Operação sem atendente',
+          operation: row.operation,
+          operationLabel: labelFlipAiUsageOperation(row.operation),
+          provider: row.provider,
+          model: row.model,
+          status: row.status,
+          inputTokens,
+          outputTokens,
+          units: count(row.units),
+          estimatedCostNanoUsd: billing?.costNanoUsd ?? estimated.costNanoUsd,
+          chargedCredits: billing?.amountCredits ?? 0,
+          billingStatus: billing?.status ?? null,
+          priceSnapshot: billing?.priceSnapshot ?? null,
+          createdAt: row.createdAt.toISOString(),
+        };
+      }),
+      metering: { realtimeAudioReconciled: false },
+    };
+  });
+}
+
+
+export async function getFlipAiUsageDashboard(
+  session: SessionPayload,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenantId = await prisma.$transaction(async (db) => {
+    const access = await requireFlipAiAccess(db, session);
+    return access.tenantId;
+  });
+  return buildFlipAiUsageDashboardForTenant(tenantId, periodOrRange, now);
+}
+
+export async function getFlipAiUsageDashboardForTenant(
+  tenantId: string,
+  periodOrRange: FlipAiUsagePeriod | FlipAiUsageRange = 30,
+  now = new Date(),
+): Promise<FlipAiUsageDashboard> {
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { id: true },
+  });
+  if (!tenant) {
+    throw new FlipAiError('TENANT_NOT_FOUND', 404, 'Cliente não encontrado.');
+  }
+  return buildFlipAiUsageDashboardForTenant(tenant.id, periodOrRange, now);
+}
+
+              THEN (metadata->'harnessMetrics'->>'avoidedTokens')::bigint ELSE 0 END
+          ) FILTER (WHERE operation = 'chat_response'), 0) AS "harnessAvoidedTokens"
+        FROM flip_ai_usage_events
+        WHERE tenant_id = ${tenantId}
+          AND created_at >= ${range.from}
+          AND created_at < ${range.toExclusive}
       `),
     ]);
 
