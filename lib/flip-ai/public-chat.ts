@@ -454,6 +454,7 @@ async function recoverConfirmedOutbound(input: {
   conversationId: string;
   metadata: StoredChatMetadata;
 }) {
+  const recoveredMemory = parseConversationMemorySnapshot(input.metadata.memorySnapshot);
   const changed = await prisma.flipAiUsageEvent.updateMany({
     where: { id: input.eventId, tenantId: input.tenantId, status: { not: 'confirmed' } },
     data: {
@@ -462,6 +463,17 @@ async function recoverConfirmedOutbound(input: {
       outputTokens: typeof input.metadata.outputTokens === 'number' ? input.metadata.outputTokens : undefined,
     },
   });
+  if (changed.count && recoveredMemory) {
+    await prisma.$executeRaw(Prisma.sql`
+      UPDATE flip_ai_usage_events
+      SET metadata = metadata || ${JSON.stringify({
+        memoryVersion: FLIP_AI_CONVERSATION_MEMORY_VERSION,
+        memorySnapshot: recoveredMemory,
+      })}::jsonb
+      WHERE id = ${input.eventId}
+        AND tenant_id = ${input.tenantId}
+    `);
+  }
   if (changed.count) {
     await prisma.flipAiConversationState.updateMany({
       where: { tenantId: input.tenantId, conversationId: input.conversationId },
@@ -1082,7 +1094,16 @@ export async function completePublicChatTurn(
   decision?: z.infer<typeof publicChatDecisionSchema>,
   evidenceMessageIds: string[] = [],
   externalSources: ExternalWebSource[] = [],
+  previousMemorySnapshot: FlipAiConversationMemorySnapshot | null = null,
 ) {
+  const memorySnapshot = decision
+    ? mergeConversationMemory({
+      previous: previousMemorySnapshot,
+      patch: decision.memoryPatch,
+      sourceMessageId: turn.messageId,
+    })
+    : previousMemorySnapshot;
+
   await recordOutboundMessage({
     tenantId: turn.tenantId,
     conversationId: turn.conversationId,
@@ -1100,6 +1121,8 @@ export async function completePublicChatTurn(
       outputTokens: result.outputTokens,
       inputMode: turn.inputMode,
       humanConversationPolicyVersion: FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION,
+      memoryVersion: FLIP_AI_CONVERSATION_MEMORY_VERSION,
+      ...(memorySnapshot ? { memorySnapshot } : {}),
       ...(externalSources.length ? { externalSources } : {}),
       ...(decision ? {
         leadIdentity: decision.identity,
@@ -1119,7 +1142,12 @@ export async function completePublicChatTurn(
           model = ${result.model},
           input_tokens = ${result.inputTokens},
           output_tokens = ${result.outputTokens},
-          metadata = metadata || ${JSON.stringify({ phase: 'completed', responseId: result.responseId })}::jsonb
+          metadata = metadata || ${JSON.stringify({
+            phase: 'completed',
+            responseId: result.responseId,
+            memoryVersion: FLIP_AI_CONVERSATION_MEMORY_VERSION,
+            ...(memorySnapshot ? { memorySnapshot } : {}),
+          })}::jsonb
       WHERE id = ${turn.eventId}
         AND tenant_id = ${turn.tenantId}
         AND conversation_id = ${turn.conversationId}
