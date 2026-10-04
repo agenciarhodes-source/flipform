@@ -481,7 +481,6 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       amountCredits: 1,
       source: 'adjustment',
       referenceId: 'realtime-gate-ci',
-      metadata: { reason: 'temporary CI wallet gate credit' },
     });
     let realtimeCalls = 0;
     const realtime = await issuePublicRealtimeSession(chatRuntime, anonymous, realtimeRequest, {}, async () => {
