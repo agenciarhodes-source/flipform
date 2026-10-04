@@ -60,7 +60,7 @@ def test_pr344_voice_obeys_wallet_gate_before_provider_session():
     assert "getFlipAiCreditBalanceForTenant" in session
     assert "FLIP_AI_CREDIT_BALANCE_INSUFFICIENT" in session
     assert "FLIP_AI_RUNTIME_BILLING_UNAVAILABLE" in session
-    assert session.index("getFlipAiCreditBalanceForTenant") < session.index("result = await createClientSecret")
+    assert session.index("const wallet = await getFlipAiCreditBalanceForTenant") < session.index("result = await createClientSecret")
 
 
 def test_pr344_realtime_still_never_auto_generates_unapproved_business_reply():
