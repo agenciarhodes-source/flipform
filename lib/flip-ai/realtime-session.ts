@@ -9,6 +9,7 @@ import { FlipAiError } from './access';
 import type { PublicFlipAiRuntime } from './public-agent';
 import { buildPublicChatInstructions } from './public-chat';
 import { settleFlipAiUsageCharge } from './usage-billing';
+import { FLIP_AI_HUMAN_VOICE_POLICY_VERSION } from './conversation-style';
 import {
   createOpenAiRealtimeClientSecret,
   FLIP_AI_REALTIME_MODEL,
@@ -247,6 +248,9 @@ export async function issuePublicRealtimeSession(
         knowledgeIndexId: runtime.knowledgeIndexId,
         phase: 'client_secret',
         expiresAt: result.expiresAt,
+        voice: result.voice,
+        transcriptionModel: result.transcriptionModel,
+        voicePolicyVersion: FLIP_AI_HUMAN_VOICE_POLICY_VERSION,
       },
     },
   });
