@@ -38,7 +38,8 @@ def test_admin_usage_exposes_operational_metrics_without_message_content():
     ]:
         assert field in usage
     assert 'value="flip-ai-usage"' in page
-    assert "Ledger de consumo da OpenAI" in page
+    assert "Ledger de consumo de IA" in page
+    assert "OpenAI, decisões JEV" in page
     assert "Tokens processados" in page
     assert "Custo API contabilizado" in page
     assert "Créditos debitados" in page
