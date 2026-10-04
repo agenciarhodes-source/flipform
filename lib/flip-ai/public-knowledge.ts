@@ -9,7 +9,7 @@ export type PublicKnowledgeHit = {
   heading: string | null;
   content: string;
   score: number;
-  tokenEstimate: number;
+  tokenEstimate?: number;
 };
 
 export async function searchPublicKnowledge(input: {
