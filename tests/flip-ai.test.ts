@@ -27,6 +27,11 @@ import {
 import { resolveFlipAiUsageRange } from '../lib/flip-ai/usage-range';
 import { getFlipAiConversationExecutionPlan } from '../lib/flip-ai/conversation-runtime';
 import {
+  buildHumanConversationGuidance,
+  buildHumanizedVoiceInstructions,
+  prepareHumanizedSpeechText,
+} from '../lib/flip-ai/conversation-style';
+import {
   buildFlipAiLeadIntelligenceSnapshot,
   calculateFlipAiLeadScore,
 } from '../lib/flip-ai/lead-intelligence-policy';
@@ -955,6 +960,8 @@ test('OpenAI Realtime secret uses server policy, safety identifier and no legacy
     value: 'ek_test_secret_value_123456789',
     expiresAt: 2_000,
     model: 'realtime-test-model',
+    voice: 'marin',
+    transcriptionModel: 'gpt-4o-mini-transcribe',
   });
 });
 
@@ -1535,4 +1542,36 @@ test('PR 343 handoff has a deterministic fallback when no semantic summary exist
   assert.equal(result.priority, 'normal');
   assert.equal(result.recommended, false);
   assert.match(result.nextAction, /Tratar a objeção atual/);
+});
+
+
+test('PR 344 human conversation policy keeps one-question progressive behavior for text and voice', () => {
+  const text = buildHumanConversationGuidance('text').join('\n');
+  const voice = buildHumanConversationGuidance('voice').join('\n');
+  assert.match(text, /Faça no máximo uma pergunta por resposta/);
+  assert.match(text, /Não repita apresentação, saudação, nome, telefone/);
+  assert.match(text, /Quando houver objeção/);
+  assert.match(text, /respostas curtas como/);
+  assert.match(voice, /Este turno veio de voz/);
+  assert.match(voice, /frases curtas/);
+  assert.doesNotMatch(text, /OpenRouter|Anthropic|Gemini|Qwen/i);
+});
+
+test('PR 344 humanized speech cleans display markup but preserves approved meaning', () => {
+  const speech = prepareHumanizedSpeechText('**Olá.** Veja [a informação](https://example.com). [Fonte externa 2]');
+  assert.equal(speech, 'Olá. Veja a informação.');
+  const instructions = buildHumanizedVoiceInstructions('Tudo certo. Podemos continuar.');
+  assert.match(instructions, /voz humana, natural, acolhedora e profissional/);
+  assert.match(instructions, /cadência conversacional/);
+  assert.match(instructions, /não acrescente bordões/);
+  assert.match(instructions, /Tudo certo\. Podemos continuar\./);
+});
+
+test('PR 344 public chat input mode defaults to text and accepts explicit voice turns only', () => {
+  const id = '7bd20758-e19d-4d01-8884-7aaee975e0b8';
+  const text = publicChatMessageSchema.parse({ messageId: id, text: 'Oi' });
+  const voice = publicChatMessageSchema.parse({ messageId: id, text: 'Oi', inputMode: 'voice' });
+  assert.equal(text.inputMode, 'text');
+  assert.equal(voice.inputMode, 'voice');
+  assert.equal(publicChatMessageSchema.safeParse({ messageId: id, text: 'Oi', inputMode: 'video' }).success, false);
 });
