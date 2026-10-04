@@ -198,7 +198,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
         Number(sales30d._sum.estimatedOpenAiCostCents || 0) / 100,
       ),
     },
-    tenants,
+    tenants: tenants.slice(0, 100),
     provider: {
       name: 'openai' as const,
       balanceEndpointAvailable: false,
