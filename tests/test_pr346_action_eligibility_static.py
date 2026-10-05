@@ -53,10 +53,11 @@ def test_pr346_schedule_is_only_effective_after_in_person_and_scheduling_intent(
 
 def test_pr346_web_chat_receives_backend_action_policy_but_executes_nothing():
     chat = read("lib/flip-ai/public-chat.ts")
-    assert "POLÍTICA DE AÇÃO PRESENCIAL (regra determinística do backend)" in chat
-    assert "actionEligibilityPrompt(actionEligibility)" in chat
-    assert "Só afirme que existe atendimento presencial, visita ou demonstração se a base interna recuperada confirmar" in chat
+    assert "PERMISSÃO DE AÇÃO PRESENCIAL (regra determinística do backend)" in chat
+    assert "actionPermissionPrompt(actionPermission)" in chat
+    assert "A permissão acima é a autoridade sobre o que este agente pode oferecer" in chat
     assert "actionEligibility" in chat
+    assert "actionPermission" in chat
     for forbidden in ["createAppointment(", "calendar.create", "prisma.appointment.create", "prisma.event.create"]:
         assert forbidden not in chat
 
@@ -64,7 +65,7 @@ def test_pr346_web_chat_receives_backend_action_policy_but_executes_nothing():
 def test_pr346_handoff_uses_effective_action_not_free_form_schedule_text():
     handoff = read("lib/flip-ai/human-handoff-policy.ts")
     assert "const nextAction = input.intelligence" in handoff
-    assert "intelligence.actionEligibility.mayCollectAvailability" in handoff
+    assert "intelligence.actionPermission.mayCollectAvailability" in handoff
     assert "input.intelligence?.actionEligibility.inPersonRequested" in handoff
     assert "Coletar preferência de disponibilidade para atendimento presencial, sem confirmar compromisso." in handoff
 
