@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { withPermission, canDeleteLead, canEditLead, assertCanAccessLead } from '@/lib/rbac-server';
+import {
+  withPermission,
+  canDeleteLead,
+  canEditLead,
+  canCompleteTask,
+  assertCanAccessLead,
+} from '@/lib/rbac-server';
 import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
 import { getFlipAiHumanHandoff } from '@/lib/flip-ai/human-handoff';
+import { getFlipAiHumanActionRequest } from '@/lib/flip-ai/human-action-request';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const qualificationSchemaReady = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -78,10 +85,26 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
       intelligence: flipAiLiveIntelligence,
     }).catch(() => null),
   ]);
+  const flipAiHumanActionRequest = await getFlipAiHumanActionRequest({
+    tenantId: session.tenantId,
+    leadId: lead.id,
+    conversationId: flipAiHumanHandoff?.conversationId || flipAiLiveIntelligence?.conversationId || null,
+  }).catch(() => null);
+  const flipAiHumanActionRequestView = flipAiHumanActionRequest
+    ? {
+      ...flipAiHumanActionRequest,
+      canResolve: canCompleteTask(session.role, {
+        task: { assignedTo: flipAiHumanActionRequest.assignedTo, createdBy: null },
+        lead: { assignedTo: lead.assignedTo },
+      }, session.userId),
+    }
+    : null;
+
   return NextResponse.json({ lead: { ...lead,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiHumanHandoff,
+    flipAiHumanActionRequest: flipAiHumanActionRequestView,
     saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 
