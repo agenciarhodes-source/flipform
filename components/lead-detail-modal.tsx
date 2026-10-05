@@ -106,6 +106,13 @@ const availabilityStatusLabels: Record<string, string> = {
   ready_for_handoff: 'Pronto para confirmação humana',
 };
 
+const actionRequestResolutionLabels: Record<string, string> = {
+  pending: 'Aguardando decisão humana',
+  confirmed: 'Atendimento confirmado pelo time',
+  declined: 'Atendimento não confirmado pelo time',
+  completed: 'Tarefa concluída',
+};
+
 export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId: string; stages: Stage[]; onClose: () => void; onChange: () => void }) {
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -116,6 +123,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [locationForm, setLocationForm] = useState({ state: '', city: '' });
   const [savingLocation, setSavingLocation] = useState(false);
+  const [resolvingActionRequest, setResolvingActionRequest] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -177,6 +185,32 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const deletePurchase = async (purchaseId: string) => {
     if (!confirm('Remover esta compra?')) return;
     try { const res = await fetch(`/api/leads/${leadId}/purchases/${purchaseId}`, { method: 'DELETE' }); if (!res.ok) throw new Error('delete_failed'); toast.success('Compra removida com sucesso.'); await load(); onChange(); } catch { toast.error('Não foi possível remover a compra.'); }
+  };
+
+  const resolveFlipAiActionRequest = async (action: 'confirm' | 'decline' | 'reopen') => {
+    const request = lead?.flipAiHumanActionRequest;
+    if (!request || resolvingActionRequest) return;
+    try {
+      setResolvingActionRequest(true);
+      const res = await fetch(`/api/leads/${leadId}/flip-ai/action-request`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: request.taskId, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível atualizar a solicitação.');
+      toast.success(action === 'confirm'
+        ? 'Atendimento confirmado pelo time.'
+        : action === 'decline'
+          ? 'Solicitação marcada como não confirmada.'
+          : 'Solicitação reaberta.');
+      await load();
+      onChange();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível atualizar a solicitação.');
+    } finally {
+      setResolvingActionRequest(false);
+    }
   };
 
   const addNote = async () => {
@@ -424,6 +458,73 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   </div>
                 )}
 
+                {lead.flipAiHumanActionRequest && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Solicitação interna para o time
+                        </div>
+                        <div className="mt-1 font-medium">{lead.flipAiHumanActionRequest.title}</div>
+                      </div>
+                      <Badge variant="outline">
+                        {actionRequestResolutionLabels[lead.flipAiHumanActionRequest.resolution]
+                          || lead.flipAiHumanActionRequest.resolution}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-1 md:grid-cols-2">
+                      <div>
+                        <strong>Responsável:</strong>{' '}
+                        {lead.flipAiHumanActionRequest.assignee?.name || 'Sem responsável definido'}
+                      </div>
+                      <div>
+                        <strong>Prioridade:</strong>{' '}
+                        {lead.flipAiHumanActionRequest.priority === 'high'
+                          ? 'Alta'
+                          : lead.flipAiHumanActionRequest.priority === 'low' ? 'Baixa' : 'Média'}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Esta é uma tarefa interna de confirmação. Confirmar aqui registra a decisão humana, mas não cria evento,
+                      reserva de horário ou integração com calendário.
+                    </p>
+                    {lead.flipAiHumanActionRequest.canResolve && lead.flipAiHumanActionRequest.status !== 'completed' && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          disabled={resolvingActionRequest}
+                          onClick={() => void resolveFlipAiActionRequest('confirm')}
+                        >
+                          Confirmar atendimento
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={resolvingActionRequest}
+                          onClick={() => void resolveFlipAiActionRequest('decline')}
+                        >
+                          Não confirmar
+                        </Button>
+                      </div>
+                    )}
+                    {lead.flipAiHumanActionRequest.canResolve && lead.flipAiHumanActionRequest.status === 'completed' && (
+                      <div className="mt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={resolvingActionRequest}
+                          onClick={() => void resolveFlipAiActionRequest('reopen')}
+                        >
+                          Reabrir solicitação
+                        </Button>
+                      </div>
+                    )}
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Se precisar ajustar detalhes antes de decidir, use a tarefa do lead; o snapshot original da conversa não é reescrito.
+                    </p>
+                  </div>
+                )}
+
                 {lead.flipAiHumanHandoff.reasons?.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sinais relevantes</div>
@@ -435,7 +536,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
 
                 <div className="rounded-lg border border-emerald-200 bg-white p-3 text-xs text-muted-foreground">
                   Este resumo reaproveita o estado da conversa, decisões JEV, qualificação e disponibilidade já coletada.
-                  Ele não cria agenda, não reserva horário, não move o lead, não atribui vendedor e não envia mensagem automaticamente.
+                  Quando aplicável, o Flip AI cria apenas uma tarefa interna para decisão humana. Ele não cria agenda, não reserva horário,
+                  não move o lead, não cria novo responsável e não envia mensagem automaticamente.
                 </div>
               </section>
             )}
