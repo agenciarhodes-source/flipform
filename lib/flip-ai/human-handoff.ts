@@ -56,9 +56,9 @@ export async function getFlipAiHumanHandoff(input: {
   const conversation = lead.conversations[0] || null;
   if (!qualification && !conversation && !input.intelligence) return null;
 
-  const conversationId = qualification?.conversationId
+  const conversationId = input.intelligence?.conversationId
+    || qualification?.conversationId
     || conversation?.id
-    || input.intelligence?.conversationId
     || null;
   const availability = conversationId
     ? await loadLatestConversationAvailability({
