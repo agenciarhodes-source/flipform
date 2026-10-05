@@ -67,7 +67,9 @@ export async function getFlipAiHumanHandoff(input: {
     }).catch(() => null)
     : null;
 
-  const updatedAt = qualification?.createdAt
+  const availabilityUpdatedAt = availability ? new Date(availability.updatedAt) : null;
+  const updatedAt = availabilityUpdatedAt
+    || qualification?.createdAt
     || conversation?.flipAiState?.summaryUpdatedAt
     || conversation?.lastMessageAt
     || conversation?.updatedAt
