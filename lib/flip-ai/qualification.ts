@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { isValidBrazilianPhone } from '@/lib/leads';
 import { dispatchFlipAiQualifiedLeadTracking } from '@/lib/tracking';
+import { classifyBrainAssessment, type BrainAssessment } from './brain-profiles';
 import type { PublicFlipAiRuntime } from './public-agent';
 
 const QUALIFICATION_DISPATCH_STALE_MS = 2 * 60_000;
@@ -22,6 +23,26 @@ export const flipAiFinalQualificationSchema = z.object({
 }).strict();
 
 export type FlipAiFinalQualification = z.infer<typeof flipAiFinalQualificationSchema>;
+
+// Keep final qualification consistent with the tenant's deterministic rubric.
+export function applyBrainFinalQualification(
+  qualification: FlipAiFinalQualification | null,
+  assessment?: BrainAssessment,
+): FlipAiFinalQualification | null {
+  if (!qualification || !assessment) return qualification;
+  const complete = assessment.status === 'complete' && assessment.score !== null;
+  const score = assessment.score ?? 0;
+  return {
+    ...qualification,
+    classification: classifyBrainAssessment(assessment),
+    fitScore: score,
+    confidence: complete ? Math.min(assessment.confidence, ...assessment.criteria.map((item) => item.confidence)) : 0,
+    reasons: [
+      `Perfil: ${assessment.profileLabel || 'ainda não identificado'}.`,
+      ...assessment.criteria.map((item) => `${item.label}: ${item.interpretation || 'ainda não confirmado'}.`),
+    ].slice(0, 10),
+  };
+}
 
 type LockedConversation = {
   id: string;

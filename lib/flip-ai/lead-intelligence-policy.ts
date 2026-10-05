@@ -1,3 +1,4 @@
+import { brainAssessmentSchema, classifyBrainAssessment, type BrainAssessment } from './brain-profiles';
 import {
   normalizeActionSignals,
   resolveFlipAiActionEligibility,
@@ -27,6 +28,7 @@ export type FlipAiLeadTemperature = 'hot' | 'warm' | 'cold';
 
 export type FlipAiLeadIntelligenceSnapshot = {
   source: 'jev';
+  brainAssessment?: BrainAssessment;
   policyVersion: string;
   score: number;
   classification: FlipAiLiveClassification;
@@ -104,7 +106,10 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     || typeof raw.stageConfidence !== 'number') {
     return null;
   }
+  const assessment = raw.brainAssessment === undefined ? null : brainAssessmentSchema.safeParse(raw.brainAssessment);
+  if (assessment && !assessment.success) return null;
   return {
+    ...(assessment?.success ? { brainAssessment: assessment.data } : {}),
     engine: 'jev',
     engineVersion: raw.engineVersion,
     model: raw.model,
@@ -154,7 +159,7 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
     : JOURNEY_STRENGTH[decision.journeyStage];
   const confidenceScore = boundScore(decision.confidence * 100);
 
-  const score = boundScore(
+  let score = boundScore(
     fitScore * 0.40
       + intentScore * 0.30
       + urgencyScore * 0.15
@@ -173,6 +178,12 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
     classification = 'nurture';
   } else {
     classification = 'insufficient';
+  }
+
+  if (decision.brainAssessment) {
+    const assessment = decision.brainAssessment;
+    score = assessment.score ?? 0;
+    classification = classifyBrainAssessment(assessment);
   }
 
   const temperature: FlipAiLeadTemperature = classification === 'qualified'
@@ -219,7 +230,8 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
 
   return {
     source: 'jev',
-    policyVersion: FLIP_AI_LEAD_SCORE_POLICY_VERSION,
+    policyVersion: input.decision.brainAssessment ? 'brain-profile-v1' : FLIP_AI_LEAD_SCORE_POLICY_VERSION,
+    ...(input.decision.brainAssessment ? { brainAssessment: input.decision.brainAssessment } : {}),
     score: current.score,
     classification: current.classification,
     temperature: current.temperature,
@@ -232,7 +244,13 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     actionPermission,
     needsHuman: input.decision.needsHuman,
     confidence: input.decision.confidence,
-    scoreDelta: previous ? current.score - previous.score : null,
+    scoreDelta: previous && (input.decision.brainAssessment
+      ? input.decision.brainAssessment.status === 'complete'
+        && input.previousDecision?.brainAssessment?.status === 'complete'
+        && input.decision.brainAssessment.profileId === input.previousDecision.brainAssessment.profileId
+        && input.decision.brainAssessment.contentHash === input.previousDecision.brainAssessment.contentHash
+      : !input.previousDecision?.brainAssessment)
+      ? current.score - previous.score : null,
     updatedAt: input.updatedAt.toISOString(),
     conversationId: input.conversationId,
     usageEventId: input.usageEventId,

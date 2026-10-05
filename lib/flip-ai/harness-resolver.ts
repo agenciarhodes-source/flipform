@@ -52,12 +52,14 @@ export function buildHarnessRetrievalQueries(input: {
     conversationQuery: [
       base,
       `Intenção atual: ${d.intent}.`,
+      ...(d.brainAssessment?.profileLabel ? [`Perfil: ${d.brainAssessment.profileLabel}.`, ...d.brainAssessment.retrievalTerms] : []),
       d.objection !== 'none' ? `Objeção atual: ${d.objection}.` : '',
       `Estágio da jornada: ${d.journeyStage}.`,
       `Próxima ação sugerida: ${d.nextAction}.`,
     ].filter(Boolean).join('\n'),
     qualificationQuery: [
       'Critérios de qualificação e perfil ideal aplicáveis ao contexto atual.',
+      ...(d.brainAssessment?.profileLabel ? [`Perfil: ${d.brainAssessment.profileLabel}.`, ...d.brainAssessment.retrievalTerms] : []),
       `Fit estimado: ${d.fitScore}/100.`,
       `Urgência estimada: ${d.urgencyScore}/100.`,
       `Estágio: ${d.journeyStage}.`,

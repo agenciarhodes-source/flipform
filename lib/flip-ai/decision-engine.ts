@@ -1,9 +1,10 @@
+import type { BrainAssessment } from './brain-profiles';
 import {
   resolveFlipAiActionEligibility,
   type FlipAiActionSignals,
 } from './action-eligibility';
 
-export const FLIP_AI_DECISION_ENGINE_VERSION = '2026-10-05.1';
+export const FLIP_AI_DECISION_ENGINE_VERSION = '2026-10-05.2';
 
 export const JEV_INTENTS = [
   'information',
@@ -63,6 +64,7 @@ export type FlipAiConversationDecision = {
   intentConfidence: number;
   objectionConfidence: number;
   stageConfidence: number;
+  brainAssessment?: BrainAssessment;
 };
 
 function boundedScore(value: number) {
