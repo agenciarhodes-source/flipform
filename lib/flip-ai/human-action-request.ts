@@ -262,53 +262,68 @@ export async function resolveFlipAiHumanActionRequest(input: {
   action: 'confirm' | 'decline' | 'reopen';
   note?: string | null;
 }) {
-  const task = await prisma.task.findFirst({
-    where: {
-      id: input.taskId,
-      tenantId: input.tenantId,
-      leadId: input.leadId,
-    },
-    include: {
-      lead: { select: { id: true, assignedTo: true } },
-    },
-  });
-  if (!task || !(await sourceAuditExists({ tenantId: input.tenantId, taskId: input.taskId }))) {
-    throw new FlipAiHumanActionRequestError(
-      'FLIP_AI_ACTION_REQUEST_NOT_FOUND',
-      404,
-      'Solicitação interna não encontrada.',
-    );
-  }
-
-  const latestResolution = await prisma.auditLog.findFirst({
-    where: {
-      tenantId: input.tenantId,
-      entityType: 'task',
-      entityId: task.id,
-      action: { in: [ACTIONS.confirmed, ACTIONS.declined, ACTIONS.reopened] },
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    select: { action: true },
-  });
-
   const expectedAction = input.action === 'confirm'
     ? ACTIONS.confirmed
     : input.action === 'decline'
       ? ACTIONS.declined
       : ACTIONS.reopened;
+  const resolutionLock = `flip-ai-action-resolution:${input.tenantId}:${input.taskId}`;
 
-  if (input.action !== 'reopen' && task.status === 'completed') {
-    if (latestResolution?.action === expectedAction) return task;
-    throw new FlipAiHumanActionRequestError(
-      'FLIP_AI_ACTION_REQUEST_ALREADY_RESOLVED',
-      409,
-      'A solicitação já foi concluída. Reabra antes de alterar a decisão.',
-    );
-  }
-  if (input.action === 'reopen' && task.status !== 'completed') return task;
+  return prisma.$transaction(async (db) => {
+    await db.$executeRaw(Prisma.sql`
+      SELECT pg_advisory_xact_lock(hashtext(${resolutionLock}))
+    `);
 
-  const updated = await prisma.$transaction(async (db) => {
-    const result = await db.task.update({
+    const task = await db.task.findFirst({
+      where: {
+        id: input.taskId,
+        tenantId: input.tenantId,
+        leadId: input.leadId,
+      },
+      include: {
+        lead: { select: { id: true, assignedTo: true } },
+        assignee: { select: { id: true, name: true, email: true } },
+      },
+    });
+    const sourceAudit = task ? await db.auditLog.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        entityType: 'task',
+        entityId: input.taskId,
+        action: ACTIONS.created,
+      },
+      select: { id: true },
+    }) : null;
+    if (!task || !sourceAudit) {
+      throw new FlipAiHumanActionRequestError(
+        'FLIP_AI_ACTION_REQUEST_NOT_FOUND',
+        404,
+        'Solicitação interna não encontrada.',
+      );
+    }
+
+    const latestResolution = await db.auditLog.findFirst({
+      where: {
+        tenantId: input.tenantId,
+        entityType: 'task',
+        entityId: task.id,
+        action: { in: [ACTIONS.confirmed, ACTIONS.declined, ACTIONS.reopened] },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { action: true },
+    });
+
+    if (input.action !== 'reopen' && task.status === 'completed') {
+      if (latestResolution?.action === expectedAction) return task;
+      throw new FlipAiHumanActionRequestError(
+        'FLIP_AI_ACTION_REQUEST_ALREADY_RESOLVED',
+        409,
+        'A solicitação já foi concluída. Reabra antes de alterar a decisão.',
+      );
+    }
+    if (input.action === 'reopen' && task.status !== 'completed') return task;
+
+    const updated = await db.task.update({
       where: { id: task.id },
       data: input.action === 'reopen'
         ? { status: 'pending', completedAt: null }
@@ -333,10 +348,9 @@ export async function resolveFlipAiHumanActionRequest(input: {
         },
       },
     });
-    return result;
-  });
 
-  return updated;
+    return updated;
+  });
 }
 
 export const FLIP_AI_HUMAN_ACTION_REQUEST_AUDIT_ACTIONS = ACTIONS;
