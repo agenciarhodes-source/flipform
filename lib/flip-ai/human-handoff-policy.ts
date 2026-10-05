@@ -49,7 +49,7 @@ const NEXT_ACTION_LABELS: Record<string, string> = {
   ask_one_question: 'Fazer uma única pergunta curta para destravar o próximo passo.',
   handle_objection: 'Tratar a objeção atual antes de tentar avançar.',
   request_contact: 'Solicitar apenas o dado de contato que ainda falta.',
-  schedule: 'Avançar para agenda ou visita.',
+  schedule: 'Coletar preferência de disponibilidade para atendimento presencial, sem confirmar compromisso.',
   handoff: 'Continuar com atendimento humano.',
 };
 
@@ -77,7 +77,10 @@ function buildFallbackSummary(
 
 function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   if (!intelligence) return 'low' as const;
-  if (intelligence.needsHuman || intelligence.classification === 'qualified' || intelligence.score >= 80) {
+  if (intelligence.needsHuman
+    || intelligence.actionEligibility.mayCollectAvailability
+    || intelligence.classification === 'qualified'
+    || intelligence.score >= 80) {
     return 'high' as const;
   }
   if (intelligence.score >= 50 || intelligence.classification === 'nurture') {
@@ -88,10 +91,15 @@ function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
 
 function handoffReason(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   if (!intelligence) return 'Contexto disponível para continuidade manual.';
+  if (intelligence.actionEligibility.mayCollectAvailability) {
+    return 'A pessoa demonstrou interesse presencial e quer discutir dia ou horário.';
+  }
+  if (intelligence.actionEligibility.inPersonRequested) {
+    return 'A pessoa demonstrou interesse em atendimento presencial, visita ou demonstração.';
+  }
   if (intelligence.needsHuman) return 'O JEV sinalizou necessidade de atendimento humano.';
   if (intelligence.nextAction === 'handoff') return 'A próxima ação sugerida é atendimento humano.';
   if (intelligence.classification === 'qualified') return 'O perfil atual está classificado como qualificado.';
-  if (intelligence.nextAction === 'schedule') return 'O lead está pronto para avançar para agenda ou visita.';
   return 'O resumo está disponível para continuidade sem reiniciar a conversa.';
 }
 
@@ -132,10 +140,10 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     || stateSummary
     || buildFallbackSummary(input.leadName, input.intelligence);
 
-  const nextAction = cleanText(input.qualification?.nextAction, 1_000)
-    || (input.intelligence
-      ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
-      : 'Revisar a conversa antes de responder.');
+  const nextAction = input.intelligence
+    ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
+    : cleanText(input.qualification?.nextAction, 1_000)
+      || 'Revisar a conversa antes de responder.';
 
   const knownFacts = [
     input.leadName?.trim() ? `Nome: ${input.leadName.trim()}` : '',
@@ -165,7 +173,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     input.intelligence?.needsHuman
       || input.intelligence?.nextAction === 'handoff'
       || input.intelligence?.classification === 'qualified'
-      || input.intelligence?.nextAction === 'schedule',
+      || input.intelligence?.actionEligibility.inPersonRequested,
   );
 
   return {

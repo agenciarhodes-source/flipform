@@ -57,13 +57,20 @@ const nextActionLabels: Record<string, string> = {
   ask_one_question: 'Fazer uma pergunta curta',
   handle_objection: 'Tratar objeção',
   request_contact: 'Solicitar contato',
-  schedule: 'Avançar para agenda/visita',
+  schedule: 'Coletar disponibilidade para atendimento presencial',
   handoff: 'Encaminhar para atendimento humano',
 };
 const temperatureLabels: Record<string, string> = {
   hot: 'Quente',
   warm: 'Morno',
   cold: 'Frio',
+};
+
+const schedulingStatusLabels: Record<string, string> = {
+  blocked: 'Agenda não indicada',
+  in_person_interest: 'Interesse presencial — confirmar se deseja marcar',
+  clarify_in_person: 'Esclarecer se o atendimento é presencial',
+  collect_availability: 'Pode coletar preferência de dia/horário',
 };
 
 const handoffPriorityLabels: Record<string, string> = {
@@ -423,6 +430,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div><strong>Jornada:</strong> {journeyLabels[lead.flipAiLiveIntelligence.journeyStage] || lead.flipAiLiveIntelligence.journeyStage}</div>
                       <div><strong>Urgência:</strong> {lead.flipAiLiveIntelligence.urgencyScore}/100</div>
                       <div><strong>Prontidão:</strong> {lead.flipAiLiveIntelligence.readinessScore}/100</div>
+                      <div>
+                        <strong>Presencial:</strong>{' '}
+                        {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested ? 'Interesse detectado' : 'Não indicado'}
+                      </div>
+                      <div>
+                        <strong>Agenda:</strong>{' '}
+                        {schedulingStatusLabels[lead.flipAiLiveIntelligence.actionEligibility?.schedulingStatus]
+                          || lead.flipAiLiveIntelligence.actionEligibility?.schedulingStatus
+                          || 'Não indicada'}
+                      </div>
                     </div>
                   </div>
                   <div className="rounded-lg border bg-white p-3 text-sm">
@@ -433,12 +450,18 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     {lead.flipAiLiveIntelligence.needsHuman && (
                       <p className="mt-2 text-amber-700">O JEV sinalizou necessidade de atendimento humano.</p>
                     )}
+                    {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested && (
+                      <p className="mt-2 text-blue-700">
+                        Interesse presencial detectado. Isso não significa que exista horário ou serviço presencial disponível.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
                   O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
-                  Esta leitura não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
+                  Agenda é independente do score e só fica elegível quando a conversa demonstra interesse presencial e intenção de marcar.
+                  Esta leitura não move etapa, não altera temperatura do CRM, não cria agenda e não executa ações automaticamente.
                 </div>
               </section>
             )}

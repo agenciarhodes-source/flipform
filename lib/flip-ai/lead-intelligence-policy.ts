@@ -1,4 +1,10 @@
 import {
+  normalizeActionSignals,
+  resolveFlipAiActionEligibility,
+  type FlipAiActionEligibility,
+} from './action-eligibility';
+
+import {
   JEV_INTENTS,
   JEV_JOURNEY_STAGES,
   JEV_NEXT_ACTIONS,
@@ -31,6 +37,7 @@ export type FlipAiLeadIntelligenceSnapshot = {
   objection: FlipAiConversationDecision['objection'];
   journeyStage: FlipAiConversationDecision['journeyStage'];
   nextAction: FlipAiConversationDecision['nextAction'];
+  actionEligibility: FlipAiActionEligibility;
   needsHuman: boolean;
   confidence: number;
   scoreDelta: number | null;
@@ -82,6 +89,11 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     || typeof raw.urgencyScore !== 'number'
     || (raw.readinessScore !== undefined && typeof raw.readinessScore !== 'number')
     || typeof raw.needsHuman !== 'boolean'
+    || (raw.actionSignals !== undefined && (
+      !raw.actionSignals
+      || typeof raw.actionSignals !== 'object'
+      || Array.isArray(raw.actionSignals)
+    ))
     || typeof raw.confidence !== 'number'
     || typeof raw.intentConfidence !== 'number'
     || typeof raw.objectionConfidence !== 'number'
@@ -101,6 +113,25 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     urgencyScore: boundScore(raw.urgencyScore),
     ...(typeof raw.readinessScore === 'number' ? { readinessScore: boundScore(raw.readinessScore) } : {}),
     needsHuman: raw.needsHuman,
+    ...(raw.actionSignals && typeof raw.actionSignals === 'object' && !Array.isArray(raw.actionSignals)
+      ? (() => {
+        const signals = raw.actionSignals as Record<string, unknown>;
+        return {
+          actionSignals: normalizeActionSignals({
+            humanHandoffInterest: typeof signals.humanHandoffInterest === 'number'
+              ? signals.humanHandoffInterest : undefined,
+            inPersonInterest: typeof signals.inPersonInterest === 'number'
+              ? signals.inPersonInterest : undefined,
+            visitInterest: typeof signals.visitInterest === 'number'
+              ? signals.visitInterest : undefined,
+            productDemoInterest: typeof signals.productDemoInterest === 'number'
+              ? signals.productDemoInterest : undefined,
+            schedulingInterest: typeof signals.schedulingInterest === 'number'
+              ? signals.schedulingInterest : undefined,
+          }),
+        };
+      })()
+      : {}),
     confidence: Math.max(0, Math.min(1, raw.confidence)),
     intentConfidence: Math.max(0, Math.min(1, raw.intentConfidence)),
     objectionConfidence: Math.max(0, Math.min(1, raw.objectionConfidence)),
@@ -171,6 +202,11 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
   const previous = input.previousDecision
     ? calculateFlipAiLeadScore(input.previousDecision)
     : null;
+  const actionEligibility = resolveFlipAiActionEligibility({
+    rawNextAction: input.decision.nextAction,
+    signals: input.decision.actionSignals,
+    needsHuman: input.decision.needsHuman,
+  });
 
   return {
     source: 'jev',
@@ -182,7 +218,8 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     intent: input.decision.intent,
     objection: input.decision.objection,
     journeyStage: input.decision.journeyStage,
-    nextAction: input.decision.nextAction,
+    nextAction: actionEligibility.effectiveNextAction,
+    actionEligibility,
     needsHuman: input.decision.needsHuman,
     confidence: input.decision.confidence,
     scoreDelta: previous ? current.score - previous.score : null,
