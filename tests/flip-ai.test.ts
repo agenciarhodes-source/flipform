@@ -745,10 +745,10 @@ test('Flip AI schema contract covers every object declared by the rollout migrat
   }
   assert.equal(parsedConstraints.size, FLIP_AI_REQUIRED_CONSTRAINT_SPECS.length);
   assert.equal(FLIP_AI_REQUIRED_TABLES.length, 17);
-  assert.equal(columns.size, 211);
+  assert.equal(columns.size, 212);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , notNull]) => !notNull).length, 39);
   assert.equal(FLIP_AI_REQUIRED_COLUMN_SPECS.filter(([, , , , defaultDefinition]) =>
-    defaultDefinition !== null).length, 49);
+    defaultDefinition !== null).length, 50);
   assert.equal(indexes.size, 62);
   assert.equal(constraints.size, 75);
 });
