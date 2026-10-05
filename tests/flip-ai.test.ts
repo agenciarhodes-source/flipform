@@ -55,6 +55,12 @@ import {
   parseAvailabilitySnapshot,
 } from '../lib/flip-ai/availability-policy';
 import {
+  buildFlipAiHumanActionRequestDescription,
+  flipAiHumanActionRequestKey,
+  flipAiHumanActionRequestTaskId,
+  humanActionRequestAuditMetadata,
+} from '../lib/flip-ai/human-action-request-policy';
+import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
   normalizeJevOrdinalScore,
@@ -2259,4 +2265,53 @@ test('PR 348 handoff exposes ready availability without claiming an appointment 
   assert.match(result.nextAction, /Confirmar disponibilidade/);
   assert.match(result.resumeGuidance, /não repita perguntas/i);
   assert.doesNotMatch(result.nextAction, /agendado|reservado/i);
+});
+
+
+test('PR 349 human action request task id is deterministic, UUID-shaped and conversation-scoped', () => {
+  const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
+  const conversationId = 'conversation-a';
+  const first = flipAiHumanActionRequestTaskId({ tenantId, conversationId });
+  const replay = flipAiHumanActionRequestTaskId({ tenantId, conversationId });
+  const other = flipAiHumanActionRequestTaskId({ tenantId, conversationId: 'conversation-b' });
+  assert.equal(first, replay);
+  assert.notEqual(first, other);
+  assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.equal(
+    flipAiHumanActionRequestKey({ tenantId, conversationId }),
+    `flip-ai-action-request:${tenantId}:${conversationId}:in-person-confirmation`,
+  );
+});
+
+test('PR 349 action request description presents preference without claiming a booking', () => {
+  const availability = {
+    version: '2026-10-05.1',
+    modalities: ['customer_visit', 'product_demo'] as Array<'customer_visit' | 'product_demo'>,
+    preferredDate: 'sexta-feira',
+    preferredPeriod: 'afternoon' as const,
+    preferredTime: '15:00',
+    status: 'ready_for_handoff' as const,
+    updatedAt: '2026-10-05T20:00:00.000Z',
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  };
+  const description = buildFlipAiHumanActionRequestDescription(availability);
+  assert.match(description, /visita ao cliente/);
+  assert.match(description, /demonstração presencial/);
+  assert.match(description, /sexta-feira/);
+  assert.match(description, /tarde/);
+  assert.match(description, /15:00/);
+  assert.match(description, /Nenhum horário foi reservado ou confirmado/);
+  assert.doesNotMatch(description, /Agendamento confirmado|Horário reservado/i);
+
+  const metadata = humanActionRequestAuditMetadata({
+    leadId: 'lead-1',
+    conversationId: 'conversation-1',
+    agentId: 'agent-1',
+    availability,
+    assignedTo: null,
+  });
+  assert.equal(metadata.source, 'flip_ai');
+  assert.equal(metadata.requestType, 'in_person_confirmation');
+  assert.equal(metadata.preferredDate, 'sexta-feira');
+  assert.deepEqual(metadata.modalities, ['customer_visit', 'product_demo']);
 });
