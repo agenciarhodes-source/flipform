@@ -87,6 +87,25 @@ const handoffPriorityLabels: Record<string, string> = {
   low: 'Prioridade baixa',
 };
 
+const availabilityPeriodLabels: Record<string, string> = {
+  morning: 'Manhã',
+  afternoon: 'Tarde',
+  evening: 'Noite',
+  flexible: 'Flexível',
+};
+
+const availabilityModalityLabels: Record<string, string> = {
+  in_person_service: 'Atendimento presencial',
+  customer_visit: 'Visita ao cliente',
+  product_demo: 'Demonstração presencial',
+};
+
+const availabilityStatusLabels: Record<string, string> = {
+  collecting: 'Coletando preferência',
+  partial: 'Preferência parcial',
+  ready_for_handoff: 'Pronto para confirmação humana',
+};
+
 export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId: string; stages: Stage[]; onClose: () => void; onChange: () => void }) {
   const [lead, setLead] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -366,6 +385,45 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   </div>
                 </div>
 
+                {lead.flipAiHumanHandoff.availability && (
+                  <div className="rounded-lg border border-emerald-200 bg-white p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Preferência para atendimento presencial
+                      </div>
+                      <Badge variant="outline">
+                        {availabilityStatusLabels[lead.flipAiHumanHandoff.availability.status]
+                          || lead.flipAiHumanHandoff.availability.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-2 grid gap-1 md:grid-cols-2">
+                      <div>
+                        <strong>Modalidade:</strong>{' '}
+                        {(lead.flipAiHumanHandoff.availability.modalities || [])
+                          .map((item: string) => availabilityModalityLabels[item] || item)
+                          .join(', ') || 'Não definida'}
+                      </div>
+                      <div>
+                        <strong>Dia/data:</strong>{' '}
+                        {lead.flipAiHumanHandoff.availability.preferredDate || 'Ainda não informado'}
+                      </div>
+                      <div>
+                        <strong>Período:</strong>{' '}
+                        {availabilityPeriodLabels[lead.flipAiHumanHandoff.availability.preferredPeriod]
+                          || lead.flipAiHumanHandoff.availability.preferredPeriod
+                          || 'Ainda não informado'}
+                      </div>
+                      <div>
+                        <strong>Horário:</strong>{' '}
+                        {lead.flipAiHumanHandoff.availability.preferredTime || 'Ainda não informado'}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Isto é somente uma preferência coletada na conversa. Nenhum horário foi reservado ou confirmado.
+                    </p>
+                  </div>
+                )}
+
                 {lead.flipAiHumanHandoff.reasons?.length > 0 && (
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sinais relevantes</div>
@@ -376,8 +434,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 )}
 
                 <div className="rounded-lg border border-emerald-200 bg-white p-3 text-xs text-muted-foreground">
-                  Este resumo reaproveita o estado da conversa, decisões JEV e qualificação já existentes.
-                  Ele não move o lead, não atribui vendedor e não envia mensagem automaticamente.
+                  Este resumo reaproveita o estado da conversa, decisões JEV, qualificação e disponibilidade já coletada.
+                  Ele não cria agenda, não reserva horário, não move o lead, não atribui vendedor e não envia mensagem automaticamente.
                 </div>
               </section>
             )}
