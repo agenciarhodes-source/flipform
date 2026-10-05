@@ -77,8 +77,12 @@ function buildFallbackSummary(
   ].filter(Boolean).join(' ');
 }
 
-function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
-  if (!intelligence) return 'low' as const;
+function priorityOf(
+  intelligence: FlipAiLeadIntelligenceSnapshot | null,
+  availability: FlipAiAvailabilitySnapshot | null | undefined,
+) {
+  if (availability?.status === 'ready_for_handoff') return 'high' as const;
+  if (!intelligence) return availability?.status === 'partial' ? 'normal' as const : 'low' as const;
   if (intelligence.needsHuman
     || intelligence.actionPermission.mayCollectAvailability
     || intelligence.classification === 'qualified'
@@ -91,7 +95,16 @@ function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   return 'low' as const;
 }
 
-function handoffReason(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
+function handoffReason(
+  intelligence: FlipAiLeadIntelligenceSnapshot | null,
+  availability: FlipAiAvailabilitySnapshot | null | undefined,
+) {
+  if (availability?.status === 'ready_for_handoff') {
+    return 'A pessoa já informou preferência suficiente de disponibilidade para confirmação humana.';
+  }
+  if (availability?.status === 'partial') {
+    return 'A pessoa já informou parte da preferência de disponibilidade; ainda falta completar um dado.';
+  }
   if (!intelligence) return 'Contexto disponível para continuidade manual.';
   if (intelligence.actionPermission.mayCollectAvailability) {
     return 'A pessoa quer atendimento presencial e marcação, e este agente permite coletar disponibilidade.';
@@ -186,7 +199,8 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
       : [];
 
   const recommended = Boolean(
-    input.intelligence?.needsHuman
+    input.availability?.status === 'ready_for_handoff'
+      || input.intelligence?.needsHuman
       || input.intelligence?.nextAction === 'handoff'
       || input.intelligence?.classification === 'qualified'
       || input.intelligence?.actionEligibility.inPersonRequested,
@@ -195,9 +209,9 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   return {
     summary,
     summarySource,
-    priority: priorityOf(input.intelligence),
+    priority: priorityOf(input.intelligence, input.availability),
     recommended,
-    reason: handoffReason(input.intelligence),
+    reason: handoffReason(input.intelligence, input.availability),
     nextAction,
     resumeGuidance: [
       resumeGuidance(input.intelligence, nextAction),
