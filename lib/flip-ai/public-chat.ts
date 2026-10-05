@@ -1283,7 +1283,7 @@ export async function buildPublicChatContext(
 export async function completePublicChatTurn(
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   result: OpenAiTextResult,
-  decision?: z.infer<typeof publicChatDecisionSchema>,
+  decision?: z.input<typeof publicChatDecisionSchema>,
   evidenceMessageIds: string[] = [],
   externalSources: ExternalWebSource[] = [],
   previousMemorySnapshot: FlipAiConversationMemorySnapshot | null = null,
@@ -1301,7 +1301,7 @@ export async function completePublicChatTurn(
   const availabilitySnapshot = decision && actionEligibility && actionPermission
     ? mergeAvailabilitySnapshot({
       previous: previousAvailabilitySnapshot,
-      patch: decision.availabilityPatch,
+      patch: decision.availabilityPatch || EMPTY_FLIP_AI_AVAILABILITY_PATCH,
       eligibility: actionEligibility,
       permission: actionPermission,
       sourceMessageId: turn.messageId,
