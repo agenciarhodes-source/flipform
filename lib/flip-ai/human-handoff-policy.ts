@@ -140,10 +140,10 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     || stateSummary
     || buildFallbackSummary(input.leadName, input.intelligence);
 
-  const nextAction = cleanText(input.qualification?.nextAction, 1_000)
-    || (input.intelligence
-      ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
-      : 'Revisar a conversa antes de responder.');
+  const nextAction = input.intelligence
+    ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
+    : cleanText(input.qualification?.nextAction, 1_000)
+      || 'Revisar a conversa antes de responder.';
 
   const knownFacts = [
     input.leadName?.trim() ? `Nome: ${input.leadName.trim()}` : '',
