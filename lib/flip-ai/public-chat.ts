@@ -141,7 +141,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
         properties: {
           facts: {
             type: 'array',
-            maxItems: 8,
+            maxItems: 6,
             items: {
               type: 'object',
               additionalProperties: false,
@@ -149,7 +149,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
               properties: {
                 action: { type: 'string', enum: ['upsert', 'remove'] },
                 key: { type: 'string', minLength: 2, maxLength: 64, pattern: '^[A-Za-z0-9_:-]+$' },
-                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 280 }, { type: 'null' }] },
+                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 180 }, { type: 'null' }] },
               },
             },
           },
@@ -163,7 +163,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
               properties: {
                 action: { type: 'string', enum: ['upsert', 'remove'] },
                 key: { type: 'string', minLength: 2, maxLength: 64, pattern: '^[A-Za-z0-9_:-]+$' },
-                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 280 }, { type: 'null' }] },
+                value: { anyOf: [{ type: 'string', minLength: 1, maxLength: 180 }, { type: 'null' }] },
               },
             },
           },
