@@ -166,7 +166,9 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     const existing = (await selectAgents(db, tenantId, id))[0];
     if (operation.kind === 'create' && existing) {
       const same = (Object.keys(input) as Array<keyof AgentDraftInput>)
-        .every((key) => existing[key] === input[key]);
+        .every((key) => key === 'actionCapabilities'
+          ? JSON.stringify(existing.actionCapabilities) === JSON.stringify(input.actionCapabilities)
+          : existing[key] === input[key]);
       if (!same) throw new FlipAiError('REQUEST_CONFLICT', 409, 'Esta solicitação já foi salva com outros dados. Atualize a lista.');
       const knowledge = await selectKnowledgeSummaries(db, tenantId);
       return { ...existing, updatedAt: existing.updatedAt.toISOString(), knowledge: knowledge.get(existing.id) || null,
@@ -234,7 +236,10 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
     }
     await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_agent', entityId: id,
       action: operation.kind === 'create' ? 'created' : 'updated',
-      metadata: { status: operation.kind === 'create' ? 'draft' : existing?.status } } });
+      metadata: {
+        status: operation.kind === 'create' ? 'draft' : existing?.status,
+        actionCapabilities: input.actionCapabilities,
+      } } });
     const saved = (await selectAgents(db, tenantId, id))[0];
     if (!saved) throw new FlipAiError('AGENT_NOT_FOUND', 500, 'Não foi possível confirmar o atendente salvo.');
     const knowledge = await selectKnowledgeSummaries(db, tenantId);
