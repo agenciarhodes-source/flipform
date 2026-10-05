@@ -1,5 +1,6 @@
 import {
   EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+  FLIP_AI_ACTION_CAPABILITIES_VERSION,
   type FlipAiActionCapabilities,
 } from './action-capabilities';
 
@@ -50,6 +51,7 @@ export type FlipAiActionEligibility = {
 
 export type FlipAiActionPermission = {
   version: string;
+  capabilitiesVersion: string;
   capabilities: FlipAiActionCapabilities;
   status: FlipAiActionPermissionStatus;
   supportedInPerson: boolean;
@@ -202,6 +204,7 @@ export function resolveFlipAiActionPermission(input: {
 
   return {
     version: FLIP_AI_ACTION_ELIGIBILITY_VERSION,
+    capabilitiesVersion: FLIP_AI_ACTION_CAPABILITIES_VERSION,
     capabilities,
     status,
     supportedInPerson,
