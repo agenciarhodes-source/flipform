@@ -881,6 +881,7 @@ export async function buildPublicChatContext(
       excludeEventId: turn.eventId,
     });
   const memoryContext = conversationMemoryPrompt(memorySnapshot);
+  const memoryActive = memoryContext.length > 0;
   const intelligentHarnessEnabled = isJevEnabledForTenant({
     tenantId: turn.tenantId,
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
@@ -1066,8 +1067,8 @@ export async function buildPublicChatContext(
   const budgetedHistory = intelligentHarnessEnabled
     ? buildBudgetedHistory(
       chronological,
-      memorySnapshot ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined,
-      memorySnapshot ? FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES : undefined,
+      memoryActive ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined,
+      memoryActive ? FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES : undefined,
     )
     : {
       messages: chronological.slice(-14),
