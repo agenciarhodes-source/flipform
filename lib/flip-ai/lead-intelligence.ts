@@ -7,9 +7,11 @@ import {
   parseConversationDecision,
   type FlipAiLeadIntelligenceSnapshot,
 } from './lead-intelligence-policy';
+import { loadFlipAiAgentActionCapabilities } from './action-capabilities-server';
 
 type DecisionRow = {
   id: string;
+  agentId: string;
   conversationId: string;
   decision: Prisma.JsonValue | null;
   createdAt: Date;
@@ -22,6 +24,7 @@ export async function getFlipAiLeadIntelligence(input: {
   const rows = await prisma.$queryRaw<DecisionRow[]>(Prisma.sql`
     SELECT
       e.id,
+      e.agent_id AS "agentId",
       e.conversation_id AS "conversationId",
       e.metadata->'decision' AS decision,
       e.created_at AS "createdAt"
@@ -46,6 +49,10 @@ export async function getFlipAiLeadIntelligence(input: {
   const previousDecision = rows[1]
     ? parseConversationDecision(rows[1].decision)
     : null;
+  const actionCapabilities = await loadFlipAiAgentActionCapabilities({
+    tenantId: input.tenantId,
+    agentId: currentRow.agentId,
+  });
 
   return buildFlipAiLeadIntelligenceSnapshot({
     decision,
@@ -53,5 +60,6 @@ export async function getFlipAiLeadIntelligence(input: {
     updatedAt: currentRow.createdAt,
     conversationId: currentRow.conversationId,
     usageEventId: currentRow.id,
+    actionCapabilities,
   });
 }
