@@ -184,7 +184,7 @@ def test_qualification_engine_is_server_authoritative_tenant_scoped_and_idempote
 
 def test_qualification_retrieval_and_output_are_structured_and_bounded():
     chat = read("lib/flip-ai/public-chat.ts")
-    assert "required: ['reply', 'identity', 'qualification', 'memoryPatch']" in chat
+    assert "required: ['reply', 'identity', 'qualification', 'memoryPatch', 'availabilityPatch']" in chat
     assert "memoryPatch: flipAiConversationMemoryPatchSchema" in chat
     assert "qualification: flipAiFinalQualificationSchema.nullable()" in chat
     assert "Critérios de qualificação, perfil ideal" in chat
