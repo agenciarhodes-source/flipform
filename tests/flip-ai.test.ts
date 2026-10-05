@@ -1777,3 +1777,32 @@ test('PR 346 scheduling without known in-person mode asks one clarification firs
   assert.equal(eligibility.effectiveNextAction, 'ask_one_question');
   assert.match(actionEligibilityPrompt(eligibility), /esclarecer a modalidade/);
 });
+
+
+test('PR 346 visit or in-person product demo counts as presencial but not as scheduling by itself', () => {
+  for (const signals of [
+    {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.2,
+      visitInterest: 0.9,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.2,
+    },
+    {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.2,
+      visitInterest: 0.1,
+      productDemoInterest: 0.9,
+      schedulingInterest: 0.2,
+    },
+  ]) {
+    const eligibility = resolveFlipAiActionEligibility({
+      rawNextAction: 'ask_one_question',
+      signals,
+    });
+    assert.equal(eligibility.inPersonRequested, true);
+    assert.equal(eligibility.schedulingStatus, 'in_person_interest');
+    assert.equal(eligibility.mayDiscussScheduling, true);
+    assert.equal(eligibility.mayCollectAvailability, false);
+  }
+});
