@@ -41,8 +41,9 @@ def test_pr345_memory_is_extracted_in_existing_openai_turn_not_a_second_model_ca
 def test_pr345_memory_reduces_history_only_after_a_snapshot_exists():
     chat = read("lib/flip-ai/public-chat.ts")
     harness = read("lib/flip-ai/harness-resolver.ts")
-    assert "memorySnapshot ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined" in chat
-    assert "memorySnapshot ? FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES : undefined" in chat
+    assert "const memoryActive = memoryContext.length > 0" in chat
+    assert "memoryActive ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined" in chat
+    assert "memoryActive ? FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES : undefined" in chat
     assert "FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET = 4_500" in harness
     assert "FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES = 6" in harness
     assert "avoidedTokensEstimate" in harness
