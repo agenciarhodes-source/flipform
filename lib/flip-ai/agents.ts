@@ -194,6 +194,13 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
           VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor}, ${input.avatarUrl},
             ${input.chatBackgroundColor}, ${input.userMessageColor}, ${input.sendButtonColor}, ${input.style},
             ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
+      } else if (actionCapabilitiesReady) {
+        await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
+          (id, tenant_id, name, description, primary_color, action_capabilities, style,
+           pipeline_id, initial_stage_id, rotation_id, status, version, created_by, created_at, updated_at)
+          VALUES (${id}, ${tenantId}, ${input.name}, ${input.description}, ${input.primaryColor},
+            ${JSON.stringify(input.actionCapabilities)}::jsonb, ${input.style},
+            ${input.pipelineId}, ${input.initialStageId}, ${input.rotationId}, 'draft', 1, ${userId}, NOW(), NOW())`);
       } else {
         await db.$executeRaw(Prisma.sql`INSERT INTO flip_ai_agents
           (id, tenant_id, name, description, primary_color, style, pipeline_id, initial_stage_id, rotation_id,
@@ -220,6 +227,15 @@ export async function saveAgentDraft(session: SessionPayload, rawInput: AgentDra
             description = ${input.description}, primary_color = ${input.primaryColor}, avatar_url = ${input.avatarUrl},
             chat_background_color = ${input.chatBackgroundColor}, user_message_color = ${input.userMessageColor},
             send_button_color = ${input.sendButtonColor}, style = ${input.style}, pipeline_id = ${input.pipelineId},
+            initial_stage_id = ${input.initialStageId}, rotation_id = ${input.rotationId},
+            version = version + 1, updated_at = NOW()
+            WHERE id = ${id} AND tenant_id = ${tenantId} AND status IN ('draft', 'published')
+              AND version = ${operation.version}`)
+        : actionCapabilitiesReady
+        ? await db.$executeRaw(Prisma.sql`UPDATE flip_ai_agents SET name = ${input.name},
+            description = ${input.description}, primary_color = ${input.primaryColor},
+            action_capabilities = ${JSON.stringify(input.actionCapabilities)}::jsonb,
+            style = ${input.style}, pipeline_id = ${input.pipelineId},
             initial_stage_id = ${input.initialStageId}, rotation_id = ${input.rotationId},
             version = version + 1, updated_at = NOW()
             WHERE id = ${id} AND tenant_id = ${tenantId} AND status IN ('draft', 'published')
