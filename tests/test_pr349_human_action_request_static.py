@@ -71,6 +71,8 @@ def test_pr349_human_resolution_uses_existing_task_rbac_and_audit():
     assert "flip_ai.action_request.declined" in service
     assert "flip_ai.action_request.reopened" in service
     assert "FLIP_AI_ACTION_REQUEST_ALREADY_RESOLVED" in service
+    assert "flip-ai-action-resolution:" in service
+    assert service.count("pg_advisory_xact_lock(hashtext") >= 2
 
 
 def test_pr349_confirmation_is_internal_only_and_creates_no_calendar_commitment():
