@@ -481,7 +481,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
                   O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
                   Agenda é independente do score e exige duas condições: desejo presencial do cliente e capacidade habilitada no agente.
-                  Mesmo quando a coleta de disponibilidade é permitida, esta leitura não cria compromisso, não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
+                  Mesmo quando a coleta de disponibilidade é permitida, esta leitura não cria agenda nem compromisso, não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
                 </div>
               </section>
             )}
