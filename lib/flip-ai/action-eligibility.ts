@@ -39,8 +39,8 @@ export type FlipAiActionEligibility = {
 const EXPLICIT_THRESHOLD = 0.72;
 
 function boundProbability(value: number | null | undefined) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, Number(value)));
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
 }
 
 export function normalizeActionSignals(
