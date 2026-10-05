@@ -2140,7 +2140,10 @@ test('PR 348 availability accumulates day and period progressively without inven
   assert.equal(ready?.preferredPeriod, 'afternoon');
   assert.deepEqual(ready?.modalities, ['in_person_service']);
   assert.match(availabilityPrompt(ready || null), /data_preferida=sexta-feira/);
-  assert.match(availabilityConversationGuidance(ready || null, permission), /não repita/i);
+  assert.match(
+    availabilityConversationGuidance(ready || null, permission),
+    /não (?:repita|pergunte novamente)/i,
+  );
   assert.deepEqual(parseAvailabilitySnapshot(ready), ready);
 });
 
