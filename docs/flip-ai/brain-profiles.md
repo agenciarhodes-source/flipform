@@ -20,7 +20,7 @@ O exemplo `junqueira-profiles.example.md` demonstra todos os assuntos pedidos. E
 
 O score é uma régua de triagem, não probabilidade de fechamento, direito confirmado ou diagnóstico. Classificação sugerida, somente com análise completa: 75 ou mais = qualificado; 25 ou menos = não qualificado; demais = nutrição. Incompleta = informação insuficiente. A temperatura operacional continua sob controle humano.
 
-A qualificação final é alinhada à rubrica antes da persistência e no replay. O campo legado `fitScore` recebe a nota agregada do perfil para compatibilidade; o painel principal identifica a política `brain-profile-v1`. A nova análise não altera etapa, responsável nem temperatura do Lead.
+A qualificação final é alinhada à rubrica antes da persistência e no replay. Enquanto incompleta, nenhuma qualificação final com nota numérica é gravada; o humano continua recebendo a memória e pendências. A API mantém score null e temperatura unknown, com prioridade normal de encaminhamento na ausência de outro sinal de prioridade alta. O campo legado `fitScore` recebe a nota agregada do perfil para compatibilidade; o painel principal identifica a política `brain-profile-v1`. A nova análise não altera etapa, responsável nem temperatura do Lead.
 
 ## Compatibilidade e custo
 

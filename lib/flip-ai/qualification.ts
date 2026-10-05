@@ -31,7 +31,8 @@ export function applyBrainFinalQualification(
 ): FlipAiFinalQualification | null {
   if (!qualification || !assessment) return qualification;
   const complete = assessment.status === 'complete' && assessment.score !== null;
-  const score = assessment.score ?? 0;
+  if (!complete) return null;
+  const score = assessment.score!;
   return {
     ...qualification,
     classification: classifyBrainAssessment(assessment),

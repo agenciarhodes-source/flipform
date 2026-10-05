@@ -24,13 +24,13 @@ export type FlipAiLiveClassification =
   | 'disqualified'
   | 'insufficient';
 
-export type FlipAiLeadTemperature = 'hot' | 'warm' | 'cold';
+export type FlipAiLeadTemperature = 'hot' | 'warm' | 'cold' | 'unknown';
 
 export type FlipAiLeadIntelligenceSnapshot = {
   source: 'jev';
   brainAssessment?: BrainAssessment;
   policyVersion: string;
-  score: number;
+  score: number | null;
   classification: FlipAiLiveClassification;
   temperature: FlipAiLeadTemperature;
   fitScore: number;
@@ -159,7 +159,7 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
     : JOURNEY_STRENGTH[decision.journeyStage];
   const confidenceScore = boundScore(decision.confidence * 100);
 
-  let score = boundScore(
+  let score: number | null = boundScore(
     fitScore * 0.40
       + intentScore * 0.30
       + urgencyScore * 0.15
@@ -182,11 +182,11 @@ export function calculateFlipAiLeadScore(decision: FlipAiConversationDecision) {
 
   if (decision.brainAssessment) {
     const assessment = decision.brainAssessment;
-    score = assessment.score ?? 0;
+    score = assessment.score;
     classification = classifyBrainAssessment(assessment);
   }
 
-  const temperature: FlipAiLeadTemperature = classification === 'qualified'
+  const temperature: FlipAiLeadTemperature = score === null ? 'unknown' : classification === 'qualified'
     ? 'hot'
     : classification === 'nurture' && score >= 50
       ? 'warm'
@@ -244,7 +244,7 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     actionPermission,
     needsHuman: input.decision.needsHuman,
     confidence: input.decision.confidence,
-    scoreDelta: previous && (input.decision.brainAssessment
+    scoreDelta: previous && current.score !== null && previous.score !== null && (input.decision.brainAssessment
       ? input.decision.brainAssessment.status === 'complete'
         && input.previousDecision?.brainAssessment?.status === 'complete'
         && input.decision.brainAssessment.profileId === input.previousDecision.brainAssessment.profileId

@@ -90,9 +90,10 @@ function priorityOf(
   if (intelligence.needsHuman
     || intelligence.actionPermission.mayCollectAvailability
     || intelligence.classification === 'qualified'
-    || intelligence.score >= 80) {
+    || (intelligence.score !== null && intelligence.score >= 80)) {
     return 'high' as const;
   }
+  if (intelligence.score === null) return 'normal' as const;
   if (intelligence.score >= 50 || intelligence.classification === 'nurture') {
     return 'normal' as const;
   }

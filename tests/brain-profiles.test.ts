@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseBrainProfiles, buildBrainAssessment, brainAssessmentPrompt, type BrainProfile } from '../lib/flip-ai/brain-profiles';
 import { __testOnly, runJevConversationDecision } from '../lib/flip-ai/jev-decision-engine';
-import { calculateFlipAiLeadScore, parseConversationDecision } from '../lib/flip-ai/lead-intelligence-policy';
+import { calculateFlipAiLeadScore, parseConversationDecision, buildFlipAiLeadIntelligenceSnapshot } from '../lib/flip-ai/lead-intelligence-policy';
 import { applyBrainFinalQualification } from '../lib/flip-ai/qualification';
 import { buildHarnessRetrievalQueries } from '../lib/flip-ai/harness-resolver';
 import { buildFlipAiHumanHandoffSnapshot } from '../lib/flip-ai/human-handoff-policy';
@@ -48,6 +48,13 @@ test('weighted score comes from the selected rubric; missing evidence never mean
   assert.equal(calculateFlipAiLeadScore({...decision, brainAssessment: full}).score, 80);
   const partial = assess({brain_perfil: {choice: 'level_4', confidence: .9}, brain_documentos: {choice: 'unknown', confidence: .95}});
   assert.equal(partial.score, null);
+  const intelligence = buildFlipAiLeadIntelligenceSnapshot({decision: {...decision, brainAssessment: partial}, updatedAt: new Date(), conversationId: 'conversation', usageEventId: 'event'});
+  const handoff = buildFlipAiHumanHandoffSnapshot({leadName: 'Maria', hasPhone: true, hasEmail: false, answers: [], qualification: null, stateSummary: null, intelligence, conversationId: 'conversation', updatedAt: new Date()});
+  assert.equal(intelligence.score, null); assert.equal(intelligence.temperature, 'unknown');
+  assert.equal(handoff.priority, 'normal');
+
+  assert.equal(calculateFlipAiLeadScore({...decision, brainAssessment: partial}).score, null);
+  assert.equal(calculateFlipAiLeadScore({...decision, brainAssessment: partial}).temperature, 'unknown');
   assert.equal(calculateFlipAiLeadScore({...decision, brainAssessment: partial}).classification, 'insufficient');
   assert.equal(assess({brain_perfil: {choice: 'level_4', confidence: .3}}).criteria[0].level, null);
   assert.equal(assess({}, .3).status, 'unknown');
@@ -92,10 +99,12 @@ test('retrieval is directed to the detected thesis and final qualification canno
   const assessment = assess({brain_perfil: {choice: 'level_4', confidence: .9}});
   const queries = buildHarnessRetrievalQueries({message: 'E quais documentos?', decision: {...decision, brainAssessment: assessment}});
   assert.match(queries.qualificationQuery, /documentação rural/);
+  const early = buildHarnessRetrievalQueries({message: 'E quais documentos?', decision: {...decision, confidence: .3, brainAssessment: assessment}});
+  assert.match(early.qualificationQuery, /documentação rural/);
+  assert.match(early.conversationQuery, /Salário-maternidade/);
   assert.equal(parseConversationDecision({...decision, brainAssessment: assessment})?.brainAssessment?.status, 'partial');
   const final = applyBrainFinalQualification({classification: 'qualified', fitScore: 99, intentScore: 99, awarenessLevel: 3, journeyStage: 'decision', confidence: .99, summary: 'Busca orientação.', reasons: ['LLM'], nextAction: 'Análise humana.'}, assessment);
-  assert.equal(final?.classification, 'insufficient');
-  assert.equal(final?.confidence, 0);
+  assert.equal(final, null);
   assert.equal(applyBrainFinalQualification(null, assessment), null);
 });
 
