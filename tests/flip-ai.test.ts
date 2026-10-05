@@ -392,13 +392,16 @@ test('structured public turn validates reply and identity without extra fields',
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
     qualification: null,
+    memoryPatch: { facts: [], pending: [] },
   })), {
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
     qualification: null,
+    memoryPatch: { facts: [], pending: [] },
   });
   assert.throws(() => parsePublicChatDecision(JSON.stringify({
-    reply: 'Oi', identity: { name: null, phone: null }, qualification: null, tenantId: 'other',
+    reply: 'Oi', identity: { name: null, phone: null }, qualification: null,
+    memoryPatch: { facts: [], pending: [] }, tenantId: 'other',
   })), (error: unknown) => error instanceof OpenAiResponseError && error.kind === 'ambiguous');
 });
 
