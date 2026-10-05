@@ -1974,3 +1974,71 @@ test('PR 347 vague scheduling stays blocked when agent has no presencial capabil
   assert.equal(permission.status, 'blocked');
   assert.equal(permission.effectiveNextAction, 'answer_directly');
 });
+
+
+test('PR 347 scheduling capability cannot be enabled without a presencial modality', () => {
+  assert.deepEqual(parseFlipAiActionCapabilities({
+    inPersonService: false,
+    customerVisit: false,
+    productDemo: false,
+    inPersonScheduling: true,
+  }), EMPTY_FLIP_AI_ACTION_CAPABILITIES);
+
+  const baseDraft = {
+    name: 'Helena',
+    description: '',
+    primaryColor: '#2563EB',
+    style: 'welcoming' as const,
+    pipelineId: 'a166c90d-c862-4e04-9e8b-ad1c43ac6390',
+    initialStageId: 'b166c90d-c862-4e04-9e8b-ad1c43ac6390',
+    slug: 'helena-capabilities',
+  };
+  assert.equal(updateAgentDraftSchema.safeParse({
+    ...baseDraft,
+    version: 1,
+    actionCapabilities: {
+      inPersonService: false,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  }).success, false);
+});
+
+test('PR 347 combined presencial requests require every explicitly requested modality', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.9,
+      productDemoInterest: 0.9,
+      schedulingInterest: 0.9,
+    },
+  });
+  const partial = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: true,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  });
+  assert.equal(partial.status, 'unsupported');
+  assert.equal(partial.supportedInPerson, false);
+  assert.equal(partial.mayCollectAvailability, false);
+
+  const complete = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: false,
+      customerVisit: true,
+      productDemo: true,
+      inPersonScheduling: true,
+    },
+  });
+  assert.equal(complete.status, 'collect_availability');
+  assert.equal(complete.supportedInPerson, true);
+  assert.equal(complete.mayCollectAvailability, true);
+});
