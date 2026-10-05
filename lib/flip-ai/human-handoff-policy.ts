@@ -131,7 +131,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   } | null;
   stateSummary: string | null;
   intelligence: FlipAiLeadIntelligenceSnapshot | null;
-  availability: FlipAiAvailabilitySnapshot | null;
+  availability?: FlipAiAvailabilitySnapshot | null;
   conversationId: string | null;
   updatedAt: Date;
 }): FlipAiHumanHandoffSnapshot {
@@ -210,7 +210,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     ].filter(Boolean).join(' '),
     knownFacts,
     reasons,
-    availability: input.availability,
+    availability: input.availability || null,
     conversationId: input.conversationId,
     updatedAt: input.updatedAt.toISOString(),
   };
