@@ -965,12 +965,21 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
 
     const leadStageBeforeActionRequest = capturedLead.stageId;
     const leadAssigneeBeforeActionRequest = capturedLead.assignedTo;
-    const actionRequest = await syncFlipAiHumanActionRequest({
-      tenantId: a.tenant.id,
-      conversationId: identityTurn.conversationId,
-      agentId: id,
-    });
+    const [actionRequest, actionRequestConcurrent] = await Promise.all([
+      syncFlipAiHumanActionRequest({
+        tenantId: a.tenant.id,
+        conversationId: identityTurn.conversationId,
+        agentId: id,
+      }),
+      syncFlipAiHumanActionRequest({
+        tenantId: a.tenant.id,
+        conversationId: identityTurn.conversationId,
+        agentId: id,
+      }),
+    ]);
     assert.ok(actionRequest);
+    assert.equal(actionRequestConcurrent?.id, actionRequest?.id,
+      'concurrent syncs must converge on the same deterministic task');
     assert.equal(actionRequest?.leadId, capturedLead.id);
     assert.equal(actionRequest?.status, 'pending');
     assert.equal(actionRequest?.priority, 'high');
@@ -979,7 +988,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.match(actionRequest?.description || '', /Nenhum horário foi reservado ou confirmado/);
     assert.equal(await prisma.task.count({
       where: { tenantId: a.tenant.id, leadId: capturedLead.id },
-    }), 1);
+    }), 1, 'the same conversation must never create a duplicate human action request');
 
     const actionRequestReplay = await syncFlipAiHumanActionRequest({
       tenantId: a.tenant.id,
@@ -987,9 +996,6 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       agentId: id,
     });
     assert.equal(actionRequestReplay?.id, actionRequest?.id);
-    assert.equal(await prisma.task.count({
-      where: { tenantId: a.tenant.id, leadId: capturedLead.id },
-    }), 1, 'the same conversation must never create a duplicate human action request');
 
     const pendingRequest = await getFlipAiHumanActionRequest({
       tenantId: a.tenant.id,
@@ -998,6 +1004,11 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     });
     assert.equal(pendingRequest?.resolution, 'pending');
     assert.equal(pendingRequest?.status, 'pending');
+    assert.equal(await getFlipAiHumanActionRequest({
+      tenantId: b.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    }), null, 'another tenant must never resolve or read this internal request');
 
     await resolveFlipAiHumanActionRequest({
       tenantId: a.tenant.id,
