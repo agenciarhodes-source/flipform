@@ -57,10 +57,15 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     value: boolean,
   ) {
     if (!editor) return;
-    change('actionCapabilities', {
-      ...(editor.input.actionCapabilities || EMPTY_FLIP_AI_ACTION_CAPABILITIES),
-      [key]: value,
-    });
+    const current = editor.input.actionCapabilities || EMPTY_FLIP_AI_ACTION_CAPABILITIES;
+    if (key === 'inPersonScheduling' && value
+      && !current.inPersonService && !current.customerVisit && !current.productDemo) return;
+    const next = { ...current, [key]: value };
+    if (key !== 'inPersonScheduling'
+      && !next.inPersonService && !next.customerVisit && !next.productDemo) {
+      next.inPersonScheduling = false;
+    }
+    change('actionCapabilities', next);
   }
   async function reload(successMessage = 'Lista atualizada.') {
     if (inFlight.current) return;
@@ -177,7 +182,12 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
               <span><strong>Demonstração presencial</strong><span className="block text-xs text-muted-foreground">É possível conhecer ou demonstrar produtos/serviços presencialmente.</span></span>
             </label>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-1" disabled={!workspace.actionCapabilitiesReady}
+              <input type="checkbox" className="mt-1"
+                disabled={!workspace.actionCapabilitiesReady
+                  || !editor.input.actionCapabilities
+                  || (!editor.input.actionCapabilities.inPersonService
+                    && !editor.input.actionCapabilities.customerVisit
+                    && !editor.input.actionCapabilities.productDemo)}
                 checked={Boolean(editor.input.actionCapabilities?.inPersonScheduling)}
                 onChange={(e) => changeActionCapability('inPersonScheduling', e.target.checked)} />
               <span><strong>Coletar preferência de agenda</strong><span className="block text-xs text-muted-foreground">Permite perguntar preferência de dia/horário quando o cliente já quer uma modalidade presencial habilitada. Não confirma compromisso.</span></span>
