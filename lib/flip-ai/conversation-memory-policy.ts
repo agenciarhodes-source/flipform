@@ -1,19 +1,19 @@
 import { z } from 'zod';
 
 export const FLIP_AI_CONVERSATION_MEMORY_VERSION = '2026-10-04.1';
-export const FLIP_AI_MEMORY_MAX_FACTS = 14;
-export const FLIP_AI_MEMORY_MAX_PENDING = 8;
+export const FLIP_AI_MEMORY_MAX_FACTS = 12;
+export const FLIP_AI_MEMORY_MAX_PENDING = 6;
 
 const memoryKeySchema = z.string().trim().min(2).max(64)
   .regex(/^[a-z0-9_:-]+$/i, 'Use chaves semânticas curtas.');
-const memoryValueSchema = z.string().trim().min(1).max(280);
+const memoryValueSchema = z.string().trim().min(1).max(180);
 
 export const flipAiConversationMemoryPatchSchema = z.object({
   facts: z.array(z.object({
     action: z.enum(['upsert', 'remove']),
     key: memoryKeySchema,
     value: memoryValueSchema.nullable(),
-  }).strict()).max(8),
+  }).strict()).max(6),
   pending: z.array(z.object({
     action: z.enum(['upsert', 'remove']),
     key: memoryKeySchema,
@@ -55,7 +55,7 @@ function normalizeKey(value: string) {
 }
 
 function normalizeValue(value: string) {
-  return value.replace(/\s+/g, ' ').trim().slice(0, 280);
+  return value.replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
 const BLOCKED_MEMORY_KEYS = new Set([
