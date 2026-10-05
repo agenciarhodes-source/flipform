@@ -18,7 +18,7 @@ export const flipAiConversationMemoryPatchSchema = z.object({
     action: z.enum(['upsert', 'remove']),
     key: memoryKeySchema,
     value: memoryValueSchema.nullable(),
-  }).strict()).max(6),
+  }).strict()).max(4),
 }).strict();
 
 export type FlipAiConversationMemoryPatch = z.infer<typeof flipAiConversationMemoryPatchSchema>;
