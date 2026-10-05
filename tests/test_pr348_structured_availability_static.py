@@ -28,10 +28,12 @@ def test_pr348_backend_permission_is_the_hard_gate_for_availability():
 
 def test_pr348_modalities_are_derived_from_eligibility_not_model_output():
     policy = read("lib/flip-ai/availability-policy.ts")
+    chat = read("lib/flip-ai/public-chat.ts")
     assert "deriveAvailabilityModalities" in policy
     assert "eligibility.visitRequested" in policy
     assert "eligibility.productDemoRequested" in policy
-    assert "modalities:" not in read("lib/flip-ai/public-chat.ts").split("availabilityPatch:", 1)[1].split("},\n    },\n  },", 1)[0]
+    assert "required: ['preferredDate', 'preferredPeriod', 'preferredTime']" in chat
+    assert "modalities: z.array" in policy
 
 
 def test_pr348_relative_dates_are_preserved_not_normalized_to_iso():
@@ -54,6 +56,8 @@ def test_pr348_progressive_collection_uses_existing_state_and_does_not_repeat_qu
 def test_pr348_availability_is_persisted_only_in_confirmed_chat_metadata():
     loader = read("lib/flip-ai/availability.ts")
     chat = read("lib/flip-ai/public-chat.ts")
+    assert "tenantId: input.tenantId" in loader
+    assert "conversationId: input.conversationId" in loader
     assert "operation: 'chat_response'" in loader
     assert "status: 'confirmed'" in loader
     assert "availabilityVersion: FLIP_AI_AVAILABILITY_VERSION" in chat
