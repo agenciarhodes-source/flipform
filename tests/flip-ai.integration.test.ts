@@ -479,15 +479,25 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       ...a.input,
       name: 'Helena publicada',
       primaryColor: '#864040',
-      actionCapabilities: published.actionCapabilities,
+      actionCapabilities: savedWithKnowledge.actionCapabilities,
     }, { kind: 'update', id, version: published.version });
     assert.equal(editedPublished.status, 'published', 'editing must keep the public chat online');
     assert.equal(editedPublished.name, 'Helena publicada');
     assert.equal(editedPublished.primaryColor, '#864040');
     assert.equal(editedPublished.version, published.version + 1);
-    assert.equal(await prisma.auditLog.count({
-      where: { tenantId: a.tenant.id, entityId: id, action: 'updated', metadata: { equals: { status: 'published' } } },
-    }), 1, 'live edits must be auditable as published changes');
+    const publishedUpdateAudit = await prisma.auditLog.findFirstOrThrow({
+      where: { tenantId: a.tenant.id, entityId: id, action: 'updated' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { metadata: true },
+    });
+    const publishedUpdateMetadata = publishedUpdateAudit.metadata as {
+      status?: string;
+      actionCapabilities?: unknown;
+    } | null;
+    assert.equal(publishedUpdateMetadata?.status, 'published',
+      'live edits must be auditable as published changes');
+    assert.deepEqual(publishedUpdateMetadata?.actionCapabilities, editedPublished.actionCapabilities,
+      'capability changes must remain auditable on the agent');
     const publishedWorkspace = await getAgentDraftWorkspace(a.session);
     assert.equal(publishedWorkspace.agents.find((agent) => agent.id === id)?.status, 'published');
     assert.equal(await prisma.auditLog.count({
