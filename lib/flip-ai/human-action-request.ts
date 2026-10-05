@@ -142,7 +142,16 @@ export async function syncFlipAiHumanActionRequest(input: {
     });
 
     if (existing) {
-      if (existing.tenantId !== input.tenantId || existing.leadId !== lead.id) {
+      const sourceAudit = await db.auditLog.findFirst({
+        where: {
+          tenantId: input.tenantId,
+          entityType: 'task',
+          entityId: existing.id,
+          action: ACTIONS.created,
+        },
+        select: { id: true },
+      });
+      if (existing.tenantId !== input.tenantId || existing.leadId !== lead.id || !sourceAudit) {
         throw new FlipAiHumanActionRequestError(
           'FLIP_AI_ACTION_REQUEST_CONTEXT_CONFLICT',
           409,
