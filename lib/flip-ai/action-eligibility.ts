@@ -151,15 +151,16 @@ export function resolveFlipAiActionPermission(input: {
     || capabilities.customerVisit
     || capabilities.productDemo;
 
-  const supportedRequestedModes = [
-    eligibility.visitRequested && capabilities.customerVisit,
-    eligibility.productDemoRequested && capabilities.productDemo,
-    eligibility.inPersonRequested
-      && !eligibility.visitRequested
-      && !eligibility.productDemoRequested
-      && capabilities.inPersonService,
-  ];
-  const supportedInPerson = supportedRequestedModes.some(Boolean);
+  const requestedModeSupport: boolean[] = [];
+  if (eligibility.visitRequested) requestedModeSupport.push(capabilities.customerVisit);
+  if (eligibility.productDemoRequested) requestedModeSupport.push(capabilities.productDemo);
+  if (eligibility.inPersonRequested
+    && !eligibility.visitRequested
+    && !eligibility.productDemoRequested) {
+    requestedModeSupport.push(capabilities.inPersonService);
+  }
+  const supportedInPerson = requestedModeSupport.length > 0
+    && requestedModeSupport.every(Boolean);
 
   let status: FlipAiActionPermissionStatus = 'blocked';
   let reason = 'Nenhuma ação presencial está habilitada para este ponto da conversa.';
