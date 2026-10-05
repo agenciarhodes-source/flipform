@@ -1,3 +1,8 @@
+import {
+  EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+  type FlipAiActionCapabilities,
+} from './action-capabilities';
+
 export const FLIP_AI_ACTION_ELIGIBILITY_VERSION = '2026-10-05.1';
 
 export type FlipAiActionSignals = {
@@ -22,6 +27,13 @@ export type FlipAiSchedulingStatus =
   | 'clarify_in_person'
   | 'collect_availability';
 
+export type FlipAiActionPermissionStatus =
+  | 'blocked'
+  | 'unsupported'
+  | 'discuss_in_person'
+  | 'clarify_in_person'
+  | 'collect_availability';
+
 export type FlipAiActionEligibility = {
   version: string;
   humanHandoffRequested: boolean;
@@ -35,6 +47,18 @@ export type FlipAiActionEligibility = {
   effectiveNextAction: FlipAiActionNext;
   reason: string;
 };
+
+export type FlipAiActionPermission = {
+  version: string;
+  capabilities: FlipAiActionCapabilities;
+  status: FlipAiActionPermissionStatus;
+  supportedInPerson: boolean;
+  mayDiscussInPerson: boolean;
+  mayCollectAvailability: boolean;
+  effectiveNextAction: FlipAiActionNext;
+  reason: string;
+};
+
 
 const EXPLICIT_THRESHOLD = 0.72;
 
@@ -113,6 +137,107 @@ export function resolveFlipAiActionEligibility(input: {
     effectiveNextAction,
     reason,
   };
+}
+
+export function resolveFlipAiActionPermission(input: {
+  eligibility: FlipAiActionEligibility;
+  capabilities?: FlipAiActionCapabilities | null;
+}): FlipAiActionPermission {
+  const capabilities = input.capabilities || EMPTY_FLIP_AI_ACTION_CAPABILITIES;
+  const { eligibility } = input;
+
+  const supportedRequestedModes = [
+    eligibility.visitRequested && capabilities.customerVisit,
+    eligibility.productDemoRequested && capabilities.productDemo,
+    eligibility.inPersonRequested
+      && !eligibility.visitRequested
+      && !eligibility.productDemoRequested
+      && capabilities.inPersonService,
+  ];
+  const supportedInPerson = supportedRequestedModes.some(Boolean);
+
+  let status: FlipAiActionPermissionStatus = 'blocked';
+  let reason = 'Nenhuma ação presencial está habilitada para este ponto da conversa.';
+
+  if (eligibility.schedulingStatus === 'clarify_in_person') {
+    status = 'clarify_in_person';
+    reason = 'A pessoa quer marcar algo, mas a modalidade ainda precisa ser esclarecida.';
+  } else if (eligibility.inPersonRequested && !supportedInPerson) {
+    status = 'unsupported';
+    reason = 'A pessoa demonstrou interesse presencial, mas o agente não está configurado para oferecer a modalidade solicitada.';
+  } else if (eligibility.schedulingStatus === 'collect_availability'
+    && supportedInPerson
+    && capabilities.inPersonScheduling) {
+    status = 'collect_availability';
+    reason = 'A pessoa quer atendimento presencial e marcação, e o agente permite coletar preferência de disponibilidade.';
+  } else if (eligibility.inPersonRequested && supportedInPerson) {
+    status = 'discuss_in_person';
+    reason = eligibility.schedulingRequested
+      ? 'A modalidade presencial é suportada, mas a coleta de disponibilidade está desativada para este agente.'
+      : 'A modalidade presencial solicitada é suportada por este agente.';
+  }
+
+  const mayDiscussInPerson = status === 'discuss_in_person' || status === 'collect_availability';
+  const mayCollectAvailability = status === 'collect_availability';
+
+  let effectiveNextAction = eligibility.effectiveNextAction;
+  if (eligibility.effectiveNextAction === 'schedule' && !mayCollectAvailability) {
+    if (status === 'clarify_in_person' || status === 'discuss_in_person') {
+      effectiveNextAction = 'ask_one_question';
+    } else if (eligibility.humanHandoffRequested) {
+      effectiveNextAction = 'handoff';
+    } else {
+      effectiveNextAction = 'answer_directly';
+    }
+  }
+
+  return {
+    version: FLIP_AI_ACTION_ELIGIBILITY_VERSION,
+    capabilities,
+    status,
+    supportedInPerson,
+    mayDiscussInPerson,
+    mayCollectAvailability,
+    effectiveNextAction,
+    reason,
+  };
+}
+
+export function actionPermissionPrompt(permission: FlipAiActionPermission) {
+  if (permission.status === 'collect_availability') {
+    return [
+      'A modalidade presencial solicitada é permitida por este agente.',
+      'Você pode coletar preferência de dia OU horário, uma pergunta por vez.',
+      'Não confirme compromisso nem prometa disponibilidade.',
+    ].join(' ');
+  }
+  if (permission.status === 'discuss_in_person') {
+    return [
+      'A modalidade presencial solicitada é permitida por este agente.',
+      'Você pode reconhecer essa possibilidade.',
+      permission.capabilities.inPersonScheduling
+        ? 'Se a pessoa quiser marcar, confirme primeiro essa intenção antes de pedir disponibilidade.'
+        : 'A coleta de dia/horário está desativada para este agente; não peça disponibilidade.',
+    ].join(' ');
+  }
+  if (permission.status === 'unsupported') {
+    return [
+      'A pessoa demonstrou interesse presencial, mas a modalidade solicitada não está habilitada para este agente.',
+      'Não ofereça, não prometa e não invente essa opção.',
+      'Continue o atendimento normal ou faça handoff humano quando necessário.',
+    ].join(' ');
+  }
+  if (permission.status === 'clarify_in_person') {
+    return [
+      'A pessoa quer marcar algo, mas ainda não está claro se é presencial.',
+      'Faça uma única pergunta curta para esclarecer a modalidade.',
+      'Não peça data ou horário ainda.',
+    ].join(' ');
+  }
+  return [
+    'Nenhuma ação presencial está habilitada neste ponto da conversa.',
+    'Não ofereça visita, demonstração, atendimento presencial ou horário por iniciativa própria.',
+  ].join(' ');
 }
 
 export function actionEligibilityPrompt(eligibility: FlipAiActionEligibility) {
