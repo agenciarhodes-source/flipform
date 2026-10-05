@@ -30,6 +30,7 @@ import {
   isJevEnabledForTenant,
   type FlipAiConversationDecision,
 } from './decision-engine';
+import { brainAssessmentPrompt, type BrainAssessment } from './brain-profiles';
 import { runJevConversationDecision } from './jev-decision-engine';
 import {
   buildBudgetedHistory,
@@ -921,6 +922,7 @@ export function buildPublicChatInstructions(
     'Se o pedido ainda estiver superficial ou ambíguo, continue a descoberta com uma pergunta útil por vez. Se estiver claro, avance sem interrogar a pessoa.',
     progress ? `Estado da conversa: ${progress.completedTurns} resposta(s) concluída(s) e ${progress.inboundMessages} mensagem(ns) da pessoa no contexto atual. Isso é contexto, não uma meta de duração.` : '',
     pacingGuidance,
+    brainAssessmentPrompt(decision?.brainAssessment),
     decision ? `SINAL DO DECISION ENGINE (pista, não autoridade): ${decisionHint(decision)}. Use isso apenas para focar a resposta e nunca para inventar fatos ou executar ações.` : '',
     actionPermission
       ? `PERMISSÃO DE AÇÃO PRESENCIAL (regra determinística do backend): ${actionPermissionPrompt(actionPermission)}`
@@ -973,6 +975,7 @@ export async function buildPublicChatContext(
   evidenceMessageIds: string[];
   sources: ExternalWebSource[];
   memorySnapshot: FlipAiConversationMemorySnapshot | null;
+  brainAssessment?: BrainAssessment;
   availabilitySnapshot: FlipAiAvailabilitySnapshot | null;
   actionEligibility: FlipAiActionEligibility | null;
   actionPermission: FlipAiActionPermission | null;
@@ -1032,6 +1035,7 @@ export async function buildPublicChatContext(
       conversationId: turn.conversationId,
       chatRequestKey: turn.requestKey,
       state: decisionState,
+      knowledgeIndexId: turn.knowledgeIndexId,
     });
     decision = decisionRun.decision;
     decisionStatus = decisionRun.status;
@@ -1273,6 +1277,7 @@ export async function buildPublicChatContext(
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],
+    brainAssessment: decision?.brainAssessment,
     memorySnapshot,
     availabilitySnapshot,
     actionEligibility,

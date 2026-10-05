@@ -32,17 +32,23 @@ export function buildHarnessRetrievalQueries(input: {
   memoryContext?: string | null;
   decision?: FlipAiConversationDecision | null;
 }) {
+  const assessment = input.decision?.brainAssessment;
+  const profileTerms = assessment && assessment.confidence >= 0.6 && assessment.profileLabel
+    ? [`Perfil: ${assessment.profileLabel}.`, ...assessment.retrievalTerms] : [];
   const base = [
     compact(input.message, 1_600),
     input.memoryContext ? `Memória compacta: ${compact(input.memoryContext, 1_000)}` : '',
     input.entryContext ? `Contexto de entrada: ${compact(input.entryContext, 600)}` : '',
+    ...profileTerms,
   ].filter(Boolean).join('\n');
 
   if (!input.decision || input.decision.confidence < 0.52) {
     return {
       conversationQuery: base,
-      qualificationQuery:
+      qualificationQuery: [
         'Critérios de qualificação, perfil ideal, quem não atendemos, urgência, intenção, timing e próxima ação.',
+        ...profileTerms,
+      ].join(' '),
       decisionApplied: false,
     };
   }
@@ -58,6 +64,7 @@ export function buildHarnessRetrievalQueries(input: {
     ].filter(Boolean).join('\n'),
     qualificationQuery: [
       'Critérios de qualificação e perfil ideal aplicáveis ao contexto atual.',
+      ...profileTerms,
       `Fit estimado: ${d.fitScore}/100.`,
       `Urgência estimada: ${d.urgencyScore}/100.`,
       `Estágio: ${d.journeyStage}.`,

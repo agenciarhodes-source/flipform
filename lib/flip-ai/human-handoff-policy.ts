@@ -1,9 +1,11 @@
+import type { FlipAiConversationMemorySnapshot } from './conversation-memory-policy';
 import type { FlipAiLeadIntelligenceSnapshot } from './lead-intelligence-policy';
 import type { FlipAiAvailabilitySnapshot } from './availability-policy';
 
 export type FlipAiHumanHandoffSnapshot = {
   summary: string;
-  summarySource: 'qualification' | 'conversation_state' | 'deterministic';
+  pending: string[];
+  summarySource: 'qualification' | 'conversation_state' | 'deterministic' | 'conversation_memory';
   priority: 'high' | 'normal' | 'low';
   recommended: boolean;
   reason: string;
@@ -67,11 +69,13 @@ function buildFallbackSummary(
   if (!intelligence) {
     return `${leadName || 'Lead'} possui uma conversa Flip AI vinculada, mas ainda não há inteligência suficiente para um resumo confiável.`;
   }
+  const profile = intelligence.brainAssessment?.profileLabel;
   const classification = CLASSIFICATION_LABELS[intelligence.classification] || intelligence.classification;
   const intent = INTENT_LABELS[intelligence.intent] || intelligence.intent;
   const objection = OBJECTION_LABELS[intelligence.objection] || intelligence.objection;
   return [
-    `${leadName || 'Lead'} está ${classification}, com score ${intelligence.score}/100.`,
+    `${leadName || 'Lead'} está ${classification}${intelligence.brainAssessment && intelligence.brainAssessment.score === null ? '' : `, com score ${intelligence.score}/100`}.`,
+    profile ? `Assunto identificado: ${profile}.` : '',
     `A intenção atual é ${intent}.`,
     intelligence.objection !== 'none' ? `A objeção principal identificada é ${objection}.` : '',
   ].filter(Boolean).join(' ');
@@ -86,9 +90,10 @@ function priorityOf(
   if (intelligence.needsHuman
     || intelligence.actionPermission.mayCollectAvailability
     || intelligence.classification === 'qualified'
-    || intelligence.score >= 80) {
+    || (intelligence.score !== null && intelligence.score >= 80)) {
     return 'high' as const;
   }
+  if (intelligence.score === null) return 'normal' as const;
   if (intelligence.score >= 50 || intelligence.classification === 'nurture') {
     return 'normal' as const;
   }
@@ -147,15 +152,20 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   availability?: FlipAiAvailabilitySnapshot | null;
   conversationId: string | null;
   updatedAt: Date;
+  memory?: FlipAiConversationMemorySnapshot | null;
 }): FlipAiHumanHandoffSnapshot {
   const qualificationSummary = cleanText(input.qualification?.summary);
   const stateSummary = cleanText(input.stateSummary);
-  const summarySource: FlipAiHumanHandoffSnapshot['summarySource'] = qualificationSummary
+  const memoryFacts = (input.memory?.facts || []).map((item) => `${cleanText(item.key.replace(/_/g, ' '), 120)}: ${cleanText(item.value, 300)}`);
+  const memorySummary = memoryFacts.length
+    ? [input.intelligence?.brainAssessment?.profileLabel ? `Assunto identificado: ${input.intelligence.brainAssessment.profileLabel}.` : '', ...memoryFacts.slice(0, 5)].filter(Boolean).join(' ') : '';
+  const summarySource: FlipAiHumanHandoffSnapshot['summarySource'] = memorySummary
+    ? 'conversation_memory' : qualificationSummary
     ? 'qualification'
     : stateSummary
       ? 'conversation_state'
       : 'deterministic';
-  const summary = qualificationSummary
+  const summary = memorySummary || qualificationSummary
     || stateSummary
     || buildFallbackSummary(input.leadName, input.intelligence);
 
@@ -170,6 +180,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     input.leadName?.trim() ? `Nome: ${input.leadName.trim()}` : '',
     input.hasPhone ? 'Telefone já capturado.' : '',
     input.hasEmail ? 'E-mail já capturado.' : '',
+    ...memoryFacts.slice(0, 6),
     ...input.answers.slice(0, 3).map((answer) => {
       const value = typeof answer.answer === 'string'
         ? answer.answer
@@ -187,7 +198,9 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
       ? `Horário preferido: ${input.availability.preferredTime}` : '',
   ].filter(Boolean).slice(0, 9);
 
-  const reasons = input.qualification?.reasons?.length
+  const reasons = input.intelligence?.brainAssessment
+    ? input.intelligence.brainAssessment.criteria.map((item) => `${item.label}: ${item.interpretation || 'ainda não confirmado'}`).slice(0, 8)
+    : input.qualification?.reasons?.length
     ? input.qualification.reasons.map((reason) => cleanText(reason, 500)).filter(Boolean).slice(0, 5)
     : input.intelligence
       ? [
@@ -208,6 +221,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
 
   return {
     summary,
+    pending: (input.memory?.pending || []).map((item) => `${cleanText(item.key.replace(/_/g, ' '), 120)}: ${cleanText(item.value, 300)}`).slice(0, 6),
     summarySource,
     priority: priorityOf(input.intelligence, input.availability),
     recommended,

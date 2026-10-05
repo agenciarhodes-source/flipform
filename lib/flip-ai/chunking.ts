@@ -1,3 +1,4 @@
+import { expandBrainProfilesForIndexing } from './brain-profiles';
 export const FLIP_AI_CHUNK_TARGET_BYTES = 4_000;
 export const FLIP_AI_CHUNK_MAX_BYTES = 6_000;
 export const FLIP_AI_EMBED_BATCH_MAX_BYTES = 100_000;
@@ -46,7 +47,7 @@ function splitToByteLimit(value: string, maxBytes: number): string[] {
 }
 
 export function chunkMasterMarkdown(markdown: string): KnowledgeChunk[] {
-  const normalized = markdown.replace(/\r\n?/g, '\n').trim();
+  const normalized = expandBrainProfilesForIndexing(markdown.replace(/\r\n?/g, '\n').trim());
   if (!normalized) return [];
   const paragraphs = normalized.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
   const chunks: KnowledgeChunk[] = [];

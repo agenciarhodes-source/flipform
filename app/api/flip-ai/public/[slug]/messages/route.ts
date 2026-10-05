@@ -18,7 +18,7 @@ import {
   FlipAiConversationRuntimeError,
 } from '@/lib/flip-ai/conversation-runtime';
 import { captureFlipAiLead, type FlipAiIdentityDecision } from '@/lib/flip-ai/lead-capture';
-import { finalizeFlipAiQualification } from '@/lib/flip-ai/qualification';
+import { applyBrainFinalQualification, finalizeFlipAiQualification } from '@/lib/flip-ai/qualification';
 import { syncFlipAiHumanActionRequest } from '@/lib/flip-ai/human-action-request';
 import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
 import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
@@ -225,6 +225,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           timeoutMs: 55_000,
         });
         const decision = parsePublicChatDecision(rawResult.text);
+        decision.qualification = applyBrainFinalQualification(decision.qualification, context.brainAssessment);
         const result = { ...rawResult, text: decision.reply };
         await completePublicChatTurn(
           turn,

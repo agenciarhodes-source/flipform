@@ -1,4 +1,5 @@
 import 'server-only';
+import { parseBrainProfiles } from './brain-profiles';
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -46,6 +47,9 @@ export async function saveMasterMarkdown(session: SessionPayload, agentId: strin
   const parsed = knowledgeMasterSchema.safeParse(rawInput);
   if (!parsed.success) throw new FlipAiError('INVALID_MASTER_MARKDOWN', 400, 'Revise o título e o conteúdo do Markdown Mestre.');
   const input = parsed.data;
+  if (parseBrainProfiles(input.content).status === 'invalid') {
+    throw new FlipAiError('INVALID_BRAIN_PROFILES', 400, 'Revise o bloco flip-ai-profiles: IDs únicos, cinco níveis por critério e pesos somando 100 por perfil.');
+  }
   const byteSize = Buffer.byteLength(input.content, 'utf8');
   if (byteSize > 1_000_000) throw new FlipAiError('MASTER_MARKDOWN_TOO_LARGE', 413, 'O Markdown Mestre deve ter no máximo 1 MB.');
   const contentHash = createHash('sha256').update(input.title).update('\0').update(input.content).digest('hex');

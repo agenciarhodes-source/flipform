@@ -3,6 +3,8 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { brainAssessmentSchema, buildBrainAssessment, type BrainProfile, type BrainProfiles } from './brain-profiles';
+import { loadPublishedBrainProfiles } from './brain-profiles-server';
 import {
   combineDecisionConfidence,
   FLIP_AI_DECISION_ENGINE_VERSION,
@@ -65,7 +67,7 @@ const jevResponseSchema = z.object({
     visit_interest: noulAnswerSchema,
     product_demo_interest: noulAnswerSchema,
     scheduling_interest: noulAnswerSchema,
-  }).strict(),
+  }).catchall(choiceAnswerSchema),
   usage: z.object({
     input_tokens: z.number().int().nonnegative(),
     output_tokens: z.number().int().nonnegative(),
@@ -96,6 +98,7 @@ const storedDecisionSchema = z.object({
   intentConfidence: z.number().min(0).max(1),
   objectionConfidence: z.number().min(0).max(1),
   stageConfidence: z.number().min(0).max(1),
+  brainAssessment: brainAssessmentSchema.optional(),
 }).strict();
 
 function metadataRecord(value: Prisma.JsonValue | null) {
@@ -164,8 +167,8 @@ function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversati
   };
 }
 
-function payload(state: unknown, model: string) {
-  return {
+function payload(state: unknown, model: string, profile?: BrainProfile | null) {
+  const request = {
     model,
     state,
     questions: {
@@ -291,6 +294,75 @@ function payload(state: unknown, model: string) {
       },
     },
   };
+  if (profile) {
+    Object.assign(request.questions, Object.fromEntries(profile.criteria.map((criterion) => [
+      `brain_${criterion.id}`,
+      {
+        type: 'choice',
+        instructions: `Para o perfil ${profile.label}, avalie ${criterion.label} somente com fatos informados pela pessoa. Não trate UTM, campanha, perguntas ou sugestões do assistente como fato. Escolha unknown quando faltar evidência.`,
+        criteria: {
+          unknown: 'Não foi informado pela pessoa ou há informação contraditória/insuficiente. Ausência de informação não significa incompatibilidade.',
+          ...Object.fromEntries(criterion.levels.map((level, index) => [`level_${index}`, level])),
+        },
+      },
+    ])));
+  }
+  return request;
+}
+
+async function requestJev(body: unknown, options?: {
+  apiKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number;
+}): Promise<unknown> {
+  const apiKey = options?.apiKey || process.env.TYPESAFE_API_KEY?.trim();
+  if (!apiKey) throw new Error('TYPESAFE_API_KEY_MISSING');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || JEV_TIMEOUT_MS);
+  try {
+    const response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
+    try { return await response.json(); } catch { throw new Error('JEV_RESPONSE_INVALID'); }
+  } catch (error) {
+    if (error instanceof Error && /^JEV_(HTTP_|RESPONSE_)/.test(error.message)) throw error;
+    throw new Error('JEV_TRANSPORT_FAILED');
+  } finally { clearTimeout(timeout); }
+}
+
+async function routeBrainProfile(state: unknown, brain: BrainProfiles, options?: {
+  apiKey?: string; model?: string; fetchImpl?: typeof fetch; timeoutMs?: number;
+}) {
+  const raw = await requestJev({
+    model: options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL,
+    state,
+    questions: {
+      profile: {
+        type: 'choice',
+        instructions: 'Qual é o assunto principal que a pessoa realmente busca neste momento? Use o relato da pessoa, nunca somente a campanha/UTM nem afirmações do assistente. Se há temas concorrentes sem um principal claro, ou não há evidência suficiente, escolha unknown.',
+        criteria: {
+          unknown: 'Assunto não identificado, ambíguo ou fora dos perfis configurados.',
+          ...Object.fromEntries(brain.profiles.map((profile) => [profile.id, `${profile.label}: ${profile.description}`])),
+        },
+      },
+    },
+  }, options);
+  const parsed = z.object({
+    model: z.string().min(1).max(200),
+    answers: z.object({ profile: choiceAnswerSchema }).strict(),
+    usage: jevResponseSchema.shape.usage,
+  }).passthrough().safeParse(raw);
+  if (!parsed.success) throw new Error('JEV_PROFILE_RESPONSE_INVALID');
+  const choice = parsed.data.answers.profile;
+  if (choice.choice !== 'unknown' && !brain.profiles.some((profile) => profile.id === choice.choice)) {
+    throw new Error('JEV_PROFILE_CHOICE_INVALID');
+  }
+  return {
+    profile: choice.confidence >= 0.6 ? brain.profiles.find((profile) => profile.id === choice.choice) || null : null,
+    confidence: choice.confidence,
+    usage: parsed.data.usage,
+  };
 }
 
 async function callJev(state: unknown, options?: {
@@ -298,37 +370,17 @@ async function callJev(state: unknown, options?: {
   model?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  profile?: BrainProfile | null;
 }) {
-  const apiKey = options?.apiKey || process.env.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) throw new Error('TYPESAFE_API_KEY_MISSING');
   const model = options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || JEV_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload(state, model)),
-      signal: controller.signal,
-    });
-  } catch {
-    clearTimeout(timeout);
-    throw new Error('JEV_TRANSPORT_FAILED');
-  }
-  clearTimeout(timeout);
-  if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
-  let raw: unknown;
-  try { raw = await response.json(); } catch { throw new Error('JEV_RESPONSE_INVALID'); }
+  const raw = await requestJev(payload(state, model, options?.profile), options);
   const parsed = jevResponseSchema.safeParse(raw);
   if (!parsed.success) throw new Error('JEV_RESPONSE_INVALID');
   const decision = buildDecision(parsed.data);
   if (!decision) throw new Error('JEV_DECISION_INVALID');
   return {
     decision,
+    answers: parsed.data.answers,
     model: parsed.data.model,
     inputTokens: parsed.data.usage.input_tokens,
     outputTokens: parsed.data.usage.output_tokens,
@@ -341,6 +393,7 @@ export async function runJevConversationDecision(input: {
   conversationId: string;
   chatRequestKey: string;
   state: unknown;
+  knowledgeIndexId?: string;
 }): Promise<JevDecisionRun> {
   const enabled = isJevEnabledForTenant({
     tenantId: input.tenantId,
@@ -352,10 +405,17 @@ export async function runJevConversationDecision(input: {
   const requestKey = `jev-decision:${input.chatRequestKey}`;
   const existing = await prisma.flipAiUsageEvent.findUnique({
     where: { requestKey },
-    select: { status: true, metadata: true },
+    select: { status: true, metadata: true, tenantId: true, agentId: true, conversationId: true },
   });
+  if (existing && (existing.tenantId !== input.tenantId || existing.agentId !== input.agentId
+    || existing.conversationId !== input.conversationId)) {
+    return { decision: null, status: 'fallback', reused: true, errorCode: 'JEV_USAGE_BINDING_CONFLICT' };
+  }
   if (existing?.status === 'confirmed') {
     const stored = metadataRecord(existing.metadata);
+    if (stored?.knowledgeIndexId && stored.knowledgeIndexId !== input.knowledgeIndexId) {
+      return { decision: null, status: 'fallback', reused: true, errorCode: 'JEV_INDEX_BINDING_CONFLICT' };
+    }
     const parsed = storedDecisionSchema.safeParse(stored?.decision);
     if (parsed.success) {
       return { decision: parsed.data, status: 'confirmed', reused: true, errorCode: null };
@@ -382,6 +442,7 @@ export async function runJevConversationDecision(input: {
         units: 1,
         metadata: {
           chatRequestKey: input.chatRequestKey,
+          knowledgeIndexId: input.knowledgeIndexId || null,
           decisionEngine: 'jev',
           engineVersion: FLIP_AI_DECISION_ENGINE_VERSION,
         },
@@ -396,8 +457,28 @@ export async function runJevConversationDecision(input: {
     return { decision: null, status: 'fallback', reused: false, errorCode: 'JEV_USAGE_EVENT_FAILED' };
   }
 
+  const startedAt = Date.now();
+  let routedInputTokens = 0;
+  let routedOutputTokens = 0;
   try {
-    const result = await callJev(input.state);
+    const brain = input.knowledgeIndexId ? await loadPublishedBrainProfiles({
+      tenantId: input.tenantId, agentId: input.agentId, knowledgeIndexId: input.knowledgeIndexId,
+    }) : null;
+    const routed = brain?.status === 'valid'
+      ? await routeBrainProfile(input.state, brain.brain) : null;
+    routedInputTokens = routed?.usage.input_tokens || 0;
+    routedOutputTokens = routed?.usage.output_tokens || 0;
+    const result = await callJev(input.state, { profile: routed?.profile });
+    if (brain && brain.status !== 'absent' && input.knowledgeIndexId) {
+      result.decision.brainAssessment = buildBrainAssessment({
+        knowledgeIndexId: input.knowledgeIndexId, contentHash: brain.contentHash,
+        profile: routed?.profile || null, confidence: routed?.confidence || 0,
+        answers: result.answers as Record<string, { choice: string; confidence: number }>,
+        invalid: brain.status === 'invalid',
+      });
+    }
+    result.inputTokens += routedInputTokens;
+    result.outputTokens += routedOutputTokens;
     await prisma.flipAiUsageEvent.updateMany({
       where: { id: eventId, tenantId: input.tenantId, status: 'processing' },
       data: {
@@ -405,11 +486,15 @@ export async function runJevConversationDecision(input: {
         model: result.model,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
+        units: routed ? 2 : 1,
         metadata: {
           chatRequestKey: input.chatRequestKey,
+          knowledgeIndexId: input.knowledgeIndexId || null,
           decisionEngine: 'jev',
           engineVersion: FLIP_AI_DECISION_ENGINE_VERSION,
           decision: result.decision,
+          providerLatencyMs: Date.now() - startedAt,
+          providerCalls: routed ? 2 : 1,
         },
       },
     });
@@ -423,11 +508,15 @@ export async function runJevConversationDecision(input: {
       where: { id: eventId, tenantId: input.tenantId, status: 'processing' },
       data: {
         status: ambiguous ? 'ambiguous' : 'failed',
+        inputTokens: routedInputTokens,
+        outputTokens: routedOutputTokens,
         metadata: {
           chatRequestKey: input.chatRequestKey,
+          knowledgeIndexId: input.knowledgeIndexId || null,
           decisionEngine: 'jev',
           engineVersion: FLIP_AI_DECISION_ENGINE_VERSION,
           errorCode,
+          providerLatencyMs: Date.now() - startedAt,
         },
       },
     }).catch(() => undefined);
@@ -435,4 +524,4 @@ export async function runJevConversationDecision(input: {
   }
 }
 
-export const __testOnly = { callJev };
+export const __testOnly = { callJev, routeBrainProfile, payload };

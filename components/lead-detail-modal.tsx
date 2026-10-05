@@ -396,6 +396,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   <p className="mt-1 whitespace-pre-wrap text-sm">{lead.flipAiHumanHandoff.summary}</p>
                 </div>
 
+                {lead.flipAiHumanHandoff.pending?.length > 0 && (
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="font-semibold">O que falta confirmar</div>
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {lead.flipAiHumanHandoff.pending.map((item: string, index: number) => <li key={index}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+
                 <div className="rounded-lg border border-emerald-200 bg-white p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Como retomar</div>
                   <p className="mt-1 text-sm font-medium">{lead.flipAiHumanHandoff.resumeGuidance}</p>
@@ -565,7 +574,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Score</div>
-                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.score}</div>
+                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? '—' : lead.flipAiLiveIntelligence.score}</div>
                     <div className="text-xs text-muted-foreground">
                       {lead.flipAiLiveIntelligence.scoreDelta == null
                         ? 'Primeira leitura'
@@ -574,20 +583,42 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   </div>
                   <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
-                    <div className="text-xl font-bold">{temperatureLabels[lead.flipAiLiveIntelligence.temperature] || lead.flipAiLiveIntelligence.temperature}</div>
+                    <div className="text-xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? 'Em análise' : temperatureLabels[lead.flipAiLiveIntelligence.temperature] || lead.flipAiLiveIntelligence.temperature}</div>
                     <div className="text-xs text-muted-foreground">Não altera o CRM automaticamente</div>
                   </div>
-                  <div className="rounded-lg border bg-white p-3">
+                  {!lead.flipAiLiveIntelligence.brainAssessment && <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Fit</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.fitScore}</div>
                     <div className="text-xs text-muted-foreground">peso 40%</div>
-                  </div>
-                  <div className="rounded-lg border bg-white p-3">
+                  </div>}
+                  {!lead.flipAiLiveIntelligence.brainAssessment && <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Intenção</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.intentScore}</div>
                     <div className="text-xs text-muted-foreground">peso 30%</div>
-                  </div>
+                  </div>}
                 </div>
+
+                {lead.flipAiLiveIntelligence.brainAssessment && (
+                  <div className="rounded-lg border bg-white p-3 text-sm">
+                    <div className="font-semibold">Perfil: {lead.flipAiLiveIntelligence.brainAssessment.profileLabel || 'Ainda não identificado'}</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {lead.flipAiLiveIntelligence.brainAssessment.status === 'complete'
+                        ? 'Score calculado pelos critérios deste perfil.'
+                        : lead.flipAiLiveIntelligence.brainAssessment.status === 'invalid'
+                          ? 'A configuração deste perfil precisa ser revisada.'
+                          : 'Análise incompleta: faltam informações para calcular o score.'}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {lead.flipAiLiveIntelligence.brainAssessment.criteria.map((item: any) => (
+                        <li key={item.id}>
+                          <strong>{item.label} ({item.weight}%):</strong>{' '}
+                          {item.interpretation || 'Ainda não confirmado'}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs text-muted-foreground">Triagem para apoiar o time. A análise humana confirma os requisitos e a documentação.</p>
+                  </div>
+                )}
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-lg border bg-white p-3 text-sm">
