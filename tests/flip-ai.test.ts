@@ -2230,7 +2230,7 @@ test('PR 348 availability corrections can replace or clear only explicitly chang
 test('PR 348 handoff exposes ready availability without claiming an appointment exists', () => {
   const availability = {
     version: '2026-10-05.1',
-    modalities: ['in_person_service'] as const,
+    modalities: ['in_person_service'] as Array<'in_person_service'>,
     preferredDate: 'sexta-feira',
     preferredPeriod: 'afternoon' as const,
     preferredTime: null,
