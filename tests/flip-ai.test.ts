@@ -479,6 +479,7 @@ test('Flip AI final qualification is strict, bounded and separates merit dimensi
       reasons: ['Perfil atende aos critérios internos.', 'Há intenção explícita de avançar.'],
       nextAction: 'Atendimento humano deve confirmar disponibilidade.',
     },
+    memoryPatch: { facts: [], pending: [] },
   }));
   assert.equal(decision.qualification?.classification, 'qualified');
   assert.equal(decision.qualification?.fitScore, 84);
