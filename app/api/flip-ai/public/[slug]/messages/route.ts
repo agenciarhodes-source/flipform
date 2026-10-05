@@ -205,7 +205,14 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         });
         const decision = parsePublicChatDecision(rawResult.text);
         const result = { ...rawResult, text: decision.reply };
-        await completePublicChatTurn(turn, result, decision, context.evidenceMessageIds, context.sources);
+        await completePublicChatTurn(
+          turn,
+          result,
+          decision,
+          context.evidenceMessageIds,
+          context.sources,
+          context.memorySnapshot,
+        );
         controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
         if (context.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: context.sources })));
 

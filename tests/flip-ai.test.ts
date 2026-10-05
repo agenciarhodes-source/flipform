@@ -45,9 +45,16 @@ import {
 import {
   buildBudgetedHistory,
   buildHarnessRetrievalQueries,
+  FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET,
+  FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES,
   resolveHarnessTokenBudget,
   selectHarnessHits,
 } from '../lib/flip-ai/harness-resolver';
+import {
+  conversationMemoryPrompt,
+  mergeConversationMemory,
+  parseConversationMemorySnapshot,
+} from '../lib/flip-ai/conversation-memory-policy';
 import { buildTreasuryReservePolicy, calculateTreasuryCoverage, resolveTreasuryBufferPercent } from '../lib/flip-ai/treasury-policy';
 import { getFlipAiAvatarDataUrlSize, isValidFlipAiAvatar } from '../lib/flip-ai/avatar';
 import {
@@ -392,13 +399,16 @@ test('structured public turn validates reply and identity without extra fields',
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
     qualification: null,
+    memoryPatch: { facts: [], pending: [] },
   })), {
     reply: 'Entendi. Qual é o seu telefone?',
     identity: { name: 'Diego', phone: null },
     qualification: null,
+    memoryPatch: { facts: [], pending: [] },
   });
   assert.throws(() => parsePublicChatDecision(JSON.stringify({
-    reply: 'Oi', identity: { name: null, phone: null }, qualification: null, tenantId: 'other',
+    reply: 'Oi', identity: { name: null, phone: null }, qualification: null,
+    memoryPatch: { facts: [], pending: [] }, tenantId: 'other',
   })), (error: unknown) => error instanceof OpenAiResponseError && error.kind === 'ambiguous');
 });
 
@@ -469,6 +479,7 @@ test('Flip AI final qualification is strict, bounded and separates merit dimensi
       reasons: ['Perfil atende aos critérios internos.', 'Há intenção explícita de avançar.'],
       nextAction: 'Atendimento humano deve confirmar disponibilidade.',
     },
+    memoryPatch: { facts: [], pending: [] },
   }));
   assert.equal(decision.qualification?.classification, 'qualified');
   assert.equal(decision.qualification?.fitScore, 84);
@@ -1574,4 +1585,86 @@ test('PR 344 public chat input mode defaults to text and accepts explicit voice 
   assert.equal(text.inputMode, 'text');
   assert.equal(voice.inputMode, 'voice');
   assert.equal(publicChatMessageSchema.safeParse({ messageId: id, text: 'Oi', inputMode: 'video' }).success, false);
+});
+
+
+test('PR 345 compact memory merges stable facts and pending items deterministically', () => {
+  const previous = mergeConversationMemory({
+    patch: {
+      facts: [
+        { action: 'upsert', key: 'cidade', value: 'Parnaíba' },
+        { action: 'upsert', key: 'tipo_negocio', value: 'Mercado' },
+      ],
+      pending: [
+        { action: 'upsert', key: 'volume_mensal', value: 'Descobrir volume mensal aproximado' },
+      ],
+    },
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+    updatedAt: new Date('2026-10-04T20:00:00.000Z'),
+  });
+  const current = mergeConversationMemory({
+    previous,
+    patch: {
+      facts: [
+        { action: 'upsert', key: 'possui_freezer', value: 'sim' },
+        { action: 'remove', key: 'tipo_negocio', value: null },
+      ],
+      pending: [
+        { action: 'remove', key: 'volume_mensal', value: null },
+        { action: 'upsert', key: 'visita', value: 'Confirmar interesse em receber representante' },
+      ],
+    },
+    sourceMessageId: '8bd20758-e19d-4d01-8884-7aaee975e0b8',
+    updatedAt: new Date('2026-10-04T20:01:00.000Z'),
+  });
+  assert.deepEqual(current.facts, [
+    { key: 'cidade', value: 'Parnaíba' },
+    { key: 'possui_freezer', value: 'sim' },
+  ]);
+  assert.deepEqual(current.pending, [
+    { key: 'visita', value: 'Confirmar interesse em receber representante' },
+  ]);
+  assert.match(conversationMemoryPrompt(current), /cidade=Parnaíba/);
+  assert.match(conversationMemoryPrompt(current), /visita=Confirmar interesse/);
+  assert.deepEqual(parseConversationMemorySnapshot(current), current);
+});
+
+test('PR 345 compact memory refuses direct contact credentials and document-number keys', () => {
+  const snapshot = mergeConversationMemory({
+    patch: {
+      facts: [
+        { action: 'upsert', key: 'nome', value: 'Maria' },
+        { action: 'upsert', key: 'telefone', value: '86999999999' },
+        { action: 'upsert', key: 'cpf', value: '00000000000' },
+        { action: 'upsert', key: 'cidade', value: 'Teresina' },
+      ],
+      pending: [],
+    },
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  });
+  assert.deepEqual(snapshot.facts, [{ key: 'cidade', value: 'Teresina' }]);
+});
+
+test('PR 345 memory context lets the harness use less recent transcript with measurable savings', () => {
+  const messages = Array.from({ length: 12 }, (_, index) => ({
+    id: `m${index}`,
+    role: index % 2 ? 'assistant' as const : 'user' as const,
+    content: `turno-${index}-` + 'x'.repeat(850),
+  }));
+  const result = buildBudgetedHistory(
+    messages,
+    FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET,
+    FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES,
+  );
+  assert.ok(result.messages.length <= FLIP_AI_HISTORY_MEMORY_MAX_MESSAGES);
+  assert.ok(result.metrics.selectedChars <= FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET);
+  assert.ok(result.metrics.avoidedChars > 0);
+  assert.ok(result.metrics.avoidedTokensEstimate > 0);
+  assert.equal(result.messages.at(-1)?.id, 'm11');
+
+  const retrieval = buildHarnessRetrievalQueries({
+    message: 'E sobre a visita?',
+    memoryContext: 'cidade=Parnaíba; possui_freezer=sim',
+  });
+  assert.match(retrieval.conversationQuery, /Memória compacta: cidade=Parnaíba/);
 });

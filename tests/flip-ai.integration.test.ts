@@ -821,6 +821,7 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       reply: 'Obrigado, Diego. Como posso continuar?',
       identity: { name: 'Diego', phone: '(86) 99999-8877' },
       qualification: null,
+      memoryPatch: { facts: [], pending: [] },
     });
     const identityReplay = await preparePublicChatTurn(chatRuntime, anonymous, identityInput);
     assert.equal(identityReplay.mode, 'replay');
