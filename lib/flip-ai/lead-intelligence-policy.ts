@@ -114,7 +114,23 @@ export function parseConversationDecision(value: unknown): FlipAiConversationDec
     ...(typeof raw.readinessScore === 'number' ? { readinessScore: boundScore(raw.readinessScore) } : {}),
     needsHuman: raw.needsHuman,
     ...(raw.actionSignals && typeof raw.actionSignals === 'object' && !Array.isArray(raw.actionSignals)
-      ? { actionSignals: normalizeActionSignals(raw.actionSignals as Record<string, number>) }
+      ? (() => {
+        const signals = raw.actionSignals as Record<string, unknown>;
+        return {
+          actionSignals: normalizeActionSignals({
+            humanHandoffInterest: typeof signals.humanHandoffInterest === 'number'
+              ? signals.humanHandoffInterest : undefined,
+            inPersonInterest: typeof signals.inPersonInterest === 'number'
+              ? signals.inPersonInterest : undefined,
+            visitInterest: typeof signals.visitInterest === 'number'
+              ? signals.visitInterest : undefined,
+            productDemoInterest: typeof signals.productDemoInterest === 'number'
+              ? signals.productDemoInterest : undefined,
+            schedulingInterest: typeof signals.schedulingInterest === 'number'
+              ? signals.schedulingInterest : undefined,
+          }),
+        };
+      })()
       : {}),
     confidence: Math.max(0, Math.min(1, raw.confidence)),
     intentConfidence: Math.max(0, Math.min(1, raw.intentConfidence)),
