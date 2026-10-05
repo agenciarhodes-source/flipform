@@ -1,8 +1,11 @@
 import {
   normalizeActionSignals,
   resolveFlipAiActionEligibility,
+  resolveFlipAiActionPermission,
   type FlipAiActionEligibility,
+  type FlipAiActionPermission,
 } from './action-eligibility';
+import type { FlipAiActionCapabilities } from './action-capabilities';
 
 import {
   JEV_INTENTS,
@@ -38,6 +41,7 @@ export type FlipAiLeadIntelligenceSnapshot = {
   journeyStage: FlipAiConversationDecision['journeyStage'];
   nextAction: FlipAiConversationDecision['nextAction'];
   actionEligibility: FlipAiActionEligibility;
+  actionPermission: FlipAiActionPermission;
   needsHuman: boolean;
   confidence: number;
   scoreDelta: number | null;
@@ -197,6 +201,7 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
   updatedAt: Date;
   conversationId: string;
   usageEventId: string;
+  actionCapabilities?: FlipAiActionCapabilities | null;
 }): FlipAiLeadIntelligenceSnapshot {
   const current = calculateFlipAiLeadScore(input.decision);
   const previous = input.previousDecision
@@ -206,6 +211,10 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     rawNextAction: input.decision.nextAction,
     signals: input.decision.actionSignals,
     needsHuman: input.decision.needsHuman,
+  });
+  const actionPermission = resolveFlipAiActionPermission({
+    eligibility: actionEligibility,
+    capabilities: input.actionCapabilities,
   });
 
   return {
@@ -218,8 +227,9 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     intent: input.decision.intent,
     objection: input.decision.objection,
     journeyStage: input.decision.journeyStage,
-    nextAction: actionEligibility.effectiveNextAction,
+    nextAction: actionPermission.effectiveNextAction,
     actionEligibility,
+    actionPermission,
     needsHuman: input.decision.needsHuman,
     confidence: input.decision.confidence,
     scoreDelta: previous ? current.score - previous.score : null,
