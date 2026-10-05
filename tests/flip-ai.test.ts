@@ -38,8 +38,14 @@ import {
 import { buildFlipAiHumanHandoffSnapshot } from '../lib/flip-ai/human-handoff-policy';
 import {
   actionEligibilityPrompt,
+  actionPermissionPrompt,
   resolveFlipAiActionEligibility,
+  resolveFlipAiActionPermission,
 } from '../lib/flip-ai/action-eligibility';
+import {
+  EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+  parseFlipAiActionCapabilities,
+} from '../lib/flip-ai/action-capabilities';
 import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
@@ -1450,6 +1456,12 @@ test('PR 342 live intelligence exposes deterministic score trend across JEV deci
     updatedAt: new Date('2026-10-04T20:00:00.000Z'),
     conversationId: 'conversation-1',
     usageEventId: 'usage-1',
+    actionCapabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
   });
   assert.equal(snapshot.score, 87);
   assert.ok(snapshot.scoreDelta != null && snapshot.scoreDelta > 0);
@@ -1477,6 +1489,13 @@ test('PR 343 handoff prefers the existing qualification summary without another 
     actionEligibility: resolveFlipAiActionEligibility({
       rawNextAction: 'handoff',
       needsHuman: true,
+    }),
+    actionPermission: resolveFlipAiActionPermission({
+      eligibility: resolveFlipAiActionEligibility({
+        rawNextAction: 'handoff',
+        needsHuman: true,
+      }),
+      capabilities: EMPTY_FLIP_AI_ACTION_CAPABILITIES,
     }),
     needsHuman: true,
     confidence: 0.9,
@@ -1547,6 +1566,13 @@ test('PR 343 handoff has a deterministic fallback when no semantic summary exist
     actionEligibility: resolveFlipAiActionEligibility({
       rawNextAction: 'handle_objection',
       needsHuman: false,
+    }),
+    actionPermission: resolveFlipAiActionPermission({
+      eligibility: resolveFlipAiActionEligibility({
+        rawNextAction: 'handle_objection',
+        needsHuman: false,
+      }),
+      capabilities: EMPTY_FLIP_AI_ACTION_CAPABILITIES,
     }),
     needsHuman: false,
     confidence: 0.8,
@@ -1805,4 +1831,146 @@ test('PR 346 visit or in-person product demo counts as presencial but not as sch
     assert.equal(eligibility.mayDiscussScheduling, true);
     assert.equal(eligibility.mayCollectAvailability, false);
   }
+});
+
+
+test('PR 347 action capabilities fail closed and reject unknown configuration', () => {
+  assert.deepEqual(parseFlipAiActionCapabilities({}), EMPTY_FLIP_AI_ACTION_CAPABILITIES);
+  assert.deepEqual(parseFlipAiActionCapabilities(null), EMPTY_FLIP_AI_ACTION_CAPABILITIES);
+  assert.deepEqual(parseFlipAiActionCapabilities({
+    inPersonService: true,
+    customerVisit: false,
+    productDemo: true,
+    inPersonScheduling: false,
+  }), {
+    inPersonService: true,
+    customerVisit: false,
+    productDemo: true,
+    inPersonScheduling: false,
+  });
+  assert.deepEqual(parseFlipAiActionCapabilities({
+    inPersonService: true,
+    customerVisit: false,
+    productDemo: false,
+    inPersonScheduling: false,
+    unexpected: true,
+  }), EMPTY_FLIP_AI_ACTION_CAPABILITIES);
+});
+
+test('PR 347 customer desire never overrides a disabled agent capability', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.9,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.9,
+    },
+  });
+  const permission = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  });
+  assert.equal(eligibility.visitRequested, true);
+  assert.equal(permission.supportedInPerson, false);
+  assert.equal(permission.status, 'unsupported');
+  assert.equal(permission.mayCollectAvailability, false);
+  assert.notEqual(permission.effectiveNextAction, 'schedule');
+  assert.match(actionPermissionPrompt(permission), /não está habilitada/i);
+});
+
+test('PR 347 each presencial modality requires its own agent capability', () => {
+  const cases = [
+    {
+      signals: { inPersonInterest: 0.9, visitInterest: 0.1, productDemoInterest: 0.1 },
+      capabilities: { inPersonService: true, customerVisit: false, productDemo: false, inPersonScheduling: false },
+    },
+    {
+      signals: { inPersonInterest: 0.1, visitInterest: 0.9, productDemoInterest: 0.1 },
+      capabilities: { inPersonService: false, customerVisit: true, productDemo: false, inPersonScheduling: false },
+    },
+    {
+      signals: { inPersonInterest: 0.1, visitInterest: 0.1, productDemoInterest: 0.9 },
+      capabilities: { inPersonService: false, customerVisit: false, productDemo: true, inPersonScheduling: false },
+    },
+  ] as const;
+  for (const item of cases) {
+    const eligibility = resolveFlipAiActionEligibility({
+      rawNextAction: 'ask_one_question',
+      signals: {
+        humanHandoffInterest: 0.1,
+        schedulingInterest: 0.1,
+        ...item.signals,
+      },
+    });
+    const permission = resolveFlipAiActionPermission({
+      eligibility,
+      capabilities: item.capabilities,
+    });
+    assert.equal(permission.supportedInPerson, true);
+    assert.equal(permission.status, 'discuss_in_person');
+  }
+});
+
+test('PR 347 collecting day or time requires both supported modality and scheduling capability', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  const withoutScheduling = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: false,
+    },
+  });
+  assert.equal(withoutScheduling.mayCollectAvailability, false);
+  assert.equal(withoutScheduling.effectiveNextAction, 'handoff');
+
+  const enabled = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  });
+  assert.equal(enabled.status, 'collect_availability');
+  assert.equal(enabled.mayCollectAvailability, true);
+  assert.equal(enabled.effectiveNextAction, 'schedule');
+});
+
+test('PR 347 vague scheduling stays blocked when agent has no presencial capability at all', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.1,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  const permission = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+  });
+  assert.equal(eligibility.schedulingStatus, 'clarify_in_person');
+  assert.equal(permission.status, 'blocked');
+  assert.equal(permission.effectiveNextAction, 'answer_directly');
 });
