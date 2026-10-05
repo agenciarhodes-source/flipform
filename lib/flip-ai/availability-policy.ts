@@ -168,6 +168,34 @@ export function availabilityPrompt(snapshot: FlipAiAvailabilitySnapshot | null) 
   return fields.join('; ');
 }
 
+export function availabilityConversationGuidance(
+  snapshot: FlipAiAvailabilitySnapshot | null,
+  permission: FlipAiActionPermission | null,
+) {
+  if (!permission?.mayCollectAvailability) return '';
+
+  if (snapshot?.status === 'ready_for_handoff') {
+    return [
+      'A preferência de disponibilidade já está suficiente para handoff.',
+      'Não pergunte novamente dia, período ou horário que já tenham sido informados.',
+      'Reconheça brevemente a preferência e deixe claro que o time humano ainda confirmará a disponibilidade.',
+    ].join(' ');
+  }
+
+  if (snapshot?.preferredDate && !snapshot.preferredPeriod && !snapshot.preferredTime) {
+    return 'O dia/data preferido já foi informado. Se ainda for útil, pergunte somente o período ou horário preferido.';
+  }
+
+  if (!snapshot?.preferredDate && (snapshot?.preferredPeriod || snapshot?.preferredTime)) {
+    return 'O período/horário preferido já foi informado. Pergunte somente o dia ou data preferida.';
+  }
+
+  return [
+    'Colete somente a próxima informação de disponibilidade que faltar.',
+    'Se a própria mensagem atual já trouxer dia e período/horário, não faça uma pergunta redundante.',
+  ].join(' ');
+}
+
 export function availabilityPatchInstructions(permission: FlipAiActionPermission | null) {
   if (!permission?.mayCollectAvailability) {
     return [
