@@ -1104,6 +1104,7 @@ model FlipAiAgent {
   chatBackgroundColor String? @map("chat_background_color")
   userMessageColor String? @map("user_message_color")
   sendButtonColor String? @map("send_button_color")
+  actionCapabilities Json @default("{}") @map("action_capabilities")
   style String @default("welcoming")
   status String @default("draft")
   version Int @default(1)

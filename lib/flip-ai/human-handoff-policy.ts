@@ -78,7 +78,7 @@ function buildFallbackSummary(
 function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   if (!intelligence) return 'low' as const;
   if (intelligence.needsHuman
-    || intelligence.actionEligibility.mayCollectAvailability
+    || intelligence.actionPermission.mayCollectAvailability
     || intelligence.classification === 'qualified'
     || intelligence.score >= 80) {
     return 'high' as const;
@@ -91,11 +91,14 @@ function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
 
 function handoffReason(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   if (!intelligence) return 'Contexto disponível para continuidade manual.';
-  if (intelligence.actionEligibility.mayCollectAvailability) {
-    return 'A pessoa demonstrou interesse presencial e quer discutir dia ou horário.';
+  if (intelligence.actionPermission.mayCollectAvailability) {
+    return 'A pessoa quer atendimento presencial e marcação, e este agente permite coletar disponibilidade.';
   }
-  if (intelligence.actionEligibility.inPersonRequested) {
-    return 'A pessoa demonstrou interesse em atendimento presencial, visita ou demonstração.';
+  if (intelligence.actionEligibility.inPersonRequested && !intelligence.actionPermission.supportedInPerson) {
+    return 'A pessoa pediu uma modalidade presencial que não está habilitada para este agente.';
+  }
+  if (intelligence.actionPermission.mayDiscussInPerson) {
+    return 'A pessoa demonstrou interesse presencial em uma modalidade habilitada para este agente.';
   }
   if (intelligence.needsHuman) return 'O JEV sinalizou necessidade de atendimento humano.';
   if (intelligence.nextAction === 'handoff') return 'A próxima ação sugerida é atendimento humano.';

@@ -73,6 +73,14 @@ const schedulingStatusLabels: Record<string, string> = {
   collect_availability: 'Pode coletar preferência de dia/horário',
 };
 
+const actionPermissionLabels: Record<string, string> = {
+  blocked: 'Ação presencial bloqueada',
+  unsupported: 'Modalidade presencial não habilitada',
+  discuss_in_person: 'Modalidade presencial habilitada',
+  clarify_in_person: 'Esclarecer modalidade antes de avançar',
+  collect_availability: 'Pode coletar preferência de dia/horário',
+};
+
 const handoffPriorityLabels: Record<string, string> = {
   high: 'Prioridade alta',
   normal: 'Prioridade normal',
@@ -435,10 +443,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                         {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested ? 'Interesse detectado' : 'Não indicado'}
                       </div>
                       <div>
-                        <strong>Agenda:</strong>{' '}
+                        <strong>Desejo do cliente:</strong>{' '}
                         {schedulingStatusLabels[lead.flipAiLiveIntelligence.actionEligibility?.schedulingStatus]
                           || lead.flipAiLiveIntelligence.actionEligibility?.schedulingStatus
-                          || 'Não indicada'}
+                          || 'Não indicado'}
+                      </div>
+                      <div>
+                        <strong>Permissão do agente:</strong>{' '}
+                        {actionPermissionLabels[lead.flipAiLiveIntelligence.actionPermission?.status]
+                          || lead.flipAiLiveIntelligence.actionPermission?.status
+                          || 'Bloqueada'}
                       </div>
                     </div>
                   </div>
@@ -450,9 +464,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     {lead.flipAiLiveIntelligence.needsHuman && (
                       <p className="mt-2 text-amber-700">O JEV sinalizou necessidade de atendimento humano.</p>
                     )}
-                    {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested && (
+                    {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested
+                      && !lead.flipAiLiveIntelligence.actionPermission?.supportedInPerson && (
+                      <p className="mt-2 text-amber-700">
+                        Interesse presencial detectado, mas a modalidade solicitada não está habilitada para este agente.
+                      </p>
+                    )}
+                    {lead.flipAiLiveIntelligence.actionPermission?.mayDiscussInPerson && (
                       <p className="mt-2 text-blue-700">
-                        Interesse presencial detectado. Isso não significa que exista horário ou serviço presencial disponível.
+                        A modalidade presencial solicitada está habilitada para este agente.
                       </p>
                     )}
                   </div>
@@ -460,8 +480,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
 
                 <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
                   O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
-                  Agenda é independente do score e só fica elegível quando a conversa demonstra interesse presencial e intenção de marcar.
-                  Esta leitura não move etapa, não altera temperatura do CRM, não cria agenda e não executa ações automaticamente.
+                  Agenda é independente do score e exige duas condições: desejo presencial do cliente e capacidade habilitada no agente.
+                  Mesmo quando a coleta de disponibilidade é permitida, esta leitura não cria agenda nem compromisso, não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
                 </div>
               </section>
             )}

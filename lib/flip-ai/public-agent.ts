@@ -6,6 +6,8 @@ import { normalizeHostname } from '@/lib/host-routing';
 import { FLIP_AI_EMBEDDING_MODEL } from './openai-embeddings';
 import { isFlipAiPilotTenant } from './pilot-access';
 import { canServeFlipAiPilot, canServeFlipAiPublic } from './policy';
+import { loadFlipAiAgentActionCapabilities } from './action-capabilities-server';
+import type { FlipAiActionCapabilities } from './action-capabilities';
 
 const PUBLIC_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -51,6 +53,7 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   pipelineId: string;
   initialStageId: string;
   rotationId: string | null;
+  actionCapabilities?: FlipAiActionCapabilities;
 };
 
 async function publicSchemaReady(): Promise<boolean> {
@@ -185,10 +188,16 @@ export async function resolvePublicFlipAiRuntime(input: {
     select: { id: true },
   });
   if (!index) return null;
-  const appearance = await resolveAgentAppearance({
-    tenantId: endpoint.agent.tenantId,
-    agentId: endpoint.agent.id,
-  });
+  const [appearance, actionCapabilities] = await Promise.all([
+    resolveAgentAppearance({
+      tenantId: endpoint.agent.tenantId,
+      agentId: endpoint.agent.id,
+    }),
+    loadFlipAiAgentActionCapabilities({
+      tenantId: endpoint.agent.tenantId,
+      agentId: endpoint.agent.id,
+    }),
+  ]);
 
   return {
     id: endpoint.agent.id,
@@ -212,6 +221,7 @@ export async function resolvePublicFlipAiRuntime(input: {
       && endpoint.agent.rotation.isEnabled
       && endpoint.agent.rotation.form.isActive
       ? endpoint.agent.rotationId : null,
+    actionCapabilities,
   };
 }
 

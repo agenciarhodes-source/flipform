@@ -10,6 +10,7 @@ import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-edi
 import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-editor';
 import { AgentAvatarPicker } from '@/components/flip-ai/agent-avatar-picker';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
+import { EMPTY_FLIP_AI_ACTION_CAPABILITIES } from '@/lib/flip-ai/action-capabilities';
 
 type Editor = { id?: string; version?: number; status?: AgentDraft['status']; requestId: string; input: AgentDraftInput };
 const control = 'mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm';
@@ -34,6 +35,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     setEditor({ requestId: crypto.randomUUID(), input: {
       name: '', description: '', primaryColor: '#2563EB', style: 'welcoming',
       avatarUrl: null, chatBackgroundColor: null, userMessageColor: null, sendButtonColor: null,
+      actionCapabilities: { ...EMPTY_FLIP_AI_ACTION_CAPABILITIES },
       pipelineId: pipeline?.id || '', initialStageId: pipeline?.stages[0]?.id || '', rotationId: null, slug: '',
     } });
   }
@@ -43,11 +45,27 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
       name: agent.name, description: agent.description, primaryColor: agent.primaryColor, style: agent.style,
       avatarUrl: agent.avatarUrl, chatBackgroundColor: agent.chatBackgroundColor,
       userMessageColor: agent.userMessageColor, sendButtonColor: agent.sendButtonColor,
+      actionCapabilities: { ...agent.actionCapabilities },
       pipelineId: agent.pipelineId, initialStageId: agent.initialStageId, rotationId: agent.rotationId, slug: agent.slug,
     } });
   }
   function change<K extends keyof AgentDraftInput>(key: K, value: AgentDraftInput[K]) {
     setEditor((current) => current ? { ...current, input: { ...current.input, [key]: value } } : current);
+  }
+  function changeActionCapability(
+    key: keyof typeof EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+    value: boolean,
+  ) {
+    if (!editor) return;
+    const current = editor.input.actionCapabilities || EMPTY_FLIP_AI_ACTION_CAPABILITIES;
+    if (key === 'inPersonScheduling' && value
+      && !current.inPersonService && !current.customerVisit && !current.productDemo) return;
+    const next = { ...current, [key]: value };
+    if (key !== 'inPersonScheduling'
+      && !next.inPersonService && !next.customerVisit && !next.productDemo) {
+      next.inPersonScheduling = false;
+    }
+    change('actionCapabilities', next);
   }
   async function reload(successMessage = 'Lista atualizada.') {
     if (inFlight.current) return;
@@ -123,6 +141,9 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
     {!workspace.appearanceReady ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
       A identidade visual avançada será liberada após a atualização aditiva do banco. O chat continua usando a cor principal e as iniciais atuais.
     </div> : null}
+    {!workspace.actionCapabilitiesReady ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+      As capacidades de atendimento presencial ainda aguardam a migration aditiva. Enquanto isso, visita, demonstração e agenda permanecem bloqueadas.
+    </div> : null}
     <div className="rounded-lg border bg-muted/40 p-4 text-sm">A publicação só é liberada quando destino, conhecimento, OpenAI e carteira estiverem prontos. Retirar do ar é imediato e não apaga conversas ou Leads.</div>
     <div className="flex flex-wrap items-center justify-between gap-3"><p role="status" aria-live="polite" className="text-sm">{message}</p>
       <Button variant="outline" disabled={busy} onClick={() => reload()}>Atualizar lista</Button></div>
@@ -136,6 +157,43 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <label className="text-sm" htmlFor="ai-style">Estilo de conversa<select id="ai-style" className={control} value={editor.input.style} onChange={(e) => change('style', e.target.value as AgentDraftInput['style'])}>
           <option value="welcoming">Acolhedor</option><option value="professional">Profissional</option><option value="direct">Direto</option></select></label>
         <label className="text-sm sm:col-span-2" htmlFor="ai-description">Descrição interna<textarea id="ai-description" className={control} rows={3} maxLength={500} value={editor.input.description} onChange={(e) => change('description', e.target.value)} /></label>
+        <div className="rounded-lg border p-4 sm:col-span-2">
+          <p className="text-sm font-medium">Capacidades de atendimento</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ative somente o que este atendente realmente pode oferecer. Interesse do cliente não libera uma capacidade desativada.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" disabled={!workspace.actionCapabilitiesReady}
+                checked={Boolean(editor.input.actionCapabilities?.inPersonService)}
+                onChange={(e) => changeActionCapability('inPersonService', e.target.checked)} />
+              <span><strong>Atendimento presencial</strong><span className="block text-xs text-muted-foreground">Cliente pode ser atendido fisicamente na unidade, escritório ou local da empresa.</span></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" disabled={!workspace.actionCapabilitiesReady}
+                checked={Boolean(editor.input.actionCapabilities?.customerVisit)}
+                onChange={(e) => changeActionCapability('customerVisit', e.target.checked)} />
+              <span><strong>Visita ao cliente</strong><span className="block text-xs text-muted-foreground">Representante, vendedor ou profissional pode visitar o cliente presencialmente.</span></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" disabled={!workspace.actionCapabilitiesReady}
+                checked={Boolean(editor.input.actionCapabilities?.productDemo)}
+                onChange={(e) => changeActionCapability('productDemo', e.target.checked)} />
+              <span><strong>Demonstração presencial</strong><span className="block text-xs text-muted-foreground">É possível conhecer ou demonstrar produtos/serviços presencialmente.</span></span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1"
+                disabled={!workspace.actionCapabilitiesReady
+                  || !editor.input.actionCapabilities
+                  || (!editor.input.actionCapabilities.inPersonService
+                    && !editor.input.actionCapabilities.customerVisit
+                    && !editor.input.actionCapabilities.productDemo)}
+                checked={Boolean(editor.input.actionCapabilities?.inPersonScheduling)}
+                onChange={(e) => changeActionCapability('inPersonScheduling', e.target.checked)} />
+              <span><strong>Coletar preferência de agenda</strong><span className="block text-xs text-muted-foreground">Permite perguntar preferência de dia/horário quando o cliente já quer uma modalidade presencial habilitada. Não confirma compromisso.</span></span>
+            </label>
+          </div>
+        </div>
         <AgentAvatarPicker value={editor.input.avatarUrl || ''} disabled={!workspace.appearanceReady}
           onChange={(value) => change('avatarUrl', value || null)} />
         <label className="text-sm" htmlFor="ai-color">Cor de identidade<input id="ai-color" type="color" className="mt-1 block h-10 w-20 cursor-pointer rounded border" value={editor.input.primaryColor} onChange={(e) => change('primaryColor', e.target.value)} /></label>

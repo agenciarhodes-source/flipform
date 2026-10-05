@@ -36,7 +36,7 @@ export function canonicalizeFlipAiIdentifier(identifier: string) {
 }
 
 const COLUMN_SPECS_BY_TABLE = {
-  flip_ai_agents: "id:text tenant_id:text name:text description:text='' primary_color:text='#2563EB' style:text='welcoming' status:text='draft' version:int4=1 pipeline_id:text initial_stage_id:text created_by:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp rotation_id:text? avatar_url:text? chat_background_color:text? user_message_color:text? send_button_color:text?",
+  flip_ai_agents: "id:text tenant_id:text name:text description:text='' primary_color:text='#2563EB' style:text='welcoming' status:text='draft' version:int4=1 pipeline_id:text initial_stage_id:text created_by:text? created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp rotation_id:text? avatar_url:text? chat_background_color:text? user_message_color:text? send_button_color:text? action_capabilities:jsonb='{}'::jsonb",
   flip_ai_endpoints: 'id:text tenant_id:text agent_id:text slug:text created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp',
   flip_ai_knowledge_bases: "id:text tenant_id:text agent_id:text status:text='draft' created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
   flip_ai_knowledge_documents: "id:text tenant_id:text knowledge_base_id:text source_key:text source_type:text='markdown' title:text current_revision:int4=1 current_hash:text byte_size:int4 created_at:timestamp=CURRENT_TIMESTAMP updated_at:timestamp",
