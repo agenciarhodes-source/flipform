@@ -318,8 +318,27 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       (e: unknown) => e instanceof FlipAiError && e.code === 'INVALID_DESTINATION');
     await assert.rejects(saveAgentDraft(b.session, { ...b.input, slug: a.input.slug }, { kind: 'create', requestId: randomUUID() }));
     assert.equal(await prisma.flipAiAgent.count({ where: { tenantId: b.tenant.id } }), 0);
-    const updated = await saveAgentDraft(a.session, { ...a.input, name: 'Ana' }, { kind: 'update', id, version: 1 });
+    const updated = await saveAgentDraft(a.session, {
+      ...a.input,
+      name: 'Ana',
+      actionCapabilities: {
+        inPersonService: false,
+        customerVisit: true,
+        productDemo: false,
+        inPersonScheduling: true,
+      },
+    }, { kind: 'update', id, version: 1 });
     assert.equal(updated.version, 2);
+    assert.deepEqual(updated.actionCapabilities, {
+      inPersonService: false,
+      customerVisit: true,
+      productDemo: false,
+      inPersonScheduling: true,
+    });
+    const capabilityWorkspace = await getAgentDraftWorkspace(a.session);
+    assert.equal(capabilityWorkspace.actionCapabilitiesReady, true);
+    assert.deepEqual(capabilityWorkspace.agents.find((agent) => agent.id === id)?.actionCapabilities,
+      updated.actionCapabilities);
     await assert.rejects(saveAgentDraft(a.session, a.input, { kind: 'update', id, version: 1 }), (e: unknown) => e instanceof FlipAiError && e.code === 'VERSION_CONFLICT');
     await assert.rejects(changeAgentPublication(a.session, id, {
       action: 'publish', version: updated.version,
@@ -360,7 +379,11 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       (e: unknown) => e instanceof FlipAiError && e.code === 'KNOWLEDGE_VERSION_CONFLICT');
     await assert.rejects(saveMasterMarkdown(a.session, id, { ...master, content: '界'.repeat(400_000), expectedRevision: 2 }),
       (e: unknown) => e instanceof FlipAiError && e.status === 413);
-    const savedWithKnowledge = await saveAgentDraft(a.session, { ...a.input, name: 'Ana indexada' }, { kind: 'update', id, version: 2 });
+    const savedWithKnowledge = await saveAgentDraft(a.session, {
+      ...a.input,
+      name: 'Ana indexada',
+      actionCapabilities: updated.actionCapabilities,
+    }, { kind: 'update', id, version: 2 });
     assert.equal(savedWithKnowledge.knowledge?.revision, 2, 'agent save must preserve its knowledge summary');
 
     const prepared = await prepareKnowledgeIndex(a.session, id, 2);
@@ -453,7 +476,10 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     }, { openAiConfigured: true });
     assert.equal(publicationReplay.reused, true, 'publication replay must be idempotent');
     const editedPublished = await saveAgentDraft(a.session, {
-      ...a.input, name: 'Helena publicada', primaryColor: '#864040',
+      ...a.input,
+      name: 'Helena publicada',
+      primaryColor: '#864040',
+      actionCapabilities: published.actionCapabilities,
     }, { kind: 'update', id, version: published.version });
     assert.equal(editedPublished.status, 'published', 'editing must keep the public chat online');
     assert.equal(editedPublished.name, 'Helena publicada');
