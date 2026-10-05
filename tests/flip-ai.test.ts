@@ -37,6 +37,10 @@ import {
 } from '../lib/flip-ai/lead-intelligence-policy';
 import { buildFlipAiHumanHandoffSnapshot } from '../lib/flip-ai/human-handoff-policy';
 import {
+  actionEligibilityPrompt,
+  resolveFlipAiActionEligibility,
+} from '../lib/flip-ai/action-eligibility';
+import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
   normalizeJevOrdinalScore,
@@ -1432,6 +1436,13 @@ test('PR 342 live intelligence exposes deterministic score trend across JEV deci
     fitScore: 85,
     urgencyScore: 75,
     confidence: 0.9,
+    actionSignals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.2,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.9,
+    },
   };
   const snapshot = buildFlipAiLeadIntelligenceSnapshot({
     decision: current,
@@ -1463,6 +1474,10 @@ test('PR 343 handoff prefers the existing qualification summary without another 
     objection: 'price' as const,
     journeyStage: 'decision' as const,
     nextAction: 'handoff' as const,
+    actionEligibility: resolveFlipAiActionEligibility({
+      rawNextAction: 'handoff',
+      needsHuman: true,
+    }),
     needsHuman: true,
     confidence: 0.9,
     scoreDelta: 8,
@@ -1529,6 +1544,10 @@ test('PR 343 handoff has a deterministic fallback when no semantic summary exist
     objection: 'trust' as const,
     journeyStage: 'consideration' as const,
     nextAction: 'handle_objection' as const,
+    actionEligibility: resolveFlipAiActionEligibility({
+      rawNextAction: 'handle_objection',
+      needsHuman: false,
+    }),
     needsHuman: false,
     confidence: 0.8,
     scoreDelta: null,
@@ -1667,4 +1686,94 @@ test('PR 345 memory context lets the harness use less recent transcript with mea
     memoryContext: 'cidade=Parnaíba; possui_freezer=sim',
   });
   assert.match(retrieval.conversationQuery, /Memória compacta: cidade=Parnaíba/);
+});
+
+
+test('PR 346 high score or qualification never unlocks agenda without in-person intent', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    needsHuman: false,
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.1,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.1,
+    },
+  });
+  assert.equal(eligibility.schedulingStatus, 'blocked');
+  assert.equal(eligibility.mayDiscussScheduling, false);
+  assert.equal(eligibility.mayCollectAvailability, false);
+  assert.equal(eligibility.effectiveNextAction, 'answer_directly');
+});
+
+test('PR 346 asking for a human does not imply in-person service or agenda', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    needsHuman: false,
+    signals: {
+      humanHandoffInterest: 0.95,
+      inPersonInterest: 0.1,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.1,
+    },
+  });
+  assert.equal(eligibility.humanHandoffRequested, true);
+  assert.equal(eligibility.inPersonRequested, false);
+  assert.equal(eligibility.schedulingStatus, 'blocked');
+  assert.equal(eligibility.effectiveNextAction, 'handoff');
+});
+
+test('PR 346 in-person interest can be acknowledged before asking for a date or time', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.2,
+      inPersonInterest: 0.9,
+      visitInterest: 0.2,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.3,
+    },
+  });
+  assert.equal(eligibility.schedulingStatus, 'in_person_interest');
+  assert.equal(eligibility.mayDiscussScheduling, true);
+  assert.equal(eligibility.mayCollectAvailability, false);
+  assert.equal(eligibility.effectiveNextAction, 'ask_one_question');
+  assert.match(actionEligibilityPrompt(eligibility), /Não peça dia\/horário/);
+});
+
+test('PR 346 agenda collection requires both in-person and scheduling intent', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.2,
+      inPersonInterest: 0.85,
+      visitInterest: 0.8,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.9,
+    },
+  });
+  assert.equal(eligibility.schedulingStatus, 'collect_availability');
+  assert.equal(eligibility.mayCollectAvailability, true);
+  assert.equal(eligibility.effectiveNextAction, 'schedule');
+  assert.match(actionEligibilityPrompt(eligibility), /dia OU horário/);
+  assert.match(actionEligibilityPrompt(eligibility), /não diga que algo foi agendado/i);
+});
+
+test('PR 346 scheduling without known in-person mode asks one clarification first', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.2,
+      inPersonInterest: 0.1,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  assert.equal(eligibility.schedulingStatus, 'clarify_in_person');
+  assert.equal(eligibility.mayCollectAvailability, false);
+  assert.equal(eligibility.effectiveNextAction, 'ask_one_question');
+  assert.match(actionEligibilityPrompt(eligibility), /esclarecer a modalidade/);
 });
