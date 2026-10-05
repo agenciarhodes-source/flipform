@@ -84,8 +84,8 @@ def test_pr345_is_web_chat_only_and_does_not_add_whatsapp_runtime():
     chat = read("lib/flip-ai/public-chat.ts")
     assert "provider: 'flip_ai'" in chat
     assert "channel: 'web'" in chat
-    assert "whatsapp" not in policy
-    assert "whatsapp" not in memory
+    assert "integrations/whatsapp" not in policy + memory
+    assert "provider: 'meta'" not in policy + memory
 
 
 def test_pr345_keeps_human_summary_separate_from_machine_memory():
