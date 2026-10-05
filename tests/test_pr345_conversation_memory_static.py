@@ -32,7 +32,7 @@ def test_pr345_memory_is_extracted_in_existing_openai_turn_not_a_second_model_ca
     policy = read("lib/flip-ai/conversation-memory-policy.ts")
     memory = read("lib/flip-ai/conversation-memory.ts")
     assert "memoryPatch: flipAiConversationMemoryPatchSchema" in chat
-    assert "required: ['reply', 'identity', 'qualification', 'memoryPatch']" in chat
+    assert "required: ['reply', 'identity', 'qualification', 'memoryPatch', 'availabilityPatch']" in chat
     for content in [policy, memory]:
         for forbidden in ["streamOpenAiText", "executeFlipAiConversationResponse", "runJevConversationDecision", "fetch("]:
             assert forbidden not in content
