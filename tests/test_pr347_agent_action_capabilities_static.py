@@ -22,6 +22,7 @@ def test_pr347_agent_contract_defaults_every_capability_off():
     assert "productDemo: false" in policy
     assert "inPersonScheduling: false" in policy
     assert "strict()" in policy
+    assert "A coleta de agenda exige ao menos uma modalidade presencial habilitada." in policy
 
 
 def test_pr347_agent_editor_persists_capabilities_only_when_schema_is_ready():
@@ -52,9 +53,10 @@ def test_pr347_public_runtime_loads_capabilities_server_side_with_pre_migration_
 def test_pr347_permission_requires_both_customer_intent_and_agent_capability():
     policy = read("lib/flip-ai/action-eligibility.ts")
     assert "resolveFlipAiActionPermission" in policy
-    assert "eligibility.visitRequested && capabilities.customerVisit" in policy
-    assert "eligibility.productDemoRequested && capabilities.productDemo" in policy
-    assert "&& capabilities.inPersonService" in policy
+    assert "if (eligibility.visitRequested) requestedModeSupport.push(capabilities.customerVisit)" in policy
+    assert "if (eligibility.productDemoRequested) requestedModeSupport.push(capabilities.productDemo)" in policy
+    assert "requestedModeSupport.push(capabilities.inPersonService)" in policy
+    assert "requestedModeSupport.every(Boolean)" in policy
     assert "&& capabilities.inPersonScheduling" in policy
     assert "status = 'unsupported'" in policy
     assert "effectiveNextAction = 'handoff'" in policy
