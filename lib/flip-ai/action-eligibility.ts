@@ -187,7 +187,11 @@ export function resolveFlipAiActionPermission(input: {
   const mayCollectAvailability = status === 'collect_availability';
 
   let effectiveNextAction = eligibility.effectiveNextAction;
-  if (eligibility.effectiveNextAction === 'schedule' && !mayCollectAvailability) {
+  if (status === 'blocked'
+    && eligibility.schedulingStatus === 'clarify_in_person'
+    && !hasAnyInPersonCapability) {
+    effectiveNextAction = eligibility.humanHandoffRequested ? 'handoff' : 'answer_directly';
+  } else if (eligibility.effectiveNextAction === 'schedule' && !mayCollectAvailability) {
     if (status === 'clarify_in_person') {
       effectiveNextAction = 'ask_one_question';
     } else if (status === 'discuss_in_person'
