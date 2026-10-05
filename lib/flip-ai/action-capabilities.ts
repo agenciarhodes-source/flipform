@@ -7,7 +7,18 @@ export const flipAiActionCapabilitiesSchema = z.object({
   customerVisit: z.boolean().default(false),
   productDemo: z.boolean().default(false),
   inPersonScheduling: z.boolean().default(false),
-}).strict();
+}).strict().superRefine((value, ctx) => {
+  if (value.inPersonScheduling
+    && !value.inPersonService
+    && !value.customerVisit
+    && !value.productDemo) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['inPersonScheduling'],
+      message: 'A coleta de agenda exige ao menos uma modalidade presencial habilitada.',
+    });
+  }
+});
 
 export type FlipAiActionCapabilities = z.output<typeof flipAiActionCapabilitiesSchema>;
 
