@@ -3,7 +3,7 @@ import {
   type FlipAiActionSignals,
 } from './action-eligibility';
 
-export const FLIP_AI_DECISION_ENGINE_VERSION = '2026-10-04.1';
+export const FLIP_AI_DECISION_ENGINE_VERSION = '2026-10-05.1';
 
 export const JEV_INTENTS = [
   'information',
