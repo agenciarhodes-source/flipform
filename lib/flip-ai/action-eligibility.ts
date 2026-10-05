@@ -145,6 +145,9 @@ export function resolveFlipAiActionPermission(input: {
 }): FlipAiActionPermission {
   const capabilities = input.capabilities || EMPTY_FLIP_AI_ACTION_CAPABILITIES;
   const { eligibility } = input;
+  const hasAnyInPersonCapability = capabilities.inPersonService
+    || capabilities.customerVisit
+    || capabilities.productDemo;
 
   const supportedRequestedModes = [
     eligibility.visitRequested && capabilities.customerVisit,
@@ -159,9 +162,9 @@ export function resolveFlipAiActionPermission(input: {
   let status: FlipAiActionPermissionStatus = 'blocked';
   let reason = 'Nenhuma ação presencial está habilitada para este ponto da conversa.';
 
-  if (eligibility.schedulingStatus === 'clarify_in_person') {
+  if (eligibility.schedulingStatus === 'clarify_in_person' && hasAnyInPersonCapability) {
     status = 'clarify_in_person';
-    reason = 'A pessoa quer marcar algo, mas a modalidade ainda precisa ser esclarecida.';
+    reason = 'A pessoa quer marcar algo, e este agente possui capacidade presencial; a modalidade ainda precisa ser esclarecida.';
   } else if (eligibility.inPersonRequested && !supportedInPerson) {
     status = 'unsupported';
     reason = 'A pessoa demonstrou interesse presencial, mas o agente não está configurado para oferecer a modalidade solicitada.';
@@ -182,7 +185,13 @@ export function resolveFlipAiActionPermission(input: {
 
   let effectiveNextAction = eligibility.effectiveNextAction;
   if (eligibility.effectiveNextAction === 'schedule' && !mayCollectAvailability) {
-    if (status === 'clarify_in_person' || status === 'discuss_in_person') {
+    if (status === 'clarify_in_person') {
+      effectiveNextAction = 'ask_one_question';
+    } else if (status === 'discuss_in_person'
+      && eligibility.schedulingRequested
+      && !capabilities.inPersonScheduling) {
+      effectiveNextAction = 'handoff';
+    } else if (status === 'discuss_in_person') {
       effectiveNextAction = 'ask_one_question';
     } else if (eligibility.humanHandoffRequested) {
       effectiveNextAction = 'handoff';
@@ -217,7 +226,7 @@ export function actionPermissionPrompt(permission: FlipAiActionPermission) {
       'Você pode reconhecer essa possibilidade.',
       permission.capabilities.inPersonScheduling
         ? 'Se a pessoa quiser marcar, confirme primeiro essa intenção antes de pedir disponibilidade.'
-        : 'A coleta de dia/horário está desativada para este agente; não peça disponibilidade.',
+        : 'A coleta de dia/horário está desativada para este agente; não peça disponibilidade. Se a pessoa quiser marcar, encaminhe para atendimento humano.',
     ].join(' ');
   }
   if (permission.status === 'unsupported') {
