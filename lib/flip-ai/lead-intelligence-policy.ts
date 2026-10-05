@@ -186,6 +186,11 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
   const previous = input.previousDecision
     ? calculateFlipAiLeadScore(input.previousDecision)
     : null;
+  const actionEligibility = resolveFlipAiActionEligibility({
+    rawNextAction: input.decision.nextAction,
+    signals: input.decision.actionSignals,
+    needsHuman: input.decision.needsHuman,
+  });
 
   return {
     source: 'jev',
@@ -197,12 +202,8 @@ export function buildFlipAiLeadIntelligenceSnapshot(input: {
     intent: input.decision.intent,
     objection: input.decision.objection,
     journeyStage: input.decision.journeyStage,
-    nextAction: input.decision.nextAction,
-    actionEligibility: resolveFlipAiActionEligibility({
-      rawNextAction: input.decision.nextAction,
-      signals: input.decision.actionSignals,
-      needsHuman: input.decision.needsHuman,
-    }),
+    nextAction: actionEligibility.effectiveNextAction,
+    actionEligibility,
     needsHuman: input.decision.needsHuman,
     confidence: input.decision.confidence,
     scoreDelta: previous ? current.score - previous.score : null,
