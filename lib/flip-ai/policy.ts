@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { isValidFlipAiAvatar } from './avatar';
+import {
+  EMPTY_FLIP_AI_ACTION_CAPABILITIES,
+  flipAiActionCapabilitiesSchema,
+} from './action-capabilities';
 
 export const FLIP_AI_PLAN_SLUGS = ['premium', 'premium-pro'] as const;
 type Plan = { slug: string | null; isActive: boolean } | null;
@@ -41,6 +45,7 @@ export const agentDraftSchema = z.object({
   chatBackgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
   userMessageColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
   sendButtonColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
+  actionCapabilities: flipAiActionCapabilitiesSchema.default(EMPTY_FLIP_AI_ACTION_CAPABILITIES),
   style: z.enum(['welcoming', 'professional', 'direct']),
   pipelineId: z.string().uuid(),
   initialStageId: z.string().uuid(),
@@ -102,6 +107,7 @@ export type AgentDraft = AgentDraftValues & {
 export type AgentWorkspace = {
   accessMode: 'plan' | 'pilot';
   appearanceReady: boolean;
+  actionCapabilitiesReady: boolean;
   agents: AgentDraft[];
   pipelines: Array<{ id: string; name: string; stages: Array<{ id: string; name: string }> }>;
   rotations: Array<{ id: string; name: string; pipelineId: string; enabled: boolean }>;
