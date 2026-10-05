@@ -1,3 +1,8 @@
+import {
+  resolveFlipAiActionEligibility,
+  type FlipAiActionSignals,
+} from './action-eligibility';
+
 export const FLIP_AI_DECISION_ENGINE_VERSION = '2026-10-04.1';
 
 export const JEV_INTENTS = [
@@ -53,6 +58,7 @@ export type FlipAiConversationDecision = {
   urgencyScore: number;
   readinessScore?: number;
   needsHuman: boolean;
+  actionSignals?: FlipAiActionSignals;
   confidence: number;
   intentConfidence: number;
   objectionConfidence: number;
@@ -115,6 +121,17 @@ export function decisionHint(decision: FlipAiConversationDecision | null) {
     `urgência=${decision.urgencyScore}/100`,
     ...(typeof decision.readinessScore === 'number' ? [`prontidão=${decision.readinessScore}/100`] : []),
     `próxima_ação=${decision.nextAction}`,
+    ...(decision.actionSignals ? (() => {
+      const eligibility = resolveFlipAiActionEligibility({
+        rawNextAction: decision.nextAction,
+        signals: decision.actionSignals,
+        needsHuman: decision.needsHuman,
+      });
+      return [
+        `presencial=${eligibility.inPersonRequested ? 'sim' : 'não'}`,
+        `agenda=${eligibility.schedulingStatus}`,
+      ];
+    })() : []),
     `humano=${decision.needsHuman ? 'sim' : 'não'}`,
     `confiança=${decision.confidence.toFixed(2)}`,
   ].join('; ');
