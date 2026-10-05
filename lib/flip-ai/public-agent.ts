@@ -53,7 +53,7 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   pipelineId: string;
   initialStageId: string;
   rotationId: string | null;
-  actionCapabilities: FlipAiActionCapabilities;
+  actionCapabilities?: FlipAiActionCapabilities;
 };
 
 async function publicSchemaReady(): Promise<boolean> {
