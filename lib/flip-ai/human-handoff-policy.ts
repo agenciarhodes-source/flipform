@@ -1,4 +1,5 @@
 import type { FlipAiLeadIntelligenceSnapshot } from './lead-intelligence-policy';
+import type { FlipAiAvailabilitySnapshot } from './availability-policy';
 
 export type FlipAiHumanHandoffSnapshot = {
   summary: string;
@@ -10,6 +11,7 @@ export type FlipAiHumanHandoffSnapshot = {
   resumeGuidance: string;
   knownFacts: string[];
   reasons: string[];
+  availability: FlipAiAvailabilitySnapshot | null;
   conversationId: string | null;
   updatedAt: string;
 };
@@ -75,8 +77,12 @@ function buildFallbackSummary(
   ].filter(Boolean).join(' ');
 }
 
-function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
-  if (!intelligence) return 'low' as const;
+function priorityOf(
+  intelligence: FlipAiLeadIntelligenceSnapshot | null,
+  availability: FlipAiAvailabilitySnapshot | null | undefined,
+) {
+  if (availability?.status === 'ready_for_handoff') return 'high' as const;
+  if (!intelligence) return availability?.status === 'partial' ? 'normal' as const : 'low' as const;
   if (intelligence.needsHuman
     || intelligence.actionPermission.mayCollectAvailability
     || intelligence.classification === 'qualified'
@@ -89,7 +95,16 @@ function priorityOf(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
   return 'low' as const;
 }
 
-function handoffReason(intelligence: FlipAiLeadIntelligenceSnapshot | null) {
+function handoffReason(
+  intelligence: FlipAiLeadIntelligenceSnapshot | null,
+  availability: FlipAiAvailabilitySnapshot | null | undefined,
+) {
+  if (availability?.status === 'ready_for_handoff') {
+    return 'A pessoa já informou preferência suficiente de disponibilidade para confirmação humana.';
+  }
+  if (availability?.status === 'partial') {
+    return 'A pessoa já informou parte da preferência de disponibilidade; ainda falta completar um dado.';
+  }
   if (!intelligence) return 'Contexto disponível para continuidade manual.';
   if (intelligence.actionPermission.mayCollectAvailability) {
     return 'A pessoa quer atendimento presencial e marcação, e este agente permite coletar disponibilidade.';
@@ -129,6 +144,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   } | null;
   stateSummary: string | null;
   intelligence: FlipAiLeadIntelligenceSnapshot | null;
+  availability?: FlipAiAvailabilitySnapshot | null;
   conversationId: string | null;
   updatedAt: Date;
 }): FlipAiHumanHandoffSnapshot {
@@ -143,10 +159,12 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     || stateSummary
     || buildFallbackSummary(input.leadName, input.intelligence);
 
-  const nextAction = input.intelligence
-    ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
-    : cleanText(input.qualification?.nextAction, 1_000)
-      || 'Revisar a conversa antes de responder.';
+  const nextAction = input.availability?.status === 'ready_for_handoff'
+    ? 'Confirmar disponibilidade e combinar o atendimento presencial com a pessoa.'
+    : input.intelligence
+      ? NEXT_ACTION_LABELS[input.intelligence.nextAction] || input.intelligence.nextAction
+      : cleanText(input.qualification?.nextAction, 1_000)
+        || 'Revisar a conversa antes de responder.';
 
   const knownFacts = [
     input.leadName?.trim() ? `Nome: ${input.leadName.trim()}` : '',
@@ -159,7 +177,15 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
       const compact = cleanText(value, 220);
       return compact ? `${cleanText(answer.questionLabel, 120)}: ${compact}` : '';
     }),
-  ].filter(Boolean).slice(0, 6);
+    input.availability?.preferredDate
+      ? `Dia/data preferida: ${input.availability.preferredDate}` : '',
+    input.availability?.preferredPeriod
+      ? `Período preferido: ${({
+        morning: 'manhã', afternoon: 'tarde', evening: 'noite', flexible: 'flexível',
+      } as const)[input.availability.preferredPeriod]}` : '',
+    input.availability?.preferredTime
+      ? `Horário preferido: ${input.availability.preferredTime}` : '',
+  ].filter(Boolean).slice(0, 9);
 
   const reasons = input.qualification?.reasons?.length
     ? input.qualification.reasons.map((reason) => cleanText(reason, 500)).filter(Boolean).slice(0, 5)
@@ -173,7 +199,8 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
       : [];
 
   const recommended = Boolean(
-    input.intelligence?.needsHuman
+    input.availability?.status === 'ready_for_handoff'
+      || input.intelligence?.needsHuman
       || input.intelligence?.nextAction === 'handoff'
       || input.intelligence?.classification === 'qualified'
       || input.intelligence?.actionEligibility.inPersonRequested,
@@ -182,13 +209,22 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   return {
     summary,
     summarySource,
-    priority: priorityOf(input.intelligence),
+    priority: priorityOf(input.intelligence, input.availability),
     recommended,
-    reason: handoffReason(input.intelligence),
+    reason: handoffReason(input.intelligence, input.availability),
     nextAction,
-    resumeGuidance: resumeGuidance(input.intelligence, nextAction),
+    resumeGuidance: [
+      resumeGuidance(input.intelligence, nextAction),
+      input.availability?.status === 'partial'
+        ? 'Há uma preferência de disponibilidade parcial; pergunte somente o que ainda faltar antes de confirmar com o time.'
+        : '',
+      input.availability?.status === 'ready_for_handoff'
+        ? 'A preferência de disponibilidade já está suficiente; não repita perguntas de dia, período ou horário já respondidas.'
+        : '',
+    ].filter(Boolean).join(' '),
     knownFacts,
     reasons,
+    availability: input.availability || null,
     conversationId: input.conversationId,
     updatedAt: input.updatedAt.toISOString(),
   };

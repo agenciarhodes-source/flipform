@@ -64,7 +64,9 @@ def test_pr346_web_chat_receives_backend_action_policy_but_executes_nothing():
 
 def test_pr346_handoff_uses_effective_action_not_free_form_schedule_text():
     handoff = read("lib/flip-ai/human-handoff-policy.ts")
-    assert "const nextAction = input.intelligence" in handoff
+    assert "input.availability?.status === 'ready_for_handoff'" in handoff
+    assert ": input.intelligence" in handoff
+    assert "NEXT_ACTION_LABELS[input.intelligence.nextAction]" in handoff
     assert "intelligence.actionPermission.mayCollectAvailability" in handoff
     assert "input.intelligence?.actionEligibility.inPersonRequested" in handoff
     assert "Coletar preferência de disponibilidade para atendimento presencial, sem confirmar compromisso." in handoff

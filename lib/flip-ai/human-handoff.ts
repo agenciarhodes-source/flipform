@@ -6,6 +6,7 @@ import {
   buildFlipAiHumanHandoffSnapshot,
   type FlipAiHumanHandoffSnapshot,
 } from './human-handoff-policy';
+import { loadLatestConversationAvailability } from './availability';
 
 export async function getFlipAiHumanHandoff(input: {
   tenantId: string;
@@ -55,7 +56,20 @@ export async function getFlipAiHumanHandoff(input: {
   const conversation = lead.conversations[0] || null;
   if (!qualification && !conversation && !input.intelligence) return null;
 
-  const updatedAt = qualification?.createdAt
+  const conversationId = input.intelligence?.conversationId
+    || qualification?.conversationId
+    || conversation?.id
+    || null;
+  const availability = conversationId
+    ? await loadLatestConversationAvailability({
+      tenantId: input.tenantId,
+      conversationId,
+    }).catch(() => null)
+    : null;
+
+  const availabilityUpdatedAt = availability ? new Date(availability.updatedAt) : null;
+  const updatedAt = availabilityUpdatedAt
+    || qualification?.createdAt
     || conversation?.flipAiState?.summaryUpdatedAt
     || conversation?.lastMessageAt
     || conversation?.updatedAt
@@ -73,7 +87,8 @@ export async function getFlipAiHumanHandoff(input: {
     } : null,
     stateSummary: conversation?.flipAiState?.summary || null,
     intelligence: input.intelligence,
-    conversationId: qualification?.conversationId || conversation?.id || input.intelligence?.conversationId || null,
+    availability,
+    conversationId,
     updatedAt,
   });
 }

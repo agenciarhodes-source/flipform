@@ -212,6 +212,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           context.evidenceMessageIds,
           context.sources,
           context.memorySnapshot,
+          context.availabilitySnapshot,
+          context.actionEligibility,
+          context.actionPermission,
         );
         controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
         if (context.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: context.sources })));

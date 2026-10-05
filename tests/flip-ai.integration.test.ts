@@ -9,6 +9,11 @@ import { prepareKnowledgeIndex, processNextKnowledgeIndexBatch, searchKnowledgeB
 import { FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
 import { previewKnowledgeRetrieval } from '../lib/flip-ai/knowledge-preview';
 import { completePublicChatTurn, getOrCreatePublicSessionToken, preparePublicChatTurn } from '../lib/flip-ai/public-chat';
+import { loadLatestConversationAvailability } from '../lib/flip-ai/availability';
+import {
+  resolveFlipAiActionEligibility,
+  resolveFlipAiActionPermission,
+} from '../lib/flip-ai/action-eligibility';
 import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
@@ -863,6 +868,69 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
     assert.equal(identityReplay.mode, 'replay');
     assert.deepEqual(identityReplay.mode === 'replay' ? identityReplay.identity : null,
       { name: 'Diego', phone: '(86) 99999-8877' });
+
+    const availabilityInput = {
+      messageId: randomUUID(),
+      text: 'Quero ir pessoalmente na sexta-feira à tarde.',
+    };
+    const availabilityTurn = await preparePublicChatTurn(chatRuntime, anonymous, availabilityInput);
+    assert.equal(availabilityTurn.mode, 'execute');
+    if (availabilityTurn.mode !== 'execute') throw new Error('expected availability turn');
+    const availabilityEligibility = resolveFlipAiActionEligibility({
+      rawNextAction: 'schedule',
+      signals: {
+        humanHandoffInterest: 0.1,
+        inPersonInterest: 0.95,
+        visitInterest: 0.1,
+        productDemoInterest: 0.1,
+        schedulingInterest: 0.95,
+      },
+    });
+    const availabilityPermission = resolveFlipAiActionPermission({
+      eligibility: availabilityEligibility,
+      capabilities: {
+        inPersonService: true,
+        customerVisit: false,
+        productDemo: false,
+        inPersonScheduling: true,
+      },
+    });
+    await completePublicChatTurn(
+      availabilityTurn,
+      {
+        responseId: 'resp_availability',
+        model: 'test-model',
+        text: 'Perfeito. Vou registrar sexta-feira à tarde como sua preferência.',
+        inputTokens: 24,
+        outputTokens: 10,
+      },
+      {
+        reply: 'Perfeito. Vou registrar sexta-feira à tarde como sua preferência.',
+        identity: { name: null, phone: null },
+        qualification: null,
+        memoryPatch: { facts: [], pending: [] },
+        availabilityPatch: {
+          preferredDate: { action: 'set', value: 'sexta-feira' },
+          preferredPeriod: { action: 'set', value: 'afternoon' },
+          preferredTime: { action: 'keep', value: null },
+        },
+      },
+      [],
+      [],
+      null,
+      null,
+      availabilityEligibility,
+      availabilityPermission,
+    );
+    const persistedAvailability = await loadLatestConversationAvailability({
+      tenantId: a.tenant.id,
+      conversationId: availabilityTurn.conversationId,
+    });
+    assert.equal(persistedAvailability?.preferredDate, 'sexta-feira');
+    assert.equal(persistedAvailability?.preferredPeriod, 'afternoon');
+    assert.equal(persistedAvailability?.status, 'ready_for_handoff');
+    assert.deepEqual(persistedAvailability?.modalities, ['in_person_service']);
+
     const captured = await captureFlipAiLead({
       runtime: chatRuntime,
       conversationId: identityTurn.conversationId,
