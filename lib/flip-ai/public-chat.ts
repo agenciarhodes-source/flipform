@@ -155,7 +155,7 @@ export const PUBLIC_CHAT_DECISION_FORMAT = {
           },
           pending: {
             type: 'array',
-            maxItems: 6,
+            maxItems: 4,
             items: {
               type: 'object',
               additionalProperties: false,
