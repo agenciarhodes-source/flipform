@@ -19,6 +19,7 @@ import {
 } from '@/lib/flip-ai/conversation-runtime';
 import { captureFlipAiLead, type FlipAiIdentityDecision } from '@/lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '@/lib/flip-ai/qualification';
+import { syncFlipAiHumanActionRequest } from '@/lib/flip-ai/human-action-request';
 import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversation';
 import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
@@ -70,6 +71,22 @@ function sseData(event: string, data: unknown) {
 type BrowserAttribution = Pick<LeadAttributionSnapshot,
   'utmSource' | 'utmMedium' | 'utmCampaign' | 'utmContent' | 'utmTerm'
   | 'fbclid' | 'gclid' | 'landingPage' | 'referrer'>;
+
+async function trySyncHumanActionRequest(input: {
+  runtime: PublicFlipAiRuntime;
+  conversationId: string;
+}) {
+  try {
+    return await syncFlipAiHumanActionRequest({
+      tenantId: input.runtime.tenantId,
+      conversationId: input.conversationId,
+      agentId: input.runtime.id,
+    });
+  } catch {
+    // Internal human-action task creation never invalidates a confirmed customer reply.
+    return null;
+  }
+}
 
 async function tryCaptureLead(input: {
   request: NextRequest;
@@ -163,6 +180,10 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         } catch {
           // Qualification persistence/tracking never invalidates a confirmed reply or Lead.
         }
+        await trySyncHumanActionRequest({
+          runtime: runtimeContext,
+          conversationId: turn.conversationId,
+        });
         if (turn.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: turn.sources })));
         controller.enqueue(encoder.encode(sseData('done', { messageId: turn.messageId, replayed: true })));
         controller.close();
@@ -240,6 +261,10 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
         } catch {
           // Qualification persistence/tracking never invalidates a confirmed reply or Lead.
         }
+        await trySyncHumanActionRequest({
+          runtime: runtimeContext,
+          conversationId: turn.conversationId,
+        });
         controller.enqueue(encoder.encode(sseData('done', {
           messageId: turn.messageId,
           responseId: result.responseId,

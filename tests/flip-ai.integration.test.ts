@@ -16,6 +16,12 @@ import {
 } from '../lib/flip-ai/action-eligibility';
 import { captureFlipAiLead } from '../lib/flip-ai/lead-capture';
 import { finalizeFlipAiQualification } from '../lib/flip-ai/qualification';
+import {
+  FlipAiHumanActionRequestError,
+  getFlipAiHumanActionRequest,
+  resolveFlipAiHumanActionRequest,
+  syncFlipAiHumanActionRequest,
+} from '../lib/flip-ai/human-action-request';
 import { createExternalSource, listExternalSources, updateExternalSource } from '../lib/flip-ai/external-sources';
 import { issuePublicRealtimeSession } from '../lib/flip-ai/realtime-session';
 import { inspectFlipAiSchema } from '../lib/flip-ai/schema-readiness';
@@ -956,6 +962,137 @@ test('drafts are tenant-isolated, idempotent and transactional', async () => {
       attribution: {},
     }), null, 'a linked conversation must not emit a second media action');
     assert.equal(await prisma.lead.count({ where: { tenantId: a.tenant.id, phone: '5586999998877' } }), 1);
+
+    const leadStageBeforeActionRequest = capturedLead.stageId;
+    const leadAssigneeBeforeActionRequest = capturedLead.assignedTo;
+    const [actionRequest, actionRequestConcurrent] = await Promise.all([
+      syncFlipAiHumanActionRequest({
+        tenantId: a.tenant.id,
+        conversationId: identityTurn.conversationId,
+        agentId: id,
+      }),
+      syncFlipAiHumanActionRequest({
+        tenantId: a.tenant.id,
+        conversationId: identityTurn.conversationId,
+        agentId: id,
+      }),
+    ]);
+    assert.ok(actionRequest);
+    assert.equal(actionRequestConcurrent?.id, actionRequest?.id,
+      'concurrent syncs must converge on the same deterministic task');
+    assert.equal(actionRequest?.leadId, capturedLead.id);
+    assert.equal(actionRequest?.status, 'pending');
+    assert.equal(actionRequest?.priority, 'high');
+    assert.equal(actionRequest?.assignedTo, leadAssigneeBeforeActionRequest);
+    assert.match(actionRequest?.description || '', /sexta-feira/);
+    assert.match(actionRequest?.description || '', /Nenhum horário foi reservado ou confirmado/);
+    assert.equal(await prisma.task.count({
+      where: { tenantId: a.tenant.id, leadId: capturedLead.id },
+    }), 1, 'the same conversation must never create a duplicate human action request');
+
+    const actionRequestReplay = await syncFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      conversationId: identityTurn.conversationId,
+      agentId: id,
+    });
+    assert.equal(actionRequestReplay?.id, actionRequest?.id);
+
+    const pendingRequest = await getFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    });
+    assert.equal(pendingRequest?.resolution, 'pending');
+    assert.equal(pendingRequest?.status, 'pending');
+    assert.equal(await getFlipAiHumanActionRequest({
+      tenantId: b.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    }), null, 'another tenant must never resolve or read this internal request');
+
+    await resolveFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      taskId: actionRequest!.id,
+      userId: a.user.id,
+      action: 'confirm',
+    });
+    const confirmedRequest = await getFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    });
+    assert.equal(confirmedRequest?.resolution, 'confirmed');
+    assert.equal(confirmedRequest?.status, 'completed');
+    assert.equal(await prisma.auditLog.count({
+      where: {
+        tenantId: a.tenant.id,
+        entityType: 'task',
+        entityId: actionRequest!.id,
+        action: 'flip_ai.action_request.confirmed',
+      },
+    }), 1);
+
+    await resolveFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      taskId: actionRequest!.id,
+      userId: a.user.id,
+      action: 'confirm',
+    });
+    assert.equal(await prisma.auditLog.count({
+      where: {
+        tenantId: a.tenant.id,
+        entityType: 'task',
+        entityId: actionRequest!.id,
+        action: 'flip_ai.action_request.confirmed',
+      },
+    }), 1, 'repeating the same human resolution must be idempotent');
+
+    await assert.rejects(resolveFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      taskId: actionRequest!.id,
+      userId: a.user.id,
+      action: 'decline',
+    }), (error: unknown) => error instanceof FlipAiHumanActionRequestError
+      && error.code === 'FLIP_AI_ACTION_REQUEST_ALREADY_RESOLVED');
+
+    await resolveFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      taskId: actionRequest!.id,
+      userId: a.user.id,
+      action: 'reopen',
+    });
+    assert.equal((await getFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    }))?.resolution, 'pending');
+
+    await resolveFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      taskId: actionRequest!.id,
+      userId: a.user.id,
+      action: 'decline',
+      note: 'Sem disponibilidade neste momento.',
+    });
+    assert.equal((await getFlipAiHumanActionRequest({
+      tenantId: a.tenant.id,
+      leadId: capturedLead.id,
+      conversationId: identityTurn.conversationId,
+    }))?.resolution, 'declined');
+
+    const leadAfterActionRequest = await prisma.lead.findUniqueOrThrow({
+      where: { id: capturedLead.id },
+      select: { stageId: true, assignedTo: true },
+    });
+    assert.equal(leadAfterActionRequest.stageId, leadStageBeforeActionRequest,
+      'human action requests must never move the lead');
+    assert.equal(leadAfterActionRequest.assignedTo, leadAssigneeBeforeActionRequest,
+      'human action requests must never create or change the lead owner');
 
     const evidenceMessageIds = (await prisma.message.findMany({
       where: { tenantId: a.tenant.id, conversationId: identityTurn.conversationId, type: 'text' },
