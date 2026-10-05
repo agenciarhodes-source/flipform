@@ -47,6 +47,14 @@ import {
   parseFlipAiActionCapabilities,
 } from '../lib/flip-ai/action-capabilities';
 import {
+  availabilityConversationGuidance,
+  availabilityPatchInstructions,
+  availabilityPrompt,
+  EMPTY_FLIP_AI_AVAILABILITY_PATCH,
+  mergeAvailabilitySnapshot,
+  parseAvailabilitySnapshot,
+} from '../lib/flip-ai/availability-policy';
+import {
   combineDecisionConfidence,
   isJevEnabledForTenant,
   normalizeJevOrdinalScore,
@@ -415,6 +423,7 @@ test('structured public turn validates reply and identity without extra fields',
     identity: { name: 'Diego', phone: null },
     qualification: null,
     memoryPatch: { facts: [], pending: [] },
+    availabilityPatch: EMPTY_FLIP_AI_AVAILABILITY_PATCH,
   });
   assert.throws(() => parsePublicChatDecision(JSON.stringify({
     reply: 'Oi', identity: { name: null, phone: null }, qualification: null,
@@ -2041,4 +2050,210 @@ test('PR 347 combined presencial requests require every explicitly requested mod
   assert.equal(complete.status, 'collect_availability');
   assert.equal(complete.supportedInPerson, true);
   assert.equal(complete.mayCollectAvailability, true);
+});
+
+
+test('PR 348 availability collection is impossible without final action permission', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  const blocked = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: false,
+    },
+  });
+  const snapshot = mergeAvailabilitySnapshot({
+    patch: {
+      preferredDate: { action: 'set', value: 'sexta-feira' },
+      preferredPeriod: { action: 'set', value: 'afternoon' },
+      preferredTime: { action: 'keep', value: null },
+    },
+    eligibility,
+    permission: blocked,
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  });
+  assert.equal(blocked.mayCollectAvailability, false);
+  assert.equal(snapshot, null);
+  assert.match(availabilityPatchInstructions(blocked).join('\n'), /permanecer totalmente em keep/);
+});
+
+test('PR 348 availability accumulates day and period progressively without inventing a booking', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  const permission = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  });
+  const dateOnly = mergeAvailabilitySnapshot({
+    patch: {
+      preferredDate: { action: 'set', value: 'sexta-feira' },
+      preferredPeriod: { action: 'keep', value: null },
+      preferredTime: { action: 'keep', value: null },
+    },
+    eligibility,
+    permission,
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+    updatedAt: new Date('2026-10-05T19:30:00.000Z'),
+  });
+  assert.equal(dateOnly?.status, 'partial');
+  assert.equal(dateOnly?.preferredDate, 'sexta-feira');
+  assert.match(availabilityConversationGuidance(dateOnly, permission), /período ou horário/);
+
+  const ready = mergeAvailabilitySnapshot({
+    previous: dateOnly,
+    patch: {
+      preferredDate: { action: 'keep', value: null },
+      preferredPeriod: { action: 'set', value: 'afternoon' },
+      preferredTime: { action: 'keep', value: null },
+    },
+    eligibility,
+    permission,
+    sourceMessageId: '8bd20758-e19d-4d01-8884-7aaee975e0b8',
+    updatedAt: new Date('2026-10-05T19:31:00.000Z'),
+  });
+  assert.equal(ready?.status, 'ready_for_handoff');
+  assert.equal(ready?.preferredDate, 'sexta-feira');
+  assert.equal(ready?.preferredPeriod, 'afternoon');
+  assert.deepEqual(ready?.modalities, ['in_person_service']);
+  assert.match(availabilityPrompt(ready || null), /data_preferida=sexta-feira/);
+  assert.match(availabilityConversationGuidance(ready || null, permission), /não repita/i);
+  assert.deepEqual(parseAvailabilitySnapshot(ready), ready);
+});
+
+test('PR 348 visit and product demo modalities come from deterministic eligibility, not model output', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.9,
+      productDemoInterest: 0.9,
+      schedulingInterest: 0.95,
+    },
+  });
+  const permission = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: false,
+      customerVisit: true,
+      productDemo: true,
+      inPersonScheduling: true,
+    },
+  });
+  const snapshot = mergeAvailabilitySnapshot({
+    patch: {
+      preferredDate: { action: 'set', value: 'amanhã' },
+      preferredPeriod: { action: 'set', value: 'morning' },
+      preferredTime: { action: 'set', value: '09:30' },
+    },
+    eligibility,
+    permission,
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  });
+  assert.deepEqual(snapshot?.modalities, ['customer_visit', 'product_demo']);
+  assert.equal(snapshot?.preferredDate, 'amanhã');
+  assert.equal(snapshot?.preferredTime, '09:30');
+  assert.equal(snapshot?.status, 'ready_for_handoff');
+});
+
+test('PR 348 availability corrections can replace or clear only explicitly changed preferences', () => {
+  const eligibility = resolveFlipAiActionEligibility({
+    rawNextAction: 'schedule',
+    signals: {
+      humanHandoffInterest: 0.1,
+      inPersonInterest: 0.9,
+      visitInterest: 0.1,
+      productDemoInterest: 0.1,
+      schedulingInterest: 0.95,
+    },
+  });
+  const permission = resolveFlipAiActionPermission({
+    eligibility,
+    capabilities: {
+      inPersonService: true,
+      customerVisit: false,
+      productDemo: false,
+      inPersonScheduling: true,
+    },
+  });
+  const previous = mergeAvailabilitySnapshot({
+    patch: {
+      preferredDate: { action: 'set', value: 'sexta-feira' },
+      preferredPeriod: { action: 'set', value: 'afternoon' },
+      preferredTime: { action: 'set', value: '15:00' },
+    },
+    eligibility,
+    permission,
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  });
+  const corrected = mergeAvailabilitySnapshot({
+    previous,
+    patch: {
+      preferredDate: { action: 'set', value: 'sábado' },
+      preferredPeriod: { action: 'keep', value: null },
+      preferredTime: { action: 'clear', value: null },
+    },
+    eligibility,
+    permission,
+    sourceMessageId: '8bd20758-e19d-4d01-8884-7aaee975e0b8',
+  });
+  assert.equal(corrected?.preferredDate, 'sábado');
+  assert.equal(corrected?.preferredPeriod, 'afternoon');
+  assert.equal(corrected?.preferredTime, null);
+  assert.equal(corrected?.status, 'ready_for_handoff');
+});
+
+test('PR 348 handoff exposes ready availability without claiming an appointment exists', () => {
+  const availability = {
+    version: '2026-10-05.1',
+    modalities: ['in_person_service'] as const,
+    preferredDate: 'sexta-feira',
+    preferredPeriod: 'afternoon' as const,
+    preferredTime: null,
+    status: 'ready_for_handoff' as const,
+    updatedAt: '2026-10-05T19:40:00.000Z',
+    sourceMessageId: '7bd20758-e19d-4d01-8884-7aaee975e0b8',
+  };
+  const result = buildFlipAiHumanHandoffSnapshot({
+    leadName: 'Maria',
+    hasPhone: true,
+    hasEmail: false,
+    answers: [],
+    qualification: null,
+    stateSummary: 'Maria quer atendimento presencial.',
+    intelligence: null,
+    availability,
+    conversationId: 'conversation-1',
+    updatedAt: new Date('2026-10-05T19:40:00.000Z'),
+  });
+  assert.equal(result.availability?.status, 'ready_for_handoff');
+  assert.ok(result.knownFacts.some((fact) => fact.includes('sexta-feira')));
+  assert.ok(result.knownFacts.some((fact) => fact.includes('tarde')));
+  assert.match(result.nextAction, /Confirmar disponibilidade/);
+  assert.match(result.resumeGuidance, /não repita perguntas/i);
+  assert.doesNotMatch(result.nextAction, /agendado|reservado/i);
 });
