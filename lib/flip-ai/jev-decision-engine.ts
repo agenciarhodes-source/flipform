@@ -14,6 +14,10 @@ import {
   normalizeJevOrdinalScore,
   type FlipAiConversationDecision,
 } from './decision-engine';
+import {
+  resolveFlipAiActionEligibility,
+  type FlipAiActionSignals,
+} from './action-eligibility';
 
 export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
@@ -56,6 +60,11 @@ const jevResponseSchema = z.object({
     urgency: scoreAnswerSchema,
     readiness: scoreAnswerSchema,
     needs_human: noulAnswerSchema,
+    human_handoff_interest: noulAnswerSchema,
+    in_person_interest: noulAnswerSchema,
+    visit_interest: noulAnswerSchema,
+    product_demo_interest: noulAnswerSchema,
+    scheduling_interest: noulAnswerSchema,
   }).strict(),
   usage: z.object({
     input_tokens: z.number().int().nonnegative(),
@@ -76,6 +85,13 @@ const storedDecisionSchema = z.object({
   urgencyScore: z.number().int().min(0).max(100),
   readinessScore: z.number().int().min(0).max(100).optional(),
   needsHuman: z.boolean(),
+  actionSignals: z.object({
+    humanHandoffInterest: z.number().min(0).max(1),
+    inPersonInterest: z.number().min(0).max(1),
+    visitInterest: z.number().min(0).max(1),
+    productDemoInterest: z.number().min(0).max(1),
+    schedulingInterest: z.number().min(0).max(1),
+  }).strict().optional(),
   confidence: z.number().min(0).max(1),
   intentConfidence: z.number().min(0).max(1),
   objectionConfidence: z.number().min(0).max(1),
@@ -105,6 +121,19 @@ function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversati
   const intentConfidence = raw.answers.intent.confidence;
   const objectionConfidence = raw.answers.objection.confidence;
   const stageConfidence = raw.answers.journey_stage.confidence;
+  const needsHuman = raw.answers.needs_human.noul >= 0.72;
+  const actionSignals: FlipAiActionSignals = {
+    humanHandoffInterest: raw.answers.human_handoff_interest.noul,
+    inPersonInterest: raw.answers.in_person_interest.noul,
+    visitInterest: raw.answers.visit_interest.noul,
+    productDemoInterest: raw.answers.product_demo_interest.noul,
+    schedulingInterest: raw.answers.scheduling_interest.noul,
+  };
+  const actionEligibility = resolveFlipAiActionEligibility({
+    rawNextAction: nextAction,
+    signals: actionSignals,
+    needsHuman,
+  });
   return {
     engine: 'jev',
     engineVersion: FLIP_AI_DECISION_ENGINE_VERSION,
@@ -112,12 +141,13 @@ function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversati
     intent,
     objection,
     journeyStage,
-    nextAction,
+    nextAction: actionEligibility.effectiveNextAction,
     fitScore: normalizeJevOrdinalScore(raw.answers.fit.score),
     intentScore: normalizeJevOrdinalScore(raw.answers.intent_strength.score),
     urgencyScore: normalizeJevOrdinalScore(raw.answers.urgency.score),
     readinessScore: normalizeJevOrdinalScore(raw.answers.readiness.score),
-    needsHuman: raw.answers.needs_human.noul >= 0.72,
+    needsHuman,
+    actionSignals,
     confidence: combineDecisionConfidence([
       intentConfidence,
       objectionConfidence,
@@ -187,7 +217,7 @@ function payload(state: unknown, model: string) {
           ask_one_question: 'Fazer uma única pergunta curta que destrava a próxima decisão.',
           handle_objection: 'Responder à objeção antes de tentar avançar.',
           request_contact: 'Pedir apenas o dado de contato que ainda falta.',
-          schedule: 'Avançar para intenção de agenda ou visita, sem criar compromisso automaticamente.',
+          schedule: 'Somente quando a pessoa demonstrou que quer atendimento presencial/visita/demonstração E também quer discutir marcação de dia ou horário. Nunca use apenas por score alto, qualificação ou pedido genérico para falar com alguém.',
           handoff: 'Recomendar atendimento humano.',
         },
       },
@@ -238,6 +268,26 @@ function payload(state: unknown, model: string) {
       needs_human: {
         type: 'noul',
         instructions: 'A conversa neste momento requer atendimento humano por pedido explícito, risco, exceção, sensibilidade ou incapacidade segura de continuar automaticamente?',
+      },
+      human_handoff_interest: {
+        type: 'noul',
+        instructions: 'A pessoa pediu explicitamente para falar com um humano, vendedor, atendente, especialista ou alguém da equipe? Isso NÃO significa atendimento presencial.',
+      },
+      in_person_interest: {
+        type: 'noul',
+        instructions: 'A pessoa demonstrou desejo claro de atendimento presencial, encontro pessoal ou ir fisicamente até a empresa/escritório/unidade?',
+      },
+      visit_interest: {
+        type: 'noul',
+        instructions: 'A pessoa pediu ou demonstrou interesse claro em receber uma visita presencial de representante, vendedor ou profissional?',
+      },
+      product_demo_interest: {
+        type: 'noul',
+        instructions: 'A pessoa quer conhecer, ver ou receber demonstração dos produtos/serviços presencialmente?',
+      },
+      scheduling_interest: {
+        type: 'noul',
+        instructions: 'A pessoa quer marcar, combinar ou discutir explicitamente dia/horário para um atendimento, visita ou encontro? Não marque verdadeiro apenas porque ela quer falar com um humano.',
       },
     },
   };
