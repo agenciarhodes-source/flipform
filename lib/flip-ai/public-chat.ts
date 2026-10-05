@@ -757,6 +757,7 @@ async function buildJevDecisionState(
   turn: Extract<PreparedPublicChatTurn, { mode: 'execute' }>,
   entryContext: string | null,
   memorySnapshot: FlipAiConversationMemorySnapshot | null,
+  availabilitySnapshot: FlipAiAvailabilitySnapshot | null,
 ) {
   const [state, recent] = await Promise.all([
     prisma.flipAiConversationState.findFirst({
@@ -777,11 +778,15 @@ async function buildJevDecisionState(
   ]);
 
   const compactMemory = conversationMemoryPrompt(memorySnapshot);
+  const compactAvailability = availabilityPrompt(availabilitySnapshot);
   return {
     latestMessage: sanitizeDecisionStateText(turn.text, 1_200),
     inputMode: turn.inputMode,
     compactMemory: compactMemory
       ? sanitizeDecisionStateText(compactMemory, 1_600)
+      : null,
+    compactAvailability: compactAvailability
+      ? sanitizeDecisionStateText(compactAvailability, 800)
       : null,
     conversationSummary: state?.summary ? sanitizeDecisionStateText(state.summary, 1_200) : null,
     completedTurns: state?.turnCount || 0,
@@ -955,7 +960,12 @@ export async function buildPublicChatContext(
     : null;
 
   if (!decision && intelligentHarnessEnabled) {
-    const decisionState = await buildJevDecisionState(turn, entryContext, memorySnapshot);
+    const decisionState = await buildJevDecisionState(
+      turn,
+      entryContext,
+      memorySnapshot,
+      availabilitySnapshot,
+    );
     const decisionRun = await runJevConversationDecision({
       tenantId: turn.tenantId,
       agentId: turn.agentId,
