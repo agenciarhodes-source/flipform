@@ -16,6 +16,31 @@ test('provider boundary recursively redacts new fields and credentials', () => {
   for (const secret of ['Maria', '12345678900', 'maria@email.com', 'key-do-not-send']) assert.ok(!serialized.includes(secret));
 });
 
+test('provider boundary safely truncates deep, circular and oversized structures', () => {
+  const circular: Record<string, unknown> = {safe: 'trabalhadora rural'};
+  circular.self = circular;
+  let deep: Record<string, unknown> = {value: 'fim'};
+  for (let index = 0; index < 30; index += 1) deep = {nested: deep};
+  const safe = sanitizeJevPayload({
+    circular,
+    deep,
+    hugeArray: Array.from({length: 1_000}, (_, index) => index),
+  }) as {circular: {self: string}; deep: unknown; hugeArray: number[]};
+  assert.equal(safe.circular.self, '[estrutura omitida]');
+  assert.equal(safe.hugeArray.length, 100);
+  assert.doesNotThrow(() => JSON.stringify(safe));
+  assert.match(JSON.stringify(safe.deep), /estrutura omitida/);
+});
+
+test('provider boundary converts values that JSON cannot safely serialize', () => {
+  const safe = sanitizeJevPayload({big: 1n, infinite: Number.POSITIVE_INFINITY, fn: () => 'secret'});
+  assert.deepEqual(safe, {
+    big: '[estrutura omitida]',
+    infinite: null,
+    fn: '[estrutura omitida]',
+  });
+});
+
 test('subject reference is stable inside one tenant and opaque across tenants', () => {
   const first = jevSubjectReference('tenant-a', 'conversation-a');
   assert.equal(first, jevSubjectReference('tenant-a', 'conversation-a'));

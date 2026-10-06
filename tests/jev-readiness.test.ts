@@ -44,7 +44,9 @@ test('synthetic readiness rejects a provider response outside the declared choic
 
 test('JEV rejects oversized requests before calling the provider', async () => {
   let called = false;
-  const oversizedState = Array.from({length: 40_000}, () => 'abcdefgh');
+  const oversizedState = Object.fromEntries(
+    Array.from({length: 100}, (_, index) => [`field_${index}`, 'x'.repeat(4_000)]),
+  );
   await assert.rejects(__testOnly.callJev(oversizedState, {
     apiKey: 'test',
     fetchImpl: (async () => {
