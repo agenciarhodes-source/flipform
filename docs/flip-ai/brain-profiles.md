@@ -32,7 +32,7 @@ A economia líquida deve ser medida em conversas reais: o catálogo compacto e a
 
 ## Ativação e escopo
 
-Após merge manual, editar o Markdown do agente, revisar perfis, salvar, indexar e publicar pelos fluxos existentes. A conta TypeSafe usa as configurações atuais: `TYPESAFE_API_KEY`, `TYPESAFE_JEV_MODEL`, `FLIP_AI_JEV_ENABLED` e a allowlist `FLIP_AI_JEV_TENANT_IDS`. A chave fica apenas no backend.
+Após merge manual, editar o Markdown do agente, revisar perfis, salvar, indexar e publicar pelos fluxos existentes. A conta TypeSafe usa `TYPESAFE_API_KEY`, `TYPESAFE_JEV_MODEL`, `FLIP_AI_JEV_ENABLED`, a allowlist `FLIP_AI_JEV_TENANT_IDS` e a aprovação `FLIP_AI_JEV_DATA_PROCESSING_APPROVED`. A chave fica apenas no backend. A aprovação permanece falsa até a revisão formal de retenção e Zero Data Retention descrita em `JEV-PRIVACY-RUNBOOK.md`.
 
 Sem migration. Sem instalação local do modelo, agenda externa ou alteração de integrações Meta/WhatsApp. As capacidades de ação continuam obedecendo às permissões existentes do agente.
 
