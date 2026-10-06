@@ -8,10 +8,12 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_qualified_secret_aliases_use_suffix_matching():
+def test_qualified_secret_aliases_use_boundary_aware_matching():
     privacy = read("lib/flip-ai/jev-privacy.ts")
-    assert "for (const secretName of SECRET_KEY_NAMES)" in privacy
-    assert "normalized.endsWith(secretName)" in privacy
+    assert "function keyTokens(key: string)" in privacy
+    assert "const SECRET_KEY_SUFFIXES" in privacy
+    assert "function hasTokenSuffix" in privacy
+    assert "SECRET_KEY_SUFFIXES.some((suffix) => hasTokenSuffix(tokens, suffix))" in privacy
 
 
 def test_quoted_secret_assignments_are_redacted_completely():
