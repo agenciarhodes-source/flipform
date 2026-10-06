@@ -34,6 +34,21 @@ test('provider boundary redacts structured credential aliases', () => {
   assert.match(serialized, /salário maternidade/);
 });
 
+test('provider boundary redacts qualified credential aliases', () => {
+  const safe = sanitizeJevPayload({
+    userSessionId: 'session-qualified-value',
+    requestCookies: 'cookie-qualified-value',
+    serviceAccountPrivateKey: 'private-key-qualified-value',
+    proxyAuthorization: 'Basic c2VjcmV0',
+    facts: {occupation: 'trabalhadora rural'},
+  });
+  const serialized = JSON.stringify(safe);
+  for (const secret of [
+    'session-qualified-value', 'cookie-qualified-value', 'private-key-qualified-value', 'c2VjcmV0',
+  ]) assert.ok(!serialized.includes(secret), secret);
+  assert.match(serialized, /trabalhadora rural/);
+});
+
 test('text redaction removes bearer tokens, labeled credentials, connection URLs and private keys', () => {
   const privateKey = '-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----';
   const safe = redactJevText([
@@ -44,6 +59,20 @@ test('text redaction removes bearer tokens, labeled credentials, connection URLs
     'trabalhadora rural',
   ].join(' '));
   for (const secret of ['header.payload.signature', 'secret-value', 'user:password', 'private-material']) {
+    assert.ok(!safe.includes(secret), secret);
+  }
+  assert.match(safe, /trabalhadora rural/);
+});
+
+test('text redaction removes quoted credential labels and complete quoted values', () => {
+  const safe = redactJevText([
+    '{"client_secret":"secret-value"}',
+    '{"password": "two words"}',
+    '{"proxyAuthorization":"Basic c2VjcmV0"}',
+    'api_key="api key with spaces"',
+    'trabalhadora rural',
+  ].join(' '));
+  for (const secret of ['secret-value', 'two words', 'c2VjcmV0', 'api key with spaces']) {
     assert.ok(!safe.includes(secret), secret);
   }
   assert.match(safe, /trabalhadora rural/);
