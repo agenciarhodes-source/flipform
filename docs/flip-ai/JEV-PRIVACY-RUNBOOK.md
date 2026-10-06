@@ -21,6 +21,8 @@ The redaction function runs inside the HTTP adapter immediately before serializa
 
 Structured identifier aliases are normalized before classification, including camelCase, snake_case, accented and localized variants. Names, phone numbers, email addresses, documents, bank accounts and medical record numbers remain blocked even when a future caller uses fields such as `displayName`, `phoneNumber`, `emailAddress`, `documentNumber`, `bankAccountNumber` or `medicalRecordNumber`. Qualification facts are preserved.
 
+Credential aliases are normalized and removed at the same final boundary. This includes API keys, passwords, client secrets, access or refresh tokens, authorization headers, cookies, session identifiers, private/signing/encryption keys, connection strings and database URLs. Bearer tokens, labeled credentials, connection URLs and PEM private keys embedded in free text are also replaced before serialization.
+
 Provider and runtime failures cross API and persistence boundaries only as allowlisted diagnostic codes. Raw exception messages are never returned or written to JEV usage metadata because they may contain infrastructure details, credentials, or customer content.
 
 The provider boundary rejects sanitized requests and decoded responses above 256 KiB. Response streams are stopped as soon as the limit is exceeded, including when the provider omits or understates `Content-Length`; oversized content is never parsed or persisted.

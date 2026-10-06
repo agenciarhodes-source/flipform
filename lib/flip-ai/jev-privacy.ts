@@ -11,11 +11,16 @@ const OMITTED = {
   structure: '[estrutura omitida]',
 } as const;
 
-const SECRET_KEYS = /(?:api_?key|authorization|password|senha|secret|token)$/i;
 const JEV_SANITIZER_MAX_DEPTH = 12;
 const JEV_SANITIZER_MAX_ARRAY_ITEMS = 100;
 const JEV_SANITIZER_MAX_OBJECT_ENTRIES = 200;
 const JEV_SANITIZER_MAX_NODES = 5_000;
+
+const SECRET_KEY_NAMES = new Set([
+  'authorization', 'authorizationheader', 'authheader', 'bearer', 'credential', 'credentials',
+  'cookie', 'cookies', 'setcookie', 'session', 'sessionid', 'privatekey', 'signingkey',
+  'encryptionkey', 'connectionstring', 'databaseurl', 'datasourceurl', 'dsn',
+]);
 
 const IDENTIFIER_KEYS = {
   name: new Set([
@@ -44,8 +49,18 @@ const IDENTIFIER_KEYS = {
   ]),
 } as const;
 
+function normalizedKey(key: string) {
+  return key.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
+function isSecretKey(key: string) {
+  const normalized = normalizedKey(key);
+  return SECRET_KEY_NAMES.has(normalized)
+    || /(?:apikey|password|senha|secret|token)$/.test(normalized);
+}
+
 function identifierKind(key: string): keyof typeof IDENTIFIER_KEYS | null {
-  const normalized = key.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const normalized = normalizedKey(key);
   for (const [kind, keys] of Object.entries(IDENTIFIER_KEYS)) {
     if ((keys as ReadonlySet<string>).has(normalized)) return kind as keyof typeof IDENTIFIER_KEYS;
   }
@@ -58,6 +73,10 @@ export function jevSubjectReference(tenantId: string, conversationId: string) {
 
 export function redactJevText(value: string, max = 2_000) {
   return value
+    .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, OMITTED.secret)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, OMITTED.secret)
+    .replace(/\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s]+/gi, OMITTED.secret)
+    .replace(/\b(?:access[_\s-]?token|refresh[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|password|senha|private[_\s-]?key|chave\s+privada)\s*[:=]\s*[^\s,;]+/gi, OMITTED.secret)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, OMITTED.email)
     .replace(/\b(?:CPF|CNPJ|RG|CNH|PIS|PASEP|NIT|NIS)\s*(?:n[º°o.]?\s*)?[:#-]?\s*[A-Z0-9./-]{5,}\b/gi, OMITTED.document)
     .replace(/\b(?:cart[aã]o\s+(?:do\s+)?SUS|CNS|prontu[aá]rio|laudo|receita|atestado|protocolo)\s*(?:n[º°o.]?\s*)?[:#-]?\s*[A-Z0-9./-]{5,}\b/gi, OMITTED.medicalIdentifier)
@@ -96,7 +115,7 @@ export function sanitizeJevPayload(value: unknown): unknown {
       Object.entries(entry as Record<string, unknown>)
         .slice(0, JEV_SANITIZER_MAX_OBJECT_ENTRIES)
         .map(([key, nested]) => {
-          if (SECRET_KEYS.test(key)) return [key, OMITTED.secret];
+          if (isSecretKey(key)) return [key, OMITTED.secret];
           const kind = identifierKind(key);
           if (kind) return [key, OMITTED[kind]];
           return [key, sanitize(nested, depth + 1)];
