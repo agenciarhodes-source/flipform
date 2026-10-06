@@ -42,6 +42,20 @@ test('synthetic readiness rejects a provider response outside the declared choic
   }), /JEV_READINESS_DECISION_INVALID/);
 });
 
+test('synthetic readiness rejects implausible provider token counters', async () => {
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      model: 'jev',
+      answers: { route: { type: 'choice', choice: 'billing', confidence: 0.9 } },
+      usage: {
+        input_tokens: __testOnly.limits.tokenCountPerCall + 1,
+        output_tokens: 1,
+      },
+    }))) as typeof fetch,
+  }), /JEV_READINESS_RESPONSE_INVALID/);
+});
+
 test('JEV rejects oversized requests before calling the provider', async () => {
   let called = false;
   const oversizedState = Object.fromEntries(
