@@ -96,7 +96,7 @@ export function JevReadinessCard() {
           <p className="text-xs font-semibold text-indigo-700">TYPESAFE · JEV</p>
           <h2 className="font-heading text-xl font-semibold">Conexão segura do motor de decisão</h2>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Verifica a configuração do servidor e executa somente um exemplo fixo e fictício. O teste não acessa leads, conversas, documentos, banco de dados ou Markdown de clientes.
+            Verifica a configuração do servidor e executa somente um exemplo fixo e fictício. O teste não acessa leads, conversas, documentos ou Markdown de clientes; salva apenas uma auditoria técnica sem dados pessoais.
           </p>
         </div>
       </div>
@@ -131,7 +131,7 @@ export function JevReadinessCard() {
 
       <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950 flex gap-2">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-        <span>A chave nunca é retornada ao navegador. Este botão envia à TypeSafe somente a frase fictícia embutida no servidor e não altera nenhuma trava de produção.</span>
+        <span>A chave nunca é retornada ao navegador. Este botão envia à TypeSafe somente a frase fictícia embutida no servidor, registra o resultado técnico sem payload e não altera nenhuma trava de produção.</span>
       </div>
 
       <Button type="button" onClick={() => void runSyntheticProbe()} disabled={testing || !configuration.apiKeyConfigured}>
