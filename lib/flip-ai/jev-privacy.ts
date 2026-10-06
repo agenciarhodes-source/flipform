@@ -53,13 +53,38 @@ function normalizedKey(key: string) {
   return key.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
 }
 
+function keyTokens(key: string) {
+  return key
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[^a-z0-9]+/gi, ' ')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+const SECRET_KEY_SUFFIXES = [
+  ['authorization'], ['authorization', 'header'], ['auth', 'header'], ['bearer'],
+  ['credential'], ['credentials'], ['cookie'], ['cookies'], ['set', 'cookie'],
+  ['session'], ['session', 'id'], ['private', 'key'], ['signing', 'key'],
+  ['encryption', 'key'], ['connection', 'string'], ['database', 'url'],
+  ['datasource', 'url'], ['dsn'], ['api', 'key'], ['password'], ['senha'],
+  ['secret'], ['token'],
+] as const;
+
+function hasTokenSuffix(tokens: string[], suffix: readonly string[]) {
+  if (suffix.length > tokens.length) return false;
+  const offset = tokens.length - suffix.length;
+  return suffix.every((token, index) => tokens[offset + index] === token);
+}
+
 function isSecretKey(key: string) {
   const normalized = normalizedKey(key);
   if (SECRET_KEY_NAMES.has(normalized) || /(?:apikey|password|senha|secret|token)$/.test(normalized)) return true;
-  for (const secretName of SECRET_KEY_NAMES) {
-    if (normalized.endsWith(secretName)) return true;
-  }
-  return false;
+  const tokens = keyTokens(key);
+  return SECRET_KEY_SUFFIXES.some((suffix) => hasTokenSuffix(tokens, suffix));
 }
 
 function identifierKind(key: string): keyof typeof IDENTIFIER_KEYS | null {
@@ -79,7 +104,7 @@ export function redactJevText(value: string, max = 2_000) {
     .replace(/-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g, OMITTED.secret)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, OMITTED.secret)
     .replace(/\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s]+/gi, OMITTED.secret)
-    .replace(/["']?(?:[A-Za-z0-9_-]{0,64})?(?:authorization(?:[_\s-]?header)?|auth[_\s-]?header|credentials?|cookies?|session(?:[_\s-]?id)?|private[_\s-]?key|signing[_\s-]?key|encryption[_\s-]?key|connection[_\s-]?string|database[_\s-]?url|datasource[_\s-]?url|access[_\s-]?token|refresh[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|password|senha|secret|token)["']?\s*[:=]\s*(?:(?:Basic|Bearer)\s+[A-Za-z0-9._~+\/-]+=*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi, OMITTED.secret)
+    .replace(/["']?(?:(?:[A-Za-z0-9_-]{0,64})?(?:authorization(?:[_\s-]?header)?|auth[_\s-]?header|credentials?|cookies?|session(?:[_\s-]?id)?|private[_\s-]?key|signing[_\s-]?key|encryption[_\s-]?key|connection[_\s-]?string|database[_\s-]?url|datasource[_\s-]?url|access[_\s-]?token|refresh[_\s-]?token|client[_\s-]?secret|api[_\s-]?key|password|senha|secret|token)|chave\s+privada)["']?\s*[:=]\s*(?:(?:Basic|Bearer)\s+[A-Za-z0-9._~+\/-]+=*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}\]]+)/gi, OMITTED.secret)
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, OMITTED.email)
     .replace(/\b(?:CPF|CNPJ|RG|CNH|PIS|PASEP|NIT|NIS)\s*(?:n[º°o.]?\s*)?[:#-]?\s*[A-Z0-9./-]{5,}\b/gi, OMITTED.document)
     .replace(/\b(?:cart[aã]o\s+(?:do\s+)?SUS|CNS|prontu[aá]rio|laudo|receita|atestado|protocolo)\s*(?:n[º°o.]?\s*)?[:#-]?\s*[A-Z0-9./-]{5,}\b/gi, OMITTED.medicalIdentifier)
