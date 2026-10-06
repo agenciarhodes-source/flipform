@@ -78,6 +78,26 @@ test('text redaction removes quoted credential labels and complete quoted values
   assert.match(safe, /trabalhadora rural/);
 });
 
+test('text redaction preserves Portuguese private-key label protection', () => {
+  const safe = redactJevText('chave privada: private-material-123; trabalhadora rural');
+  assert.ok(!safe.includes('private-material-123'));
+  assert.match(safe, /trabalhadora rural/);
+});
+
+test('provider boundary does not classify ordinary session suffix collisions as secrets', () => {
+  const safe = sanitizeJevPayload({
+    possession: {type: 'choice', prompt: 'Tem posse do documento?'},
+    obsession: 'fato de qualificação permitido',
+    brain_possession: {type: 'choice', prompt: 'Critério dinâmico'},
+    userSessionId: 'session-secret',
+  });
+  const serialized = JSON.stringify(safe);
+  assert.match(serialized, /possession/);
+  assert.match(serialized, /obsession/);
+  assert.match(serialized, /Critério dinâmico/);
+  assert.ok(!serialized.includes('session-secret'));
+});
+
 test('provider boundary redacts common camelCase and localized identifier aliases', () => {
   const safe = sanitizeJevPayload({
     displayName: 'Maria da Silva',
