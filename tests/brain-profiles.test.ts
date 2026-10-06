@@ -64,7 +64,7 @@ test('weighted score comes from the selected rubric; missing evidence never mean
 
 test('Jev routes only configured topics and unknown, without loading the complete brain', async () => {
   let sent: any;
-  const routed = await __testOnly.routeBrainProfile({latestMessage: 'maternidade'}, brain, {
+  const routed = await __testOnly.routeBrainProfile({latestMessage: 'Meu nome é Maria da Silva, CPF 123.456.789-00, quero maternidade'}, brain, {
     apiKey: 'test', fetchImpl: (async (_url, options) => {
       sent = JSON.parse(String(options?.body));
       return new Response(JSON.stringify({model: 'jev', answers: {profile: {type: 'choice', choice: 'maternidade', confidence: .9}}, usage: {input_tokens: 10, output_tokens: 2}}));
@@ -73,12 +73,33 @@ test('Jev routes only configured topics and unknown, without loading the complet
   assert.equal(routed.profile?.id, profile.id);
   assert.deepEqual(Object.keys(sent.questions.profile.criteria), ['unknown', 'maternidade']);
   assert.ok(!JSON.stringify(sent).includes('Documentação pronta'));
+  assert.ok(!JSON.stringify(sent).includes('Maria da Silva'));
+  assert.ok(!JSON.stringify(sent).includes('123.456.789-00'));
   const payload = __testOnly.payload({}, 'jev', profile);
   assert.ok('brain_documentos' in payload.questions);
   assert.equal(Object.keys(payload.questions).length, 16);
   await assert.rejects(__testOnly.routeBrainProfile({}, brain, {
     apiKey: 'test', fetchImpl: (async () => new Response(JSON.stringify({model: 'jev', answers: {profile: {type: 'choice', choice: 'foreign_profile', confidence: .99}}, usage: {input_tokens: 1, output_tokens: 1}}))) as typeof fetch,
   }), /JEV_PROFILE_CHOICE_INVALID/);
+});
+
+test('live Jev stays blocked until the TypeSafe data-processing review is approved', async () => {
+  const tenantId = '22222222-2222-4222-8222-222222222222';
+  const envNames = ['FLIP_AI_JEV_ENABLED', 'FLIP_AI_JEV_TENANT_IDS', 'FLIP_AI_JEV_DATA_PROCESSING_APPROVED'];
+  const savedEnv = envNames.map((name) => process.env[name]);
+  try {
+    process.env.FLIP_AI_JEV_ENABLED = 'true';
+    process.env.FLIP_AI_JEV_TENANT_IDS = tenantId;
+    process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED = 'false';
+    const result = await runJevConversationDecision({
+      tenantId, agentId: 'agent', conversationId: 'conversation',
+      chatRequestKey: 'blocked-before-provider', state: {latestMessage: 'dado fictício'},
+    });
+    assert.equal(result.status, 'disabled');
+    assert.equal(result.errorCode, 'JEV_DATA_PROCESSING_NOT_APPROVED');
+  } finally {
+    envNames.forEach((name, i) => {if (savedEnv[i] === undefined) delete process.env[name]; else process.env[name] = savedEnv[i];});
+  }
 });
 
 test('published loader binds tenant, agent and exact indexed revision, ignoring drafts', async () => {
@@ -132,12 +153,13 @@ test('decision runtime stores profile scores and combined usage, then replays wi
   const delegates: any = prisma.flipAiUsageEvent;
   const index: any = prisma.flipAiKnowledgeIndex;
   const saved = {findUnique: delegates.findUnique, create: delegates.create, updateMany: delegates.updateMany, index: index.findFirst, fetch: globalThis.fetch};
-  const envNames = ['FLIP_AI_JEV_ENABLED', 'FLIP_AI_JEV_TENANT_IDS', 'TYPESAFE_API_KEY'];
+  const envNames = ['FLIP_AI_JEV_ENABLED', 'FLIP_AI_JEV_TENANT_IDS', 'FLIP_AI_JEV_DATA_PROCESSING_APPROVED', 'TYPESAFE_API_KEY'];
   const savedEnv = envNames.map((name) => process.env[name]);
   let stored: any = null;
   let calls = 0;
   try {
-    process.env.FLIP_AI_JEV_ENABLED = 'true'; process.env.FLIP_AI_JEV_TENANT_IDS = tenantId; process.env.TYPESAFE_API_KEY = 'test';
+    process.env.FLIP_AI_JEV_ENABLED = 'true'; process.env.FLIP_AI_JEV_TENANT_IDS = tenantId;
+    process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED = 'true'; process.env.TYPESAFE_API_KEY = 'test';
     delegates.findUnique = async () => stored;
     delegates.create = async (args: any) => { stored = {...args.data, id: 'event'}; return {id: 'event'}; };
     delegates.updateMany = async (args: any) => { stored = {...stored, ...args.data}; return {count: 1}; };
