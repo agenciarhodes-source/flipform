@@ -23,6 +23,8 @@ Provider and runtime failures cross API and persistence boundaries only as allow
 
 The provider boundary rejects sanitized requests and decoded responses above 256 KiB. Response streams are stopped as soon as the limit is exceeded, including when the provider omits or understates `Content-Length`; oversized content is never parsed or persisted.
 
+Outbound calls are pinned to the server-side HTTPS TypeSafe endpoint and use `redirect: error`, `cache: no-store`, omitted credentials, and no referrer. The client cannot supply or override the provider URL, and HTTP redirects are never followed.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
