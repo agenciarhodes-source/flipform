@@ -26,6 +26,8 @@ import { safeJevErrorCode } from './jev-errors';
 export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const JEV_TIMEOUT_MS = 2_500;
+const JEV_MAX_REQUEST_BYTES = 256 * 1024;
+const JEV_MAX_RESPONSE_BYTES = 256 * 1024;
 
 export type JevSyntheticReadiness = {
   ok: true;
@@ -327,16 +329,45 @@ async function requestJev(body: unknown, options?: {
 }): Promise<unknown> {
   const apiKey = options?.apiKey || process.env.TYPESAFE_API_KEY?.trim();
   if (!apiKey) throw new Error('TYPESAFE_API_KEY_MISSING');
+  const serializedBody = JSON.stringify(sanitizeJevPayload(body));
+  if (new TextEncoder().encode(serializedBody).byteLength > JEV_MAX_REQUEST_BYTES) {
+    throw new Error('JEV_REQUEST_TOO_LARGE');
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || JEV_TIMEOUT_MS);
   try {
     const response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(sanitizeJevPayload(body)), signal: controller.signal,
+      body: serializedBody, signal: controller.signal,
     });
     if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
-    try { return await response.json(); } catch { throw new Error('JEV_RESPONSE_INVALID'); }
+    const declaredLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declaredLength) && declaredLength > JEV_MAX_RESPONSE_BYTES) {
+      controller.abort();
+      throw new Error('JEV_RESPONSE_TOO_LARGE');
+    }
+    if (!response.body) throw new Error('JEV_RESPONSE_INVALID');
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      totalBytes += chunk.value.byteLength;
+      if (totalBytes > JEV_MAX_RESPONSE_BYTES) {
+        controller.abort();
+        throw new Error('JEV_RESPONSE_TOO_LARGE');
+      }
+      chunks.push(chunk.value);
+    }
+    const responseBytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      responseBytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    try { return JSON.parse(new TextDecoder().decode(responseBytes)); } catch { throw new Error('JEV_RESPONSE_INVALID'); }
   } catch (error) {
     if (error instanceof Error && /^JEV_(HTTP_|RESPONSE_)/.test(error.message)) throw error;
     throw new Error('JEV_TRANSPORT_FAILED');
@@ -591,4 +622,9 @@ export async function runJevConversationDecision(input: {
   }
 }
 
-export const __testOnly = { callJev, routeBrainProfile, payload };
+export const __testOnly = {
+  callJev,
+  routeBrainProfile,
+  payload,
+  limits: { requestBytes: JEV_MAX_REQUEST_BYTES, responseBytes: JEV_MAX_RESPONSE_BYTES },
+};

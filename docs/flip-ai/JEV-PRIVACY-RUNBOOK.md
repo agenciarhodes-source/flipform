@@ -21,6 +21,8 @@ The redaction function runs inside the HTTP adapter immediately before serializa
 
 Provider and runtime failures cross API and persistence boundaries only as allowlisted diagnostic codes. Raw exception messages are never returned or written to JEV usage metadata because they may contain infrastructure details, credentials, or customer content.
 
+The provider boundary rejects sanitized requests and decoded responses above 256 KiB. Response streams are stopped as soon as the limit is exceeded, including when the provider omits or understates `Content-Length`; oversized content is never parsed or persisted.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:

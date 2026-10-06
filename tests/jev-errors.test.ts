@@ -5,6 +5,8 @@ import { safeJevErrorCode } from '../lib/flip-ai/jev-errors';
 test('JEV error policy preserves only allowlisted provider diagnostics', () => {
   assert.equal(safeJevErrorCode(new Error('JEV_HTTP_429')), 'JEV_HTTP_429');
   assert.equal(safeJevErrorCode(new Error('JEV_TRANSPORT_FAILED')), 'JEV_TRANSPORT_FAILED');
+  assert.equal(safeJevErrorCode(new Error('JEV_REQUEST_TOO_LARGE')), 'JEV_REQUEST_TOO_LARGE');
+  assert.equal(safeJevErrorCode(new Error('JEV_RESPONSE_TOO_LARGE')), 'JEV_RESPONSE_TOO_LARGE');
   assert.equal(safeJevErrorCode(new Error('JEV_PROFILE_RESPONSE_INVALID')), 'JEV_PROFILE_RESPONSE_INVALID');
 });
 
