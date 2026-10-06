@@ -30,3 +30,11 @@ Before changing the approval variable, record the response from TypeSafe coverin
 - incident notification and data subject request procedures.
 
 Do not place credentials, real lead samples, or client documents in this record.
+
+## Synthetic connection test
+
+Platform administrators can inspect configuration with `GET /api/admin/integrations/jev/readiness` and execute one paid provider call with `POST /api/admin/integrations/jev/readiness`. The POST is limited to three attempts per administrator and IP per hour.
+
+The probe sends a constant fictitious support sentence. It does not query the database or read tenants, leads, conversations, knowledge, documents, or Markdown. Its response exposes only model, latency, token counts, the synthetic routing choice, and confidence. It never returns or logs the API key or provider payload.
+
+The probe does not change `FLIP_AI_JEV_ENABLED`, the tenant allowlist, or `FLIP_AI_JEV_DATA_PROCESSING_APPROVED`. A successful probe proves connectivity and response compatibility only; it does not authorize real customer data.
