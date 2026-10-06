@@ -8,10 +8,15 @@ const OMITTED = {
   name: '[nome omitido]',
   phone: '[telefone omitido]',
   secret: '[segredo omitido]',
+  structure: '[estrutura omitida]',
 } as const;
 
 const DIRECT_IDENTIFIER_KEYS = /^(?:name|full_?name|nome|nome_?completo|phone|telefone|whatsapp|email|cpf|cnpj|rg|cnh|pis|pasep|nit|nis|cns|pix|bank_?account|conta_?bancaria)$/i;
 const SECRET_KEYS = /(?:api_?key|authorization|password|senha|secret|token)$/i;
+const JEV_SANITIZER_MAX_DEPTH = 12;
+const JEV_SANITIZER_MAX_ARRAY_ITEMS = 100;
+const JEV_SANITIZER_MAX_OBJECT_ENTRIES = 200;
+const JEV_SANITIZER_MAX_NODES = 5_000;
 
 export function jevSubjectReference(tenantId: string, conversationId: string) {
   return `lead_${createHash('sha256').update(`${tenantId}:${conversationId}`).digest('hex').slice(0, 16)}`;
@@ -35,17 +40,39 @@ export function redactJevText(value: string, max = 2_000) {
 }
 
 export function sanitizeJevPayload(value: unknown): unknown {
-  if (typeof value === 'string') return redactJevText(value, 8_000);
-  if (Array.isArray(value)) return value.map(sanitizeJevPayload);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
-    if (SECRET_KEYS.test(key)) return [key, OMITTED.secret];
-    if (DIRECT_IDENTIFIER_KEYS.test(key)) {
-      const kind = /(?:name|nome)/i.test(key) ? 'name'
-        : /mail/i.test(key) ? 'email'
-          : /phone|telefone|whatsapp/i.test(key) ? 'phone' : 'document';
-      return [key, OMITTED[kind]];
+  const seen = new WeakSet<object>();
+  let visitedNodes = 0;
+
+  function sanitize(entry: unknown, depth: number): unknown {
+    visitedNodes += 1;
+    if (visitedNodes > JEV_SANITIZER_MAX_NODES) return OMITTED.structure;
+    if (typeof entry === 'string') return redactJevText(entry, 8_000);
+    if (typeof entry === 'bigint' || typeof entry === 'function' || typeof entry === 'symbol') {
+      return OMITTED.structure;
     }
-    return [key, sanitizeJevPayload(entry)];
-  }));
+    if (!entry || typeof entry !== 'object') {
+      return typeof entry === 'number' && !Number.isFinite(entry) ? null : entry;
+    }
+    if (depth >= JEV_SANITIZER_MAX_DEPTH || seen.has(entry)) return OMITTED.structure;
+    seen.add(entry);
+    if (Array.isArray(entry)) {
+      return entry.slice(0, JEV_SANITIZER_MAX_ARRAY_ITEMS).map((item) => sanitize(item, depth + 1));
+    }
+    return Object.fromEntries(
+      Object.entries(entry as Record<string, unknown>)
+        .slice(0, JEV_SANITIZER_MAX_OBJECT_ENTRIES)
+        .map(([key, nested]) => {
+          if (SECRET_KEYS.test(key)) return [key, OMITTED.secret];
+          if (DIRECT_IDENTIFIER_KEYS.test(key)) {
+            const kind = /(?:name|nome)/i.test(key) ? 'name'
+              : /mail/i.test(key) ? 'email'
+                : /phone|telefone|whatsapp/i.test(key) ? 'phone' : 'document';
+            return [key, OMITTED[kind]];
+          }
+          return [key, sanitize(nested, depth + 1)];
+        }),
+    );
+  }
+
+  return sanitize(value, 0);
 }

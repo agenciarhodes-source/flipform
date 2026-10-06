@@ -25,6 +25,8 @@ The provider boundary rejects sanitized requests and decoded responses above 256
 
 Outbound calls are pinned to the server-side HTTPS TypeSafe endpoint and use `redirect: error`, `cache: no-store`, omitted credentials, and no referrer. The client cannot supply or override the provider URL, and HTTP redirects are never followed.
 
+Sanitization is bounded before serialization: nesting depth, array items, object entries, and total visited nodes all have fixed limits. Circular references and non-JSON values are replaced with a neutral omission marker, preventing malformed state from exhausting the server before the 256 KiB request limit is measured.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
