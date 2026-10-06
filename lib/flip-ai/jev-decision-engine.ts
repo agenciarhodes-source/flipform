@@ -49,21 +49,20 @@ type JevDecisionRun = {
 
 const choiceAnswerSchema = z.object({
   type: z.literal('choice'),
-  choice: z.string().min(1),
-  probabilities: z.record(z.number()).optional(),
+  choice: z.string().min(1).max(64),
   confidence: z.number().min(0).max(1),
-}).passthrough();
+}).strip();
 
 const scoreAnswerSchema = z.object({
   type: z.literal('score'),
-  score: z.number().min(0),
+  score: z.number().min(0).max(4),
   confidence: z.number().min(0).max(1),
-}).passthrough();
+}).strip();
 
 const noulAnswerSchema = z.object({
   type: z.literal('noul'),
   noul: z.number().min(0).max(1),
-}).passthrough();
+}).strip();
 
 const jevResponseSchema = z.object({
   model: z.string().min(1).max(200),
@@ -87,7 +86,7 @@ const jevResponseSchema = z.object({
     input_tokens: z.number().int().nonnegative().max(JEV_MAX_TOKEN_COUNT_PER_CALL),
     output_tokens: z.number().int().nonnegative().max(JEV_MAX_TOKEN_COUNT_PER_CALL),
   }).strict(),
-}).passthrough();
+}).strip();
 
 const storedDecisionSchema = z.object({
   engine: z.literal('jev'),
@@ -127,6 +126,11 @@ function choiceOf<T extends readonly string[]>(
   allowed: T,
 ): T[number] | null {
   return allowed.includes(value as T[number]) ? value as T[number] : null;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]) {
+  const actual = Object.keys(value);
+  return actual.length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 
 function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversationDecision | null {
@@ -415,7 +419,7 @@ export async function runJevSyntheticReadinessProbe(options?: {
     model: z.string().min(1).max(200),
     answers: z.object({ route: choiceAnswerSchema }).strict(),
     usage: jevResponseSchema.shape.usage,
-  }).passthrough().safeParse(raw);
+  }).strip().safeParse(raw);
   if (!parsed.success) throw new Error('JEV_READINESS_RESPONSE_INVALID');
   const decision = choiceOf(parsed.data.answers.route.choice, ['billing', 'technical', 'other'] as const);
   if (!decision) throw new Error('JEV_READINESS_DECISION_INVALID');
@@ -451,7 +455,7 @@ async function routeBrainProfile(state: unknown, brain: BrainProfiles, options?:
     model: z.string().min(1).max(200),
     answers: z.object({ profile: choiceAnswerSchema }).strict(),
     usage: jevResponseSchema.shape.usage,
-  }).passthrough().safeParse(raw);
+  }).strip().safeParse(raw);
   if (!parsed.success) throw new Error('JEV_PROFILE_RESPONSE_INVALID');
   const choice = parsed.data.answers.profile;
   if (choice.choice !== 'unknown' && !brain.profiles.some((profile) => profile.id === choice.choice)) {
@@ -472,9 +476,13 @@ async function callJev(state: unknown, options?: {
   profile?: BrainProfile | null;
 }) {
   const model = options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
-  const raw = await requestJev(payload(state, model, options?.profile), options);
+  const request = payload(state, model, options?.profile);
+  const raw = await requestJev(request, options);
   const parsed = jevResponseSchema.safeParse(raw);
   if (!parsed.success) throw new Error('JEV_RESPONSE_INVALID');
+  if (!hasExactKeys(parsed.data.answers, Object.keys(request.questions))) {
+    throw new Error('JEV_RESPONSE_INVALID');
+  }
   const decision = buildDecision(parsed.data);
   if (!decision) throw new Error('JEV_DECISION_INVALID');
   return {

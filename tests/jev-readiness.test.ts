@@ -56,6 +56,39 @@ test('synthetic readiness rejects implausible provider token counters', async ()
   }), /JEV_READINESS_RESPONSE_INVALID/);
 });
 
+test('synthetic readiness rejects answer values outside the allowlisted schema', async () => {
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      model: 'jev',
+      answers: { route: { type: 'choice', choice: 'x'.repeat(65), confidence: 0.9 } },
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }))) as typeof fetch,
+  }), /JEV_READINESS_RESPONSE_INVALID/);
+});
+
+test('live JEV rejects answer keys that were not requested', async () => {
+  await assert.rejects(__testOnly.callJev({ latestMessage: 'Synthetic state' }, {
+    apiKey: 'test',
+    fetchImpl: (async (_url, options) => {
+      const request = JSON.parse(String(options?.body));
+      const choices: Record<string, string> = {
+        intent: 'information', objection: 'none', journey_stage: 'discovery', next_action: 'answer_directly',
+      };
+      const answers = Object.fromEntries(Object.entries(request.questions).map(([key, question]) => {
+        const type = (question as { type: string }).type;
+        if (type === 'choice') return [key, { type, choice: choices[key], confidence: 0.9 }];
+        if (type === 'score') return [key, { type, score: 2, confidence: 0.9 }];
+        return [key, { type, noul: 0.1 }];
+      }));
+      answers.unrequested = { type: 'choice', choice: 'other', confidence: 0.9 };
+      return new Response(JSON.stringify({
+        model: 'jev', answers, usage: { input_tokens: 1, output_tokens: 1 },
+      }));
+    }) as typeof fetch,
+  }), /JEV_RESPONSE_INVALID/);
+});
+
 test('JEV rejects oversized requests before calling the provider', async () => {
   let called = false;
   const oversizedState = Object.fromEntries(
