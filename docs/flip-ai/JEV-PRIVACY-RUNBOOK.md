@@ -19,6 +19,8 @@ Live JEV calls require all three controls: the global feature flag, a tenant all
 
 The redaction function runs inside the HTTP adapter immediately before serialization. Callers cannot bypass it by adding new fields to the decision state. Medical facts that are needed for qualification may remain after direct identifiers and record numbers are removed.
 
+Provider and runtime failures cross API and persistence boundaries only as allowlisted diagnostic codes. Raw exception messages are never returned or written to JEV usage metadata because they may contain infrastructure details, credentials, or customer content.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
