@@ -27,6 +27,8 @@ Outbound calls are pinned to the server-side HTTPS TypeSafe endpoint and use `re
 
 Sanitization is bounded before serialization: nesting depth, array items, object entries, and total visited nodes all have fixed limits. Circular references and non-JSON values are replaced with a neutral omission marker, preventing malformed state from exhausting the server before the 256 KiB request limit is measured.
 
+Provider token counters are accepted only as non-negative integers capped at 1,000,000 per call. The same schema protects synthetic probes, profile routing, and live decisions before token totals reach audit records or database fields; a routed decision can therefore accumulate at most 2,000,000 input tokens and 2,000,000 output tokens.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:

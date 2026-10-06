@@ -28,6 +28,7 @@ const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const JEV_TIMEOUT_MS = 2_500;
 const JEV_MAX_REQUEST_BYTES = 256 * 1024;
 const JEV_MAX_RESPONSE_BYTES = 256 * 1024;
+const JEV_MAX_TOKEN_COUNT_PER_CALL = 1_000_000;
 
 export type JevSyntheticReadiness = {
   ok: true;
@@ -83,8 +84,8 @@ const jevResponseSchema = z.object({
     scheduling_interest: noulAnswerSchema,
   }).catchall(choiceAnswerSchema),
   usage: z.object({
-    input_tokens: z.number().int().nonnegative(),
-    output_tokens: z.number().int().nonnegative(),
+    input_tokens: z.number().int().nonnegative().max(JEV_MAX_TOKEN_COUNT_PER_CALL),
+    output_tokens: z.number().int().nonnegative().max(JEV_MAX_TOKEN_COUNT_PER_CALL),
   }).strict(),
 }).passthrough();
 
@@ -634,5 +635,9 @@ export const __testOnly = {
   callJev,
   routeBrainProfile,
   payload,
-  limits: { requestBytes: JEV_MAX_REQUEST_BYTES, responseBytes: JEV_MAX_RESPONSE_BYTES },
+  limits: {
+    requestBytes: JEV_MAX_REQUEST_BYTES,
+    responseBytes: JEV_MAX_RESPONSE_BYTES,
+    tokenCountPerCall: JEV_MAX_TOKEN_COUNT_PER_CALL,
+  },
 };
