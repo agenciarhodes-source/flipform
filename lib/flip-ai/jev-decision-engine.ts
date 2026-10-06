@@ -133,6 +133,11 @@ function hasExactKeys(value: Record<string, unknown>, expected: string[]) {
   return actual.length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 
+function hasJsonContentType(response: Response) {
+  const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  return mediaType === 'application/json' || Boolean(mediaType?.startsWith('application/') && mediaType.endsWith('+json'));
+}
+
 function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversationDecision | null {
   const intent = choiceOf(raw.answers.intent.choice, JEV_INTENTS);
   const objection = choiceOf(raw.answers.objection.choice, JEV_OBJECTIONS);
@@ -355,6 +360,10 @@ async function requestJev(body: unknown, options?: {
       referrerPolicy: 'no-referrer',
     });
     if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
+    if (!hasJsonContentType(response)) {
+      controller.abort();
+      throw new Error('JEV_RESPONSE_CONTENT_TYPE_INVALID');
+    }
     const declaredLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(declaredLength) && declaredLength > JEV_MAX_RESPONSE_BYTES) {
       controller.abort();

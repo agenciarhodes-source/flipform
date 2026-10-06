@@ -11,6 +11,10 @@ import { buildFlipAiHumanHandoffSnapshot } from '../lib/flip-ai/human-handoff-po
 import { loadPublishedBrainProfiles } from '../lib/flip-ai/brain-profiles-server';
 import { prisma } from '../lib/prisma';
 
+const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), {
+  headers: { 'Content-Type': 'application/json' },
+});
+
 const profile: BrainProfile = {
   id: 'maternidade', label: 'Salário-maternidade', description: 'Pessoa busca orientação sobre maternidade.',
   retrievalTerms: ['maternidade rural', 'documentação rural'],
@@ -67,7 +71,7 @@ test('Jev routes only configured topics and unknown, without loading the complet
   const routed = await __testOnly.routeBrainProfile({latestMessage: 'Meu nome é Maria da Silva, CPF 123.456.789-00, quero maternidade'}, brain, {
     apiKey: 'test', fetchImpl: (async (_url, options) => {
       sent = JSON.parse(String(options?.body));
-      return new Response(JSON.stringify({model: 'jev', answers: {profile: {type: 'choice', choice: 'maternidade', confidence: .9}}, usage: {input_tokens: 10, output_tokens: 2}}));
+      return jsonResponse({model: 'jev', answers: {profile: {type: 'choice', choice: 'maternidade', confidence: .9}}, usage: {input_tokens: 10, output_tokens: 2}});
     }) as typeof fetch,
   });
   assert.equal(routed.profile?.id, profile.id);
@@ -79,7 +83,7 @@ test('Jev routes only configured topics and unknown, without loading the complet
   assert.ok('brain_documentos' in payload.questions);
   assert.equal(Object.keys(payload.questions).length, 16);
   await assert.rejects(__testOnly.routeBrainProfile({}, brain, {
-    apiKey: 'test', fetchImpl: (async () => new Response(JSON.stringify({model: 'jev', answers: {profile: {type: 'choice', choice: 'foreign_profile', confidence: .99}}, usage: {input_tokens: 1, output_tokens: 1}}))) as typeof fetch,
+    apiKey: 'test', fetchImpl: (async () => jsonResponse({model: 'jev', answers: {profile: {type: 'choice', choice: 'foreign_profile', confidence: .99}}, usage: {input_tokens: 1, output_tokens: 1}})) as typeof fetch,
   }), /JEV_PROFILE_CHOICE_INVALID/);
 });
 
@@ -176,7 +180,7 @@ test('decision runtime stores profile scores and combined usage, then replays wi
             : question.type === 'score' ? {type: 'score', score: 4, confidence: .9} : {type: 'noul', noul: .1};
         }
       }
-      return new Response(JSON.stringify({model: 'jev', answers, usage: {input_tokens: 10, output_tokens: 2}}));
+      return jsonResponse({model: 'jev', answers, usage: {input_tokens: 10, output_tokens: 2}});
     }) as typeof fetch;
     const input = {tenantId, agentId: 'agent', conversationId: 'conversation', chatRequestKey: 'unique-turn', knowledgeIndexId: 'index', state: {latestMessage: 'Preciso de salário maternidade'}};
     const first = await runJevConversationDecision(input);

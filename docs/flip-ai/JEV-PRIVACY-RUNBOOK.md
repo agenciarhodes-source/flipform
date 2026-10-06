@@ -31,6 +31,8 @@ Provider token counters are accepted only as non-negative integers capped at 1,0
 
 Provider answers use an allowlisted schema. Unknown top-level and per-answer metadata, including probability distributions and legends that FlipForm does not consume, is stripped after validation. Choice values are length-bounded, ordinal scores must remain inside the requested five-level scale, and live decisions must return exactly the question IDs sent by FlipForm, including only the selected profile's dynamic criteria.
 
+Successful provider responses must declare an `application/json` media type, including registered `application/*+json` variants and optional parameters such as `charset`. Missing or incompatible content types are rejected and the response stream is aborted before its body is read or parsed.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
