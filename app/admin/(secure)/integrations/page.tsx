@@ -11,6 +11,7 @@ import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
 import { WhatsAppMetaTestBindingCard } from './whatsapp-meta-test-binding-card';
 import { WhatsAppPlatformPreflightCard } from './whatsapp-platform-preflight-card';
 import { StripeFoundationReadinessCard } from './stripe-foundation-readiness-card';
+import { JevReadinessCard } from './jev-readiness-card';
 
 type Settings = {
   appId: string | null;
@@ -141,6 +142,7 @@ export default function AdminIntegrationsPage() {
       <Button onClick={save} disabled={busy}><Save className="w-4 h-4 mr-2" />{busy ? 'Salvando...' : 'Salvar Ads/WhatsApp e padrões'}</Button>
     </Card>}
 
+    <JevReadinessCard />
     <StripeFoundationReadinessCard />
     <WhatsAppPlatformPreflightCard />
     <WhatsAppMetaTestBindingCard />
