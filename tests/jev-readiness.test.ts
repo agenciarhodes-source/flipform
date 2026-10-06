@@ -64,3 +64,27 @@ test('JEV stops oversized provider responses before parsing them', async () => {
     }))) as typeof fetch,
   }), /JEV_RESPONSE_TOO_LARGE/);
 });
+
+test('JEV pins the provider destination and refuses redirects, cache, cookies and referrer', async () => {
+  let destination = '';
+  let requestOptions: RequestInit | undefined;
+  await runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async (url, options) => {
+      destination = String(url);
+      requestOptions = options;
+      return new Response(JSON.stringify({
+        model: 'jev',
+        answers: {route: {type: 'choice', choice: 'technical', confidence: 0.9}},
+        usage: {input_tokens: 1, output_tokens: 1},
+      }));
+    }) as typeof fetch,
+  });
+  const headers = new Headers(requestOptions?.headers);
+  assert.equal(destination, 'https://api.typesafe.ai/v1/systemone');
+  assert.equal(requestOptions?.redirect, 'error');
+  assert.equal(requestOptions?.cache, 'no-store');
+  assert.equal(requestOptions?.credentials, 'omit');
+  assert.equal(requestOptions?.referrerPolicy, 'no-referrer');
+  assert.equal(headers.get('accept'), 'application/json');
+});

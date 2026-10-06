@@ -338,8 +338,16 @@ async function requestJev(body: unknown, options?: {
   try {
     const response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
       body: serializedBody, signal: controller.signal,
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
     });
     if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
     const declaredLength = Number(response.headers.get('content-length'));
