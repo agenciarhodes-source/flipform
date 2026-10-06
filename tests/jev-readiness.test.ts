@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runJevSyntheticReadinessProbe } from '../lib/flip-ai/jev-decision-engine';
+import { __testOnly, runJevSyntheticReadinessProbe } from '../lib/flip-ai/jev-decision-engine';
 
 test('synthetic readiness sends only constant fictitious state and returns safe diagnostics', async () => {
   let requestBody = '';
@@ -40,4 +40,27 @@ test('synthetic readiness rejects a provider response outside the declared choic
       usage: { input_tokens: 1, output_tokens: 1 },
     }))) as typeof fetch,
   }), /JEV_READINESS_DECISION_INVALID/);
+});
+
+test('JEV rejects oversized requests before calling the provider', async () => {
+  let called = false;
+  const oversizedState = Array.from({length: 40_000}, () => 'abcdefgh');
+  await assert.rejects(__testOnly.callJev(oversizedState, {
+    apiKey: 'test',
+    fetchImpl: (async () => {
+      called = true;
+      return new Response('{}');
+    }) as typeof fetch,
+  }), /JEV_REQUEST_TOO_LARGE/);
+  assert.ok(JSON.stringify(oversizedState).length > __testOnly.limits.requestBytes);
+  assert.equal(called, false);
+});
+
+test('JEV stops oversized provider responses before parsing them', async () => {
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      padding: 'x'.repeat(__testOnly.limits.responseBytes + 1),
+    }))) as typeof fetch,
+  }), /JEV_RESPONSE_TOO_LARGE/);
 });
