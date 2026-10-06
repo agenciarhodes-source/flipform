@@ -19,6 +19,8 @@ Live JEV calls require all three controls: the global feature flag, a tenant all
 
 The redaction function runs inside the HTTP adapter immediately before serialization. Callers cannot bypass it by adding new fields to the decision state. Medical facts that are needed for qualification may remain after direct identifiers and record numbers are removed.
 
+Structured identifier aliases are normalized before classification, including camelCase, snake_case, accented and localized variants. Names, phone numbers, email addresses, documents, bank accounts and medical record numbers remain blocked even when a future caller uses fields such as `displayName`, `phoneNumber`, `emailAddress`, `documentNumber`, `bankAccountNumber` or `medicalRecordNumber`. Qualification facts are preserved.
+
 Provider and runtime failures cross API and persistence boundaries only as allowlisted diagnostic codes. Raw exception messages are never returned or written to JEV usage metadata because they may contain infrastructure details, credentials, or customer content.
 
 The provider boundary rejects sanitized requests and decoded responses above 256 KiB. Response streams are stopped as soon as the limit is exceeded, including when the provider omits or understates `Content-Length`; oversized content is never parsed or persisted.
