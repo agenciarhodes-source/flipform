@@ -96,6 +96,23 @@ test('JEV rejects an unsafe API key before building the provider request', async
   assert.equal(called, false);
 });
 
+test('JEV rejects timeout overrides outside the bounded safe range before network access', async () => {
+  for (const timeoutMs of [0, 99, 10_001, Number.NaN, Number.POSITIVE_INFINITY, 250.5]) {
+    let called = false;
+    await assert.rejects(runJevSyntheticReadinessProbe({
+      apiKey: 'test',
+      timeoutMs,
+      fetchImpl: (async () => {
+        called = true;
+        return jsonResponse({});
+      }) as typeof fetch,
+    }), /JEV_TIMEOUT_INVALID/);
+    assert.equal(called, false);
+  }
+  assert.equal(__testOnly.limits.minTimeoutMs, 100);
+  assert.equal(__testOnly.limits.maxTimeoutMs, 10_000);
+});
+
 test('JEV rejects an unsafe model identifier returned by the provider', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',

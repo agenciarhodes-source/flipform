@@ -26,6 +26,8 @@ import { safeJevErrorCode } from './jev-errors';
 export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const JEV_TIMEOUT_MS = 2_500;
+const JEV_MIN_TIMEOUT_MS = 100;
+const JEV_MAX_TIMEOUT_MS = 10_000;
 const JEV_MAX_REQUEST_BYTES = 256 * 1024;
 const JEV_MAX_RESPONSE_BYTES = 256 * 1024;
 const JEV_MAX_TOKEN_COUNT_PER_CALL = 1_000_000;
@@ -61,6 +63,13 @@ const jevApiKeySchema = z.string()
 export function getJevApiKeyStatus(raw = process.env.TYPESAFE_API_KEY): 'missing' | 'invalid' | 'valid' {
   if (!raw) return 'missing';
   return jevApiKeySchema.safeParse(raw).success ? 'valid' : 'invalid';
+}
+
+function resolveJevTimeout(raw = JEV_TIMEOUT_MS): number {
+  if (!Number.isSafeInteger(raw) || raw < JEV_MIN_TIMEOUT_MS || raw > JEV_MAX_TIMEOUT_MS) {
+    throw new Error('JEV_TIMEOUT_INVALID');
+  }
+  return raw;
 }
 
 const choiceAnswerSchema = z.object({
@@ -369,8 +378,9 @@ async function requestJev(body: unknown, options?: {
   if (new TextEncoder().encode(serializedBody).byteLength > JEV_MAX_REQUEST_BYTES) {
     throw new Error('JEV_REQUEST_TOO_LARGE');
   }
+  const timeoutMs = resolveJevTimeout(options?.timeoutMs);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || JEV_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
       method: 'POST',
@@ -687,5 +697,7 @@ export const __testOnly = {
     requestBytes: JEV_MAX_REQUEST_BYTES,
     responseBytes: JEV_MAX_RESPONSE_BYTES,
     tokenCountPerCall: JEV_MAX_TOKEN_COUNT_PER_CALL,
+    minTimeoutMs: JEV_MIN_TIMEOUT_MS,
+    maxTimeoutMs: JEV_MAX_TIMEOUT_MS,
   },
 };
