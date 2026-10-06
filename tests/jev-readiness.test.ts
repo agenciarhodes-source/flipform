@@ -84,6 +84,18 @@ test('JEV rejects an unsafe configured model before network access', async () =>
   assert.equal(called, false);
 });
 
+test('JEV rejects an unsafe API key before building the provider request', async () => {
+  let called = false;
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'secret with whitespace',
+    fetchImpl: (async () => {
+      called = true;
+      return jsonResponse({});
+    }) as typeof fetch,
+  }), /TYPESAFE_API_KEY_INVALID/);
+  assert.equal(called, false);
+});
+
 test('JEV rejects an unsafe model identifier returned by the provider', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',
