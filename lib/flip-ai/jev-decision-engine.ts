@@ -20,6 +20,7 @@ import {
   resolveFlipAiActionEligibility,
   type FlipAiActionSignals,
 } from './action-eligibility';
+import { sanitizeJevPayload } from './jev-privacy';
 
 export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
@@ -321,7 +322,7 @@ async function requestJev(body: unknown, options?: {
     const response = await (options?.fetchImpl || fetch)(JEV_ENDPOINT, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: controller.signal,
+      body: JSON.stringify(sanitizeJevPayload(body)), signal: controller.signal,
     });
     if (!response.ok) throw new Error(`JEV_HTTP_${response.status}`);
     try { return await response.json(); } catch { throw new Error('JEV_RESPONSE_INVALID'); }
@@ -401,6 +402,14 @@ export async function runJevConversationDecision(input: {
     tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
   });
   if (!enabled) return { decision: null, status: 'disabled', reused: false, errorCode: null };
+  if (process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED !== 'true') {
+    return {
+      decision: null,
+      status: 'disabled',
+      reused: false,
+      errorCode: 'JEV_DATA_PROCESSING_NOT_APPROVED',
+    };
+  }
 
   const requestKey = `jev-decision:${input.chatRequestKey}`;
   const existing = await prisma.flipAiUsageEvent.findUnique({

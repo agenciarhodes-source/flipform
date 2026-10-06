@@ -32,6 +32,7 @@ import {
 } from './decision-engine';
 import { brainAssessmentPrompt, type BrainAssessment } from './brain-profiles';
 import { runJevConversationDecision } from './jev-decision-engine';
+import { jevSubjectReference, redactJevText } from './jev-privacy';
 import {
   buildBudgetedHistory,
   buildHarnessRetrievalQueries,
@@ -806,12 +807,7 @@ function safeReference(value: string) {
 }
 
 function sanitizeDecisionStateText(value: string, max = 1_200) {
-  return value
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email omitido]')
-    .replace(/(?:\+?\d[\s().-]*){8,}/g, '[telefone omitido]')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, max);
+  return redactJevText(value, max);
 }
 
 async function buildJevDecisionState(
@@ -841,6 +837,7 @@ async function buildJevDecisionState(
   const compactMemory = conversationMemoryPrompt(memorySnapshot);
   const compactAvailability = availabilityPrompt(availabilitySnapshot);
   return {
+    subjectRef: jevSubjectReference(turn.tenantId, turn.conversationId),
     latestMessage: sanitizeDecisionStateText(turn.text, 1_200),
     inputMode: turn.inputMode,
     compactMemory: compactMemory
@@ -856,7 +853,7 @@ async function buildJevDecisionState(
       role: message.direction === 'outbound' ? 'assistant' : 'user',
       content: sanitizeDecisionStateText(message.text, 700),
     }] : []),
-    privacy: 'Dados de contato diretos são omitidos antes da classificação.',
+    privacy: 'Identificadores diretos, documentos, dados bancários e identificadores médicos são omitidos antes da classificação.',
   };
 }
 
