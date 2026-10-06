@@ -71,6 +71,30 @@ test('synthetic readiness rejects answer values outside the allowlisted schema',
   }), /JEV_READINESS_RESPONSE_INVALID/);
 });
 
+test('JEV rejects an unsafe configured model before network access', async () => {
+  let called = false;
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    model: `jev-safe\nforged-log-entry`,
+    fetchImpl: (async () => {
+      called = true;
+      return jsonResponse({});
+    }) as typeof fetch,
+  }), /JEV_MODEL_INVALID/);
+  assert.equal(called, false);
+});
+
+test('JEV rejects an unsafe model identifier returned by the provider', async () => {
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => jsonResponse({
+      model: `jev-safe\nforged-log-entry`,
+      answers: { route: { type: 'choice', choice: 'billing', confidence: 0.9 } },
+      usage: { input_tokens: 1, output_tokens: 1 },
+    })) as typeof fetch,
+  }), /JEV_READINESS_RESPONSE_INVALID/);
+});
+
 test('live JEV rejects answer keys that were not requested', async () => {
   await assert.rejects(__testOnly.callJev({ latestMessage: 'Synthetic state' }, {
     apiKey: 'test',

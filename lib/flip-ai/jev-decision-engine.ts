@@ -47,6 +47,12 @@ type JevDecisionRun = {
   errorCode: string | null;
 };
 
+const jevModelSchema = z.string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[^\u0000-\u001f\u007f]+$/);
+
 const choiceAnswerSchema = z.object({
   type: z.literal('choice'),
   choice: z.string().min(1).max(64),
@@ -65,7 +71,7 @@ const noulAnswerSchema = z.object({
 }).strip();
 
 const jevResponseSchema = z.object({
-  model: z.string().min(1).max(200),
+  model: jevModelSchema,
   answers: z.object({
     intent: choiceAnswerSchema,
     objection: choiceAnswerSchema,
@@ -91,7 +97,7 @@ const jevResponseSchema = z.object({
 const storedDecisionSchema = z.object({
   engine: z.literal('jev'),
   engineVersion: z.string().min(1),
-  model: z.string().min(1),
+  model: jevModelSchema,
   intent: z.enum(JEV_INTENTS),
   objection: z.enum(JEV_OBJECTIONS),
   journeyStage: z.enum(JEV_JOURNEY_STAGES),
@@ -136,6 +142,13 @@ function hasExactKeys(value: Record<string, unknown>, expected: string[]) {
 function hasJsonContentType(response: Response) {
   const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
   return mediaType === 'application/json' || Boolean(mediaType?.startsWith('application/') && mediaType.endsWith('+json'));
+}
+
+function resolveJevModel(override?: string) {
+  const candidate = override?.trim() || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
+  const parsed = jevModelSchema.safeParse(candidate);
+  if (!parsed.success) throw new Error('JEV_MODEL_INVALID');
+  return parsed.data;
 }
 
 function buildDecision(raw: z.infer<typeof jevResponseSchema>): FlipAiConversationDecision | null {
@@ -407,7 +420,7 @@ export async function runJevSyntheticReadinessProbe(options?: {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): Promise<JevSyntheticReadiness> {
-  const model = options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
+  const model = resolveJevModel(options?.model);
   const startedAt = Date.now();
   const raw = await requestJev({
     model,
@@ -425,7 +438,7 @@ export async function runJevSyntheticReadinessProbe(options?: {
     },
   }, options);
   const parsed = z.object({
-    model: z.string().min(1).max(200),
+    model: jevModelSchema,
     answers: z.object({ route: choiceAnswerSchema }).strict(),
     usage: jevResponseSchema.shape.usage,
   }).strip().safeParse(raw);
@@ -447,7 +460,7 @@ async function routeBrainProfile(state: unknown, brain: BrainProfiles, options?:
   apiKey?: string; model?: string; fetchImpl?: typeof fetch; timeoutMs?: number;
 }) {
   const raw = await requestJev({
-    model: options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL,
+    model: resolveJevModel(options?.model),
     state,
     questions: {
       profile: {
@@ -461,7 +474,7 @@ async function routeBrainProfile(state: unknown, brain: BrainProfiles, options?:
     },
   }, options);
   const parsed = z.object({
-    model: z.string().min(1).max(200),
+    model: jevModelSchema,
     answers: z.object({ profile: choiceAnswerSchema }).strict(),
     usage: jevResponseSchema.shape.usage,
   }).strip().safeParse(raw);
@@ -484,7 +497,7 @@ async function callJev(state: unknown, options?: {
   timeoutMs?: number;
   profile?: BrainProfile | null;
 }) {
-  const model = options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
+  const model = resolveJevModel(options?.model);
   const request = payload(state, model, options?.profile);
   const raw = await requestJev(request, options);
   const parsed = jevResponseSchema.safeParse(raw);
@@ -550,7 +563,12 @@ export async function runJevConversationDecision(input: {
     return { decision: null, status: 'fallback', reused: true, errorCode: 'JEV_DECISION_ALREADY_ATTEMPTED' };
   }
 
-  const configuredModel = process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
+  let configuredModel: string;
+  try {
+    configuredModel = resolveJevModel();
+  } catch {
+    return { decision: null, status: 'fallback', reused: false, errorCode: 'JEV_MODEL_INVALID' };
+  }
   let eventId: string;
   try {
     const event = await prisma.flipAiUsageEvent.create({
