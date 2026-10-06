@@ -6,6 +6,7 @@ test('JEV error policy preserves only allowlisted provider diagnostics', () => {
   assert.equal(safeJevErrorCode(new Error('JEV_HTTP_429')), 'JEV_HTTP_429');
   assert.equal(safeJevErrorCode(new Error('TYPESAFE_API_KEY_INVALID')), 'TYPESAFE_API_KEY_INVALID');
   assert.equal(safeJevErrorCode(new Error('JEV_MODEL_INVALID')), 'JEV_MODEL_INVALID');
+  assert.equal(safeJevErrorCode(new Error('JEV_TIMEOUT_INVALID')), 'JEV_TIMEOUT_INVALID');
   assert.equal(safeJevErrorCode(new Error('JEV_TRANSPORT_FAILED')), 'JEV_TRANSPORT_FAILED');
   assert.equal(safeJevErrorCode(new Error('JEV_REQUEST_TOO_LARGE')), 'JEV_REQUEST_TOO_LARGE');
   assert.equal(safeJevErrorCode(new Error('JEV_RESPONSE_CONTENT_TYPE_INVALID')), 'JEV_RESPONSE_CONTENT_TYPE_INVALID');

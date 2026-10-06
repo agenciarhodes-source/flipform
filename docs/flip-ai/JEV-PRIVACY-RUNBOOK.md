@@ -37,6 +37,8 @@ The configured and returned JEV model identifiers share one bounded schema: surr
 
 The TypeSafe API key is validated only on the server and is never returned by readiness endpoints. It must contain from 1 to 512 non-whitespace characters without control bytes. Missing and invalid credentials have separate safe diagnostic codes; both block the synthetic probe before network access, and the administrator sees only the configuration status.
 
+Every JEV request uses a bounded integer timeout. The default is 2.5 seconds, and internal overrides are accepted only from 100 milliseconds through 10 seconds. Invalid, fractional, infinite or out-of-range values are rejected before network access, preventing accidental unbounded provider calls.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
