@@ -120,6 +120,15 @@ def test_pr341_has_no_schema_migration_or_commercial_credit_formula_change():
 
 def test_pr341_decision_state_omits_direct_phone_and_email_patterns():
     chat = read("lib/flip-ai/public-chat.ts")
-    assert "[email omitido]" in chat
-    assert "[telefone omitido]" in chat
+    privacy = read("lib/flip-ai/jev-privacy.ts")
+    assert "[email omitido]" in privacy
+    assert "[telefone omitido]" in privacy
     assert "sanitizeDecisionStateText" in chat
+
+
+def test_jev_provider_boundary_redacts_every_payload_and_requires_data_review():
+    adapter = read("lib/flip-ai/jev-decision-engine.ts")
+    config = read("lib/config/validate-env.ts")
+    assert "JSON.stringify(sanitizeJevPayload(body))" in adapter
+    assert "FLIP_AI_JEV_DATA_PROCESSING_APPROVED" in adapter
+    assert "FLIP_AI_JEV_DATA_PROCESSING_APPROVED" in config
