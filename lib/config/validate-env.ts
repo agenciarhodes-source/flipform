@@ -81,6 +81,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   const stripeLiveAllowed = String(env.STRIPE_LIVE_PAYMENTS_ALLOWED || '').trim().toLowerCase() === 'true';
 
   const jevEnabled = String(env.FLIP_AI_JEV_ENABLED || '').trim().toLowerCase() === 'true';
+  const jevDataProcessingApproved = String(env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED || '').trim().toLowerCase() === 'true';
   const jevTenants = parseJevTenantIds(env.FLIP_AI_JEV_TENANT_IDS);
   const harnessBudgetRaw = String(env.FLIP_AI_HARNESS_TOKEN_BUDGET || '').trim();
   const harnessBudget = harnessBudgetRaw ? Number.parseInt(harnessBudgetRaw, 10) : 1_200;
@@ -97,6 +98,12 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
       jevTenants.configured && jevTenants.valid && jevTenants.tenantIds.length > 0,
       'JEV tenant allowlist configured',
       'FLIP_AI_JEV_ENABLED=true requires a valid non-empty FLIP_AI_JEV_TENANT_IDS allowlist.',
+    );
+    addCheck(
+      'FLIP_AI_JEV_DATA_PROCESSING_APPROVED',
+      jevDataProcessingApproved,
+      'TypeSafe retention and data processing review approved',
+      'Live JEV requires the TypeSafe retention and Zero Data Retention review before FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true.',
     );
   }
   if (harnessBudgetRaw) {
@@ -254,6 +261,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
       && jevTenants.configured
       && jevTenants.valid
       && jevTenants.tenantIds.length > 0
+      && jevDataProcessingApproved
     ),
     stripe: !stripeEnabled || (
       (
