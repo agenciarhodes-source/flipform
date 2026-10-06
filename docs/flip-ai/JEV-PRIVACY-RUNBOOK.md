@@ -33,6 +33,8 @@ Provider answers use an allowlisted schema. Unknown top-level and per-answer met
 
 Successful provider responses must declare an `application/json` media type, including registered `application/*+json` variants and optional parameters such as `charset`. Missing or incompatible content types are rejected and the response stream is aborted before its body is read or parsed.
 
+The configured and returned JEV model identifiers share one bounded schema: surrounding whitespace is removed, the value must contain between 1 and 200 characters, and control characters are forbidden. Invalid configuration is rejected before a network call or usage-event creation, and an invalid returned identifier is never persisted.
+
 ## Provider review record
 
 Before changing the approval variable, record the response from TypeSafe covering:
