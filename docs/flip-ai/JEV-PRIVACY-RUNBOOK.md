@@ -2,6 +2,8 @@
 
 This policy applies to every TypeSafe/JEV integration in FlipForm.
 
+Operational production activation must also follow `docs/flip-ai/JEV-ACTIVATION-CHECKLIST.md`. Connecting the global company API key is intentionally separate from authorizing any tenant to send real customer data.
+
 ## Mandatory controls
 
 1. Use a company-only TypeSafe account and a dedicated API key.
