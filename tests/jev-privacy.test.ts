@@ -16,6 +16,39 @@ test('provider boundary recursively redacts new fields and credentials', () => {
   for (const secret of ['Maria', '12345678900', 'maria@email.com', 'key-do-not-send']) assert.ok(!serialized.includes(secret));
 });
 
+test('provider boundary redacts structured credential aliases', () => {
+  const safe = sanitizeJevPayload({
+    clientSecret: 'client-secret-value',
+    accessToken: 'access-token-value',
+    privateKey: 'private-key-value',
+    connectionString: 'postgresql://user:password@database/private',
+    sessionId: 'session-value',
+    nested: { cookie: 'auth=session-cookie' },
+    facts: {topic: 'salário maternidade'},
+  });
+  const serialized = JSON.stringify(safe);
+  for (const secret of [
+    'client-secret-value', 'access-token-value', 'private-key-value',
+    'postgresql://user:password@database/private', 'session-value', 'session-cookie',
+  ]) assert.ok(!serialized.includes(secret), secret);
+  assert.match(serialized, /salário maternidade/);
+});
+
+test('text redaction removes bearer tokens, labeled credentials, connection URLs and private keys', () => {
+  const privateKey = '-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----';
+  const safe = redactJevText([
+    'Bearer header.payload.signature',
+    'client_secret: secret-value',
+    'postgresql://user:password@database/private',
+    privateKey,
+    'trabalhadora rural',
+  ].join(' '));
+  for (const secret of ['header.payload.signature', 'secret-value', 'user:password', 'private-material']) {
+    assert.ok(!safe.includes(secret), secret);
+  }
+  assert.match(safe, /trabalhadora rural/);
+});
+
 test('provider boundary redacts common camelCase and localized identifier aliases', () => {
   const safe = sanitizeJevPayload({
     displayName: 'Maria da Silva',
