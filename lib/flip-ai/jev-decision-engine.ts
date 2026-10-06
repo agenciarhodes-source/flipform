@@ -26,6 +26,16 @@ export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const JEV_TIMEOUT_MS = 2_500;
 
+export type JevSyntheticReadiness = {
+  ok: true;
+  model: string;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  decision: 'billing' | 'technical' | 'other';
+  confidence: number;
+};
+
 type JevDecisionRun = {
   decision: FlipAiConversationDecision | null;
   status: 'disabled' | 'confirmed' | 'fallback';
@@ -330,6 +340,53 @@ async function requestJev(body: unknown, options?: {
     if (error instanceof Error && /^JEV_(HTTP_|RESPONSE_)/.test(error.message)) throw error;
     throw new Error('JEV_TRANSPORT_FAILED');
   } finally { clearTimeout(timeout); }
+}
+
+/**
+ * Executes one provider call with a constant synthetic payload. This is the
+ * only probe allowed before the data-processing review is approved. It does
+ * not read tenants, leads, conversations, knowledge or the database.
+ */
+export async function runJevSyntheticReadinessProbe(options?: {
+  apiKey?: string;
+  model?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}): Promise<JevSyntheticReadiness> {
+  const model = options?.model || process.env.TYPESAFE_JEV_MODEL?.trim() || FLIP_AI_JEV_DEFAULT_MODEL;
+  const startedAt = Date.now();
+  const raw = await requestJev({
+    model,
+    state: 'Synthetic test: the demo account cannot complete a test payment.',
+    questions: {
+      route: {
+        type: 'choice',
+        instructions: 'Route this synthetic support request. This state is fictitious and contains no customer data.',
+        criteria: {
+          billing: 'Payment, invoice or account balance issue.',
+          technical: 'Software defect, outage or integration issue.',
+          other: 'Neither billing nor technical.',
+        },
+      },
+    },
+  }, options);
+  const parsed = z.object({
+    model: z.string().min(1).max(200),
+    answers: z.object({ route: choiceAnswerSchema }).strict(),
+    usage: jevResponseSchema.shape.usage,
+  }).passthrough().safeParse(raw);
+  if (!parsed.success) throw new Error('JEV_READINESS_RESPONSE_INVALID');
+  const decision = choiceOf(parsed.data.answers.route.choice, ['billing', 'technical', 'other'] as const);
+  if (!decision) throw new Error('JEV_READINESS_DECISION_INVALID');
+  return {
+    ok: true,
+    model: parsed.data.model,
+    latencyMs: Date.now() - startedAt,
+    inputTokens: parsed.data.usage.input_tokens,
+    outputTokens: parsed.data.usage.output_tokens,
+    decision,
+    confidence: parsed.data.answers.route.confidence,
+  };
 }
 
 async function routeBrainProfile(state: unknown, brain: BrainProfiles, options?: {
