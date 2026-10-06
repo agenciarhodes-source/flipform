@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { withPlatformAdmin } from '@/lib/auth';
-import { runJevSyntheticReadinessProbe } from '@/lib/flip-ai/jev-decision-engine';
+import { getJevApiKeyStatus, runJevSyntheticReadinessProbe } from '@/lib/flip-ai/jev-decision-engine';
 import { safeJevErrorCode } from '@/lib/flip-ai/jev-errors';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse, withRateLimitHeaders } from '@/lib/rate-limit';
@@ -26,8 +26,10 @@ async function auditProbe(userId: string, metadata: Record<string, string | numb
 }
 
 function configuration() {
+  const apiKeyStatus = getJevApiKeyStatus();
   return {
-    apiKeyConfigured: Boolean(process.env.TYPESAFE_API_KEY?.trim()),
+    apiKeyConfigured: apiKeyStatus !== 'missing',
+    apiKeyValid: apiKeyStatus === 'valid',
     model: process.env.TYPESAFE_JEV_MODEL?.trim() || 'jev-latest',
     liveEnabled: process.env.FLIP_AI_JEV_ENABLED === 'true',
     tenantAllowlistConfigured: Boolean(process.env.FLIP_AI_JEV_TENANT_IDS?.trim()),
@@ -51,16 +53,20 @@ export const POST = withPlatformAdmin(async (req, session) => {
     windowMs: 60 * 60_000,
   });
   if (!limit.allowed) return rateLimitResponse(limit);
-  if (!process.env.TYPESAFE_API_KEY?.trim()) {
+  const apiKeyStatus = getJevApiKeyStatus();
+  if (apiKeyStatus !== 'valid') {
+    const code = apiKeyStatus === 'missing' ? 'TYPESAFE_API_KEY_MISSING' : 'TYPESAFE_API_KEY_INVALID';
     await auditProbe(session.userId, {
       outcome: 'blocked',
-      code: 'TYPESAFE_API_KEY_MISSING',
+      code,
       providerCalled: false,
     });
     return withRateLimitHeaders(NextResponse.json({
       ok: false,
-      code: 'TYPESAFE_API_KEY_MISSING',
-      message: 'Configure TYPESAFE_API_KEY somente no ambiente do servidor.',
+      code,
+      message: code === 'TYPESAFE_API_KEY_MISSING'
+        ? 'Configure TYPESAFE_API_KEY somente no ambiente do servidor.'
+        : 'A TYPESAFE_API_KEY configurada no servidor é inválida.',
       configuration: configuration(),
     }, { status: 503, headers: noStore }), limit);
   }

@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/card';
 
 type JevConfiguration = {
   apiKeyConfigured: boolean;
+  apiKeyValid: boolean;
   model: string;
   liveEnabled: boolean;
   tenantAllowlistConfigured: boolean;
@@ -114,8 +115,10 @@ export function JevReadinessCard() {
 
     {configuration && <>
       <div className="flex flex-wrap gap-2">
-        <Badge variant={configuration.apiKeyConfigured ? 'secondary' : 'destructive'}>
-          {configuration.apiKeyConfigured ? 'Chave configurada no servidor' : 'Chave pendente'}
+        <Badge variant={configuration.apiKeyValid ? 'secondary' : 'destructive'}>
+          {configuration.apiKeyValid
+            ? 'Chave configurada no servidor'
+            : configuration.apiKeyConfigured ? 'Chave configurada, mas inválida' : 'Chave pendente'}
         </Badge>
         <Badge variant="outline">Modelo: {configuration.model}</Badge>
         <Badge variant={configuration.realDataProcessingApproved ? 'destructive' : 'secondary'}>

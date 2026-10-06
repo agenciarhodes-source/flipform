@@ -53,6 +53,16 @@ const jevModelSchema = z.string()
   .max(200)
   .regex(/^[^\u0000-\u001f\u007f]+$/);
 
+const jevApiKeySchema = z.string()
+  .min(1)
+  .max(512)
+  .regex(/^[^\s\u0000-\u001f\u007f]+$/);
+
+export function getJevApiKeyStatus(raw = process.env.TYPESAFE_API_KEY): 'missing' | 'invalid' | 'valid' {
+  if (!raw) return 'missing';
+  return jevApiKeySchema.safeParse(raw).success ? 'valid' : 'invalid';
+}
+
 const choiceAnswerSchema = z.object({
   type: z.literal('choice'),
   choice: z.string().min(1).max(64),
@@ -350,8 +360,11 @@ function payload(state: unknown, model: string, profile?: BrainProfile | null) {
 async function requestJev(body: unknown, options?: {
   apiKey?: string; fetchImpl?: typeof fetch; timeoutMs?: number;
 }): Promise<unknown> {
-  const apiKey = options?.apiKey || process.env.TYPESAFE_API_KEY?.trim();
-  if (!apiKey) throw new Error('TYPESAFE_API_KEY_MISSING');
+  const rawApiKey = options?.apiKey ?? process.env.TYPESAFE_API_KEY;
+  const apiKeyStatus = getJevApiKeyStatus(rawApiKey);
+  if (apiKeyStatus === 'missing') throw new Error('TYPESAFE_API_KEY_MISSING');
+  if (apiKeyStatus === 'invalid') throw new Error('TYPESAFE_API_KEY_INVALID');
+  const apiKey = jevApiKeySchema.parse(rawApiKey);
   const serializedBody = JSON.stringify(sanitizeJevPayload(body));
   if (new TextEncoder().encode(serializedBody).byteLength > JEV_MAX_REQUEST_BYTES) {
     throw new Error('JEV_REQUEST_TOO_LARGE');
