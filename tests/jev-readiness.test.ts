@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { __testOnly, runJevSyntheticReadinessProbe } from '../lib/flip-ai/jev-decision-engine';
 
+const jsonResponse = (body: unknown) => new Response(JSON.stringify(body), {
+  headers: { 'Content-Type': 'application/json; charset=utf-8' },
+});
+
 test('synthetic readiness sends only constant fictitious state and returns safe diagnostics', async () => {
   let requestBody = '';
   const result = await runJevSyntheticReadinessProbe({
     apiKey: 'secret-test-key',
     fetchImpl: (async (_url, options) => {
       requestBody = String(options?.body);
-      return new Response(JSON.stringify({
+      return jsonResponse({
         model: 'jev-1.13.0',
         answers: {
           route: {
@@ -17,7 +21,7 @@ test('synthetic readiness sends only constant fictitious state and returns safe 
           },
         },
         usage: { input_tokens: 42, output_tokens: 8 },
-      }));
+      });
     }) as typeof fetch,
   });
 
@@ -34,36 +38,36 @@ test('synthetic readiness sends only constant fictitious state and returns safe 
 test('synthetic readiness rejects a provider response outside the declared choices', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',
-    fetchImpl: (async () => new Response(JSON.stringify({
+    fetchImpl: (async () => jsonResponse({
       model: 'jev',
       answers: { route: { type: 'choice', choice: 'unexpected', confidence: 0.9 } },
       usage: { input_tokens: 1, output_tokens: 1 },
-    }))) as typeof fetch,
+    })) as typeof fetch,
   }), /JEV_READINESS_DECISION_INVALID/);
 });
 
 test('synthetic readiness rejects implausible provider token counters', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',
-    fetchImpl: (async () => new Response(JSON.stringify({
+    fetchImpl: (async () => jsonResponse({
       model: 'jev',
       answers: { route: { type: 'choice', choice: 'billing', confidence: 0.9 } },
       usage: {
         input_tokens: __testOnly.limits.tokenCountPerCall + 1,
         output_tokens: 1,
       },
-    }))) as typeof fetch,
+    })) as typeof fetch,
   }), /JEV_READINESS_RESPONSE_INVALID/);
 });
 
 test('synthetic readiness rejects answer values outside the allowlisted schema', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',
-    fetchImpl: (async () => new Response(JSON.stringify({
+    fetchImpl: (async () => jsonResponse({
       model: 'jev',
       answers: { route: { type: 'choice', choice: 'x'.repeat(65), confidence: 0.9 } },
       usage: { input_tokens: 1, output_tokens: 1 },
-    }))) as typeof fetch,
+    })) as typeof fetch,
   }), /JEV_READINESS_RESPONSE_INVALID/);
 });
 
@@ -82,9 +86,9 @@ test('live JEV rejects answer keys that were not requested', async () => {
         return [key, { type, noul: 0.1 }];
       }));
       answers.unrequested = { type: 'choice', choice: 'other', confidence: 0.9 };
-      return new Response(JSON.stringify({
+      return jsonResponse({
         model: 'jev', answers, usage: { input_tokens: 1, output_tokens: 1 },
-      }));
+      });
     }) as typeof fetch,
   }), /JEV_RESPONSE_INVALID/);
 });
@@ -105,12 +109,37 @@ test('JEV rejects oversized requests before calling the provider', async () => {
   assert.equal(called, false);
 });
 
+test('JEV rejects non-JSON provider content before parsing it', async () => {
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response('<html>proxy error</html>', {
+      headers: { 'Content-Type': 'text/html' },
+    })) as typeof fetch,
+  }), /JEV_RESPONSE_CONTENT_TYPE_INVALID/);
+  await assert.rejects(runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response('{}')) as typeof fetch,
+  }), /JEV_RESPONSE_CONTENT_TYPE_INVALID/);
+});
+
+test('JEV accepts registered application JSON media type variants', async () => {
+  const result = await runJevSyntheticReadinessProbe({
+    apiKey: 'test',
+    fetchImpl: (async () => new Response(JSON.stringify({
+      model: 'jev',
+      answers: { route: { type: 'choice', choice: 'other', confidence: 0.8 } },
+      usage: { input_tokens: 1, output_tokens: 1 },
+    }), { headers: { 'Content-Type': 'application/vnd.typesafe+json' } })) as typeof fetch,
+  });
+  assert.equal(result.decision, 'other');
+});
+
 test('JEV stops oversized provider responses before parsing them', async () => {
   await assert.rejects(runJevSyntheticReadinessProbe({
     apiKey: 'test',
-    fetchImpl: (async () => new Response(JSON.stringify({
+    fetchImpl: (async () => jsonResponse({
       padding: 'x'.repeat(__testOnly.limits.responseBytes + 1),
-    }))) as typeof fetch,
+    })) as typeof fetch,
   }), /JEV_RESPONSE_TOO_LARGE/);
 });
 
@@ -122,11 +151,11 @@ test('JEV pins the provider destination and refuses redirects, cache, cookies an
     fetchImpl: (async (url, options) => {
       destination = String(url);
       requestOptions = options;
-      return new Response(JSON.stringify({
+      return jsonResponse({
         model: 'jev',
         answers: {route: {type: 'choice', choice: 'technical', confidence: 0.9}},
         usage: {input_tokens: 1, output_tokens: 1},
-      }));
+      });
     }) as typeof fetch,
   });
   const headers = new Headers(requestOptions?.headers);
