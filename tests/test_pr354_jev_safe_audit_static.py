@@ -33,7 +33,9 @@ def test_audit_explicitly_states_that_no_customer_data_or_gate_changed():
 
 def test_provider_errors_are_allowlisted_before_logging_or_returning():
     route = read("app/api/admin/integrations/jev/readiness/route.ts")
-    assert "function safeErrorCode" in route
+    policy = read("lib/flip-ai/jev-errors.ts")
+    assert "safeJevErrorCode(error, 'JEV_READINESS_FAILED')" in route
+    assert "SAFE_JEV_ERROR_CODES" in policy
     assert "error.message.slice" not in route
     assert "JEV_READINESS_FAILED" in route
 

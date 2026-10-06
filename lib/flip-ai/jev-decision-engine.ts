@@ -21,6 +21,7 @@ import {
   type FlipAiActionSignals,
 } from './action-eligibility';
 import { sanitizeJevPayload } from './jev-privacy';
+import { safeJevErrorCode } from './jev-errors';
 
 export const FLIP_AI_JEV_DEFAULT_MODEL = 'jev-latest';
 const JEV_ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
@@ -566,7 +567,7 @@ export async function runJevConversationDecision(input: {
     });
     return { decision: result.decision, status: 'confirmed', reused: false, errorCode: null };
   } catch (error) {
-    const errorCode = error instanceof Error ? error.message.slice(0, 100) : 'JEV_UNKNOWN_ERROR';
+    const errorCode = safeJevErrorCode(error);
     const ambiguous = errorCode === 'JEV_TRANSPORT_FAILED'
       || errorCode === 'JEV_HTTP_429'
       || errorCode === 'JEV_HTTP_529';

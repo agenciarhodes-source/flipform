@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { withPlatformAdmin } from '@/lib/auth';
 import { runJevSyntheticReadinessProbe } from '@/lib/flip-ai/jev-decision-engine';
+import { safeJevErrorCode } from '@/lib/flip-ai/jev-errors';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse, withRateLimitHeaders } from '@/lib/rate-limit';
 
@@ -8,14 +9,6 @@ export const dynamic = 'force-dynamic';
 
 const noStore = { 'Cache-Control': 'private, no-store, max-age=0' };
 const JEV_READINESS_AUDIT_ACTION = 'platform.jev.synthetic_probe';
-
-function safeErrorCode(error: unknown) {
-  const code = error instanceof Error ? error.message : '';
-  if (/^JEV_(?:HTTP_\d{3}|TRANSPORT_FAILED|RESPONSE_INVALID|READINESS_RESPONSE_INVALID|READINESS_DECISION_INVALID)$/.test(code)) {
-    return code;
-  }
-  return 'JEV_READINESS_FAILED';
-}
 
 async function auditProbe(userId: string, metadata: Record<string, string | number | boolean | null>) {
   await logPlatformAudit({
@@ -90,7 +83,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
       liveProcessingChanged: false,
     }, { headers: noStore }), limit);
   } catch (error) {
-    const code = safeErrorCode(error);
+    const code = safeJevErrorCode(error, 'JEV_READINESS_FAILED');
     const providerStatus = /^JEV_HTTP_\d+$/.test(code) ? Number(code.slice('JEV_HTTP_'.length)) : null;
     await auditProbe(session.userId, {
       outcome: 'failed',
