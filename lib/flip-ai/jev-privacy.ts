@@ -11,12 +11,46 @@ const OMITTED = {
   structure: '[estrutura omitida]',
 } as const;
 
-const DIRECT_IDENTIFIER_KEYS = /^(?:name|full_?name|nome|nome_?completo|phone|telefone|whatsapp|email|cpf|cnpj|rg|cnh|pis|pasep|nit|nis|cns|pix|bank_?account|conta_?bancaria)$/i;
 const SECRET_KEYS = /(?:api_?key|authorization|password|senha|secret|token)$/i;
 const JEV_SANITIZER_MAX_DEPTH = 12;
 const JEV_SANITIZER_MAX_ARRAY_ITEMS = 100;
 const JEV_SANITIZER_MAX_OBJECT_ENTRIES = 200;
 const JEV_SANITIZER_MAX_NODES = 5_000;
+
+const IDENTIFIER_KEYS = {
+  name: new Set([
+    'name', 'fullname', 'firstname', 'lastname', 'surname', 'givenname', 'familyname',
+    'displayname', 'legalname', 'contactname', 'leadname', 'customername', 'clientname', 'username',
+    'nome', 'nomecompleto', 'primeironome', 'sobrenome', 'nomedeexibicao', 'nomecontato',
+    'nomelead', 'nomecliente',
+  ]),
+  phone: new Set([
+    'phone', 'phonenumber', 'telephone', 'mobile', 'mobilephone', 'cellphone', 'contactphone',
+    'telefone', 'numerotelefone', 'celular', 'numerocelular', 'whatsapp', 'whatsappnumber',
+    'numerowhatsapp',
+  ]),
+  email: new Set(['email', 'emailaddress', 'mail', 'contactemail', 'correioeletronico']),
+  document: new Set([
+    'cpf', 'cnpj', 'rg', 'cnh', 'pis', 'pasep', 'nit', 'nis', 'document', 'documentnumber',
+    'identitynumber', 'socialsecuritynumber', 'documento', 'numerodocumento',
+  ]),
+  bank: new Set([
+    'pix', 'pixkey', 'chavepix', 'bankaccount', 'bankaccountnumber', 'accountnumber', 'routingnumber',
+    'branchnumber', 'agencynumber', 'contabancaria', 'numeroconta', 'numeroagencia',
+  ]),
+  medicalIdentifier: new Set([
+    'cns', 'medicalrecord', 'medicalrecordnumber', 'healthcardnumber', 'prontuario',
+    'numeroprontuario', 'cartaosus', 'numerocartaosus',
+  ]),
+} as const;
+
+function identifierKind(key: string): keyof typeof IDENTIFIER_KEYS | null {
+  const normalized = key.normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^a-z0-9]/gi, '').toLowerCase();
+  for (const [kind, keys] of Object.entries(IDENTIFIER_KEYS)) {
+    if ((keys as ReadonlySet<string>).has(normalized)) return kind as keyof typeof IDENTIFIER_KEYS;
+  }
+  return null;
+}
 
 export function jevSubjectReference(tenantId: string, conversationId: string) {
   return `lead_${createHash('sha256').update(`${tenantId}:${conversationId}`).digest('hex').slice(0, 16)}`;
@@ -31,7 +65,7 @@ export function redactJevText(value: string, max = 2_000) {
     .replace(/\b\d{2}[.\s-]?\d{3}[.\s-]?\d{3}[\/.\s-]?\d{4}[-.\s]?\d{2}\b/g, OMITTED.document)
     .replace(/\b\d{5,7}[-.]?\d\b/g, OMITTED.document)
     .replace(/\b(?:banco|ag[eê]ncia|conta|chave\s+pix|pix)\s*[:#-]?\s*[A-Z0-9@.+/_-]{3,}\b/gi, OMITTED.bank)
-    .replace(/\b(?:meu nome [ée]|me chamo)\s+[\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,4}/giu, `meu nome é ${OMITTED.name}`)
+    .replace(/\b(?:meu\s+nome(?:\s+completo)?\s*(?:[ée]|:)|nome(?:\s+completo)?\s*:|me\s+chamo|pode\s+me\s+chamar\s+de)\s+[\p{L}][\p{L}'’-]*(?:\s+[\p{L}][\p{L}'’-]*){0,4}/giu, OMITTED.name)
     .replace(/(?:\+?55[\s().-]*)?(?:\(?\d{2}\)?[\s.-]*)?9?\d{4}[\s.-]*\d{4}\b/g, OMITTED.phone)
     .replace(/\b(?:sk|pk|rk|key)[-_][A-Za-z0-9_-]{12,}\b/g, OMITTED.secret)
     .replace(/\s+/g, ' ')
@@ -63,12 +97,8 @@ export function sanitizeJevPayload(value: unknown): unknown {
         .slice(0, JEV_SANITIZER_MAX_OBJECT_ENTRIES)
         .map(([key, nested]) => {
           if (SECRET_KEYS.test(key)) return [key, OMITTED.secret];
-          if (DIRECT_IDENTIFIER_KEYS.test(key)) {
-            const kind = /(?:name|nome)/i.test(key) ? 'name'
-              : /mail/i.test(key) ? 'email'
-                : /phone|telefone|whatsapp/i.test(key) ? 'phone' : 'document';
-            return [key, OMITTED[kind]];
-          }
+          const kind = identifierKind(key);
+          if (kind) return [key, OMITTED[kind]];
           return [key, sanitize(nested, depth + 1)];
         }),
     );

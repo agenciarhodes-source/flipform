@@ -16,6 +16,33 @@ test('provider boundary recursively redacts new fields and credentials', () => {
   for (const secret of ['Maria', '12345678900', 'maria@email.com', 'key-do-not-send']) assert.ok(!serialized.includes(secret));
 });
 
+test('provider boundary redacts common camelCase and localized identifier aliases', () => {
+  const safe = sanitizeJevPayload({
+    displayName: 'Maria da Silva',
+    contact: {
+      phoneNumber: '86999991111',
+      emailAddress: 'maria@example.com',
+      documentNumber: '12345678900',
+      bankAccountNumber: '123456-7',
+      medicalRecordNumber: '987654',
+    },
+    facts: {occupation: 'trabalhadora rural', condition: 'autismo'},
+  });
+  const serialized = JSON.stringify(safe);
+  for (const secret of ['Maria da Silva', '86999991111', 'maria@example.com', '12345678900', '123456-7', '987654']) {
+    assert.ok(!serialized.includes(secret), secret);
+  }
+  assert.match(serialized, /trabalhadora rural/);
+  assert.match(serialized, /autismo/);
+});
+
+test('text redaction removes additional explicit name declarations', () => {
+  const safe = redactJevText('Nome completo: João da Silva. Pode me chamar de João. Sou trabalhador rural.');
+  assert.ok(!safe.includes('João da Silva'));
+  assert.ok(!safe.includes('chamar de João'));
+  assert.match(safe, /trabalhador rural/);
+});
+
 test('provider boundary safely truncates deep, circular and oversized structures', () => {
   const circular: Record<string, unknown> = {safe: 'trabalhadora rural'};
   circular.self = circular;
