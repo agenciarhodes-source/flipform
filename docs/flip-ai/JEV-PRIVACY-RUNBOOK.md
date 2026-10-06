@@ -35,6 +35,8 @@ Do not place credentials, real lead samples, or client documents in this record.
 
 Platform administrators can inspect configuration with `GET /api/admin/integrations/jev/readiness` and execute one paid provider call with `POST /api/admin/integrations/jev/readiness`. The POST is limited to three attempts per administrator and IP per hour.
 
-The probe sends a constant fictitious support sentence. It does not query the database or read tenants, leads, conversations, knowledge, documents, or Markdown. Its response exposes only model, latency, token counts, the synthetic routing choice, and confidence. It never returns or logs the API key or provider payload.
+The probe sends a constant fictitious support sentence. It does not read tenants, leads, conversations, knowledge, documents, or Markdown. Its response exposes only model, latency, token counts, the synthetic routing choice, and confidence. It never returns or logs the API key or provider payload.
+
+Each accepted probe attempt writes a minimal `platform.jev.synthetic_probe` audit entry using the existing audit store. The entry contains the administrator id, outcome, safe error code when applicable, model, latency, token counts, synthetic choice, and confidence. It never stores request state, provider response bodies, credentials, IP addresses, tenant/customer identifiers, messages, or documents. Audit persistence failure does not expose provider data and does not change any activation gate.
 
 The probe does not change `FLIP_AI_JEV_ENABLED`, the tenant allowlist, or `FLIP_AI_JEV_DATA_PROCESSING_APPROVED`. A successful probe proves connectivity and response compatibility only; it does not authorize real customer data.

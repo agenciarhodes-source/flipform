@@ -15,7 +15,8 @@ def test_admin_integrations_exposes_a_synthetic_only_jev_probe():
     assert "Testar conexão com dados fictícios" in card
     assert "method: 'POST'" in card
     assert "body:" not in card
-    assert "leads, conversas, documentos, banco de dados ou Markdown" in card
+    assert "leads, conversas, documentos ou Markdown" in card
+    assert "auditoria técnica sem dados pessoais" in card
 
 
 def test_admin_never_receives_or_requests_the_typesafe_key():

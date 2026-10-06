@@ -24,4 +24,4 @@ def test_probe_is_synthetic_and_does_not_unlock_real_data_processing():
     assert "Synthetic test:" in adapter
     assert "FLIP_AI_JEV_DATA_PROCESSING_APPROVED" not in adapter.split("runJevSyntheticReadinessProbe", 1)[1].split("async function routeBrainProfile", 1)[0]
     assert "does not authorize real customer data" in runbook
-    assert "does not query the database" in runbook
+    assert "does not read tenants, leads, conversations, knowledge, documents, or Markdown" in runbook
