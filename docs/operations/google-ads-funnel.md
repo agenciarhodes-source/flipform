@@ -18,7 +18,7 @@ Esta etapa entrega somente a fundação, sem efeito em produção:
 - `lib/tracking/google-click-ids.ts`: captura e preservação de `gclid`, `gbraid` e `wbraid`.
 - `tests/google-funnel.test.ts`: testes unitários executados no CI.
 
-Não há tabela nova, migration, rota, tela, variável de ambiente ou chamada de rede. Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
+Não há rota, tela, variável de ambiente ou chamada de rede. As tabelas do outbox existem apenas como schema e migration (ver Banco / Neon). Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
 
 ## Mapeamento
 
@@ -77,9 +77,20 @@ PENDING/SENT/RETRY → FAILED → RETRY (reprocessamento explícito)
 - Nenhuma decisão automática de CRM: o sistema só sinaliza etapas movidas por um usuário ou por regra aprovada.
 - Meta Pixel/CAPI, GTM, WhatsApp e Stripe ficam fora do escopo.
 
+## Banco / Neon
+
+A migration `20261007190000_google_conversion_outbox` cria somente duas tabelas novas e não altera nenhuma tabela existente:
+
+- `google_conversion_mappings`: etapa → ação de conversão, por tenant. Única por `tenant_id + stage_id + conversion_action_resource`. Nasce com `enabled = false`. Remoção é lógica (`archived_at`), para preservar o histórico dos eventos.
+- `google_conversion_events`: fila/outbox e trilha de auditoria. Única por `tenant_id + idempotency_key`. Guarda estado, tentativas, datas e código simbólico de erro; não guarda payload, token nem dados de contato.
+
+`trigger_rule` define a regra de disparo do mapeamento: `first_entry` (uma conversão por lead naquela etapa, padrão) ou `every_entry`. A janela de conversão pertence à ação de conversão no Google Ads e não é replicada aqui. Contadores de enviadas, aceitas e erros são derivados de `google_conversion_events`.
+
+Nenhum código de runtime lê ou grava essas tabelas ainda, então o deploy não depende da migration. Ela precisa ser aplicada separadamente no Neon, com aprovação explícita, antes da etapa que cria eventos na movimentação do lead. A presença do arquivo não significa que o banco foi alterado.
+
 ## Próximas etapas
 
-1. **Outbox**: tabelas aditivas de mapeamento e de eventos, colunas `gbraid`/`wbraid`, criação do evento na movimentação, idempotência, estados, retry e auditoria. Ainda sem envio.
+1. **Outbox**: criação do evento na movimentação do lead usando as tabelas acima, colunas `gbraid`/`wbraid` em `lead_attributions`, idempotência, estados, retry e auditoria. Ainda sem envio.
 2. **Transporte**: Enhanced Conversions for Leads via Data Manager API, com conexão por OAuth do cliente ou conta gerenciadora (decisão pendente).
 3. **UI administrativa**: pipeline, etapa, ação de conversão, primária/secundária, valor, moeda e ativação.
 4. **Analytics**: leads, qualificados, oportunidades, contratos, receita, custo, origem e campanha.

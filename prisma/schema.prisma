@@ -142,6 +142,8 @@ model Tenant {
   flipAiQualifications FlipAiQualification[]
   flipAiExternalSources FlipAiExternalSource[]
   flipAiExternalSearchCaches FlipAiExternalSearchCache[]
+  googleConversionMappings GoogleConversionMapping[]
+  googleConversionEvents GoogleConversionEvent[]
 
   @@map("tenants")
 }
@@ -1519,4 +1521,69 @@ model FlipAiRateLimitBucket {
   @@index([tenantId, windowStart])
   @@index([tenantId, rejectedCount, updatedAt])
   @@map("flip_ai_rate_limit_buckets")
+}
+
+model GoogleConversionMapping {
+  id                       String    @id @default(uuid())
+  tenantId                 String    @map("tenant_id")
+  pipelineId               String    @map("pipeline_id")
+  stageId                  String    @map("stage_id")
+  conversionActionResource String    @map("conversion_action_resource")
+  conversionActionName     String?   @map("conversion_action_name")
+  conversionCategory       String    @map("conversion_category")
+  optimizationRole         String    @default("secondary") @map("optimization_role")
+  valueMode                String    @default("none") @map("value_mode")
+  conversionValue          Decimal?  @map("conversion_value") @db.Decimal(10, 2)
+  currency                 String    @default("BRL")
+  triggerRule              String    @default("first_entry") @map("trigger_rule")
+  enabled                  Boolean   @default(false)
+  archivedAt               DateTime? @map("archived_at")
+  createdById              String?   @map("created_by_id")
+  updatedById              String?   @map("updated_by_id")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  events GoogleConversionEvent[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, stageId, conversionActionResource])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, stageId, enabled])
+  @@map("google_conversion_mappings")
+}
+
+model GoogleConversionEvent {
+  id                       String    @id @default(uuid())
+  tenantId                 String    @map("tenant_id")
+  mappingId                String    @map("mapping_id")
+  leadId                   String    @map("lead_id")
+  pipelineId               String    @map("pipeline_id")
+  stageId                  String    @map("stage_id")
+  transitionId             String    @map("transition_id")
+  conversionActionResource String    @map("conversion_action_resource")
+  conversionCategory       String    @map("conversion_category")
+  idempotencyKey           String    @map("idempotency_key")
+  state                    String    @default("PENDING")
+  conversionTime           DateTime  @map("conversion_time")
+  conversionValue          Decimal?  @map("conversion_value") @db.Decimal(10, 2)
+  currency                 String?
+  attempts                 Int       @default(0)
+  nextAttemptAt            DateTime? @map("next_attempt_at")
+  lastAttemptAt            DateTime? @map("last_attempt_at")
+  lastErrorCode            String?   @map("last_error_code")
+  finalizedAt              DateTime? @map("finalized_at")
+  triggeredById            String?   @map("triggered_by_id")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
+
+  tenant  Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mapping GoogleConversionMapping @relation(fields: [tenantId, mappingId], references: [tenantId, id], onDelete: NoAction)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([state, nextAttemptAt])
+  @@index([tenantId, leadId])
+  @@index([tenantId, mappingId, state])
+  @@index([tenantId, createdAt])
+  @@map("google_conversion_events")
 }
