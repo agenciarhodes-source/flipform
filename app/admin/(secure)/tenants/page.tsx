@@ -48,7 +48,7 @@ export default function AdminTenantsPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Uma empresa por linha. Apenas contas com nível Dono da empresa (owner) aparecem como responsáveis; os demais usuários permanecem como acessos internos do cliente.
+            Empresas comerciais com perfil Dono da empresa (owner). Acessos técnicos de login e os demais usuários continuam disponíveis no painel Acessos.
           </p>
         </div>
       </div>
@@ -128,12 +128,7 @@ export default function AdminTenantsPage() {
                             </div>
                           ))}
                         </div>
-                      ) : (
-                        <div>
-                          <div className="text-sm font-medium text-amber-700">Sem dono cadastrado</div>
-                          <div className="text-xs text-muted-foreground">Revise os acessos deste cliente.</div>
-                        </div>
-                      )}
+                      ) : null}
                     </td>
                     <td className="py-3 px-4"><StatusBadge status={t.status} /></td>
                     <td className="py-3 px-4">{t.planName ? <span>{t.planName} <span className="text-xs text-muted-foreground">(R$ {Number(t.planPrice).toFixed(2)})</span></span> : <span className="text-muted-foreground">—</span>}</td>
