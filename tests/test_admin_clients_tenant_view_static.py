@@ -13,9 +13,11 @@ def test_admin_clients_route_is_platform_admin_only_and_owner_company_centric():
     assert "prisma.tenant.findMany" in route
     assert "clientsOnly" in route
     assert "getClientTenantWhere" in route
-    assert "startsWith: 'internal-'" in route
-    assert "startsWith: 'Acesso interno '" in route
     assert "clientWhere" in route
+    helper = read("lib/admin/client-tenant-filter.ts")
+    assert "startsWith: 'internal-'" in helper
+    assert "startsWith: 'Acesso interno '" in helper
+    assert "contains: 'internal=true'" in helper
     assert "owners: t.tenantUsers.map" in route
 
 
