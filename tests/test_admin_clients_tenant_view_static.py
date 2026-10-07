@@ -7,11 +7,14 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_admin_clients_route_is_platform_admin_only_and_tenant_centric():
+def test_admin_clients_route_is_platform_admin_only_and_owner_company_centric():
     route = read("app/api/admin/tenants/route.ts")
     assert "withPlatformAdmin" in route
     assert "prisma.tenant.findMany" in route
-    assert "where: { role: Role.owner }" in route
+    assert "{ tenantUsers: { some: { role: Role.owner } } }" in route
+    assert "startsWith: 'internal-'" in route
+    assert "startsWith: 'Acesso interno '" in route
+    assert "contains: 'internal=true'" in route
     assert "owners: t.tenantUsers.map" in route
 
 
@@ -25,13 +28,12 @@ def test_admin_clients_search_only_uses_owner_accounts_as_people_filter():
     assert "role: Role.agent" not in route
 
 
-def test_admin_clients_page_shows_company_owner_and_labels_other_users_as_accesses():
+def test_admin_clients_page_separates_companies_from_access_accounts():
     page = read("app/admin/(secure)/tenants/page.tsx")
     assert ">Clientes<" in page
-    assert "Uma empresa por linha." in page
-    assert "Dono da empresa" in page
-    assert "Acessos" in page
-    assert "Sem dono cadastrado" in page
+    assert "Empresas comerciais com perfil Dono da empresa (owner)." in page
+    assert "painel Acessos" in page
+    assert "Sem dono cadastrado" not in page
     assert "t.owners.map" in page
 
 

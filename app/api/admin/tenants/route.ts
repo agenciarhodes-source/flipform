@@ -11,27 +11,48 @@ export const GET = withPlatformAdmin(async (req) => {
 
   const tenantStatuses = Object.values(TenantStatus) as string[];
 
-  const where: Prisma.TenantWhereInput = {};
+  const clientFilters: Prisma.TenantWhereInput[] = [
+    // "Clientes" representa empresas comerciais, não tenants técnicos usados apenas
+    // como ponto de entrada de logins/grupos empresariais.
+    { tenantUsers: { some: { role: Role.owner } } },
+    { NOT: { slug: { startsWith: 'internal-' } } },
+    { NOT: { name: { startsWith: 'Acesso interno ', mode: 'insensitive' } } },
+    {
+      OR: [
+        { internalNotes: null },
+        { NOT: { internalNotes: { contains: 'internal=true' } } },
+      ],
+    },
+  ];
+
+  if (q) {
+    clientFilters.push({
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { slug: { contains: q, mode: 'insensitive' } },
+        {
+          tenantUsers: {
+            some: {
+              role: Role.owner,
+              user: {
+                OR: [
+                  { name: { contains: q, mode: 'insensitive' } },
+                  { email: { contains: q, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    });
+  }
+
+  const where: Prisma.TenantWhereInput = {
+    AND: clientFilters,
+  };
   if (status && status !== 'all' && tenantStatuses.includes(status)) {
     where.status = status as TenantStatus;
   }
-  if (q) where.OR = [
-    { name: { contains: q, mode: 'insensitive' } },
-    { slug: { contains: q, mode: 'insensitive' } },
-    {
-      tenantUsers: {
-        some: {
-          role: Role.owner,
-          user: {
-            OR: [
-              { name: { contains: q, mode: 'insensitive' } },
-              { email: { contains: q, mode: 'insensitive' } },
-            ],
-          },
-        },
-      },
-    },
-  ];
 
   const tenants = await prisma.tenant.findMany({
     where,
