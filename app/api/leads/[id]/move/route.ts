@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPermission, canMoveLead } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { dispatchKanbanStageTracking } from '@/lib/tracking';
+import { enqueueGoogleConversionEvents } from '@/lib/tracking/google-funnel-outbox';
 
 export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { params: { id: string } }) => {
   try {
@@ -48,7 +49,7 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     else if (lead.status === 'won') newStatus = 'open';
     else newStatus = 'open';
 
-    await prisma.$transaction([
+    const [, stageHistory] = await prisma.$transaction([
       prisma.lead.update({
         where: { id: lead.id },
         data: { stageId, status: newStatus, temperature: newTemperature },
@@ -67,6 +68,17 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
       triggeredById: session.userId,
       source: 'kanban',
       lead: { email: lead.email, phone: lead.phone, name: lead.name },
+    });
+
+    // Queue only; never blocks or undoes the move, and nothing is sent to Google here.
+    await enqueueGoogleConversionEvents({
+      tenantId: session.tenantId,
+      leadId: lead.id,
+      pipelineId: newStage.pipelineId,
+      stageId,
+      transitionId: stageHistory.id,
+      occurredAt: stageHistory.createdAt,
+      triggeredById: session.userId,
     });
 
     await logAudit({
