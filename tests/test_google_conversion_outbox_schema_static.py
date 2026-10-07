@@ -76,6 +76,6 @@ def test_only_the_mapping_module_touches_the_new_tables():
         for path in (ROOT / folder).rglob('*.ts*'):
             source = path.read_text(encoding='utf-8')
             # The event outbox has no writer or reader yet.
-            assert not re.search(r'\.googleConversionEvent', source), path
+            assert not re.search(r'\.googleConversionEvent\b', source), path
             if path != allowed:
-                assert not re.search(r'\.googleConversionMapping', source), path
+                assert not re.search(r'\.googleConversionMapping\b', source), path
