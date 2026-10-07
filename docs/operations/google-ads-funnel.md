@@ -18,7 +18,7 @@ Esta etapa entrega somente a fundação, sem efeito em produção:
 - `lib/tracking/google-click-ids.ts`: captura e preservação de `gclid`, `gbraid` e `wbraid`.
 - `tests/google-funnel.test.ts`: testes unitários executados no CI.
 
-Não há rota, tela, variável de ambiente ou chamada de rede. As tabelas do outbox existem apenas como schema e migration (ver Banco / Neon). Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
+Não há tela, variável de ambiente ou chamada de rede. Existe apenas a API de configuração dos mapeamentos. As tabelas do outbox existem apenas como schema e migration (ver Banco / Neon). Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
 
 ## Mapeamento
 
@@ -86,7 +86,20 @@ A migration `20261007190000_google_conversion_outbox` cria somente duas tabelas 
 
 `trigger_rule` define a regra de disparo do mapeamento: `first_entry` (uma conversão por lead naquela etapa, padrão) ou `every_entry`. A janela de conversão pertence à ação de conversão no Google Ads e não é replicada aqui. Contadores de enviadas, aceitas e erros são derivados de `google_conversion_events`.
 
-Nenhum código de runtime lê ou grava essas tabelas ainda, então o deploy não depende da migration. Ela precisa ser aplicada separadamente no Neon, com aprovação explícita, antes da etapa que cria eventos na movimentação do lead. A presença do arquivo não significa que o banco foi alterado.
+Somente a API de configuração lê e grava `google_conversion_mappings`; nada grava `google_conversion_events` ainda. O deploy não depende da migration: sem as tabelas, a API responde `503`. Ela precisa ser aplicada separadamente no Neon, com aprovação explícita, antes da etapa que cria eventos na movimentação do lead. A presença do arquivo não significa que o banco foi alterado.
+
+## API de configuração
+
+| Rota | Permissão | Efeito |
+| --- | --- | --- |
+| `GET /api/integrations/google-funnel/mappings` | `INTEGRATIONS_VIEW` | Lista mapeamentos ativos e os pipelines/etapas do tenant. |
+| `POST /api/integrations/google-funnel/mappings` | `INTEGRATIONS_EDIT` | Cria um mapeamento. Restaura o registro se ele estava arquivado. |
+| `PUT /api/integrations/google-funnel/mappings/{id}` | `INTEGRATIONS_EDIT` | Atualiza o mapeamento. |
+| `DELETE /api/integrations/google-funnel/mappings/{id}` | `INTEGRATIONS_EDIT` | Arquiva (remoção lógica) e desativa. |
+
+O tenant vem sempre da sessão. Pipeline e etapa são validados contra o tenant, e etapas ou pipelines arquivados são recusados. Cada alteração gera Audit Log. Se as tabelas ainda não existirem no ambiente, as rotas respondem `503` com mensagem explícita, sem afetar o restante do sistema.
+
+Esta camada é só configuração: salvar ou ativar um mapeamento ainda não cria evento nem envia conversão. Ainda não há tela; ela vem na etapa de UI.
 
 ## Próximas etapas
 

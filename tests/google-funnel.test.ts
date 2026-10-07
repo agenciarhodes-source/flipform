@@ -73,6 +73,16 @@ test('mapeamento nasce desativado, secundário e sem valor', () => {
   assert.equal(parsed.optimizationRole, 'secondary');
   assert.equal(parsed.valueMode, 'none');
   assert.equal(parsed.currency, 'BRL');
+  assert.equal(parsed.triggerRule, 'first_entry');
+  assert.equal(parsed.conversionActionName, undefined);
+});
+
+test('regra de disparo e nome da ação são validados', () => {
+  const parsed = googleFunnelMappingSchema.parse({ ...validMapping, triggerRule: 'every_entry', conversionActionName: '  Lead qualificado  ' });
+  assert.equal(parsed.triggerRule, 'every_entry');
+  assert.equal(parsed.conversionActionName, 'Lead qualificado');
+  assert.equal(googleFunnelMappingSchema.safeParse({ ...validMapping, triggerRule: 'always' }).success, false);
+  assert.equal(googleFunnelMappingSchema.safeParse({ ...validMapping, conversionActionName: 'a'.repeat(121) }).success, false);
 });
 
 test('valor e moeda são validados no servidor', () => {
