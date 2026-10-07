@@ -18,7 +18,7 @@ Esta etapa entrega somente a fundação, sem efeito em produção:
 - `lib/tracking/google-click-ids.ts`: captura e preservação de `gclid`, `gbraid` e `wbraid`.
 - `tests/google-funnel.test.ts`: testes unitários executados no CI.
 
-Não há tela, variável de ambiente ou chamada de rede. Existe apenas a API de configuração dos mapeamentos. As tabelas do outbox existem apenas como schema e migration (ver Banco / Neon). Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
+Não há variável de ambiente nem chamada de rede ao Google. Existem a API de configuração, a tela e a fila de eventos. As tabelas do outbox existem apenas como schema e migration (ver Banco / Neon). Nenhuma conversão é enviada ao Google. O provider `google_ads` legado em `lib/tracking.ts` continua registrando `not_dispatched`, e o fluxo Meta não foi tocado.
 
 ## Mapeamento
 
@@ -99,7 +99,11 @@ A API de configuração lê e grava `google_conversion_mappings`; a fila grava `
 
 O tenant vem sempre da sessão. Pipeline e etapa são validados contra o tenant, e etapas ou pipelines arquivados são recusados. Cada alteração gera Audit Log. Se as tabelas ainda não existirem no ambiente, as rotas respondem `503` com mensagem explícita, sem afetar o restante do sistema.
 
-Esta camada é só configuração: salvar ou ativar um mapeamento ainda não cria evento nem envia conversão. Ainda não há tela; ela vem na etapa de UI.
+Esta camada é só configuração e não envia conversão.
+
+## Tela
+
+Em **Integrações → Google Ads — Funil de conversões** (`app/(app)/integrations/google-funnel-card.tsx`), o owner ou admin escolhe o pipeline e vê todas as etapas em ordem: as que têm ação de conversão e as internas. É possível adicionar, ativar, desativar e remover conversões. A tela usa somente a API acima, avisa que o envio ao Google ainda não está ativo e mostra a mensagem de indisponibilidade quando as tabelas não existem no ambiente.
 
 ## Fila de eventos
 
