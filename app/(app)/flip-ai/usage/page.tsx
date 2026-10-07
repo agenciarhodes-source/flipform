@@ -197,7 +197,6 @@ export default async function FlipAiUsagePage({
               <thead className="bg-muted/50 text-xs text-muted-foreground"><tr>
                 <th className="px-4 py-3 font-medium">Operação</th><th className="px-4 py-3 font-medium">Confirmadas</th>
                 <th className="px-4 py-3 font-medium">Entrada</th><th className="px-4 py-3 font-medium">Saída</th>
-                <th className="px-4 py-3 font-medium">Estimativa</th>
               </tr></thead>
               <tbody>{usage.operations.map((operation) => <tr key={`${operation.operation}:${operation.model}`} className="border-t">
                 <td className="px-4 py-3"><p className="font-medium">{operation.label}</p>
@@ -206,13 +205,6 @@ export default async function FlipAiUsagePage({
                 <td className="px-4 py-3">{number.format(operation.confirmedEvents)}</td>
                 <td className="px-4 py-3">{number.format(operation.inputTokens)}</td>
                 <td className="px-4 py-3">{number.format(operation.outputTokens)}</td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  {operation.costCoverage === 'none'
-                    ? <span className="text-xs text-muted-foreground">Não calculado</span>
-                    : <span>{formatUsd(operation.estimatedCostNanoUsd)}
-                      {operation.costCoverage === 'partial' ? <sup title="Estimativa parcial">*</sup> : null}
-                    </span>}
-                </td>
               </tr>)}</tbody>
             </table></div>}
         </section>
