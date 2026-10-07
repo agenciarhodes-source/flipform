@@ -20,6 +20,10 @@ export type GoogleConversionOptimizationRole = (typeof googleConversionOptimizat
 export const googleConversionValueModes = ['none', 'fixed', 'purchase'] as const;
 export type GoogleConversionValueMode = (typeof googleConversionValueModes)[number];
 
+/** `first_entry` signals a lead once per mapped stage; `every_entry` signals each transition. */
+export const googleConversionTriggerRules = ['first_entry', 'every_entry'] as const;
+export type GoogleConversionTriggerRule = (typeof googleConversionTriggerRules)[number];
+
 export const GOOGLE_CONVERSION_MAX_VALUE = 99_999_999.99;
 
 const CONVERSION_ACTION_RESOURCE = /^customers\/([0-9]{1,12})\/conversionActions\/([0-9]{1,20})$/;
@@ -48,9 +52,12 @@ export const googleFunnelMappingSchema = z
       .string()
       .trim()
       .regex(CONVERSION_ACTION_RESOURCE, 'Ação de conversão inválida. Use customers/{id}/conversionActions/{id}.'),
+    // Display label only; the resource name above is what identifies the action.
+    conversionActionName: z.string().trim().max(120).nullable().optional(),
     conversionCategory: z.enum(googleConversionCategories),
     optimizationRole: z.enum(googleConversionOptimizationRoles).default('secondary'),
     valueMode: z.enum(googleConversionValueModes).default('none'),
+    triggerRule: z.enum(googleConversionTriggerRules).default('first_entry'),
     conversionValue: z
       .number()
       .finite()
