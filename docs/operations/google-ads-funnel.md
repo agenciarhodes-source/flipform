@@ -86,7 +86,7 @@ A migration `20261007190000_google_conversion_outbox` cria somente duas tabelas 
 
 `trigger_rule` define a regra de disparo do mapeamento: `first_entry` (uma conversão por lead naquela etapa, padrão) ou `every_entry`. A janela de conversão pertence à ação de conversão no Google Ads e não é replicada aqui. Contadores de enviadas, aceitas e erros são derivados de `google_conversion_events`.
 
-Somente a API de configuração lê e grava `google_conversion_mappings`; nada grava `google_conversion_events` ainda. O deploy não depende da migration: sem as tabelas, a API responde `503`. Ela precisa ser aplicada separadamente no Neon, com aprovação explícita, antes da etapa que cria eventos na movimentação do lead. A presença do arquivo não significa que o banco foi alterado.
+A API de configuração lê e grava `google_conversion_mappings`; a fila grava `google_conversion_events` na movimentação do Kanban. O deploy não depende da migration: sem as tabelas, a API responde `503`. Ela precisa ser aplicada separadamente no Neon, com aprovação explícita, antes da etapa que cria eventos na movimentação do lead. A presença do arquivo não significa que o banco foi alterado.
 
 ## API de configuração
 
@@ -101,9 +101,24 @@ O tenant vem sempre da sessão. Pipeline e etapa são validados contra o tenant,
 
 Esta camada é só configuração: salvar ou ativar um mapeamento ainda não cria evento nem envia conversão. Ainda não há tela; ela vem na etapa de UI.
 
+## Fila de eventos
+
+Quando um usuário move um lead no Kanban (`POST /api/leads/{id}/move`), depois que a movimentação e o histórico já foram gravados e depois do disparo Meta existente, o FlipForm consulta os mapeamentos ativos da etapa de destino e cria um evento `PENDING` em `google_conversion_events` para cada um.
+
+| Resultado | Significado |
+| --- | --- |
+| `queued` | Evento criado na fila. |
+| `already_signaled` | Regra `first_entry` e o lead já tem evento para esse mapeamento. |
+| `duplicate` | A mesma transição já gerou o evento (chave idempotente). |
+| `awaiting_purchase` | Modo `purchase` sem `LeadPurchase`; nenhum evento é criado. |
+
+O enfileiramento é best-effort: qualquer falha é registrada em log sem dados do lead e nunca bloqueia, atrasa de forma perceptível ou desfaz a movimentação. Sem as tabelas no ambiente, o funil fica simplesmente desligado.
+
+Nesta etapa os eventos ficam em `PENDING` e nada é enviado ao Google. Só a movimentação manual no Kanban enfileira; criação de lead, automações e Flip AI ainda não. Um evento em `awaiting_purchase` também não é retomado automaticamente quando a compra é registrada depois. Esses pontos entram em etapas seguintes.
+
 ## Próximas etapas
 
-1. **Outbox**: criação do evento na movimentação do lead usando as tabelas acima, colunas `gbraid`/`wbraid` em `lead_attributions`, idempotência, estados, retry e auditoria. Ainda sem envio.
+1. **Atribuição e demais origens**: colunas `gbraid`/`wbraid` em `lead_attributions`, evento de `Lead` na criação pelo formulário e retomada de `awaiting_purchase`. Ainda sem envio.
 2. **Transporte**: Enhanced Conversions for Leads via Data Manager API, com conexão por OAuth do cliente ou conta gerenciadora (decisão pendente).
 3. **UI administrativa**: pipeline, etapa, ação de conversão, primária/secundária, valor, moeda e ativação.
 4. **Analytics**: leads, qualificados, oportunidades, contratos, receita, custo, origem e campanha.

@@ -70,12 +70,14 @@ def test_existing_attribution_and_tracking_tables_are_untouched():
     assert 'kanban_stage_tracking_events' not in read(MIGRATION)
 
 
-def test_only_the_mapping_module_touches_the_new_tables():
-    allowed = ROOT / 'lib' / 'tracking' / 'google-funnel-mappings.ts'
+def test_only_the_funnel_modules_touch_the_new_tables():
+    tracking = ROOT / 'lib' / 'tracking'
+    mapping_users = {tracking / 'google-funnel-mappings.ts', tracking / 'google-funnel-outbox.ts'}
+    event_users = {tracking / 'google-funnel-outbox.ts'}
     for folder in ['app', 'lib']:
         for path in (ROOT / folder).rglob('*.ts*'):
             source = path.read_text(encoding='utf-8')
-            # The event outbox has no writer or reader yet.
-            assert not re.search(r'\.googleConversionEvent\b', source), path
-            if path != allowed:
+            if path not in event_users:
+                assert not re.search(r'\.googleConversionEvent\b', source), path
+            if path not in mapping_users:
                 assert not re.search(r'\.googleConversionMapping\b', source), path
