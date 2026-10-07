@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
+import { getClientTenantWhere } from '@/lib/admin/client-tenant-filter';
 
 export const GET = withPlatformAdmin(async () => {
   const [totalTenants, activeTenants, suspended, blocked, pastDue, trial, totalUsers, totalLeads, totalForms] = await Promise.all([
@@ -30,6 +31,7 @@ export const GET = withPlatformAdmin(async () => {
 
   // Últimos tenants criados
   const recentTenants = await prisma.tenant.findMany({
+    where: getClientTenantWhere(),
     orderBy: { createdAt: 'desc' },
     take: 5,
     include: { plan: { select: { name: true } } },
