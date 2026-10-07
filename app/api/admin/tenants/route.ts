@@ -3,6 +3,7 @@ import { Role, TenantStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
+import { getClientTenantWhere } from '@/lib/admin/client-tenant-filter';
 
 export const GET = withPlatformAdmin(async (req) => {
   const { searchParams } = new URL(req.url);
@@ -11,19 +12,11 @@ export const GET = withPlatformAdmin(async (req) => {
 
   const tenantStatuses = Object.values(TenantStatus) as string[];
 
-  const clientFilters: Prisma.TenantWhereInput[] = [
-    // "Clientes" representa empresas comerciais, não tenants técnicos usados apenas
-    // como ponto de entrada de logins/grupos empresariais.
-    { tenantUsers: { some: { role: Role.owner } } },
-    { NOT: { slug: { startsWith: 'internal-' } } },
-    { NOT: { name: { startsWith: 'Acesso interno ', mode: 'insensitive' } } },
-    {
-      OR: [
-        { internalNotes: null },
-        { NOT: { internalNotes: { contains: 'internal=true' } } },
-      ],
-    },
-  ];
+  const clientsOnly = searchParams.get('clientsOnly') === 'true';
+  const clientWhere = getClientTenantWhere();
+  const clientFilters: Prisma.TenantWhereInput[] = clientsOnly
+    ? (Array.isArray(clientWhere.AND) ? clientWhere.AND : [clientWhere])
+    : [];
 
   if (q) {
     clientFilters.push({
