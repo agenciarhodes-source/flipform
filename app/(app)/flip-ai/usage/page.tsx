@@ -4,7 +4,6 @@ import { AlertTriangle, ArrowLeft, AudioLines, Bot, CalendarDays, CircleDollarSi
 import { getSession } from '@/lib/auth';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { getFlipAiCreditWallet } from '@/lib/flip-ai/credits';
-import { nanoUsdToUsd } from '@/lib/flip-ai/openai-pricing';
 import { getFlipAiUsageDashboard } from '@/lib/flip-ai/usage';
 import {
   resolveFlipAiUsageRange,
@@ -14,12 +13,6 @@ import {
 export const dynamic = 'force-dynamic';
 
 const number = new Intl.NumberFormat('pt-BR');
-const usd = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 6,
-});
 const dateTime = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',
   timeStyle: 'short',
@@ -41,11 +34,6 @@ const CREDIT_SOURCE_LABELS: Record<string, string> = {
   refund: 'Estorno',
   manual_adjustment: 'Ajuste manual',
 };
-
-function formatUsd(costNanoUsd: number) {
-  const value = nanoUsdToUsd(costNanoUsd);
-  return value > 0 && value < 0.000001 ? '< US$ 0,000001' : usd.format(value);
-}
 
 function statusClass(status: string) {
   if (status === 'confirmed') return 'bg-emerald-50 text-emerald-700';
@@ -166,32 +154,21 @@ export default async function FlipAiUsagePage({
           </div>
         </div>}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
-          <p className="text-sm font-medium">Custo estimado OpenAI no período</p>
-          <p className="mt-2 text-3xl font-semibold">{formatUsd(usage.pricing.estimatedCostNanoUsd)}</p>
-          <p className="mt-2 text-xs">
-            {number.format(usage.pricing.fullyPricedOperations)} operação(ões) com preço integral.
-          </p>
-        </div>
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-          <div className="flex gap-3"><AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <div><p className="font-medium">Cobrança auditável por consumo confirmado</p>
-              <p className="mt-1">Operações confirmadas e com preço integral geram um único débito idempotente na carteira. Resultados incertos, custos parciais e voz ainda não reconciliada não são debitados.</p>
-              <p className="mt-1">1 crédito técnico representa US$ 0,000001 de custo confirmado, com arredondamento para cima por evento. Não há recarga automática nesta etapa.</p>
-              <a href={usage.pricing.source} target="_blank" rel="noreferrer"
-                className="mt-2 inline-block font-medium underline">Consultar tabela oficial</a>
-            </div>
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-5 text-blue-950">
+        <div className="flex gap-3">
+          <AudioLines className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <div>
+            <p className="font-medium">Consumo registrado por créditos</p>
+            <p className="mt-1 text-sm">
+              Apenas operações confirmadas são descontadas da carteira. Se uma operação não puder ser confirmada,
+              o saldo não é descontado.
+            </p>
+            <p className="mt-2 text-xs">
+              O atendimento e a criação válida de Leads não são desfeitos por uma falha de cobrança.
+            </p>
           </div>
         </div>
       </div>
-
-      {(usage.pricing.partiallyPricedOperations > 0 || usage.pricing.unpricedOperations > 0) &&
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
-            <p><strong>{number.format(usage.pricing.partiallyPricedOperations)}</strong> operação(ões) têm custo parcial e <strong>{number.format(usage.pricing.unpricedOperations)}</strong> ficaram fora da estimativa por modelo sem preço cadastrado ou voz ainda não reconciliada.</p>
-          </div>
-        </div>}
 
       {(usage.totals.ambiguousOperations > 0 || usage.totals.processingOperations > 0) &&
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
@@ -205,7 +182,7 @@ export default async function FlipAiUsagePage({
           ['Operações confirmadas', usage.totals.confirmedOperations],
           ['Tokens de entrada', usage.totals.inputTokens],
           ['Tokens de saída', usage.totals.outputTokens],
-          ['Sessões de voz emitidas', usage.totals.realtimeSessions],
+          ['Sessões de voz', usage.totals.realtimeSessions],
         ].map(([label, value]) => <div key={String(label)} className="rounded-lg border bg-card p-5">
           <p className="text-sm text-muted-foreground">{label}</p>
           <p className="mt-2 text-2xl font-semibold">{number.format(Number(value))}</p>
