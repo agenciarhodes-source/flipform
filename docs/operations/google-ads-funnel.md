@@ -120,10 +120,34 @@ O enfileiramento é best-effort: qualquer falha é registrada em log sem dados d
 
 Nesta etapa os eventos ficam em `PENDING` e nada é enviado ao Google. Só a movimentação manual no Kanban enfileira; criação de lead, automações e Flip AI ainda não. Um evento em `awaiting_purchase` também não é retomado automaticamente quando a compra é registrada depois. Esses pontos entram em etapas seguintes.
 
+## Transporte (Data Manager API)
+
+`lib/tracking/google-data-manager.ts` monta e envia a conversão para `POST https://datamanager.googleapis.com/v1/events:ingest`. A Data Manager API não usa developer token; a autenticação é por service account com o escopo `https://www.googleapis.com/auth/datamanager`.
+
+Este módulo ainda não é chamado por nenhuma rota ou job: nenhum evento da fila é enviado. Ele é fail-closed e depende de todas as variáveis abaixo.
+
+| Variável | Padrão | Função |
+| --- | --- | --- |
+| `GOOGLE_FUNNEL_TRANSPORT_ENABLED` | desligado | Só `true` liga o transporte. |
+| `GOOGLE_DATA_MANAGER_SERVICE_ACCOUNT_JSON` | ausente | JSON da service account (puro ou base64). Segredo de servidor. |
+| `GOOGLE_FUNNEL_TENANT_ACCOUNTS` | vazio | Pareamento `tenantId:customerId`, separado por vírgula. Um tenant só envia para a conta pareada com ele. |
+| `GOOGLE_DATA_MANAGER_LOGIN_ACCOUNT_ID` | conta operada | Conta (por exemplo a MCC) onde a service account é usuária. |
+| `GOOGLE_FUNNEL_VALIDATE_ONLY` | dry run | Só `false` faz o Google ingerir de fato; caso contrário a requisição é apenas validada. |
+| `GOOGLE_FUNNEL_SEND_USER_DATA` | desligado | Só `true` inclui e-mail e telefone do lead, normalizados e com hash SHA-256. |
+
+Regras:
+
+- A conta e a ação de conversão vêm do mapeamento (`customers/{id}/conversionActions/{id}`); a ação precisa ser do tipo `UPLOAD_CLICKS`.
+- `transactionId` é a chave idempotente do evento, o que permite ao Google deduplicar reenvios.
+- Um único identificador de clique por evento. Sem click ID e sem dados de usuário liberados, o evento não é enviável (`NO_IDENTIFIER`).
+- Dados de usuário nunca saem em claro. Quando enviados, a requisição declara consentimento (`CONSENT_GRANTED`); só ligue `GOOGLE_FUNNEL_SEND_USER_DATA` se o formulário e a política de privacidade do tenant cobrirem esse uso.
+- Uma tentativa por chamada, sem retry interno. `401`, `403`, `408`, `429` e `5xx` viram nova tentativa; demais `4xx` são rejeição. Só um código simbólico é devolvido; mensagens do provedor, tokens e payloads não são registrados.
+- Resposta `200` significa que o Google aceitou a requisição para processamento (`SENT`), não que a conversão foi atribuída.
+
 ## Próximas etapas
 
 1. **Atribuição e demais origens**: colunas `gbraid`/`wbraid` em `lead_attributions`, evento de `Lead` na criação pelo formulário e retomada de `awaiting_purchase`. Ainda sem envio.
-2. **Transporte**: Enhanced Conversions for Leads via Data Manager API, com conexão por OAuth do cliente ou conta gerenciadora (decisão pendente).
+2. **Processador da fila**: job que lê eventos `PENDING`/`RETRY`, chama o transporte e atualiza estado, tentativas e auditoria.
 3. **UI administrativa**: pipeline, etapa, ação de conversão, primária/secundária, valor, moeda e ativação.
 4. **Analytics**: leads, qualificados, oportunidades, contratos, receita, custo, origem e campanha.
 
