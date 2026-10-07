@@ -11,10 +11,13 @@ def test_admin_clients_route_is_platform_admin_only_and_owner_company_centric():
     route = read("app/api/admin/tenants/route.ts")
     assert "withPlatformAdmin" in route
     assert "prisma.tenant.findMany" in route
-    assert "{ tenantUsers: { some: { role: Role.owner } } }" in route
-    assert "startsWith: 'internal-'" in route
-    assert "startsWith: 'Acesso interno '" in route
-    assert "contains: 'internal=true'" in route
+    assert "clientsOnly" in route
+    assert "getClientTenantWhere" in route
+    assert "clientWhere" in route
+    helper = read("lib/admin/client-tenant-filter.ts")
+    assert "startsWith: 'internal-'" in helper
+    assert "startsWith: 'Acesso interno '" in helper
+    assert "contains: 'internal=true'" in helper
     assert "owners: t.tenantUsers.map" in route
 
 
@@ -48,3 +51,19 @@ def test_admin_clients_view_does_not_change_schema_or_operational_data():
         "CREATE TABLE",
     ]:
         assert forbidden not in route
+
+
+def test_admin_client_filter_is_canonical_and_overview_uses_it():
+    helper = read("lib/admin/client-tenant-filter.ts")
+    overview = read("app/api/admin/overview/route.ts")
+    assert "function getClientTenantWhere" in helper
+    assert "role: Role.owner" in helper
+    assert "startsWith: 'internal-'" in helper
+    assert "startsWith: 'Acesso interno '" in helper
+    assert "contains: 'internal=true'" in helper
+    assert "getClientTenantWhere()" in overview
+
+
+def test_admin_clients_page_requests_client_only_tenants():
+    page = read("app/admin/(secure)/tenants/page.tsx")
+    assert "params.set('clientsOnly', 'true')" in page

@@ -20,6 +20,7 @@ export default function AdminTenantsPage() {
     const params = new URLSearchParams();
     if (status !== 'all') params.set('status', status);
     if (q) params.set('q', q);
+    params.set('clientsOnly', 'true');
     const data = await fetch(`/api/admin/tenants?${params}`).then((r) => r.json());
     setTenants(data.tenants || []);
     setLoading(false);
