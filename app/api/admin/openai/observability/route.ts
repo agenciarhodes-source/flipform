@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { resolveOpenAiOperationalBalanceReference } from '@/lib/flip-ai/operational-balance-setting';
 import { withPlatformAdmin } from '@/lib/auth';
 import {
   getOpenAiAdminObservability,
@@ -36,7 +37,7 @@ export const GET = withPlatformAdmin(async (req) => {
     const observability = await getOpenAiAdminObservability({
       adminKey,
       organizationId: process.env.OPENAI_ORGANIZATION_ID?.trim() || null,
-      operationalBalanceRaw: process.env.OPENAI_OPERATIONAL_BALANCE_USD,
+      operationalBalanceRaw: (await resolveOpenAiOperationalBalanceReference()).raw,
       days,
     });
 

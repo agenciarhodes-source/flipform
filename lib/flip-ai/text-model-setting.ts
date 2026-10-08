@@ -53,6 +53,7 @@ export async function setActiveFlipAiTextModel(input: {
     where: { id: SETTINGS_ID },
     update: { textModel: input.model, updatedById: input.userId },
     create: { id: SETTINGS_ID, textModel: input.model, updatedById: input.userId },
+    select: { id: true },
   });
   resetActiveFlipAiTextModelCache();
   return { model: input.model, source: 'admin' };

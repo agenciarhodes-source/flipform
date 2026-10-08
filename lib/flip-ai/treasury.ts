@@ -8,6 +8,7 @@ import {
   OpenAiAdminObservabilityError,
   parseOpenAiOperationalBalance,
 } from './openai-admin-observability';
+import { resolveOpenAiOperationalBalanceReference } from './operational-balance-setting';
 import {
   buildTreasuryReservePolicy,
   calculateTreasuryCoverage,
@@ -51,9 +52,9 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
   const packages = getFlipAiCreditPackages();
   const bufferPercent = resolveTreasuryBufferPercent(process.env.FLIP_AI_TREASURY_BUFFER_PERCENT);
   const policy = buildTreasuryReservePolicy(packages, bufferPercent);
-  const operationalBalance = parseOpenAiOperationalBalance(
-    process.env.OPENAI_OPERATIONAL_BALANCE_USD,
-  );
+  // Typed in the Treasury panel; the server variable is only the fallback.
+  const balanceReference = await resolveOpenAiOperationalBalanceReference();
+  const operationalBalance = parseOpenAiOperationalBalance(balanceReference.raw);
 
   const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1_000);
 
@@ -217,7 +218,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       const provider = await getOpenAiAdminObservability({
         adminKey,
         organizationId: process.env.OPENAI_ORGANIZATION_ID?.trim() || null,
-        operationalBalanceRaw: process.env.OPENAI_OPERATIONAL_BALANCE_USD,
+        operationalBalanceRaw: balanceReference.raw,
         days: 30,
         now,
       });
@@ -257,7 +258,9 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       requiredReserveUsd: coverage.requiredReserveUsd,
       operationalBalanceUsd: coverage.operationalBalanceUsd,
       operationalBalanceStatus: operationalBalance.status,
-      operationalBalanceSource: 'manual_server_configuration' as const,
+      // 'admin_panel' or 'manual_server_configuration': always a typed reference, never an official balance.
+      operationalBalanceSource: balanceReference.source,
+      operationalBalanceUpdatedAt: balanceReference.updatedAt,
       coveragePercent: coverage.coveragePercent,
       requiredReserveCoveragePercent: coverage.requiredReserveCoveragePercent,
       recommendedTopUpUsd: coverage.recommendedTopUpUsd,

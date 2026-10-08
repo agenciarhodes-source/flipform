@@ -1593,6 +1593,8 @@ model GoogleConversionEvent {
 model PlatformFlipAiSettings {
   id          String   @id
   textModel   String   @map("text_model")
+  operationalBalanceUsd       Decimal?  @map("operational_balance_usd") @db.Decimal(12, 2)
+  operationalBalanceUpdatedAt DateTime? @map("operational_balance_updated_at")
   updatedById String?  @map("updated_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
