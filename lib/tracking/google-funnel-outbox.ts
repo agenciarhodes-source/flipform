@@ -57,8 +57,10 @@ async function enqueueForTransition(input: GoogleConversionEnqueueInput): Promis
   const results: GoogleConversionEnqueueResult[] = [];
   for (const mapping of mappings) {
     if (mapping.triggerRule !== 'every_entry') {
+      // Per conversion action, not per stage: two stages mapped to the same
+      // action (alternative paths to "qualified") signal the lead only once.
       const signaled = await prisma.googleConversionEvent.findFirst({
-        where: { tenantId: input.tenantId, leadId: input.leadId, mappingId: mapping.id },
+        where: { tenantId: input.tenantId, leadId: input.leadId, conversionActionResource: mapping.conversionActionResource },
         select: { id: true },
       });
       if (signaled) {
