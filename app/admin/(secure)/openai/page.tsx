@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ComponentType } from 'react';
 import { Activity, AlertTriangle, Bot, Coins, Loader2, RefreshCw, WalletCards } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { FlipAiTextModelCard } from './text-model-card';
 import { Button } from '@/components/ui/button';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 4 });
@@ -109,6 +110,8 @@ export default function OpenAiObservabilityPage() {
           </Button>
         </div>
       </div>
+
+      <FlipAiTextModelCard />
 
       {!data || loading ? (
         <div className="py-12 text-muted-foreground">

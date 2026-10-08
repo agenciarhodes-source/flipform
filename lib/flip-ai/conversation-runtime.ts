@@ -2,6 +2,7 @@ import 'server-only';
 
 import { FlipAiError } from './access';
 import { getFlipAiCreditBalanceForTenant } from './credits';
+import { getActiveFlipAiTextModel } from './text-model-setting';
 import {
   FLIP_AI_TEXT_MODEL,
   streamOpenAiText,
@@ -25,11 +26,11 @@ export class FlipAiConversationRuntimeError extends FlipAiError {
   readonly kind = 'definitive' as const;
 }
 
-export function getFlipAiConversationExecutionPlan(): FlipAiConversationExecutionPlan {
+export function getFlipAiConversationExecutionPlan(model: string = FLIP_AI_TEXT_MODEL): FlipAiConversationExecutionPlan {
   return {
     runtimeVersion: FLIP_AI_CONVERSATION_RUNTIME_VERSION,
     provider: 'openai',
-    model: FLIP_AI_TEXT_MODEL,
+    model,
     modality: 'text',
     task: 'customer_conversation',
     modelRouting: 'disabled',
@@ -72,8 +73,10 @@ export async function assertFlipAiConversationRuntimeReady(input: {
     );
   }
 
+  // One model for every tenant, set explicitly by the platform admin; never chosen per request.
+  const activeModel = await getActiveFlipAiTextModel();
   return {
-    ...getFlipAiConversationExecutionPlan(),
+    ...getFlipAiConversationExecutionPlan(activeModel.model),
     balanceCredits: wallet.balanceCredits,
   };
 }

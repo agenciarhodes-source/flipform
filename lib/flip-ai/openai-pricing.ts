@@ -1,4 +1,4 @@
-export const OPENAI_PRICE_SNAPSHOT = '2026-09-30';
+export const OPENAI_PRICE_SNAPSHOT = '2026-10-08';
 export const OPENAI_PRICE_SOURCE = 'https://developers.openai.com/api/docs/pricing';
 
 export type OpenAiCostCoverage = 'full' | 'partial' | 'none';
@@ -26,6 +26,10 @@ const TOKEN_PRICES: Array<{ matches: (model: string) => boolean; price: TokenPri
   {
     matches: (model) => model === 'gpt-5.6-luna' || model.startsWith('gpt-5.6-luna-'),
     price: { inputNanoUsd: 200, outputNanoUsd: 1_200 },
+  },
+  {
+    matches: (model) => model === 'gpt-6-luna' || model.startsWith('gpt-6-luna-'),
+    price: { inputNanoUsd: 100, outputNanoUsd: 500 },
   },
   {
     matches: (model) => model === 'text-embedding-3-small'
