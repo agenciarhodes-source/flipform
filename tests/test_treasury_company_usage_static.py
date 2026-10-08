@@ -49,3 +49,12 @@ def test_internal_cost_stays_out_of_the_customer_usage_page():
     customer = read("app/(app)/flip-ai/usage/page.tsx")
     for forbidden in ["chargedCostUsd", "undebitedCostUsd", "nanoUsdToUsd", "formatUsd"]:
         assert forbidden not in customer, forbidden
+
+
+def test_fractions_of_a_cent_are_not_shown_as_zero():
+    page = read("app/admin/(secure)/treasury/page.tsx")
+    assert "return value > 0 && value < 0.01 ? smallUsd.format(value) : usd.format(value);" in page
+    assert "minimumFractionDigits: 4," in page
+    # Every dollar figure on the page goes through the helper.
+    assert page.count("usd.format(") == 1
+    assert page.count("formatUsd(") > 5

@@ -13,6 +13,17 @@ const usd = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const smallUsd = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4,
+});
+
+// Fractions of a cent would otherwise read as "$0.00" and look like no cost at all.
+function formatUsd(value: number) {
+  return value > 0 && value < 0.01 ? smallUsd.format(value) : usd.format(value);
+}
 
 const ACCOUNT_KIND_LABELS: Record<string, string> = {
   internal_test: 'Teste interno',
@@ -146,12 +157,12 @@ export default function AdminAiTreasuryPage() {
 
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <Metric label="Créditos em circulação" value={number.format(treasury.balances.creditsInCirculation)} detail={number.format(treasury.balances.tenantsWithCredits) + ' cliente(s) com saldo'} />
-      <Metric label="Obrigação de IA" value={treasury.balances.liabilityUsd == null ? '—' : usd.format(treasury.balances.liabilityUsd)} detail={'Taxa conservadora: ' + (treasury.policy.reserveUsdPerMillionCredits == null ? 'não definida' : usd.format(treasury.policy.reserveUsdPerMillionCredits) + ' / 1M créditos')} />
-      <Metric label="Reserva recomendada" value={treasury.balances.requiredReserveUsd == null ? '—' : usd.format(treasury.balances.requiredReserveUsd)} detail={'Inclui ' + treasury.policy.bufferPercent + '% de segurança'} />
-      <Metric label="Saldo OpenAI de referência" value={treasury.balances.operationalBalanceUsd == null ? '—' : usd.format(treasury.balances.operationalBalanceUsd)} detail={treasury.balances.operationalBalanceSource === 'admin_panel' ? 'Informado neste painel' + (treasury.balances.operationalBalanceUpdatedAt ? ' em ' + new Date(treasury.balances.operationalBalanceUpdatedAt).toLocaleDateString('pt-BR') : '') : 'Referência manual do servidor'} />
-      <Metric label="Recarga recomendada agora" value={treasury.balances.recommendedTopUpUsd == null ? '—' : usd.format(treasury.balances.recommendedTopUpUsd)} detail="Para atingir obrigação + buffer" />
+      <Metric label="Obrigação de IA" value={treasury.balances.liabilityUsd == null ? '—' : formatUsd(treasury.balances.liabilityUsd)} detail={'Taxa conservadora: ' + (treasury.policy.reserveUsdPerMillionCredits == null ? 'não definida' : formatUsd(treasury.policy.reserveUsdPerMillionCredits) + ' / 1M créditos')} />
+      <Metric label="Reserva recomendada" value={treasury.balances.requiredReserveUsd == null ? '—' : formatUsd(treasury.balances.requiredReserveUsd)} detail={'Inclui ' + treasury.policy.bufferPercent + '% de segurança'} />
+      <Metric label="Saldo OpenAI de referência" value={treasury.balances.operationalBalanceUsd == null ? '—' : formatUsd(treasury.balances.operationalBalanceUsd)} detail={treasury.balances.operationalBalanceSource === 'admin_panel' ? 'Informado neste painel' + (treasury.balances.operationalBalanceUpdatedAt ? ' em ' + new Date(treasury.balances.operationalBalanceUpdatedAt).toLocaleDateString('pt-BR') : '') : 'Referência manual do servidor'} />
+      <Metric label="Recarga recomendada agora" value={treasury.balances.recommendedTopUpUsd == null ? '—' : formatUsd(treasury.balances.recommendedTopUpUsd)} detail="Para atingir obrigação + buffer" />
       <Metric label="Cobertura da obrigação" value={treasury.balances.coveragePercent == null ? '—' : treasury.balances.coveragePercent.toFixed(1) + '%'} detail={treasury.balances.requiredReserveCoveragePercent == null ? 'Buffer não calculado' : treasury.balances.requiredReserveCoveragePercent.toFixed(1) + '% da reserva recomendada'} />
-      <Metric label="Gasto OpenAI — 30 dias" value={officialSpend == null ? '—' : usd.format(officialSpend)} detail={treasury.spend.officialProvider.available ? 'Costs API oficial da organização' : 'Ledger Flip AI contabilizado'} />
+      <Metric label="Gasto OpenAI — 30 dias" value={officialSpend == null ? '—' : formatUsd(officialSpend)} detail={treasury.spend.officialProvider.available ? 'Costs API oficial da organização' : 'Ledger Flip AI contabilizado'} />
       <Metric label="Receita de créditos — 30 dias" value={brl.format(treasury.sales30d.revenueBrl)} detail={number.format(treasury.sales30d.creditsSold) + ' créditos vendidos'} />
     </div>
 
@@ -206,7 +217,7 @@ export default function AdminAiTreasuryPage() {
         </p>
         <p className="mt-3 text-sm">
           <strong>Alvo operacional atual:</strong>{' '}
-          {treasury.balances.requiredReserveUsd == null ? 'não calculado' : usd.format(treasury.balances.requiredReserveUsd)}
+          {treasury.balances.requiredReserveUsd == null ? 'não calculado' : formatUsd(treasury.balances.requiredReserveUsd)}
         </p>
       </Card>
     </div>
@@ -233,8 +244,8 @@ export default function AdminAiTreasuryPage() {
               <tr key={item.id} className="border-b last:border-0">
                 <td className="py-3 px-4 font-medium">{item.name}</td>
                 <td className="py-3 px-4 text-right">{number.format(item.credits)}</td>
-                <td className="py-3 px-4 text-right">{item.estimatedOpenAiCostCents > 0 ? usd.format(item.estimatedOpenAiCostUsd) : 'Não definida'}</td>
-                <td className="py-3 px-4 text-right">{item.reserveUsdPerMillion == null ? '—' : usd.format(item.reserveUsdPerMillion)}</td>
+                <td className="py-3 px-4 text-right">{item.estimatedOpenAiCostCents > 0 ? formatUsd(item.estimatedOpenAiCostUsd) : 'Não definida'}</td>
+                <td className="py-3 px-4 text-right">{item.reserveUsdPerMillion == null ? '—' : formatUsd(item.reserveUsdPerMillion)}</td>
               </tr>
             ))}
           </tbody>
@@ -286,8 +297,8 @@ export default function AdminAiTreasuryPage() {
                   </td>
                   <td className="py-3 px-4 text-right">{number.format(company.notBillableOperations)}</td>
                   <td className="py-3 px-4 text-right">{number.format(company.chargedCredits)}</td>
-                  <td className="py-3 px-4 text-right">{usd.format(company.chargedCostUsd)}</td>
-                  <td className="py-3 px-4 text-right">{usd.format(company.undebitedCostUsd)}</td>
+                  <td className="py-3 px-4 text-right">{formatUsd(company.chargedCostUsd)}</td>
+                  <td className="py-3 px-4 text-right">{formatUsd(company.undebitedCostUsd)}</td>
                 </tr>
               ))}
             </tbody>
@@ -320,7 +331,7 @@ export default function AdminAiTreasuryPage() {
                   <td className="py-3 px-4 font-medium">{tenant.tenantName}</td>
                   <td className="py-3 px-4 text-xs">{tenant.tenantStatus}</td>
                   <td className="py-3 px-4 text-right">{number.format(tenant.balanceCredits)}</td>
-                  <td className="py-3 px-4 text-right">{tenant.liabilityUsd == null ? '—' : usd.format(tenant.liabilityUsd)}</td>
+                  <td className="py-3 px-4 text-right">{tenant.liabilityUsd == null ? '—' : formatUsd(tenant.liabilityUsd)}</td>
                 </tr>
               ))}
             </tbody>
