@@ -14,6 +14,7 @@ import { TasksTab } from '@/components/tasks-tab';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity, normalizeBrazilState, formatLeadLocation } from '@/lib/brazil-locations';
 import { dateLikeToDateOnly, formatDateOnlyBR, todayDateOnly } from '@/lib/date-only';
+import { summarizeFlipAiQualificationScore } from '@/lib/flip-ai/qualification-score';
 
 interface Stage { id: string; name: string; color: string; }
 
@@ -692,6 +693,24 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     Consciência {qualification.awarenessLevel}/5 • {journeyLabels[qualification.journeyStage] || qualification.journeyStage}
                   </div>
                 </div>
+                {!lead.flipAiLiveIntelligence && (() => {
+                  // Shown only when there is no live reading, so the lead never displays two competing scores.
+                  const scoreSummary = summarizeFlipAiQualificationScore(qualification);
+                  return (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border bg-white p-3">
+                        <div className="text-xs text-muted-foreground">Score geral</div>
+                        <div className="text-2xl font-bold">{scoreSummary.score == null ? '—' : scoreSummary.score}</div>
+                        <div className="text-xs text-muted-foreground">de 0 a 100</div>
+                      </div>
+                      <div className="rounded-lg border bg-white p-3">
+                        <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
+                        <div className="text-xl font-bold">{temperatureLabels[scoreSummary.temperature] || 'Em análise'}</div>
+                        <div className="text-xs text-muted-foreground">Sugestão: não altera a temperatura do lead no CRM.</div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Fit Score</div>
