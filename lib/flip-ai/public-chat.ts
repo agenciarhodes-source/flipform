@@ -9,6 +9,7 @@ import { recordInboundMessage, recordOutboundMessage } from '@/lib/conversations
 import { FlipAiError } from './access';
 import { createOpenAiEmbeddings, OpenAiEmbeddingError, type EmbeddingResult } from './openai-embeddings';
 import { OpenAiResponseError, type OpenAiConversationInput, type OpenAiTextResult } from './openai-responses';
+import { getActiveFlipAiTextModel } from './text-model-setting';
 import {
   assertFlipAiConversationRuntimeReady,
   getFlipAiConversationExecutionPlan,
@@ -598,7 +599,7 @@ export async function preparePublicChatTurn(
     attribution: input.attribution || null,
   }));
   const requestKey = `chat:${runtime.tenantId}:${runtime.id}:${sessionHash}:${input.messageId}`;
-  const executionPlan = getFlipAiConversationExecutionPlan();
+  const executionPlan = getFlipAiConversationExecutionPlan((await getActiveFlipAiTextModel()).model);
 
   const inbound = await recordInboundMessage({
     tenantId: runtime.tenantId,

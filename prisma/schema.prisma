@@ -1589,3 +1589,13 @@ model GoogleConversionEvent {
   @@index([tenantId, createdAt])
   @@map("google_conversion_events")
 }
+
+model PlatformFlipAiSettings {
+  id          String   @id
+  textModel   String   @map("text_model")
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_flip_ai_settings")
+}

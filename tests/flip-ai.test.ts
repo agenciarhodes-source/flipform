@@ -1136,7 +1136,24 @@ test('PR 326 estimates OpenAI USD costs from confirmed tenant usage', () => {
     outputTokens: 50,
   });
   assert.deepEqual(search, { costNanoUsd: 20_080_000, coverage: 'full', reason: null });
-  assert.equal(OPENAI_PRICE_SNAPSHOT, '2026-09-30');
+  assert.equal(OPENAI_PRICE_SNAPSHOT, '2026-10-08');
+
+  const nextLuna = estimateOpenAiUsageCost({
+    operation: 'chat_response',
+    model: 'gpt-6-luna',
+    confirmedEvents: 1,
+    inputTokens: 1_000,
+    outputTokens: 500,
+  });
+  assert.deepEqual(nextLuna, { costNanoUsd: 350_000, coverage: 'full', reason: null });
+  const datedSnapshot = estimateOpenAiUsageCost({
+    operation: 'chat_response',
+    model: 'gpt-6-luna-2026-09-01',
+    confirmedEvents: 1,
+    inputTokens: 1_000,
+    outputTokens: 500,
+  });
+  assert.equal(datedSnapshot.costNanoUsd, 350_000);
 });
 
 test('PR 326 never invents unknown or unreconciled Realtime costs', () => {
