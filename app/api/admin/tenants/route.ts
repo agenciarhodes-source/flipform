@@ -3,6 +3,7 @@ import { Role, TenantStatus } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
+import { getClientFlipAiSummaries, resolveClientFlipAiSummary } from '@/lib/admin/client-flip-ai-summary';
 import { getClientTenantWhere } from '@/lib/admin/client-tenant-filter';
 
 export const GET = withPlatformAdmin(async (req) => {
@@ -74,6 +75,9 @@ export const GET = withPlatformAdmin(async (req) => {
 
   type TenantRow = typeof tenants[number];
 
+  // Wallet and consumption are aggregated per company, never per login.
+  const flipAiSummaries = await getClientFlipAiSummaries(tenants.map((tenant) => tenant.id));
+
   return NextResponse.json({
     tenants: (tenants as TenantRow[]).map((t) => ({
       id: t.id,
@@ -99,6 +103,7 @@ export const GET = withPlatformAdmin(async (req) => {
       usersCount: t._count.tenantUsers,
       leadsCount: t._count.leads,
       formsCount: t._count.forms,
+      flipAi: resolveClientFlipAiSummary(flipAiSummaries, t.id),
     })),
   });
 });
