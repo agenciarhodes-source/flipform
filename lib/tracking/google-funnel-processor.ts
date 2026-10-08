@@ -1,5 +1,6 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
+import { scheduleAfterResponse } from '@/lib/vercel-wait-until';
 import { GOOGLE_CONVERSION_MAX_ATTEMPTS, planGoogleConversionRetry } from './google-funnel';
 import {
   buildGoogleConversionIngestRequest,
@@ -175,4 +176,19 @@ export async function processGoogleConversionOutbox(
   }
 
   return summary;
+}
+
+/**
+ * Low-latency delivery right after a lead move, outside the request's critical
+ * path. With the transport off this is a no-op; a scheduler calling the cron
+ * route remains the safety net for retries.
+ */
+export function scheduleGoogleConversionDelivery() {
+  const config = resolveGoogleFunnelTransportConfig();
+  if (!config.enabled) return false;
+  const work = processGoogleConversionOutbox({ config }).then(
+    () => undefined,
+    () => undefined,
+  );
+  return scheduleAfterResponse(work);
 }

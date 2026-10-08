@@ -13,7 +13,7 @@ def test_move_route_queues_after_the_committed_transition_and_keeps_meta():
     route = read(MOVE)
     commit = route.index('await prisma.$transaction([')
     meta = route.index('await dispatchKanbanStageTracking({')
-    google = route.index('await enqueueGoogleConversionEvents({')
+    google = route.index('const googleEvents = await enqueueGoogleConversionEvents({')
     audit = route.index('await logAudit({')
     assert commit < meta < google < audit
     assert 'transitionId: stageHistory.id' in route
