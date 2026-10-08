@@ -31,6 +31,9 @@ export default function AdminAiTreasuryPage() {
   const [treasury, setTreasury] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [balanceInput, setBalanceInput] = useState('');
+  const [savingBalance, setSavingBalance] = useState(false);
+  const [balanceMessage, setBalanceMessage] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -45,6 +48,27 @@ export default function AdminAiTreasuryPage() {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveBalance = async () => {
+    setSavingBalance(true);
+    setBalanceMessage(null);
+    try {
+      const response = await fetch('/api/admin/flip-ai/treasury/operational-balance', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usd: balanceInput }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Erro');
+      setBalanceInput('');
+      setBalanceMessage('Saldo de referência salvo.');
+      await load();
+    } catch (saveError: any) {
+      setBalanceMessage(saveError.message || 'Não foi possível salvar o saldo de referência.');
+    } finally {
+      setSavingBalance(false);
     }
   };
 
@@ -115,7 +139,7 @@ export default function AdminAiTreasuryPage() {
 
     {treasury.balances.operationalBalanceStatus !== 'valid' && treasury.balances.liabilityUsd !== 0 && (
       <Card className="p-4 border-amber-200 bg-amber-50 text-sm text-amber-950">
-        Configure <code>OPENAI_OPERATIONAL_BALANCE_USD</code> no servidor para comparar a obrigação calculada
+        Informe o saldo OpenAI de referência no campo abaixo para comparar a obrigação calculada
         com a reserva operacional disponível.
       </Card>
     )}
@@ -124,12 +148,39 @@ export default function AdminAiTreasuryPage() {
       <Metric label="Créditos em circulação" value={number.format(treasury.balances.creditsInCirculation)} detail={number.format(treasury.balances.tenantsWithCredits) + ' cliente(s) com saldo'} />
       <Metric label="Obrigação de IA" value={treasury.balances.liabilityUsd == null ? '—' : usd.format(treasury.balances.liabilityUsd)} detail={'Taxa conservadora: ' + (treasury.policy.reserveUsdPerMillionCredits == null ? 'não definida' : usd.format(treasury.policy.reserveUsdPerMillionCredits) + ' / 1M créditos')} />
       <Metric label="Reserva recomendada" value={treasury.balances.requiredReserveUsd == null ? '—' : usd.format(treasury.balances.requiredReserveUsd)} detail={'Inclui ' + treasury.policy.bufferPercent + '% de segurança'} />
-      <Metric label="Saldo OpenAI de referência" value={treasury.balances.operationalBalanceUsd == null ? '—' : usd.format(treasury.balances.operationalBalanceUsd)} detail="Referência manual do servidor" />
+      <Metric label="Saldo OpenAI de referência" value={treasury.balances.operationalBalanceUsd == null ? '—' : usd.format(treasury.balances.operationalBalanceUsd)} detail={treasury.balances.operationalBalanceSource === 'admin_panel' ? 'Informado neste painel' + (treasury.balances.operationalBalanceUpdatedAt ? ' em ' + new Date(treasury.balances.operationalBalanceUpdatedAt).toLocaleDateString('pt-BR') : '') : 'Referência manual do servidor'} />
       <Metric label="Recarga recomendada agora" value={treasury.balances.recommendedTopUpUsd == null ? '—' : usd.format(treasury.balances.recommendedTopUpUsd)} detail="Para atingir obrigação + buffer" />
       <Metric label="Cobertura da obrigação" value={treasury.balances.coveragePercent == null ? '—' : treasury.balances.coveragePercent.toFixed(1) + '%'} detail={treasury.balances.requiredReserveCoveragePercent == null ? 'Buffer não calculado' : treasury.balances.requiredReserveCoveragePercent.toFixed(1) + '% da reserva recomendada'} />
       <Metric label="Gasto OpenAI — 30 dias" value={officialSpend == null ? '—' : usd.format(officialSpend)} detail={treasury.spend.officialProvider.available ? 'Costs API oficial da organização' : 'Ledger Flip AI contabilizado'} />
       <Metric label="Receita de créditos — 30 dias" value={brl.format(treasury.sales30d.revenueBrl)} detail={number.format(treasury.sales30d.creditsSold) + ' créditos vendidos'} />
     </div>
+
+    <Card className="p-5">
+      <h2 className="font-heading font-semibold">Saldo OpenAI de referência</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        A OpenAI não informa o saldo pré-pago por API. Digite aqui o valor que aparece em Billing na OpenAI sempre que
+        recarregar; ele é usado só para calcular cobertura e duração do caixa. Não movimenta dinheiro nem altera a
+        recarga da OpenAI.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block text-xs text-muted-foreground">Saldo atual em dólar (US$)</span>
+          <input
+            className="w-48 rounded border bg-background p-2"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Ex.: 50.00"
+            value={balanceInput}
+            onChange={(event) => setBalanceInput(event.target.value)}
+          />
+        </label>
+        <Button onClick={saveBalance} disabled={savingBalance || balanceInput.trim() === ''}>
+          {savingBalance ? 'Salvando...' : 'Salvar saldo'}
+        </Button>
+        {balanceMessage && <span className="text-xs text-muted-foreground">{balanceMessage}</span>}
+      </div>
+    </Card>
 
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="p-5">
