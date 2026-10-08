@@ -76,7 +76,7 @@ jobs:
       - name: Run tracking unit tests
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/tracking.test.ts tests/google-funnel.test.ts
+        run: npx tsx --test tests/tracking.test.ts tests/google-funnel.test.ts tests/google-data-manager.test.ts
 
       - name: Run Meta OAuth unit tests
         env:
