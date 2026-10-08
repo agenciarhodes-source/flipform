@@ -12,6 +12,7 @@ export async function createInternalTenant(tx: Prisma.TransactionClient, params:
       name: `Acesso interno ${params.email}`,
       slug,
       status: 'active',
+      accountKind: 'technical_access',
       planId: params.planId,
       internalNotes: `internal=true;createdByAdmin=true;source=manual_admin_access;adminUserId=${params.adminUserId ?? 'unknown'}`,
     },

@@ -5,6 +5,19 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/auth';
 import { getClientFlipAiSummaries, resolveClientFlipAiSummary } from '@/lib/admin/client-flip-ai-summary';
 import { getClientTenantWhere } from '@/lib/admin/client-tenant-filter';
+import { isTenantAccountKind } from '@/lib/admin/tenant-account-kind';
+
+// A company is represented by its owner. Companies without one (for example
+// stores run only by managers) fall back to the highest role they have.
+const RESPONSIBLE_ROLES: Role[] = [Role.owner, Role.admin, Role.manager];
+
+function pickResponsibles<T extends { role: Role }>(users: T[]): T[] {
+  for (const role of RESPONSIBLE_ROLES) {
+    const matching = users.filter((user) => user.role === role);
+    if (matching.length > 0) return matching;
+  }
+  return [];
+}
 
 export const GET = withPlatformAdmin(async (req) => {
   const { searchParams } = new URL(req.url);
@@ -15,9 +28,11 @@ export const GET = withPlatformAdmin(async (req) => {
 
   const clientsOnly = searchParams.get('clientsOnly') === 'true';
   const clientWhere = getClientTenantWhere();
-  const clientFilters: Prisma.TenantWhereInput[] = clientsOnly
-    ? (Array.isArray(clientWhere.AND) ? clientWhere.AND : [clientWhere])
-    : [];
+  const kind = searchParams.get('kind');
+  // An explicit kind wins; otherwise `clientsOnly` keeps the customer-only view.
+  const clientFilters: Prisma.TenantWhereInput[] = isTenantAccountKind(kind)
+    ? [{ accountKind: kind }]
+    : clientsOnly ? [clientWhere] : [];
 
   if (q) {
     clientFilters.push({
@@ -27,7 +42,7 @@ export const GET = withPlatformAdmin(async (req) => {
         {
           tenantUsers: {
             some: {
-              role: Role.owner,
+              role: { in: RESPONSIBLE_ROLES },
               user: {
                 OR: [
                   { name: { contains: q, mode: 'insensitive' } },
@@ -54,10 +69,11 @@ export const GET = withPlatformAdmin(async (req) => {
     include: {
       plan: { select: { id: true, name: true, price: true } },
       tenantUsers: {
-        where: { role: Role.owner },
+        where: { role: { in: RESPONSIBLE_ROLES } },
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
+          role: true,
           status: true,
           createdAt: true,
           user: {
@@ -86,14 +102,16 @@ export const GET = withPlatformAdmin(async (req) => {
       logoUrl: t.logoUrl,
       primaryColor: t.primaryColor,
       status: t.status,
+      accountKind: t.accountKind,
       planId: t.planId,
       planName: t.plan?.name || null,
       planPrice: t.plan ? Number(t.plan.price) : null,
       nextDueDate: t.nextDueDate,
       lastLoginAt: t.lastLoginAt,
       createdAt: t.createdAt,
-      owners: t.tenantUsers.map((tenantUser) => ({
+      owners: pickResponsibles(t.tenantUsers).map((tenantUser) => ({
         tenantUserId: tenantUser.id,
+        role: tenantUser.role,
         userId: tenantUser.user.id,
         name: tenantUser.user.name,
         email: tenantUser.user.email,

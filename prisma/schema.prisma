@@ -92,6 +92,7 @@ model Tenant {
   planId        String?      @map("plan_id")
   nextDueDate   DateTime?    @map("next_due_date")
   internalNotes String?      @map("internal_notes")
+  accountKind   String       @default("unclassified") @map("account_kind")
   lastLoginAt   DateTime?    @map("last_login_at")
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
@@ -145,6 +146,7 @@ model Tenant {
   googleConversionMappings GoogleConversionMapping[]
   googleConversionEvents GoogleConversionEvent[]
 
+  @@index([accountKind])
   @@map("tenants")
 }
 

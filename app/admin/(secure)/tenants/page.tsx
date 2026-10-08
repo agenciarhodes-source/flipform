@@ -11,23 +11,48 @@ import { StatusBadge } from '@/components/admin/status-badge';
 
 const credits = new Intl.NumberFormat('pt-BR');
 
+const KIND_LABELS: Record<string, string> = {
+  client: 'Cliente',
+  internal_test: 'Teste interno',
+  technical_access: 'Acesso técnico',
+  unclassified: 'Não classificado',
+};
+const ROLE_LABELS: Record<string, string> = { owner: 'Dono', admin: 'Administrador', manager: 'Gestor' };
+
 export default function AdminTenantsPage() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState('all');
   const [q, setQ] = useState('');
+  const [kind, setKind] = useState('client');
 
   const load = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (status !== 'all') params.set('status', status);
     if (q) params.set('q', q);
-    params.set('clientsOnly', 'true');
+    if (kind === 'client') params.set('clientsOnly', 'true');
+    else if (kind !== 'all') params.set('kind', kind);
     const data = await fetch(`/api/admin/tenants?${params}`).then((r) => r.json());
     setTenants(data.tenants || []);
     setLoading(false);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [status, kind]);
+
+  const changeKind = async (id: string, accountKind: string) => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/account-kind`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountKind }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error || 'Erro');
+      }
+      toast.success('Tipo de conta atualizado');
+      load();
+    } catch (e: any) { toast.error(e.message); }
+  };
 
   const changeStatus = async (id: string, newStatus: string, label: string) => {
     if (newStatus !== 'active' && !confirm(`Tem certeza que deseja ${label.toLowerCase()} este tenant?`)) return;
@@ -51,7 +76,7 @@ export default function AdminTenantsPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Empresas comerciais com perfil Dono da empresa (owner). Acessos técnicos de login e os demais usuários continuam disponíveis no painel Acessos. A carteira e o consumo de IA são da empresa, somando todos os acessos dela.
+            Empresas classificadas como Cliente. O tipo de cada conta é definido aqui, na coluna Tipo; contas de teste interno e acessos técnicos ficam fora desta lista por padrão. Os usuários de cada empresa continuam disponíveis no painel Acessos. A carteira e o consumo de IA são da empresa, somando todos os acessos dela.
           </p>
         </div>
       </div>
@@ -69,6 +94,19 @@ export default function AdminTenantsPage() {
                 onKeyDown={(e) => e.key === 'Enter' && load()}
               />
             </div>
+          </div>
+          <div className="min-w-[180px]">
+            <label className="text-xs text-muted-foreground">Tipo</label>
+            <Select value={kind} onValueChange={setKind}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="client">Clientes</SelectItem>
+                <SelectItem value="unclassified">Não classificados</SelectItem>
+                <SelectItem value="internal_test">Teste interno</SelectItem>
+                <SelectItem value="technical_access">Acesso técnico</SelectItem>
+                <SelectItem value="all">Todos</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="min-w-[180px]">
             <label className="text-xs text-muted-foreground">Status</label>
@@ -93,14 +131,19 @@ export default function AdminTenantsPage() {
         {loading ? (
           <div className="p-10 text-center text-muted-foreground"><Loader2 className="w-5 h-5 inline animate-spin mr-2" />Carregando...</div>
         ) : tenants.length === 0 ? (
-          <div className="p-10 text-center text-muted-foreground">Nenhum cliente encontrado.</div>
+          <div className="p-10 text-center text-muted-foreground">
+            {kind === 'client'
+              ? 'Nenhuma conta classificada como Cliente. Use o filtro Tipo para ver as não classificadas e definir o tipo de cada uma.'
+              : 'Nenhuma conta encontrada.'}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b">
                 <tr className="text-xs uppercase text-muted-foreground">
                   <th className="text-left py-3 px-4">Cliente</th>
-                  <th className="text-left py-3 px-4">Dono da empresa</th>
+                  <th className="text-left py-3 px-4">Tipo</th>
+                  <th className="text-left py-3 px-4">Responsável</th>
                   <th className="text-left py-3 px-4">Status</th>
                   <th className="text-left py-3 px-4">Plano</th>
                   <th className="text-right py-3 px-4">Acessos</th>
@@ -120,12 +163,25 @@ export default function AdminTenantsPage() {
                       <Link href={`/admin/tenants/${t.id}`} className="font-medium hover:underline">{t.name}</Link>
                       <div className="text-xs text-muted-foreground">{t.slug}</div>
                     </td>
+                    <td className="py-3 px-4">
+                      <select
+                        className="rounded border bg-background px-2 py-1 text-xs"
+                        value={t.accountKind}
+                        aria-label="Tipo de conta"
+                        onChange={(e) => changeKind(t.id, e.target.value)}
+                      >
+                        {Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </td>
                     <td className="py-3 px-4 min-w-[220px]">
                       {t.owners?.length ? (
                         <div className="space-y-1.5">
                           {t.owners.map((owner: any) => (
                             <div key={owner.tenantUserId}>
                               <div className="font-medium">{owner.name}</div>
+                              {owner.role !== 'owner' && (
+                                <div className="text-[11px] text-muted-foreground">{ROLE_LABELS[owner.role] || owner.role} (sem dono cadastrado)</div>
+                              )}
                               <div className="text-xs text-muted-foreground">{owner.email}</div>
                               {owner.status !== 'active' && (
                                 <div className="text-[11px] text-amber-700">Acesso owner: {owner.status}</div>
@@ -133,7 +189,7 @@ export default function AdminTenantsPage() {
                             </div>
                           ))}
                         </div>
-                      ) : null}
+                      ) : <span className="text-xs text-muted-foreground">Sem responsável</span>}
                     </td>
                     <td className="py-3 px-4"><StatusBadge status={t.status} /></td>
                     <td className="py-3 px-4">{t.planName ? <span>{t.planName} <span className="text-xs text-muted-foreground">(R$ {Number(t.planPrice).toFixed(2)})</span></span> : <span className="text-muted-foreground">—</span>}</td>

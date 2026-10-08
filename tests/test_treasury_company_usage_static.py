@@ -10,7 +10,8 @@ def read(path: str) -> str:
 def test_usage_is_grouped_by_company_never_by_login():
     treasury = read("lib/flip-ai/treasury.ts")
     query = treasury.split("prisma.$queryRaw<CompanyUsageRow[]>")[1].split("`),")[0]
-    assert "GROUP BY e.tenant_id, t.name" in query
+    assert "GROUP BY e.tenant_id, t.name, t.account_kind" in query
+    assert 't.account_kind AS "accountKind"' in query
     assert "FROM flip_ai_usage_events e" in query
     assert "INNER JOIN tenants t ON t.id = e.tenant_id" in query
     assert "user_id" not in query

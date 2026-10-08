@@ -14,6 +14,12 @@ const usd = new Intl.NumberFormat('en-US', {
 });
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
+const ACCOUNT_KIND_LABELS: Record<string, string> = {
+  internal_test: 'Teste interno',
+  technical_access: 'Acesso técnico',
+  unclassified: 'Não classificado',
+};
+
 const STATUS: Record<string, { label: string; className: string }> = {
   healthy: { label: 'Saudável', className: 'border-emerald-200 bg-emerald-50 text-emerald-900' },
   attention: { label: 'Atenção', className: 'border-amber-200 bg-amber-50 text-amber-950' },
@@ -191,7 +197,7 @@ export default function AdminAiTreasuryPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           Soma todos os acessos de cada empresa. Operações sem débito foram confirmadas e atendidas, mas não puderam ser
           descontadas da carteira (saldo insuficiente ou cobrança indisponível). Não faturáveis são operações sem custo
-          confirmado para cobrar.
+          confirmado para cobrar. Contas que não são cliente aparecem com a etiqueta do tipo; o custo delas é real.
         </p>
       </div>
       {!treasury.companyUsage30d?.length ? (
@@ -214,7 +220,14 @@ export default function AdminAiTreasuryPage() {
             <tbody>
               {treasury.companyUsage30d.map((company: any) => (
                 <tr key={company.tenantId} className="border-b last:border-0">
-                  <td className="py-3 px-4 font-medium">{company.tenantName}</td>
+                  <td className="py-3 px-4 font-medium">
+                    {company.tenantName}
+                    {company.accountKind !== 'client' && (
+                      <span className="ml-2 rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-normal text-slate-700">
+                        {ACCOUNT_KIND_LABELS[company.accountKind] || 'Não classificado'}
+                      </span>
+                    )}
+                  </td>
                   <td className="py-3 px-4 text-right">{number.format(company.confirmedOperations)}</td>
                   <td className="py-3 px-4 text-right">{number.format(company.chargedOperations)}</td>
                   <td className={company.undebitedOperations > 0 ? 'py-3 px-4 text-right font-medium text-amber-700' : 'py-3 px-4 text-right'}>

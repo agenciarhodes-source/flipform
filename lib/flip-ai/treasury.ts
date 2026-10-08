@@ -29,6 +29,7 @@ type UsageSpendRow = {
 type CompanyUsageRow = {
   tenantId: string;
   tenantName: string;
+  accountKind: string;
   confirmedOperations: bigint | number | string;
   chargedOperations: bigint | number | string;
   undebitedOperations: bigint | number | string;
@@ -104,6 +105,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       SELECT
         e.tenant_id AS "tenantId",
         t.name AS "tenantName",
+        t.account_kind AS "accountKind",
         COUNT(*) FILTER (WHERE e.status = 'confirmed') AS "confirmedOperations",
         COUNT(*) FILTER (
           WHERE e.status = 'confirmed' AND e.metadata->'billing'->>'status' = 'charged'
@@ -143,7 +145,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       FROM flip_ai_usage_events e
       INNER JOIN tenants t ON t.id = e.tenant_id
       WHERE e.created_at >= ${since30d} AND e.created_at <= ${now}
-      GROUP BY e.tenant_id, t.name
+      GROUP BY e.tenant_id, t.name, t.account_kind
       HAVING COUNT(*) FILTER (WHERE e.status = 'confirmed') > 0
       ORDER BY "confirmedOperations" DESC, t.name ASC
       LIMIT 100
@@ -153,6 +155,8 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
   const companyUsage30d = companyUsageRows.map((row) => ({
     tenantId: row.tenantId,
     tenantName: row.tenantName,
+    // Internal and test accounts still spend real provider money, so they are labelled, not hidden.
+    accountKind: row.accountKind,
     confirmedOperations: Math.trunc(number(row.confirmedOperations)),
     chargedOperations: Math.trunc(number(row.chargedOperations)),
     undebitedOperations: Math.trunc(number(row.undebitedOperations)),
