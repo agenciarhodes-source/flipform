@@ -6,6 +6,8 @@ import { FLIP_AI_TEXT_MODEL_CATALOG, isSelectableFlipAiTextModel } from '@/lib/f
 import { getActiveFlipAiTextModel, probeFlipAiTextModel, setActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 
 export const dynamic = 'force-dynamic';
+// Activation waits for a live model probe before saving.
+export const maxDuration = 30;
 
 const NO_STORE = { 'Cache-Control': 'private, no-store' };
 
