@@ -16,7 +16,24 @@ def test_cron_route_is_authenticated_before_processing():
     assert auth < run
     assert "status: 401" in route
     assert 'rateLimit(' in route
-    assert 'export async function GET' not in route
+    # Both verbs share the same authenticated handler.
+    assert route.count('return run(req,') == 2
+    assert route.count('isCronRequestAuthorized') == 2
+
+
+def test_scheduler_stays_decoupled_from_vercel_cron():
+    assert not (ROOT / 'vercel.json').exists()
+
+
+def test_move_route_schedules_delivery_after_the_response_only_when_queued():
+    move = read('app/api/leads/[id]/move/route.ts')
+    assert "if (googleEvents.some((event) => event.status === 'queued')) scheduleGoogleConversionDelivery();" in move
+    assert 'await scheduleGoogleConversionDelivery' not in move
+    assert 'processGoogleConversionOutbox' not in move
+    processor = read(PROCESSOR)
+    schedule = processor.split('export function scheduleGoogleConversionDelivery')[1]
+    assert schedule.index('if (!config.enabled) return false;') < schedule.index('processGoogleConversionOutbox({ config })')
+    assert 'scheduleAfterResponse(work)' in schedule
 
 
 def test_processor_stops_before_reading_when_gates_are_closed():

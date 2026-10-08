@@ -146,7 +146,9 @@ Regras:
 
 ## Processador da fila
 
-`POST /api/cron/google-conversions` (autenticado por `CRON_SECRET`, como os demais jobs) executa `processGoogleConversionOutbox`. Sem um agendador chamando essa rota, nada é enviado.
+`/api/cron/google-conversions` (autenticado por `CRON_SECRET`, como os demais jobs) executa `processGoogleConversionOutbox`. Aceita `GET` (agendador) e `POST` (execução manual), como o worker central de automações. O projeto não usa `vercel.json`: o agendamento fica no mesmo agendador externo dos demais jobs. Sem `CRON_SECRET` no ambiente a rota responde `401`, e com o transporte desligado ela termina sem ler a fila.
+
+Além do agendador, a movimentação no Kanban dispara o processador logo após a resposta (`scheduleGoogleConversionDelivery`), fora do caminho crítico da requisição e somente quando um evento foi enfileirado. Com o transporte desligado essa chamada não faz nada. O agendador continua sendo a rede de segurança para as novas tentativas.
 
 A cada execução:
 

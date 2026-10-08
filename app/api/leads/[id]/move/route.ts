@@ -4,6 +4,7 @@ import { withPermission, canMoveLead } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { dispatchKanbanStageTracking } from '@/lib/tracking';
 import { enqueueGoogleConversionEvents } from '@/lib/tracking/google-funnel-outbox';
+import { scheduleGoogleConversionDelivery } from '@/lib/tracking/google-funnel-processor';
 
 export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { params: { id: string } }) => {
   try {
@@ -71,7 +72,7 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     });
 
     // Queue only; never blocks or undoes the move, and nothing is sent to Google here.
-    await enqueueGoogleConversionEvents({
+    const googleEvents = await enqueueGoogleConversionEvents({
       tenantId: session.tenantId,
       leadId: lead.id,
       pipelineId: newStage.pipelineId,
@@ -80,6 +81,8 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
       occurredAt: stageHistory.createdAt,
       triggeredById: session.userId,
     });
+    // Delivery runs after the response; it is a no-op while the transport is off.
+    if (googleEvents.some((event) => event.status === 'queued')) scheduleGoogleConversionDelivery();
 
     await logAudit({
       tenantId: session.tenantId, userId: session.userId,
