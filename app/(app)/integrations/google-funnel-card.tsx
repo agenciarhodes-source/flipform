@@ -20,6 +20,58 @@ type Mapping = {
   enabled: boolean;
 };
 
+type FunnelEvent = {
+  id: string;
+  stageId: string;
+  conversionActionResource: string;
+  state: string;
+  attempts: number;
+  lastErrorCode: string | null;
+  createdAt: string;
+  lastAttemptAt: string | null;
+};
+type TransportMode = 'off' | 'dry_run' | 'live';
+
+const TRANSPORT_NOTICES: Record<TransportMode, { className: string; text: string }> = {
+  off: {
+    className: 'border-amber-200 bg-amber-50 text-amber-950',
+    text: 'O envio ao Google Ads não está ativo para esta conta. Conversões ativas registram os eventos na fila quando um lead é movido no Kanban, mas nada é transmitido.',
+  },
+  dry_run: {
+    className: 'border-blue-200 bg-blue-50 text-blue-950',
+    text: 'Modo de teste: o Google valida cada evento, mas não registra conversão. Os eventos validados ficam na fila e são enviados quando o envio real for ligado.',
+  },
+  live: {
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-950',
+    text: 'Envio ativo: cada lead movido para uma etapa com conversão ativa é enviado ao Google Ads.',
+  },
+};
+
+const FAILURE_REASONS: Record<string, string> = {
+  NO_IDENTIFIER: 'lead sem clique do Google Ads',
+  TENANT_ACCOUNT_NOT_ALLOWED: 'conta Google Ads não liberada para esta empresa',
+  LEAD_NOT_FOUND: 'lead não encontrado',
+  EXPIRED: 'evento antigo demais para o Google',
+  MAX_ATTEMPTS: 'limite de tentativas atingido',
+  INVALID_CONVERSION_ACTION: 'ação de conversão inválida',
+};
+
+function describeEventStatus(event: FunnelEvent) {
+  const code = event.lastErrorCode ? ' (' + event.lastErrorCode + ')' : '';
+  if (event.state === 'SENT') return 'Enviado ao Google';
+  if (event.state === 'ACCEPTED') return 'Confirmado pelo Google';
+  if (event.state === 'REJECTED') return 'Rejeitado pelo Google' + code;
+  if (event.state === 'RETRY') return 'Nova tentativa agendada' + code;
+  if (event.state === 'FAILED') {
+    const reason = event.lastErrorCode ? FAILURE_REASONS[event.lastErrorCode] || event.lastErrorCode : '';
+    return reason ? 'Não enviado: ' + reason : 'Não enviado';
+  }
+  if (event.lastErrorCode === 'DRY_RUN_VALIDATED') return 'Validado em teste, aguardando envio real';
+  return 'Na fila';
+}
+
+const eventDateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
+
 const CATEGORY_LABELS: Record<string, string> = {
   lead: 'Lead',
   qualified_lead: 'Lead qualificado',
@@ -78,6 +130,8 @@ export function GoogleFunnelCard() {
   const [unavailable, setUnavailable] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [recentEvents, setRecentEvents] = useState<FunnelEvent[]>([]);
+  const [transportMode, setTransportMode] = useState<TransportMode>('off');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +146,8 @@ export function GoogleFunnelCard() {
       const loaded: Pipeline[] = payload.pipelines || [];
       setPipelines(loaded);
       setMappings(payload.mappings || []);
+      setRecentEvents(payload.recentEvents || []);
+      setTransportMode(payload.transport?.mode === 'live' || payload.transport?.mode === 'dry_run' ? payload.transport.mode : 'off');
       setPipelineId((current) => (loaded.some((item) => item.id === current) ? current : loaded[0]?.id || ''));
     } catch {
       setUnavailable('Não foi possível carregar o funil Google Ads.');
@@ -194,9 +250,8 @@ export function GoogleFunnelCard() {
           </p>
         </div>
 
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          O envio ao Google Ads ainda não está ativo. Conversões ativas já registram os eventos na fila quando um lead é
-          movido no Kanban, mas nada é transmitido por enquanto.
+        <div className={'rounded-lg border p-3 text-sm ' + TRANSPORT_NOTICES[transportMode].className}>
+          {TRANSPORT_NOTICES[transportMode].text}
         </div>
 
         {loading && <p className="text-sm text-muted-foreground">Carregando...</p>}
@@ -272,6 +327,33 @@ export function GoogleFunnelCard() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-medium">Últimos eventos do Google Ads</h3>
+                <button type="button" className="text-sm underline" onClick={() => void load()}>Atualizar</button>
+              </div>
+              {recentEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted-foreground">Nenhum evento registrado ainda.</p>
+              ) : (
+                <div className="mt-2 space-y-2 text-sm">
+                  {recentEvents.map((event) => {
+                    const stage = pipelines.flatMap((item) => item.stages).find((item) => item.id === event.stageId);
+                    const mapping = mappings.find((item) => item.conversionActionResource === event.conversionActionResource);
+                    return (
+                      <div key={event.id} className="flex flex-wrap justify-between gap-x-3 gap-y-1 border-b pb-1">
+                        <span>
+                          google_ads · {mapping?.conversionActionName || event.conversionActionResource} · {stage?.name || 'etapa removida'}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {describeEventStatus(event)} · {eventDateTime.format(new Date(event.createdAt))}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {pipeline && (

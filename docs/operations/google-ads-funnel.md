@@ -103,7 +103,9 @@ Esta camada é só configuração e não envia conversão.
 
 ## Tela
 
-Em **Integrações → Google Ads — Funil de conversões** (`app/(app)/integrations/google-funnel-card.tsx`), o owner ou admin escolhe o pipeline e vê todas as etapas em ordem: as que têm ação de conversão e as internas. É possível adicionar, ativar, desativar e remover conversões. A tela usa somente a API acima, avisa que o envio ao Google ainda não está ativo e mostra a mensagem de indisponibilidade quando as tabelas não existem no ambiente.
+Em **Integrações → Google Ads — Funil de conversões** (`app/(app)/integrations/google-funnel-card.tsx`), o owner ou admin escolhe o pipeline e vê todas as etapas em ordem: as que têm ação de conversão e as internas. É possível adicionar, ativar, desativar e remover conversões. A tela usa somente a API acima e mostra a mensagem de indisponibilidade quando as tabelas não existem no ambiente.
+
+O card também mostra o modo do transporte para aquela empresa (desligado, teste ou envio ativo) e a lista **Últimos eventos do Google Ads**: ação, etapa, situação e horário dos 15 eventos mais recentes da fila. A lista não traz dados do lead, payload nem mensagem do provedor; só o estado e um código simbólico traduzido.
 
 ## Fila de eventos
 
