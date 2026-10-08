@@ -104,6 +104,12 @@ test('first_entry sinaliza o lead uma única vez por etapa', async () => {
     const reentry = await enqueueGoogleConversionEvents(transition(x));
     assert.deepEqual(reentry.map((item) => item.status), ['already_signaled']);
 
+    // An event that never reached Google (failed or cancelled) does not block a later real signal.
+    await prisma.googleConversionEvent.updateMany({ where: { tenantId: x.tenant.id }, data: { state: 'FAILED', lastErrorCode: 'CANCELLED_TEST' } });
+    const afterCancel = await enqueueGoogleConversionEvents(transition(x));
+    assert.deepEqual(afterCancel.map((item) => item.status), ['queued']);
+    await prisma.googleConversionEvent.deleteMany({ where: { tenantId: x.tenant.id, state: 'FAILED' } });
+
     const events = await prisma.googleConversionEvent.findMany({ where: { tenantId: x.tenant.id } });
     assert.equal(events.length, 1);
     assert.equal(events[0].state, 'PENDING');

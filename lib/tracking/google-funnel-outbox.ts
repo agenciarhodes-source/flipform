@@ -60,7 +60,13 @@ async function enqueueForTransition(input: GoogleConversionEnqueueInput): Promis
       // Per conversion action, not per stage: two stages mapped to the same
       // action (alternative paths to "qualified") signal the lead only once.
       const signaled = await prisma.googleConversionEvent.findFirst({
-        where: { tenantId: input.tenantId, leadId: input.leadId, conversionActionResource: mapping.conversionActionResource },
+        // A failed or cancelled event never reached Google, so it must not block a later, real signal.
+        where: {
+          tenantId: input.tenantId,
+          leadId: input.leadId,
+          conversionActionResource: mapping.conversionActionResource,
+          state: { not: 'FAILED' },
+        },
         select: { id: true },
       });
       if (signaled) {
