@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Search, ExternalLink, Power, Ban, ShieldOff, RotateCcw } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/status-badge';
 
+const credits = new Intl.NumberFormat('pt-BR');
+
 export default function AdminTenantsPage() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +51,7 @@ export default function AdminTenantsPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Empresas comerciais com perfil Dono da empresa (owner). Acessos técnicos de login e os demais usuários continuam disponíveis no painel Acessos.
+            Empresas comerciais com perfil Dono da empresa (owner). Acessos técnicos de login e os demais usuários continuam disponíveis no painel Acessos. A carteira e o consumo de IA são da empresa, somando todos os acessos dela.
           </p>
         </div>
       </div>
@@ -104,6 +106,8 @@ export default function AdminTenantsPage() {
                   <th className="text-right py-3 px-4">Acessos</th>
                   <th className="text-right py-3 px-4">Formulários</th>
                   <th className="text-right py-3 px-4">Leads</th>
+                  <th className="text-right py-3 px-4">Carteira IA</th>
+                  <th className="text-right py-3 px-4">Consumo IA (30 dias)</th>
                   <th className="text-left py-3 px-4">Último login</th>
                   <th className="text-left py-3 px-4">Vence em</th>
                   <th className="text-right py-3 px-4">Ações</th>
@@ -136,6 +140,8 @@ export default function AdminTenantsPage() {
                     <td className="py-3 px-4 text-right">{t.usersCount}</td>
                     <td className="py-3 px-4 text-right">{t.formsCount}</td>
                     <td className="py-3 px-4 text-right">{t.leadsCount}</td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">{t.flipAi ? `${credits.format(t.flipAi.balanceCredits)} créditos` : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="py-3 px-4 text-right whitespace-nowrap">{t.flipAi ? `${credits.format(t.flipAi.consumedCredits30d)} créditos` : <span className="text-muted-foreground">—</span>}</td>
                     <td className="py-3 px-4 text-xs text-muted-foreground">{t.lastLoginAt ? new Date(t.lastLoginAt).toLocaleString('pt-BR') : '—'}</td>
                     <td className="py-3 px-4 text-xs text-muted-foreground">{t.nextDueDate ? new Date(t.nextDueDate).toLocaleDateString('pt-BR') : '—'}</td>
                     <td className="py-3 px-4 text-right">
