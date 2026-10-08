@@ -26,6 +26,17 @@ type UsageSpendRow = {
   chargedOperations: bigint | number | string;
 };
 
+type CompanyUsageRow = {
+  tenantId: string;
+  tenantName: string;
+  confirmedOperations: bigint | number | string;
+  chargedOperations: bigint | number | string;
+  undebitedOperations: bigint | number | string;
+  chargedCredits: bigint | number | string;
+  chargedCostNanoUsd: bigint | number | string;
+  undebitedCostNanoUsd: bigint | number | string;
+};
+
 function number(value: bigint | number | string | null | undefined) {
   const parsed = Number(value || 0);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -45,7 +56,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
 
   const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1_000);
 
-  const [tenantBalances, localUsageRows, sales30d] = await Promise.all([
+  const [tenantBalances, localUsageRows, sales30d, companyUsageRows] = await Promise.all([
     prisma.$queryRaw<TenantBalanceRow[]>(Prisma.sql`
       SELECT
         a.tenant_id AS "tenantId",
@@ -88,7 +99,72 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       },
       _count: { _all: true },
     }),
+    // Consumption is analysed per company (tenant), never per individual login.
+    prisma.$queryRaw<CompanyUsageRow[]>(Prisma.sql`
+      SELECT
+        e.tenant_id AS "tenantId",
+        t.name AS "tenantName",
+        COUNT(*) FILTER (WHERE e.status = 'confirmed') AS "confirmedOperations",
+        COUNT(*) FILTER (
+          WHERE e.status = 'confirmed' AND e.metadata->'billing'->>'status' = 'charged'
+        ) AS "chargedOperations",
+        COUNT(*) FILTER (
+          WHERE e.status = 'confirmed'
+            AND e.metadata->'billing'->>'status' IN ('insufficient_balance', 'billing_unavailable', 'failed')
+        ) AS "undebitedOperations",
+        COALESCE(SUM(
+          CASE
+            WHEN e.metadata->'billing'->>'amountCredits' ~ '^[0-9]+$'
+              THEN (e.metadata->'billing'->>'amountCredits')::numeric
+            ELSE 0
+          END
+        ) FILTER (
+          WHERE e.status = 'confirmed' AND e.metadata->'billing'->>'status' = 'charged'
+        ), 0) AS "chargedCredits",
+        COALESCE(SUM(
+          CASE
+            WHEN e.metadata->'billing'->>'costNanoUsd' ~ '^[0-9]+$'
+              THEN (e.metadata->'billing'->>'costNanoUsd')::numeric
+            ELSE 0
+          END
+        ) FILTER (
+          WHERE e.status = 'confirmed' AND e.metadata->'billing'->>'status' = 'charged'
+        ), 0) AS "chargedCostNanoUsd",
+        COALESCE(SUM(
+          CASE
+            WHEN e.metadata->'billing'->>'costNanoUsd' ~ '^[0-9]+$'
+              THEN (e.metadata->'billing'->>'costNanoUsd')::numeric
+            ELSE 0
+          END
+        ) FILTER (
+          WHERE e.status = 'confirmed'
+            AND e.metadata->'billing'->>'status' IN ('insufficient_balance', 'billing_unavailable', 'failed')
+        ), 0) AS "undebitedCostNanoUsd"
+      FROM flip_ai_usage_events e
+      INNER JOIN tenants t ON t.id = e.tenant_id
+      WHERE e.created_at >= ${since30d} AND e.created_at <= ${now}
+      GROUP BY e.tenant_id, t.name
+      HAVING COUNT(*) FILTER (WHERE e.status = 'confirmed') > 0
+      ORDER BY "confirmedOperations" DESC, t.name ASC
+      LIMIT 100
+    `),
   ]);
+
+  const companyUsage30d = companyUsageRows.map((row) => ({
+    tenantId: row.tenantId,
+    tenantName: row.tenantName,
+    confirmedOperations: Math.trunc(number(row.confirmedOperations)),
+    chargedOperations: Math.trunc(number(row.chargedOperations)),
+    undebitedOperations: Math.trunc(number(row.undebitedOperations)),
+    // Confirmed operations with no confirmed cost to bill (e.g. unpriced or partial cost).
+    notBillableOperations: Math.max(
+      0,
+      Math.trunc(number(row.confirmedOperations) - number(row.chargedOperations) - number(row.undebitedOperations)),
+    ),
+    chargedCredits: Math.trunc(number(row.chargedCredits)),
+    chargedCostUsd: roundUsd(number(row.chargedCostNanoUsd) / 1_000_000_000),
+    undebitedCostUsd: roundUsd(number(row.undebitedCostNanoUsd) / 1_000_000_000),
+  }));
 
   const creditsInCirculation = tenantBalances.reduce(
     (sum, item) => sum + Math.max(0, item.balanceCredits),
@@ -199,6 +275,7 @@ export async function getFlipAiTreasuryDashboard(now = new Date()) {
       ),
     },
     tenants: tenants.slice(0, 100),
+    companyUsage30d,
     provider: {
       name: 'openai' as const,
       balanceEndpointAvailable: false,

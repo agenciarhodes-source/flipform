@@ -187,6 +187,53 @@ export default function AdminAiTreasuryPage() {
 
     <Card className="p-0 overflow-hidden">
       <div className="p-4 border-b">
+        <h2 className="font-heading font-semibold">Consumo por empresa — 30 dias</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Soma todos os acessos de cada empresa. Operações sem débito foram confirmadas e atendidas, mas não puderam ser
+          descontadas da carteira (saldo insuficiente ou cobrança indisponível). Não faturáveis são operações sem custo
+          confirmado para cobrar.
+        </p>
+      </div>
+      {!treasury.companyUsage30d?.length ? (
+        <div className="p-6 text-sm text-muted-foreground">Nenhuma operação confirmada no período.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 border-b">
+              <tr className="text-xs uppercase text-muted-foreground">
+                <th className="text-left py-3 px-4">Empresa</th>
+                <th className="text-right py-3 px-4">Operações confirmadas</th>
+                <th className="text-right py-3 px-4">Cobradas</th>
+                <th className="text-right py-3 px-4">Sem débito</th>
+                <th className="text-right py-3 px-4">Não faturáveis</th>
+                <th className="text-right py-3 px-4">Créditos consumidos</th>
+                <th className="text-right py-3 px-4">Custo coberto</th>
+                <th className="text-right py-3 px-4">Custo sem débito</th>
+              </tr>
+            </thead>
+            <tbody>
+              {treasury.companyUsage30d.map((company: any) => (
+                <tr key={company.tenantId} className="border-b last:border-0">
+                  <td className="py-3 px-4 font-medium">{company.tenantName}</td>
+                  <td className="py-3 px-4 text-right">{number.format(company.confirmedOperations)}</td>
+                  <td className="py-3 px-4 text-right">{number.format(company.chargedOperations)}</td>
+                  <td className={company.undebitedOperations > 0 ? 'py-3 px-4 text-right font-medium text-amber-700' : 'py-3 px-4 text-right'}>
+                    {number.format(company.undebitedOperations)}
+                  </td>
+                  <td className="py-3 px-4 text-right">{number.format(company.notBillableOperations)}</td>
+                  <td className="py-3 px-4 text-right">{number.format(company.chargedCredits)}</td>
+                  <td className="py-3 px-4 text-right">{usd.format(company.chargedCostUsd)}</td>
+                  <td className="py-3 px-4 text-right">{usd.format(company.undebitedCostUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+
+    <Card className="p-0 overflow-hidden">
+      <div className="p-4 border-b">
         <h2 className="font-heading font-semibold">Maiores obrigações por cliente</h2>
         <p className="mt-1 text-xs text-muted-foreground">Ordenado pelo saldo de créditos ainda disponível.</p>
       </div>
