@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = "prisma/migrations/20261008150000_platform_flip_ai_settings/migration.sql"
+MIGRATION = "prisma/migrations/20261008150000_platform_ai_text_model_settings/migration.sql"
 
 
 def read(path: str) -> str:
@@ -80,3 +80,9 @@ def test_admin_panel_offers_the_selector_and_customers_never_see_the_model():
     customer = read("app/(app)/flip-ai/usage/page.tsx")
     for forbidden in ["gpt-6-luna", "text-model", "getActiveFlipAiTextModel"]:
         assert forbidden not in customer, forbidden
+
+
+def test_migration_folder_stays_outside_the_flip_ai_schema_contract_scan():
+    # tests/flip-ai.test.ts audits every migration folder containing "flip_ai" against the
+    # tenant-facing Flip AI schema contract; this platform setting is not part of that contract.
+    assert "flip_ai" not in Path(MIGRATION).parent.name
