@@ -169,7 +169,15 @@ jobs:
         env:
           CI: "true"
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/flip-ai.integration.test.ts tests/stripe-top-up-webhook.integration.test.ts tests/google-funnel-outbox.integration.test.ts tests/google-funnel-processor.integration.test.ts
+        run: npx tsx --test tests/flip-ai.integration.test.ts tests/stripe-top-up-webhook.integration.test.ts
+
+      # Kept in its own step so database suites do not compete for the runner and a
+      # failure points at the suite that caused it.
+      - name: Run Google funnel database tests
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test --test-concurrency=1 tests/google-funnel-outbox.integration.test.ts tests/google-funnel-processor.integration.test.ts
 
       - name: Build
         run: npm run build
