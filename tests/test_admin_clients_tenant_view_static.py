@@ -1,46 +1,92 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+MIGRATION = "prisma/migrations/20261008120000_tenant_account_kind/migration.sql"
 
 
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_admin_clients_route_is_platform_admin_only_and_owner_company_centric():
+def test_client_filter_uses_only_the_explicit_account_kind():
+    helper = read("lib/admin/client-tenant-filter.ts")
+    assert "function getClientTenantWhere" in helper
+    assert "return { accountKind: 'client' };" in helper
+    # Names, internal notes and roles are not evidence of what a customer is.
+    for heuristic in ["internalNotes", "startsWith", "Role.owner", "tenantUsers"]:
+        assert heuristic not in helper, heuristic
+    assert "getClientTenantWhere()" in read("app/api/admin/overview/route.ts")
+
+
+def test_account_kind_values_match_between_code_schema_and_database():
+    kinds = read("lib/admin/tenant-account-kind.ts")
+    migration = read(MIGRATION)
+    schema = read("prisma/schema.prisma")
+    assert "['unclassified', 'client', 'internal_test', 'technical_access']" in kinds
+    assert "('unclassified', 'client', 'internal_test', 'technical_access')" in migration
+    assert 'accountKind   String       @default("unclassified") @map("account_kind")' in schema
+    assert "@@index([accountKind])" in schema
+
+
+def test_migration_is_additive_and_touches_only_the_new_column():
+    lines = [line for line in read(MIGRATION).splitlines() if not line.strip().startswith("--")]
+    sql = "\n".join(lines).upper()
+    for forbidden in ["DROP ", "TRUNCATE", "DELETE FROM", "UPDATE ", "RENAME ", "ALTER COLUMN", "INSERT "]:
+        assert forbidden not in sql, forbidden
+    assert sql.count("ADD COLUMN") == 1
+    assert "DEFAULT 'UNCLASSIFIED'" in sql
+
+
+def test_admin_clients_route_is_platform_admin_only_and_filters_by_kind():
     route = read("app/api/admin/tenants/route.ts")
     assert "withPlatformAdmin" in route
     assert "prisma.tenant.findMany" in route
-    assert "clientsOnly" in route
-    assert "getClientTenantWhere" in route
-    assert "clientWhere" in route
-    helper = read("lib/admin/client-tenant-filter.ts")
-    assert "startsWith: 'internal-'" in helper
-    assert "startsWith: 'Acesso interno '" in helper
-    assert "contains: 'internal=true'" in helper
-    assert "owners: t.tenantUsers.map" in route
+    assert "isTenantAccountKind(kind)" in route
+    assert "? [{ accountKind: kind }]" in route
+    assert ": clientsOnly ? [clientWhere] : [];" in route
+    assert "accountKind: t.accountKind," in route
 
 
-def test_admin_clients_search_only_uses_owner_accounts_as_people_filter():
+def test_companies_without_an_owner_still_show_a_responsible():
     route = read("app/api/admin/tenants/route.ts")
-    assert "role: Role.owner" in route
-    assert "{ name: { contains: q, mode: 'insensitive' } }" in route
-    assert "{ email: { contains: q, mode: 'insensitive' } }" in route
-    assert "role: Role.admin" not in route
-    assert "role: Role.manager" not in route
-    assert "role: Role.agent" not in route
+    assert "const RESPONSIBLE_ROLES: Role[] = [Role.owner, Role.admin, Role.manager];" in route
+    assert "owners: pickResponsibles(t.tenantUsers).map" in route
+    assert "Role.agent" not in route
+    assert "Role.viewer" not in route
+    page = read("app/admin/(secure)/tenants/page.tsx")
+    assert "(sem dono cadastrado)" in page
+    assert "Sem responsável" in page
 
 
-def test_admin_clients_page_separates_companies_from_access_accounts():
+def test_account_kind_change_is_audited_and_changes_nothing_else():
+    route = read("app/api/admin/tenants/[id]/account-kind/route.ts")
+    assert "export const PUT = withPlatformAdmin" in route
+    assert "tenantAccountKindSchema.safeParse" in route
+    assert "data: { accountKind }" in route
+    assert "platform.tenant_account_kind_changed" in route
+    assert "metadata: { previous: tenant.accountKind, next: accountKind }" in route
+    for forbidden in ["tenantStatusHistory", "planId", "tenantUser", "prisma.lead", ".delete(", "deleteMany", "internalNotes"]:
+        assert forbidden not in route, forbidden
+
+
+def test_admin_clients_page_defaults_to_clients_and_lets_the_admin_classify():
     page = read("app/admin/(secure)/tenants/page.tsx")
     assert ">Clientes<" in page
-    assert "Empresas comerciais com perfil Dono da empresa (owner)." in page
+    assert "useState('client')" in page
+    assert "if (kind === 'client') params.set('clientsOnly', 'true');" in page
+    assert "else if (kind !== 'all') params.set('kind', kind);" in page
+    assert "/account-kind" in page
+    for label in ["Cliente", "Teste interno", "Acesso técnico", "Não classificado"]:
+        assert label in page
     assert "painel Acessos" in page
-    assert "Sem dono cadastrado" not in page
-    assert "t.owners.map" in page
 
 
-def test_admin_clients_view_does_not_change_schema_or_operational_data():
+def test_technical_access_tenants_are_classified_when_created():
+    creator = read("lib/admin/create-internal-tenant.ts")
+    assert "accountKind: 'technical_access'," in creator
+
+
+def test_admin_clients_view_does_not_change_operational_data():
     route = read("app/api/admin/tenants/route.ts")
     for forbidden in [
         "prisma.tenant.update",
@@ -51,19 +97,3 @@ def test_admin_clients_view_does_not_change_schema_or_operational_data():
         "CREATE TABLE",
     ]:
         assert forbidden not in route
-
-
-def test_admin_client_filter_is_canonical_and_overview_uses_it():
-    helper = read("lib/admin/client-tenant-filter.ts")
-    overview = read("app/api/admin/overview/route.ts")
-    assert "function getClientTenantWhere" in helper
-    assert "role: Role.owner" in helper
-    assert "startsWith: 'internal-'" in helper
-    assert "startsWith: 'Acesso interno '" in helper
-    assert "contains: 'internal=true'" in helper
-    assert "getClientTenantWhere()" in overview
-
-
-def test_admin_clients_page_requests_client_only_tenants():
-    page = read("app/admin/(secure)/tenants/page.tsx")
-    assert "params.set('clientsOnly', 'true')" in page
