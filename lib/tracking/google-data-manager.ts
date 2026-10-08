@@ -274,3 +274,10 @@ export async function sendGoogleConversionIngest(
   }
   return { outcome: 'rejected', code: code === 'UNKNOWN' ? `HTTP_${response.status}` : code };
 }
+
+/** What a tenant may know about the transport: no credential, account list or other tenant. */
+export function describeGoogleFunnelTransportForTenant(config: GoogleFunnelTransportConfig, tenantId: string) {
+  const paired = (config.tenantAccounts.get(tenantId)?.size ?? 0) > 0;
+  if (!config.enabled || !config.serviceAccount || !paired) return { mode: 'off' as const };
+  return { mode: config.validateOnly ? ('dry_run' as const) : ('live' as const) };
+}

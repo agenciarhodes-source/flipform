@@ -3,6 +3,8 @@ import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { logPlatformAudit } from '@/lib/platform-audit';
+import { describeGoogleFunnelTransportForTenant, resolveGoogleFunnelTransportConfig } from '@/lib/tracking/google-data-manager';
+import { listRecentGoogleConversionEvents } from '@/lib/tracking/google-funnel-outbox';
 import {
   GOOGLE_FUNNEL_SCHEMA_PENDING_MESSAGE,
   createGoogleFunnelMapping,
@@ -14,8 +16,9 @@ export const dynamic = 'force-dynamic';
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => {
   try {
-    const [mappings, pipelines] = await Promise.all([
+    const [mappings, recentEvents, pipelines] = await Promise.all([
       listGoogleFunnelMappings(session.tenantId),
+      listRecentGoogleConversionEvents(session.tenantId),
       prisma.pipeline.findMany({
         where: { tenantId: session.tenantId, isArchived: false },
         select: {
@@ -26,7 +29,8 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
         orderBy: [{ isDefault: 'desc' }, { createdAt: 'asc' }],
       }),
     ]);
-    return NextResponse.json({ mappings, pipelines });
+    const transport = describeGoogleFunnelTransportForTenant(resolveGoogleFunnelTransportConfig(), session.tenantId);
+    return NextResponse.json({ mappings, pipelines, recentEvents, transport });
   } catch (error) {
     if (isGoogleFunnelSchemaPendingError(error)) {
       return NextResponse.json({ error: GOOGLE_FUNNEL_SCHEMA_PENDING_MESSAGE }, { status: 503 });

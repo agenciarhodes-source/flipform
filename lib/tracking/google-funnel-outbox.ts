@@ -139,3 +139,22 @@ export async function enqueueGoogleConversionEvents(
     return [];
   }
 }
+
+/** Read-only activity log for the tenant's own screen. No lead data, payload or provider message. */
+export async function listRecentGoogleConversionEvents(tenantId: string, limit = 15) {
+  return prisma.googleConversionEvent.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(Math.max(limit, 1), 50),
+    select: {
+      id: true,
+      stageId: true,
+      conversionActionResource: true,
+      state: true,
+      attempts: true,
+      lastErrorCode: true,
+      createdAt: true,
+      lastAttemptAt: true,
+    },
+  });
+}
