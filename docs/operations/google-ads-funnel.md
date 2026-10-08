@@ -124,7 +124,7 @@ Nesta etapa os eventos ficam em `PENDING` e nada é enviado ao Google. Só a mov
 
 `lib/tracking/google-data-manager.ts` monta e envia a conversão para `POST https://datamanager.googleapis.com/v1/events:ingest`. A Data Manager API não usa developer token; a autenticação é por service account com o escopo `https://www.googleapis.com/auth/datamanager`.
 
-Este módulo ainda não é chamado por nenhuma rota ou job: nenhum evento da fila é enviado. Ele é fail-closed e depende de todas as variáveis abaixo.
+Ele é chamado somente pelo processador da fila (abaixo), é fail-closed e depende de todas as variáveis abaixo.
 
 | Variável | Padrão | Função |
 | --- | --- | --- |
@@ -144,10 +144,32 @@ Regras:
 - Uma tentativa por chamada, sem retry interno. `401`, `403`, `408`, `429` e `5xx` viram nova tentativa; demais `4xx` são rejeição. Só um código simbólico é devolvido; mensagens do provedor, tokens e payloads não são registrados.
 - Resposta `200` significa que o Google aceitou a requisição para processamento (`SENT`), não que a conversão foi atribuída.
 
+## Processador da fila
+
+`POST /api/cron/google-conversions` (autenticado por `CRON_SECRET`, como os demais jobs) executa `processGoogleConversionOutbox`. Sem um agendador chamando essa rota, nada é enviado.
+
+A cada execução:
+
+1. Se o transporte estiver desligado, sem credencial ou sem nenhum tenant pareado, termina sem ler a fila.
+2. Lê até 10 eventos `PENDING`/`RETRY` vencidos, somente de tenants pareados em `GOOGLE_FUNNEL_TENANT_ACCOUNTS`.
+3. Reserva cada evento de forma otimista (duas execuções simultâneas não enviam o mesmo evento) e incrementa a tentativa.
+4. Lê e-mail, telefone e `gclid` do lead, monta a requisição e chama o transporte.
+5. Grava o resultado:
+
+| Resultado | Estado | Observação |
+| --- | --- | --- |
+| Aceito pelo Google | `SENT` | Atribuição é confirmada depois, pelos diagnósticos do Google. |
+| Dry run validado | `PENDING` | Não consome tentativa; reavaliado em 1 hora. Código `DRY_RUN_VALIDATED`. |
+| Rejeitado (`4xx`) | `REJECTED` | Final. |
+| Falha temporária | `RETRY` | Backoff de 1 minuto a 6 horas, até 6 tentativas; depois `FAILED`. |
+| Sem identificador, conta não pareada, lead inexistente, evento com mais de 80 dias | `FAILED` | Sem chamada ao Google. Códigos `NO_IDENTIFIER`, `TENANT_ACCOUNT_NOT_ALLOWED`, `LEAD_NOT_FOUND`, `EXPIRED`. |
+
+O processador só atualiza `google_conversion_events`. Leads, etapas e atribuição são apenas lidos. Uma falha no meio do envio mantém a reserva por 10 minutos e o evento é reenviado com o mesmo `transactionId`, que o Google usa para deduplicar.
+
 ## Próximas etapas
 
 1. **Atribuição e demais origens**: colunas `gbraid`/`wbraid` em `lead_attributions`, evento de `Lead` na criação pelo formulário e retomada de `awaiting_purchase`. Ainda sem envio.
-2. **Processador da fila**: job que lê eventos `PENDING`/`RETRY`, chama o transporte e atualiza estado, tentativas e auditoria.
+2. **Operação**: agendar o job, parear o tenant piloto, validar em dry run e só então liberar o envio real.
 3. **UI administrativa**: pipeline, etapa, ação de conversão, primária/secundária, valor, moeda e ativação.
 4. **Analytics**: leads, qualificados, oportunidades, contratos, receita, custo, origem e campanha.
 

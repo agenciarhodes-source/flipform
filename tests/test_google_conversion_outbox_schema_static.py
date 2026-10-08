@@ -73,7 +73,7 @@ def test_existing_attribution_and_tracking_tables_are_untouched():
 def test_only_the_funnel_modules_touch_the_new_tables():
     tracking = ROOT / 'lib' / 'tracking'
     mapping_users = {tracking / 'google-funnel-mappings.ts', tracking / 'google-funnel-outbox.ts'}
-    event_users = {tracking / 'google-funnel-outbox.ts'}
+    event_users = {tracking / 'google-funnel-outbox.ts', tracking / 'google-funnel-processor.ts'}
     for folder in ['app', 'lib']:
         for path in (ROOT / folder).rglob('*.ts*'):
             source = path.read_text(encoding='utf-8')
