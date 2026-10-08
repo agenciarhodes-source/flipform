@@ -114,7 +114,7 @@ Quando um usuário move um lead no Kanban (`POST /api/leads/{id}/move`), depois 
 | Resultado | Significado |
 | --- | --- |
 | `queued` | Evento criado na fila. |
-| `already_signaled` | Regra `first_entry` e o lead já tem evento para esse mapeamento. |
+| `already_signaled` | Regra `first_entry` e o lead já tem evento para essa ação de conversão, mesmo que por outra etapa. |
 | `duplicate` | A mesma transição já gerou o evento (chave idempotente). |
 | `awaiting_purchase` | Modo `purchase` sem `LeadPurchase`; nenhum evento é criado. |
 

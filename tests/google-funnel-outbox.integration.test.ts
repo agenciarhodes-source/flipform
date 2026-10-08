@@ -117,6 +117,38 @@ test('first_entry sinaliza o lead uma única vez por etapa', async () => {
   }
 });
 
+test('duas etapas com a mesma ação sinalizam o lead uma única vez', async () => {
+  assertDisposableDatabase();
+  const x = await fixture();
+  try {
+    const firstStage = x.pipeline.stages[0];
+    for (const stageId of [firstStage.id, x.qualifiedStage.id]) {
+      const created = await createGoogleFunnelMapping({ tenantId: x.tenant.id, userId: 'ci-user', body: mappingBody(x, { stageId }) });
+      assert.equal(created.ok, true);
+    }
+    const other = await createGoogleFunnelMapping({
+      tenantId: x.tenant.id,
+      userId: 'ci-user',
+      body: mappingBody(x, { conversionActionResource: 'customers/1234567890/conversionActions/222', conversionCategory: 'converted_lead' }),
+    });
+    assert.equal(other.ok, true);
+
+    const first = await enqueueGoogleConversionEvents({ ...transition(x), stageId: firstStage.id });
+    assert.deepEqual(first.map((item) => item.status), ['queued']);
+    // The second stage shares the first action (already signaled) and adds a different one.
+    const second = await enqueueGoogleConversionEvents(transition(x));
+    assert.deepEqual(second.map((item) => item.status).sort(), ['already_signaled', 'queued']);
+
+    const events = await prisma.googleConversionEvent.findMany({ where: { tenantId: x.tenant.id } });
+    assert.deepEqual(
+      events.map((event) => event.conversionActionResource).sort(),
+      ['customers/1234567890/conversionActions/111', 'customers/1234567890/conversionActions/222'],
+    );
+  } finally {
+    await cleanup(x);
+  }
+});
+
 test('every_entry não duplica a mesma transição', async () => {
   assertDisposableDatabase();
   const x = await fixture();
