@@ -12,6 +12,7 @@ import {
   PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
 import { OpenAiResponseError } from '@/lib/flip-ai/openai-responses';
+import { toPublicFlipAiErrorMessage } from '@/lib/flip-ai/public-error-message';
 import {
   assertFlipAiConversationRuntimeReady,
   executeFlipAiConversationResponse,
@@ -56,7 +57,10 @@ function attachSessionCookie(response: NextResponse, token: string, created: boo
 
 function jsonError(error: unknown, token: string, created: boolean) {
   if (error instanceof FlipAiError) {
-    return attachSessionCookie(NextResponse.json({ error: error.message, code: error.code }, { status: error.status }), token, created);
+    return attachSessionCookie(NextResponse.json({
+      error: toPublicFlipAiErrorMessage(error.code, error.message),
+      code: error.code,
+    }, { status: error.status }), token, created);
   }
   return attachSessionCookie(NextResponse.json({
     error: 'Não foi possível processar a mensagem agora.',
@@ -283,7 +287,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           code: failure.code,
           retryRequiresConfirmation: true,
           message: failure instanceof FlipAiConversationRuntimeError
-            ? failure.message
+            ? toPublicFlipAiErrorMessage(failure.code, failure.message)
             : failure.kind === 'ambiguous'
               ? 'A resposta ficou incerta. Confirme antes de tentar novamente.'
               : 'Não foi possível responder agora. Confirme uma nova tentativa.',
