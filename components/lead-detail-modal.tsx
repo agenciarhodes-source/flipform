@@ -707,6 +707,44 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   </div>}
                 </div>
 
+                {lead.flipAiQualifications?.length > 0 && !lead.flipAiLiveIntelligence.brainAssessment && (() => {
+                  // Two independent gradings of the same conversation, shown side by side for comparison.
+                  const attendant = lead.flipAiQualifications[0];
+                  const attendantScore = summarizeFlipAiQualificationScore(attendant).score;
+                  const engine = lead.flipAiLiveIntelligence;
+                  const rows = [
+                    { label: 'Score geral', attendant: attendantScore, engine: engine.engineScore ?? engine.score },
+                    { label: 'Aderência (fit)', attendant: attendant.fitScore, engine: engine.engineFitScore ?? engine.fitScore },
+                    { label: 'Intenção', attendant: attendant.intentScore, engine: engine.engineIntentScore ?? engine.intentScore },
+                  ];
+                  return (
+                    <div className="rounded-lg border bg-white p-3">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comparativo de notas</div>
+                      <table className="mt-2 w-full text-sm">
+                        <thead>
+                          <tr className="text-xs text-muted-foreground">
+                            <th className="py-1 text-left font-normal">Nota</th>
+                            <th className="py-1 text-right font-normal">Atendente de IA</th>
+                            <th className="py-1 text-right font-normal">JEV</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row) => (
+                            <tr key={row.label} className="border-t">
+                              <td className="py-1.5">{row.label}</td>
+                              <td className="py-1.5 text-right font-semibold">{row.attendant ?? '—'}</td>
+                              <td className="py-1.5 text-right text-muted-foreground">{row.engine ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        A nota que vale para o lead é a do atendente de IA. A do JEV é a leitura da última mensagem e aparece só para comparação.
+                      </p>
+                    </div>
+                  );
+                })()}
+
                 {lead.flipAiLiveIntelligence.brainAssessment && (
                   <div className="rounded-lg border bg-white p-3 text-sm">
                     <div className="font-semibold">Perfil: {lead.flipAiLiveIntelligence.brainAssessment.profileLabel || 'Ainda não identificado'}</div>

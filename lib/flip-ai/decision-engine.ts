@@ -121,16 +121,17 @@ export function isJevEnabledForTenant(input: {
     && allowlist.tenantIds.includes(input.tenantId.trim().toLowerCase());
 }
 
+/**
+ * What the conversation model is told about the JEV reading: the moment of the conversation only.
+ * Scores are left out on purpose, so the attendant grades the lead from the conversation itself
+ * instead of copying the engine's numbers into the final qualification.
+ */
 export function decisionHint(decision: FlipAiConversationDecision | null) {
   if (!decision) return null;
   return [
     `intenção=${decision.intent}`,
     `objeção=${decision.objection}`,
     `estágio=${decision.journeyStage}`,
-    `fit=${decision.fitScore}/100`,
-    ...(typeof decision.intentScore === 'number' ? [`força_intenção=${decision.intentScore}/100`] : []),
-    `urgência=${decision.urgencyScore}/100`,
-    ...(typeof decision.readinessScore === 'number' ? [`prontidão=${decision.readinessScore}/100`] : []),
     `próxima_ação=${decision.nextAction}`,
     ...(decision.actionSignals ? (() => {
       const eligibility = resolveFlipAiActionEligibility({
@@ -144,6 +145,5 @@ export function decisionHint(decision: FlipAiConversationDecision | null) {
       ];
     })() : []),
     `humano=${decision.needsHuman ? 'sim' : 'não'}`,
-    `confiança=${decision.confidence.toFixed(2)}`,
   ].join('; ');
 }

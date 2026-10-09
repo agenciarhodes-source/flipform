@@ -53,6 +53,10 @@ export type FlipAiLeadIntelligenceSnapshot = {
   usageEventId: string;
   /** Set when the finished qualification of the conversation overrode the per-message reading. */
   finalQualificationApplied?: boolean;
+  /** The engine's own numbers before that override, kept only for the side-by-side comparison. */
+  engineScore?: number | null;
+  engineFitScore?: number;
+  engineIntentScore?: number;
 };
 
 /**
@@ -72,6 +76,9 @@ export function applyFinalDisqualification(
     intentScore: Math.min(snapshot.intentScore, boundScore(final.intentScore)),
     scoreDelta: null,
     finalQualificationApplied: true,
+    engineScore: snapshot.score,
+    engineFitScore: snapshot.fitScore,
+    engineIntentScore: snapshot.intentScore,
   };
 }
 
