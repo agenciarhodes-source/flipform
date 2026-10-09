@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { resolveTypingDelayMs, splitReplyIntoMessages } from '@/lib/flip-ai/typing-pace';
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Bot, LoaderCircle, Mic, RotateCcw, Send, Square } from 'lucide-react';
+import { Bot, LoaderCircle, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
 import { FlipAiRealtimeVoiceClient, type FlipAiVoiceState } from '@/lib/flip-ai/realtime-client';
 import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
@@ -25,7 +25,16 @@ type RetryTurn = {
   text: string;
   speakReply: boolean;
   inputMode: 'text' | 'voice';
+  file: File | null;
 };
+
+// Mirrors the server limits; the server checks the real bytes again.
+const ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
+const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
+
+function attachmentLabel(file: File) {
+  return `📎 ${file.name.slice(0, 120)}`;
+}
 
 function safeColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#2563EB';
@@ -78,6 +87,8 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     text: `Olá! Sou ${agent.name}, da ${agent.tenantName}. Como posso ajudar você hoje?`,
   }]);
   const [input, setInput] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [voiceState, setVoiceState] = useState<FlipAiVoiceState>('idle');
   const [retryTurn, setRetryTurn] = useState<RetryTurn | null>(null);
@@ -104,6 +115,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     confirmRetry: boolean,
     speakReply = false,
     inputMode: 'text' | 'voice' = 'text',
+    attachedFile: File | null = null,
   ) {
     if (sendingRef.current) return;
     const assistantId = `ai:${messageId}`;
@@ -116,7 +128,12 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
       const hasUser = withoutPreviousAssistant.some((message) => message.id === messageId);
       return [
         ...withoutPreviousAssistant,
-        ...(hasUser ? [] : [{ id: messageId, role: 'user' as const, text }]),
+        ...(hasUser ? [] : [{
+          id: messageId,
+          role: 'user' as const,
+          // The bubble shows the message and, below it, the name of the attached file.
+          text: attachedFile && text !== attachmentLabel(attachedFile) ? `${text}\n${attachmentLabel(attachedFile)}` : text,
+        }]),
         { id: assistantId, role: 'assistant' as const, text: '', streaming: true },
       ];
     });
@@ -124,17 +141,22 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     let assistantText = '';
     const startedAt = Date.now();
     try {
-      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messageId,
-          text,
-          confirmRetry,
-          inputMode,
-          attribution: buildPublicAttribution(window.location.href, document.referrer),
-        }),
+      const payload = JSON.stringify({
+        messageId,
+        text,
+        confirmRetry,
+        inputMode,
+        attribution: buildPublicAttribution(window.location.href, document.referrer),
       });
+      let requestInit: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload };
+      if (attachedFile) {
+        // With a photo or document the browser sends a multipart body and sets its own content type.
+        const form = new FormData();
+        form.set('payload', payload);
+        form.set('file', attachedFile);
+        requestInit = { method: 'POST', body: form };
+      }
+      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, requestInit);
       if (!response.ok || !response.body) {
         const problem = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(problem.error || 'Não foi possível enviar sua mensagem.');
@@ -213,7 +235,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     } catch (failure) {
       setMessages((current) => current.map((message) =>
         message.id === assistantId ? { ...message, streaming: false } : message));
-      setRetryTurn({ messageId, text, speakReply, inputMode });
+      setRetryTurn({ messageId, text, speakReply, inputMode, file: attachedFile });
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar sua mensagem.');
     } finally {
       sendingRef.current = false;
@@ -223,10 +245,28 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const text = input.trim();
+    // A file can go alone: its name stands in for the message.
+    const text = input.trim() || (file ? attachmentLabel(file) : '');
     if (!text || sendingRef.current || voiceActive) return;
+    const attachedFile = file;
     setInput('');
-    void sendTurn(crypto.randomUUID(), text, false, false, 'text');
+    setFile(null);
+    void sendTurn(crypto.randomUUID(), text, false, false, 'text', attachedFile);
+  }
+
+  function chooseFile(chosen: File | null) {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (!chosen) return;
+    if (chosen.size > ATTACHMENT_MAX_BYTES) {
+      setError('O arquivo é maior que 4 MB. Envie um arquivo menor ou uma foto.');
+      return;
+    }
+    if (!ATTACHMENT_ACCEPT.split(',').includes(chosen.type)) {
+      setError('Envie uma foto (JPG, PNG ou WEBP) ou um documento em PDF.');
+      return;
+    }
+    setError(null);
+    setFile(chosen);
   }
 
   async function toggleVoice() {
@@ -308,6 +348,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
                     true,
                     retryTurn.speakReply,
                     retryTurn.inputMode,
+                    retryTurn.file,
                   )}
                   className="mt-2 inline-flex items-center gap-2 font-medium underline underline-offset-2">
                   <RotateCcw className="h-4 w-4" /> Confirmar nova tentativa
@@ -319,11 +360,29 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
         </div>
 
         <form onSubmit={submit} className="border-t bg-white p-3">
+          {file && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              <Paperclip className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">{file.name}</span>
+              <button type="button" onClick={() => setFile(null)} aria-label="Remover arquivo"
+                className="flex h-5 w-5 items-center justify-center rounded-full hover:bg-slate-200">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden"
+            onChange={(event) => chooseFile(event.target.files?.[0] || null)} />
           <div className="flex items-center gap-2 rounded-full border bg-slate-50 px-2 py-2 pl-4">
             <input value={input} onChange={(event) => setInput(event.target.value)}
               disabled={sending || voiceActive} maxLength={2_000} autoComplete="off" aria-label="Mensagem"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-500"
               placeholder={voiceActive ? 'Conversa por voz ativa' : 'Digite sua mensagem...'} />
+            <button disabled={sending || voiceActive} type="button"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Anexar foto ou documento"
+              className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-slate-700 disabled:opacity-50">
+              <Paperclip className="h-4 w-4" />
+            </button>
             <button disabled={sending && !voiceActive} type="button"
               onClick={() => void toggleVoice()}
               aria-label={voiceActive ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
@@ -333,7 +392,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
                 ? <LoaderCircle className="h-4 w-4 animate-spin" />
                 : voiceActive ? <Square className="h-3.5 w-3.5" /> : <Mic className="h-4 w-4" />}
             </button>
-            <button disabled={sending || voiceActive || !input.trim()} type="submit" aria-label="Enviar mensagem"
+            <button disabled={sending || voiceActive || (!input.trim() && !file)} type="submit" aria-label="Enviar mensagem"
               className="flex h-9 w-9 items-center justify-center rounded-full text-white disabled:opacity-50"
               style={{ backgroundColor: sendButtonColor, color: readableTextColor(sendButtonColor) }}>
               {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden="true" />}

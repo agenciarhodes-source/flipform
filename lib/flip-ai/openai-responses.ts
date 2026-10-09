@@ -1,4 +1,5 @@
 import 'server-only';
+import type { FlipAiModelContentPart } from './chat-attachment';
 
 import { z } from 'zod';
 
@@ -11,7 +12,7 @@ export const FLIP_AI_RECOVERY_MAX_OUTPUT_TOKENS = 4_000;
 
 export type OpenAiConversationInput = {
   instructions: string;
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  messages: Array<{ role: 'user' | 'assistant'; content: string | FlipAiModelContentPart[] }>;
 };
 
 export type OpenAiJsonSchemaFormat = {
