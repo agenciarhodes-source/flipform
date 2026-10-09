@@ -568,7 +568,9 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     </div>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    JEV • confiança {Math.round(Number(lead.flipAiLiveIntelligence.confidence || 0) * 100)}%
+                    {lead.flipAiLiveIntelligence.finalQualificationApplied
+                      ? 'Qualificação final da conversa: desqualificado'
+                      : `JEV • confiança ${Math.round(Number(lead.flipAiLiveIntelligence.confidence || 0) * 100)}%`}
                   </div>
                 </div>
 

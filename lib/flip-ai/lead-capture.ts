@@ -54,10 +54,20 @@ export async function captureFlipAiLead(input: {
   conversationId: string;
   decision: FlipAiIdentityDecision;
   attribution: LeadAttributionSnapshot;
+  /** Classification decided in this same turn, when there is one. */
+  finalClassification?: string | null;
  }): Promise<{ meta?: { pixelId: string; eventId: string }; gtmContainerId?: string } | null> {
   const name = input.decision.name?.trim().slice(0, 160) || '';
   const phone = normalizeBrazilianPhone(input.decision.phone);
   if (!name || !phone || !isValidBrazilianPhone(phone)) return null;
+  // Out-of-profile contacts are not registered: no Lead, no rotation and no Lead event.
+  // The conversation and its qualification stay stored for review.
+  if (input.finalClassification === 'disqualified') return null;
+  const storedQualification = await prisma.flipAiQualification.findFirst({
+    where: { tenantId: input.runtime.tenantId, conversationId: input.conversationId },
+    select: { classification: true },
+  }).catch(() => null);
+  if (storedQualification?.classification === 'disqualified') return null;
   if (!(await hasUserEvidence({
     tenantId: input.runtime.tenantId,
     conversationId: input.conversationId,
