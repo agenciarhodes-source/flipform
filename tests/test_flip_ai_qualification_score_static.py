@@ -27,7 +27,7 @@ def test_modal_shows_the_attendant_score_and_hides_the_competing_live_score():
     assert "feita pelo atendente de IA {qualification.agent?.name || 'Flip AI'}" in modal
     assert "Score geral" in modal
     assert "Temperatura sugerida" in modal
-    assert "Sugestão: não altera a temperatura do lead no CRM." in modal
+    assert "Aplicada ao lead na qualificação, se ninguém tiver alterado a temperatura antes." in modal
 
 
 def test_suggestion_never_writes_to_the_crm():
