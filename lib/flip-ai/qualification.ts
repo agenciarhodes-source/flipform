@@ -154,6 +154,9 @@ async function dispatchQualifiedLeadOnce(input: {
   }
 }
 
+/** A conversation can only be closed as disqualified after the person wrote at least this many messages. */
+export const FLIP_AI_MIN_INBOUND_TO_DISQUALIFY = 2;
+
 /** Temperature a lead receives when Flip AI captures it, before any qualification. */
 export const FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE = 'warm' as const;
 
@@ -200,6 +203,19 @@ export async function finalizeFlipAiQualification(input: {
       },
     });
     if (validEvidenceCount !== evidence.length) return null;
+
+    if (parsed.data.classification === 'disqualified') {
+      // A verdict this final needs something the person actually said; one opening message is not enough.
+      const inboundMessages = await db.message.count({
+        where: {
+          tenantId: input.runtime.tenantId,
+          conversationId: input.conversationId,
+          direction: 'inbound',
+          type: 'text',
+        },
+      });
+      if (inboundMessages < FLIP_AI_MIN_INBOUND_TO_DISQUALIFY) return null;
+    }
 
     let leadId: string | null = null;
     if (conversation.lead_id) {

@@ -36,10 +36,15 @@ test('usa a leitura do momento para decidir a hora de pedir o contato', () => {
   assert.equal(resolveContactMoment({ inboundMessages: 2, decision: base }), 'discover_first');
   assert.equal(resolveContactMoment({ inboundMessages: 2, decision: { ...base, journeyStage: 'consideration' } }), 'ask_now');
   assert.equal(resolveContactMoment({ inboundMessages: 1, decision: { ...base, journeyStage: 'decision' } }), 'discover_first');
-  assert.equal(resolveContactMoment({ inboundMessages: 4, decision: { ...base, objection: 'price', journeyStage: 'decision' } }),
-    'handle_objection_first');
+  assert.equal(resolveContactMoment({ inboundMessages: 4,
+    decision: { ...base, intent: 'objection', objection: 'price', journeyStage: 'decision' } }), 'handle_objection_first');
+  // A question about price is not an objection, whatever topic and confidence the engine attaches.
+  assert.equal(resolveContactMoment({ inboundMessages: 4,
+    decision: { ...base, intent: 'information', objection: 'price', objectionConfidence: 0.9, journeyStage: 'decision' } }), 'ask_now');
   assert.equal(resolveContactMoment({ inboundMessages: 5, decision: base }), 'ask_now');
-  assert.equal(resolveContactMoment({ inboundMessages: 4, decision: { ...base, fitScore: 10 } }), 'out_of_profile');
+  // A low engine fit never declares the person out of profile: only the attendant judges that.
+  assert.equal(resolveContactMoment({ inboundMessages: 1, decision: { ...base, fitScore: 6 } }), 'discover_first');
+  assert.equal(resolveContactMoment({ inboundMessages: 5, decision: { ...base, fitScore: 10 } }), 'ask_now');
 });
 
 test('sem leitura do JEV mantém a regra simples por quantidade de mensagens', () => {
