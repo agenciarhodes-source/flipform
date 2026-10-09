@@ -34,7 +34,13 @@ def test_list_keeps_working_before_the_table_exists():
     card = read("app/admin/(secure)/treasury/top-up-funding-card.tsx")
     assert "Recargas dos clientes" in card
     assert "Valor atribuído" in card
-    assert "aguardando atribuição" in card
+    # Pending purchases are announced as an admin notification, not as a banner in the list.
+    assert "aguardando atribuição" not in card
+    bell = read("components/admin/admin-notification-bell.tsx")
+    assert "aguardando atribuição" in bell
+    assert "toast.info(" in bell
+    assert "/api/admin/flip-ai/treasury/top-ups" in bell
+    assert "<AdminNotificationBell />" in read("app/admin/(secure)/layout.tsx")
     assert "<TopUpFundingCard />" in read("app/admin/(secure)/treasury/page.tsx")
 
 

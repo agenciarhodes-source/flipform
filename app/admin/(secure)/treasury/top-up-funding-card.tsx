@@ -78,12 +78,6 @@ export function TopUpFundingCard() {
           créditos). Marque como atribuído depois de recarregar. É só um controle seu: não movimenta dinheiro, não fala
           com a OpenAI e não altera a carteira do cliente.
         </p>
-        {list && list.pendingCount > 0 && (
-          <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-            {number.format(list.pendingCount)} recarga(s) aguardando atribuição, somando {usd.format(list.pendingUsd)} a
-            colocar na OpenAI.
-          </div>
-        )}
         {list && !list.fundingAvailable && (
           <div className="mt-3 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
             A marcação de valor atribuído ainda não está disponível neste ambiente: a tabela não foi criada no banco.
