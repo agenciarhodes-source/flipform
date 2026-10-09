@@ -71,7 +71,7 @@ jobs:
       - name: Run Flip AI policy tests
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/flip-ai.test.ts tests/flip-ai-realtime-client.test.ts tests/brain-profiles.test.ts tests/flip-ai-qualification-score.test.ts tests/flip-ai-public-error-message.test.ts tests/flip-ai-truncated-response.test.ts tests/flip-ai-contact-timing.test.ts tests/flip-ai-typing-pace.test.ts
+        run: npx tsx --test tests/flip-ai.test.ts tests/flip-ai-realtime-client.test.ts tests/brain-profiles.test.ts tests/flip-ai-qualification-score.test.ts tests/flip-ai-public-error-message.test.ts tests/flip-ai-truncated-response.test.ts tests/flip-ai-handoff-priority.test.ts tests/flip-ai-contact-timing.test.ts tests/flip-ai-typing-pace.test.ts
 
       - name: Run tracking unit tests
         env:

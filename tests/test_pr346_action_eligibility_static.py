@@ -77,7 +77,7 @@ def test_pr346_lead_ui_explains_agenda_is_independent_from_score():
     assert "Agenda não indicada" in modal
     assert "Interesse presencial — confirmar se deseja marcar" in modal
     assert "Pode coletar preferência de dia/horário" in modal
-    assert "Agenda é independente do score" in modal
+    assert "Agenda exige duas condições" in modal
     assert "não cria agenda" in modal
 
 

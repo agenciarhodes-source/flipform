@@ -30,6 +30,7 @@ export async function getFlipAiHumanHandoff(input: {
         orderBy: { createdAt: 'desc' },
         select: {
           conversationId: true,
+          classification: true,
           summary: true,
           reasons: true,
           nextAction: true,
@@ -87,6 +88,7 @@ export async function getFlipAiHumanHandoff(input: {
       summary: currentQualification.summary,
       reasons: currentQualification.reasons,
       nextAction: currentQualification.nextAction,
+      classification: currentQualification.classification,
     } : null,
     stateSummary: conversation?.id === conversationId ? conversation.flipAiState?.summary || null : null,
     intelligence: input.intelligence,

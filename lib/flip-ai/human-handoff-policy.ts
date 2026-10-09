@@ -18,13 +18,6 @@ export type FlipAiHumanHandoffSnapshot = {
   updatedAt: string;
 };
 
-const CLASSIFICATION_LABELS: Record<string, string> = {
-  qualified: 'qualificado',
-  nurture: 'em nutrição',
-  disqualified: 'não qualificado',
-  insufficient: 'ainda sem informação suficiente',
-};
-
 const INTENT_LABELS: Record<string, string> = {
   information: 'buscar informação',
   qualification: 'avançar na qualificação',
@@ -70,39 +63,39 @@ function buildFallbackSummary(
     return `${leadName || 'Lead'} possui uma conversa Flip AI vinculada, mas ainda não há inteligência suficiente para um resumo confiável.`;
   }
   const profile = intelligence.brainAssessment?.profileLabel;
-  const classification = CLASSIFICATION_LABELS[intelligence.classification] || intelligence.classification;
   const intent = INTENT_LABELS[intelligence.intent] || intelligence.intent;
   const objection = OBJECTION_LABELS[intelligence.objection] || intelligence.objection;
   return [
-    `${leadName || 'Lead'} está ${classification}${intelligence.brainAssessment && intelligence.brainAssessment.score === null ? '' : `, com score ${intelligence.score}/100`}.`,
+    // No grade here: the lead is only graded by the attendant's finished qualification.
+    `${leadName || 'Lead'} está em atendimento pelo Flip AI e ainda não tem qualificação concluída.`,
     profile ? `Assunto identificado: ${profile}.` : '',
     `A intenção atual é ${intent}.`,
     intelligence.objection !== 'none' ? `A objeção principal identificada é ${objection}.` : '',
   ].filter(Boolean).join(' ');
 }
 
+/**
+ * Priority follows the attendant's finished qualification. The JEV reading only adds its
+ * decisions (human handoff, in-person scheduling); its scores never set the priority.
+ */
 function priorityOf(
   intelligence: FlipAiLeadIntelligenceSnapshot | null,
   availability: FlipAiAvailabilitySnapshot | null | undefined,
+  classification: string | null,
 ) {
   if (availability?.status === 'ready_for_handoff') return 'high' as const;
+  if (classification === 'disqualified') return 'low' as const;
+  if (classification === 'qualified') return 'high' as const;
+  if (intelligence?.needsHuman || intelligence?.actionPermission.mayCollectAvailability) return 'high' as const;
+  if (classification) return 'normal' as const;
   if (!intelligence) return availability?.status === 'partial' ? 'normal' as const : 'low' as const;
-  if (intelligence.needsHuman
-    || intelligence.actionPermission.mayCollectAvailability
-    || intelligence.classification === 'qualified'
-    || (intelligence.score !== null && intelligence.score >= 80)) {
-    return 'high' as const;
-  }
-  if (intelligence.score === null) return 'normal' as const;
-  if (intelligence.score >= 50 || intelligence.classification === 'nurture') {
-    return 'normal' as const;
-  }
-  return 'low' as const;
+  return 'normal' as const;
 }
 
 function handoffReason(
   intelligence: FlipAiLeadIntelligenceSnapshot | null,
   availability: FlipAiAvailabilitySnapshot | null | undefined,
+  classification: string | null,
 ) {
   if (availability?.status === 'ready_for_handoff') {
     return 'A pessoa já informou preferência suficiente de disponibilidade para confirmação humana.';
@@ -110,7 +103,11 @@ function handoffReason(
   if (availability?.status === 'partial') {
     return 'A pessoa já informou parte da preferência de disponibilidade; ainda falta completar um dado.';
   }
-  if (!intelligence) return 'Contexto disponível para continuidade manual.';
+  if (!intelligence) {
+    return classification === 'qualified'
+      ? 'O atendente de IA classificou o lead como qualificado.'
+      : 'Contexto disponível para continuidade manual.';
+  }
   if (intelligence.actionPermission.mayCollectAvailability) {
     return 'A pessoa quer atendimento presencial e marcação, e este agente permite coletar disponibilidade.';
   }
@@ -122,7 +119,7 @@ function handoffReason(
   }
   if (intelligence.needsHuman) return 'O JEV sinalizou necessidade de atendimento humano.';
   if (intelligence.nextAction === 'handoff') return 'A próxima ação sugerida é atendimento humano.';
-  if (intelligence.classification === 'qualified') return 'O perfil atual está classificado como qualificado.';
+  if (classification === 'qualified') return 'O atendente de IA classificou o lead como qualificado.';
   return 'O resumo está disponível para continuidade sem reiniciar a conversa.';
 }
 
@@ -146,6 +143,8 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     summary: string | null;
     reasons: string[];
     nextAction: string;
+    /** The attendant's verdict: qualified, nurture, disqualified or insufficient. */
+    classification?: string | null;
   } | null;
   stateSummary: string | null;
   intelligence: FlipAiLeadIntelligenceSnapshot | null;
@@ -155,6 +154,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
   memory?: FlipAiConversationMemorySnapshot | null;
 }): FlipAiHumanHandoffSnapshot {
   const qualificationSummary = cleanText(input.qualification?.summary);
+  const classification = input.qualification?.classification || null;
   const stateSummary = cleanText(input.stateSummary);
   const memoryFacts = (input.memory?.facts || []).map((item) => `${cleanText(item.key.replace(/_/g, ' '), 120)}: ${cleanText(item.value, 300)}`);
   const memorySummary = memoryFacts.length
@@ -202,30 +202,25 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     ? input.intelligence.brainAssessment.criteria.map((item) => `${item.label}: ${item.interpretation || 'ainda não confirmado'}`).slice(0, 8)
     : input.qualification?.reasons?.length
     ? input.qualification.reasons.map((reason) => cleanText(reason, 500)).filter(Boolean).slice(0, 5)
-    : input.intelligence
-      ? [
-        `Fit atual: ${input.intelligence.fitScore}/100.`,
-        `Força da intenção: ${input.intelligence.intentScore}/100.`,
-        `Urgência: ${input.intelligence.urgencyScore}/100.`,
-        `Prontidão: ${input.intelligence.readinessScore}/100.`,
-      ]
-      : [];
+    : [];
 
   const recommended = Boolean(
     input.availability?.status === 'ready_for_handoff'
-      || input.intelligence?.needsHuman
-      || input.intelligence?.nextAction === 'handoff'
-      || input.intelligence?.classification === 'qualified'
-      || input.intelligence?.actionEligibility.inPersonRequested,
+      || (classification !== 'disqualified' && (
+        classification === 'qualified'
+        || input.intelligence?.needsHuman
+        || input.intelligence?.nextAction === 'handoff'
+        || input.intelligence?.actionEligibility.inPersonRequested
+      )),
   );
 
   return {
     summary,
     pending: (input.memory?.pending || []).map((item) => `${cleanText(item.key.replace(/_/g, ' '), 120)}: ${cleanText(item.value, 300)}`).slice(0, 6),
     summarySource,
-    priority: priorityOf(input.intelligence, input.availability),
+    priority: priorityOf(input.intelligence, input.availability, classification),
     recommended,
-    reason: handoffReason(input.intelligence, input.availability),
+    reason: handoffReason(input.intelligence, input.availability, classification),
     nextAction,
     resumeGuidance: [
       resumeGuidance(input.intelligence, nextAction),

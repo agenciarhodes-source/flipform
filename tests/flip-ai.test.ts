@@ -1625,8 +1625,9 @@ test('PR 343 handoff has a deterministic fallback when no semantic summary exist
     updatedAt: new Date('2026-10-04T21:20:00.000Z'),
   });
   assert.equal(result.summarySource, 'deterministic');
-  assert.match(result.summary, /score 58\/100/);
+  assert.doesNotMatch(result.summary, /score/);
   assert.match(result.summary, /confiança/);
+  assert.deepEqual(result.reasons, []);
   assert.equal(result.priority, 'normal');
   assert.equal(result.recommended, false);
   assert.match(result.nextAction, /Tratar a objeção atual/);
