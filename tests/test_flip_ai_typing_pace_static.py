@@ -28,7 +28,11 @@ def test_typing_pace_is_one_global_setting_and_is_tested_in_ci():
 def test_reply_is_split_into_chat_bubbles_only_for_text_turns():
     shell = read("components/flip-ai/public-chat-shell.tsx")
     assert "const parts = speakReply ? [assistantText] : splitReplyIntoMessages(assistantText);" in shell
-    assert "FLIP_AI_REPLY_MAX_MESSAGES = 3;" in read("lib/flip-ai/typing-pace.ts")
+    pace = read("lib/flip-ai/typing-pace.ts")
+    assert "FLIP_AI_REPLY_MAX_MESSAGES = 4;" in pace
+    assert "FLIP_AI_BUBBLE_MAX_CHARACTERS = 200;" in pace
     style = read("lib/flip-ai/conversation-style.ts")
-    assert "separe em até três mensagens curtas, colocando uma linha em branco entre elas" in style
+    assert "Cada mensagem deve ter no máximo cerca de 200 caracteres." in style
+    assert "As mensagens não precisam ter o mesmo tamanho." in style
+    assert "Quando houver pergunta, ela é sempre a última mensagem, sozinha e curta." in style
     assert "...(inputMode === 'voice' ? [] : [" in style
