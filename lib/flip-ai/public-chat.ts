@@ -28,6 +28,7 @@ import {
 } from './qualification';
 import {
   decisionHint,
+  isJevContextSteeringEnabled,
   isJevEnabledForTenant,
   type FlipAiConversationDecision,
 } from './decision-engine';
@@ -1004,6 +1005,10 @@ export async function buildPublicChatContext(
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
     tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
   });
+  // Decision-only by default: the JEV reading is recorded and hinted to the model, but retrieval,
+  // knowledge and history follow the same path as a tenant without JEV.
+  const contextSteeringEnabled = intelligentHarnessEnabled
+    && isJevContextSteeringEnabled(process.env.FLIP_AI_JEV_CONTEXT_STEERING_ENABLED);
   let decision: FlipAiConversationDecision | null = metadata.decisionSnapshot || null;
   let decisionStatus = metadata.decisionStatus || (intelligentHarnessEnabled ? 'not_attempted' : 'disabled');
   let actionEligibility: FlipAiActionEligibility | null = decision
@@ -1066,7 +1071,7 @@ export async function buildPublicChatContext(
   } else {
     await assertFlipAiConversationRuntimeReady({ tenantId: turn.tenantId });
     try {
-      const retrievalQueries = intelligentHarnessEnabled
+      const retrievalQueries = contextSteeringEnabled
         ? buildHarnessRetrievalQueries({
           message: turn.text,
           entryContext,
@@ -1108,7 +1113,7 @@ export async function buildPublicChatContext(
       currentQueryHits = conversationHits;
       const candidates = [...conversationHits, ...qualificationHits]
         .filter((hit, index, all) => all.findIndex((item) => item.id === hit.id) === index);
-      const harness = intelligentHarnessEnabled
+      const harness = contextSteeringEnabled
         ? selectHarnessHits(
           candidates,
           resolveHarnessTokenBudget(process.env.FLIP_AI_HARNESS_TOKEN_BUDGET),
@@ -1217,7 +1222,7 @@ export async function buildPublicChatContext(
     role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
     content: message.text,
   }] : []);
-  const budgetedHistory = intelligentHarnessEnabled
+  const budgetedHistory = contextSteeringEnabled
     ? buildBudgetedHistory(
       chronological,
       memoryActive ? FLIP_AI_HISTORY_MEMORY_CHAR_BUDGET : undefined,
@@ -1229,7 +1234,7 @@ export async function buildPublicChatContext(
     };
   const messages = budgetedHistory.messages.map(({ role, content }) => ({
     role,
-    content: intelligentHarnessEnabled ? content : content.slice(0, 2_500),
+    content: contextSteeringEnabled ? content : content.slice(0, 2_500),
   }));
   const inboundMessages = history.filter((message) => message.direction === 'inbound').length;
   const knownIdentity = identity?.lead

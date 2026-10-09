@@ -88,6 +88,15 @@ export function parseJevEnabled(raw: string | undefined) {
   return String(raw || '').trim().toLowerCase() === 'true';
 }
 
+/**
+ * JEV runs as a decision engine only by default: it classifies the turn (intent, objection,
+ * stage, next action, scores) and never shapes what is sent to the conversation model.
+ * The opt-in flag restores decision-driven retrieval and the knowledge/history budgets.
+ */
+export function isJevContextSteeringEnabled(raw: string | undefined) {
+  return String(raw || '').trim().toLowerCase() === 'true';
+}
+
 export function parseJevTenantIds(raw: string | undefined) {
   if (!raw?.trim()) return { configured: false, valid: true, tenantIds: [] as string[] };
   const values = raw.split(',').map((value) => value.trim().toLowerCase()).filter(Boolean);
