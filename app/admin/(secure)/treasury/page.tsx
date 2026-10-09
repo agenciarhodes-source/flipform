@@ -5,6 +5,7 @@ import { AlertTriangle, Landmark, Loader2, RefreshCw, ShieldCheck, WalletCards }
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TopUpFundingCard } from './top-up-funding-card';
+import { AdminNotificationBell } from '@/components/admin/admin-notification-bell';
 
 const number = new Intl.NumberFormat('pt-BR');
 const usd = new Intl.NumberFormat('en-US', {
@@ -118,7 +119,10 @@ export default function AdminAiTreasuryPage() {
           Cobertura dos créditos Flip AI em circulação e capacidade operacional da OpenAI.
         </p>
       </div>
-      <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
+      <div className="flex items-center gap-3">
+        <AdminNotificationBell />
+        <Button variant="outline" onClick={load}><RefreshCw className="mr-2 h-4 w-4" />Atualizar</Button>
+      </div>
     </div>
 
     <Card className={'p-5 border ' + state.className}>

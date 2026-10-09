@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { FOCUS_TOP_UP_EVENT, TOP_UP_FUNDING_CHANGED_EVENT } from '@/components/admin/admin-notification-bell';
 
 type FundingRow = {
   orderId: string;
@@ -35,6 +36,7 @@ export function TopUpFundingCard() {
   const [list, setList] = useState<FundingList | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [focused, setFocused] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +52,18 @@ export function TopUpFundingCard() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // An alert clicked in the bell brings its purchase into view and highlights it.
+  useEffect(() => {
+    const onFocus = (event: Event) => {
+      const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
+      if (!orderId) return;
+      setFocused(orderId);
+      document.getElementById(`recarga-${orderId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    window.addEventListener(FOCUS_TOP_UP_EVENT, onFocus);
+    return () => window.removeEventListener(FOCUS_TOP_UP_EVENT, onFocus);
+  }, []);
+
   const mark = async (row: FundingRow, funded: boolean) => {
     setSaving(row.orderId);
     try {
@@ -62,6 +76,7 @@ export function TopUpFundingCard() {
       if (!response.ok) throw new Error(payload.error || 'Erro');
       toast.success(funded ? 'Valor marcado como atribuído.' : 'Marcação desfeita.');
       await load();
+      window.dispatchEvent(new Event(TOP_UP_FUNDING_CHANGED_EVENT));
     } catch (saveError: any) {
       toast.error(saveError.message || 'Não foi possível salvar o controle desta recarga.');
     } finally {
@@ -100,7 +115,11 @@ export function TopUpFundingCard() {
           </thead>
           <tbody>
             {list?.rows.map((row) => (
-              <tr key={row.orderId} className="border-b last:border-0">
+              <tr
+                key={row.orderId}
+                id={`recarga-${row.orderId}`}
+                className={`border-b last:border-0 ${focused === row.orderId ? 'bg-amber-50 ring-2 ring-inset ring-amber-400' : ''}`}
+              >
                 <td className="px-3 py-2">{day(row.creditedAt)}</td>
                 <td className="px-3 py-2 font-medium">{row.tenantName}</td>
                 <td className="px-3 py-2 text-right">{number.format(row.credits)}</td>

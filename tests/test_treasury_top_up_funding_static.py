@@ -40,7 +40,14 @@ def test_list_keeps_working_before_the_table_exists():
     assert "aguardando atribuição" in bell
     assert "toast.info(" in bell
     assert "/api/admin/flip-ai/treasury/top-ups" in bell
-    assert "<AdminNotificationBell />" in read("app/admin/(secure)/layout.tsx")
+    # The bell lives in the Treasury header, not in the admin sidebar.
+    assert "AdminNotificationBell" not in read("app/admin/(secure)/layout.tsx")
+    page = read("app/admin/(secure)/treasury/page.tsx")
+    assert page.index("<AdminNotificationBell />") < page.index("Atualizar</Button>")
+    # Clicking an alert opens the purchase in the list.
+    assert "window.dispatchEvent(new CustomEvent(FOCUS_TOP_UP_EVENT, { detail: { orderId } }));" in bell
+    assert "window.addEventListener(FOCUS_TOP_UP_EVENT, onFocus);" in card
+    assert "id={`recarga-${row.orderId}`}" in card
     assert "<TopUpFundingCard />" in read("app/admin/(secure)/treasury/page.tsx")
 
 
