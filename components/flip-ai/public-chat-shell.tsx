@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { resolveTypingDelayMs } from '@/lib/flip-ai/typing-pace';
+import { resolveTypingDelayMs, splitReplyIntoMessages } from '@/lib/flip-ai/typing-pace';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Bot, LoaderCircle, Mic, RotateCcw, Send, Square } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
@@ -192,11 +192,23 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
         if (chunk.done) break;
       }
       if (!completed) throw new Error(streamError || 'A resposta não pôde ser confirmada.');
-      // A spoken reply is paced by the voice itself.
-      const typingDelay = speakReply ? 0 : resolveTypingDelayMs(assistantText.length, Date.now() - startedAt);
-      if (typingDelay > 0) await new Promise((resolve) => setTimeout(resolve, typingDelay));
-      setMessages((current) => current.map((message) =>
-        message.id === assistantId ? { ...message, text: assistantText, streaming: false } : message));
+      // A spoken reply is paced by the voice itself and stays in one bubble.
+      const parts = speakReply ? [assistantText] : splitReplyIntoMessages(assistantText);
+      for (let index = 0; index < parts.length; index += 1) {
+        const part = parts[index] ?? '';
+        const partId = index === 0 ? assistantId : `${assistantId}:${index + 1}`;
+        if (index > 0) {
+          setMessages((current) => [
+            ...current.filter((message) => message.id !== partId),
+            { id: partId, role: 'assistant' as const, text: '', streaming: true },
+          ]);
+        }
+        // Only the first bubble discounts the time the model already took.
+        const typingDelay = speakReply ? 0 : resolveTypingDelayMs(part.length, index === 0 ? Date.now() - startedAt : 0);
+        if (typingDelay > 0) await new Promise((resolve) => setTimeout(resolve, typingDelay));
+        setMessages((current) => current.map((message) =>
+          message.id === partId ? { ...message, text: part, streaming: false } : message));
+      }
       if (speakReply && voiceRef.current) await voiceRef.current.speak(messageId, assistantText);
     } catch (failure) {
       setMessages((current) => current.map((message) =>
@@ -270,7 +282,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
               style={message.role === 'user' ? {
                 backgroundColor: userMessageColor, color: readableTextColor(userMessageColor),
               } : undefined}>
-              {message.text}
+              <span className="whitespace-pre-line">{message.text}</span>
               {message.sources?.length ? <ul className="mt-3 space-y-1 border-t pt-2 text-xs">
                 {message.sources.map((source) => <li key={source.url}>
                   <a className="font-medium underline underline-offset-2" href={source.url}

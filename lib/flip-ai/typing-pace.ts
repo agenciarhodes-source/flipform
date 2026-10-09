@@ -8,6 +8,8 @@
 export const FLIP_AI_TYPING_MS_PER_CHARACTER = 35;
 export const FLIP_AI_TYPING_MIN_MS = 1_200;
 export const FLIP_AI_TYPING_MAX_MS = 7_000;
+/** A reply is shown as at most this many chat bubbles. */
+export const FLIP_AI_REPLY_MAX_MESSAGES = 3;
 
 /** How long the "Escrevendo..." indicator should still stay on screen before the reply appears. */
 export function resolveTypingDelayMs(replyLength: number, elapsedMs: number) {
@@ -18,4 +20,16 @@ export function resolveTypingDelayMs(replyLength: number, elapsedMs: number) {
     Math.max(FLIP_AI_TYPING_MIN_MS, length * FLIP_AI_TYPING_MS_PER_CHARACTER),
   );
   return Math.max(0, Math.round(target - elapsed));
+}
+
+/**
+ * Splits a reply into the separate chat messages the agent wrote (blocks separated by a
+ * blank line). Anything beyond the limit stays in the last message, so no text is lost.
+ */
+export function splitReplyIntoMessages(reply: string, maxMessages = FLIP_AI_REPLY_MAX_MESSAGES) {
+  const blocks = reply.split(/\r?\n\s*\r?\n/).map((block) => block.trim()).filter(Boolean);
+  if (blocks.length === 0) return [reply.trim()];
+  const limit = Math.max(1, Math.trunc(maxMessages));
+  if (blocks.length <= limit) return blocks;
+  return [...blocks.slice(0, limit - 1), blocks.slice(limit - 1).join('\n\n')];
 }

@@ -16,6 +16,11 @@ export function buildHumanConversationGuidance(inputMode: FlipAiInputMode = 'tex
     inputMode === 'voice'
       ? 'Este turno veio de voz. Escreva a resposta como fala natural: frases curtas, pontuação simples, sem tabelas e sem blocos longos. O conteúdo será falado depois de aprovado pelo backend.'
       : 'Este turno veio de texto. Mantenha a resposta fácil de ler em tela e conversacional.',
+    ...(inputMode === 'voice' ? [] : [
+      'Escreva como alguém conversando em um chat, não como quem redige um texto. Varie o formato conforme o momento: às vezes uma frase só, às vezes duas ou três mensagens curtas em sequência.',
+      'Quando a resposta tiver mais de uma ideia, separe em até três mensagens curtas, colocando uma linha em branco entre elas. Cada mensagem deve fazer sentido sozinha e ter uma ou duas frases. Nunca divida uma frase no meio e não use listas ou títulos.',
+      'Se houver pergunta, ela fica sozinha na última mensagem. Para respostas simples, use uma única mensagem curta.',
+    ]),
   ];
 }
 
