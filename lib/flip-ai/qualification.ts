@@ -7,6 +7,7 @@ import { isValidBrazilianPhone } from '@/lib/leads';
 import { dispatchFlipAiQualifiedLeadTracking } from '@/lib/tracking';
 import { classifyBrainAssessment, type BrainAssessment } from './brain-profiles';
 import type { PublicFlipAiRuntime } from './public-agent';
+import { summarizeFlipAiQualificationScore } from './qualification-score';
 
 const QUALIFICATION_DISPATCH_STALE_MS = 2 * 60_000;
 
@@ -153,6 +154,9 @@ async function dispatchQualifiedLeadOnce(input: {
   }
 }
 
+/** Temperature a lead receives when Flip AI captures it, before any qualification. */
+export const FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE = 'warm' as const;
+
 export async function finalizeFlipAiQualification(input: {
   runtime: PublicFlipAiRuntime;
   conversationId: string;
@@ -260,6 +264,39 @@ export async function finalizeFlipAiQualification(input: {
         },
       },
     });
+
+    // The attendant's verdict sets the lead temperature once, when the qualification is created.
+    // Only a lead created by Flip AI that still has the capture default is changed, so a
+    // temperature chosen by a person is never overwritten. Stage and owner are not touched.
+    const temperature = summarizeFlipAiQualificationScore(parsed.data).temperature;
+    if (leadId && (temperature === 'hot' || temperature === 'cold')) {
+      const applied = await db.lead.updateMany({
+        where: {
+          id: leadId,
+          tenantId: input.runtime.tenantId,
+          source: 'flip_ai',
+          temperature: FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE,
+        },
+        data: { temperature },
+      });
+      if (applied.count === 1) {
+        await db.auditLog.create({
+          data: {
+            tenantId: input.runtime.tenantId,
+            userId: null,
+            entityType: 'lead',
+            entityId: leadId,
+            action: 'lead.flip_ai_temperature_applied',
+            metadata: {
+              from: FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE,
+              to: temperature,
+              qualificationId: qualification.id,
+              classification: parsed.data.classification,
+            },
+          },
+        });
+      }
+    }
     return qualification;
   });
 

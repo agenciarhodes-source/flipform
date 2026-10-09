@@ -97,6 +97,7 @@ async function tryCaptureLead(input: {
   runtime: PublicFlipAiRuntime;
   conversationId: string;
   decision: FlipAiIdentityDecision | null;
+  finalClassification?: string | null;
   browser?: BrowserAttribution;
 }) {
   if (!input.decision) return null;
@@ -106,6 +107,7 @@ async function tryCaptureLead(input: {
       runtime: input.runtime,
       conversationId: input.conversationId,
       decision: input.decision,
+      finalClassification: input.finalClassification,
       attribution: {
         utmSource: input.browser?.utmSource || null,
         utmMedium: input.browser?.utmMedium || null,
@@ -168,6 +170,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           runtime: runtimeContext,
           conversationId: turn.conversationId,
           decision: turn.identity,
+          finalClassification: turn.qualification?.classification,
           browser: turn.attribution,
         });
         if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {
@@ -250,6 +253,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           runtime: runtimeContext,
           conversationId: turn.conversationId,
           decision: decision.identity,
+          finalClassification: decision.qualification?.classification,
           browser: turn.attribution,
         });
         if (leadCapture && (leadCapture.meta || leadCapture.gtmContainerId)) {

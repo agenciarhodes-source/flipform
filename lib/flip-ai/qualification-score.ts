@@ -7,7 +7,9 @@
  * Readiness 10 / Confidence 5), renormalised over the three components a
  * final qualification has.
  */
-export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-08.1';
+export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-09.1';
+/** A disqualified conversation never shows more than this, whatever the partial scores say. */
+export const FLIP_AI_DISQUALIFIED_SCORE_CAP = 10;
 
 const FIT_WEIGHT = 40 / 75;
 const INTENT_WEIGHT = 30 / 75;
@@ -38,11 +40,14 @@ export function summarizeFlipAiQualificationScore(qualification: {
     return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score: null, temperature: 'unknown' };
   }
 
-  const score = Math.round(
+  const weighted = Math.round(
     bound(qualification.fitScore, 100) * FIT_WEIGHT
       + bound(qualification.intentScore, 100) * INTENT_WEIGHT
       + bound(qualification.confidence, 1) * 100 * CONFIDENCE_WEIGHT,
   );
+  const score = qualification.classification === 'disqualified'
+    ? Math.min(weighted, FLIP_AI_DISQUALIFIED_SCORE_CAP)
+    : weighted;
 
   const temperature: FlipAiQualificationTemperature = qualification.classification === 'qualified'
     ? 'hot'
