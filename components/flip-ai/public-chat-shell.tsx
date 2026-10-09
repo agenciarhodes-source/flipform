@@ -274,7 +274,11 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
                   <span className="ml-1 text-slate-500">({source.domain})</span>
                 </li>)}
               </ul> : null}
-              {message.streaming && <LoaderCircle className="h-4 w-4 animate-spin" aria-label="Respondendo" />}
+              {message.streaming && (
+                <span role="status" className={message.text ? 'mt-1 block text-xs text-slate-500' : 'text-slate-500'}>
+                  Escrevendo<span className="animate-pulse" aria-hidden="true">...</span>
+                </span>
+              )}
             </div>
           ))}
           {error && (
