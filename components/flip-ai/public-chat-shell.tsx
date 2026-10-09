@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { resolveTypingDelayMs } from '@/lib/flip-ai/typing-pace';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Bot, LoaderCircle, Mic, RotateCcw, Send, Square } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
@@ -121,6 +122,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     });
 
     let assistantText = '';
+    const startedAt = Date.now();
     try {
       const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, {
         method: 'POST',
@@ -152,9 +154,8 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
           const parsed = parseEvent(block);
           if (!parsed) continue;
           if (parsed.event === 'delta' && typeof parsed.data.delta === 'string') {
+            // Held until the typing pace elapses; the bubble keeps showing "Escrevendo...".
             assistantText += parsed.data.delta;
-            setMessages((current) => current.map((message) =>
-              message.id === assistantId ? { ...message, text: message.text + parsed.data.delta } : message));
           } else if (parsed.event === 'sources' && Array.isArray(parsed.data.sources)) {
             const sources = parsed.data.sources.flatMap((raw) => {
               if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
@@ -183,8 +184,6 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
             }
           } else if (parsed.event === 'done') {
             completed = true;
-            setMessages((current) => current.map((message) =>
-              message.id === assistantId ? { ...message, streaming: false } : message));
           } else if (parsed.event === 'error') {
             streamError = typeof parsed.data.message === 'string'
               ? parsed.data.message : 'A resposta ficou incerta.';
@@ -193,6 +192,11 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
         if (chunk.done) break;
       }
       if (!completed) throw new Error(streamError || 'A resposta não pôde ser confirmada.');
+      // A spoken reply is paced by the voice itself.
+      const typingDelay = speakReply ? 0 : resolveTypingDelayMs(assistantText.length, Date.now() - startedAt);
+      if (typingDelay > 0) await new Promise((resolve) => setTimeout(resolve, typingDelay));
+      setMessages((current) => current.map((message) =>
+        message.id === assistantId ? { ...message, text: assistantText, streaming: false } : message));
       if (speakReply && voiceRef.current) await voiceRef.current.speak(messageId, assistantText);
     } catch (failure) {
       setMessages((current) => current.map((message) =>
