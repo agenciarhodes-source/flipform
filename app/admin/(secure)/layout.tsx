@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { AdminNotificationBell } from "@/components/admin/admin-notification-bell";
 import {
   LayoutDashboard,
   Building2,
@@ -42,6 +43,7 @@ export default async function AdminLayout({
             </div>
           </div>
         </div>
+        <AdminNotificationBell />
         <nav className="flex-1 p-3 space-y-1">
           <AdminLink href="/admin" icon={LayoutDashboard} label="Visão geral" />
           <AdminLink href="/admin/tenants" icon={Building2} label="Clientes" />
