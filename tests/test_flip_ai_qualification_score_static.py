@@ -17,10 +17,14 @@ def test_score_follows_the_live_policy_weights_without_new_ai_calls():
         assert forbidden not in score, forbidden
 
 
-def test_modal_shows_score_and_temperature_only_without_live_reading():
+def test_modal_shows_the_attendant_score_and_hides_the_competing_live_score():
     modal = read("components/lead-detail-modal.tsx")
     assert "summarizeFlipAiQualificationScore(qualification)" in modal
-    assert "{!lead.flipAiLiveIntelligence && (() => {" in modal
+    assert "{!lead.flipAiLiveIntelligence && (() => {" not in modal
+    assert "{!(lead.flipAiQualifications?.length > 0) && (<>" in modal
+    # The attendant's qualification comes before the per-message reading.
+    assert modal.index("Qualificação do lead") < modal.index("Inteligência em tempo real")
+    assert "feita pelo atendente de IA {qualification.agent?.name || 'Flip AI'}" in modal
     assert "Score geral" in modal
     assert "Temperatura sugerida" in modal
     assert "Sugestão: não altera a temperatura do lead no CRM." in modal
