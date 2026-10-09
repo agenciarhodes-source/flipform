@@ -35,7 +35,6 @@ def test_final_disqualification_overrides_the_per_message_reading():
     assert "final?.classification === 'disqualified'" in server
     assert "applyFinalDisqualification(snapshot, final)" in server
     assert "FLIP_AI_DISQUALIFIED_SCORE_CAP = 10;" in read("lib/flip-ai/qualification-score.ts")
-    assert "finalQualificationApplied" in read("components/lead-detail-modal.tsx")
 
 
 def test_agent_speaks_for_the_company_without_exposing_a_knowledge_lookup():

@@ -56,9 +56,10 @@ def test_pr342_ui_is_advisory_and_does_not_claim_automatic_crm_changes():
     assert "Inteligência em tempo real" in modal
     assert "Score" in modal
     assert "Temperatura sugerida" in modal
-    assert "Não altera o CRM automaticamente" in modal
+    assert "Esta leitura não dá nota ao lead." in modal
     assert "Próxima ação sugerida" in modal
-    assert "Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%" in modal
+    # The JEV card no longer grades the lead: its score formula is gone from the screen.
+    assert "Fit 40% + Intenção 30%" not in modal
 
 
 def test_pr342_never_moves_or_mutates_lead_from_intelligence_layer():

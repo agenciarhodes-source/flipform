@@ -21,7 +21,6 @@ def test_modal_shows_the_attendant_score_and_hides_the_competing_live_score():
     modal = read("components/lead-detail-modal.tsx")
     assert "summarizeFlipAiQualificationScore(qualification)" in modal
     assert "{!lead.flipAiLiveIntelligence && (() => {" not in modal
-    assert "{!(lead.flipAiQualifications?.length > 0) && (<>" in modal
     # The attendant's qualification comes before the per-message reading.
     assert modal.index("Qualificação do lead") < modal.index("Inteligência em tempo real")
     assert "feita pelo atendente de IA {qualification.agent?.name || 'Flip AI'}" in modal

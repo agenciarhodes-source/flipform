@@ -658,92 +658,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-blue-700" />
                       <h3 className="font-heading text-sm font-semibold">Inteligência em tempo real — momento da conversa</h3>
-                      <Badge variant="outline">
-                        {qualificationLabels[lead.flipAiLiveIntelligence.classification] || lead.flipAiLiveIntelligence.classification}
-                      </Badge>
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       Atualizado em {formatDateTime(lead.flipAiLiveIntelligence.updatedAt)} • política {lead.flipAiLiveIntelligence.policyVersion}
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {lead.flipAiLiveIntelligence.finalQualificationApplied
-                      ? 'Qualificação final da conversa: desqualificado'
-                      : `JEV • confiança ${Math.round(Number(lead.flipAiLiveIntelligence.confidence || 0) * 100)}%`}
-                    {lead.flipAiQualifications?.length > 0 && (
-                      <div className="mt-1 max-w-xs">
-                        Leitura mensagem a mensagem, usada para conduzir a conversa. A qualificação do lead é a análise do atendente de IA acima.
-                      </div>
-                    )}
+                  <div className="max-w-xs text-xs text-muted-foreground">
+                    Leitura do JEV, mensagem a mensagem, usada para conduzir a conversa. Score, temperatura e qualificação
+                    do lead vêm da análise do atendente de IA.
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  {!(lead.flipAiQualifications?.length > 0) && (<>
-                  <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Score</div>
-                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? '—' : lead.flipAiLiveIntelligence.score}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {lead.flipAiLiveIntelligence.scoreDelta == null
-                        ? 'Primeira leitura'
-                        : `${lead.flipAiLiveIntelligence.scoreDelta >= 0 ? '+' : ''}${lead.flipAiLiveIntelligence.scoreDelta} desde a leitura anterior`}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
-                    <div className="text-xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? 'Em análise' : temperatureLabels[lead.flipAiLiveIntelligence.temperature] || lead.flipAiLiveIntelligence.temperature}</div>
-                    <div className="text-xs text-muted-foreground">Não altera o CRM automaticamente</div>
-                  </div>
-                  </>)}
-                  {!lead.flipAiLiveIntelligence.brainAssessment && !(lead.flipAiQualifications?.length > 0) && <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Fit</div>
-                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.fitScore}</div>
-                    <div className="text-xs text-muted-foreground">peso 40%</div>
-                  </div>}
-                  {!lead.flipAiLiveIntelligence.brainAssessment && !(lead.flipAiQualifications?.length > 0) && <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Intenção</div>
-                    <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.intentScore}</div>
-                    <div className="text-xs text-muted-foreground">peso 30%</div>
-                  </div>}
-                </div>
-
-                {lead.flipAiQualifications?.length > 0 && !lead.flipAiLiveIntelligence.brainAssessment && (() => {
-                  // Two independent gradings of the same conversation, shown side by side for comparison.
-                  const attendant = lead.flipAiQualifications[0];
-                  const attendantScore = summarizeFlipAiQualificationScore(attendant).score;
-                  const engine = lead.flipAiLiveIntelligence;
-                  const rows = [
-                    { label: 'Score geral', attendant: attendantScore, engine: engine.engineScore ?? engine.score },
-                    { label: 'Aderência (fit)', attendant: attendant.fitScore, engine: engine.engineFitScore ?? engine.fitScore },
-                    { label: 'Intenção', attendant: attendant.intentScore, engine: engine.engineIntentScore ?? engine.intentScore },
-                  ];
-                  return (
-                    <div className="rounded-lg border bg-white p-3">
-                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Comparativo de notas</div>
-                      <table className="mt-2 w-full text-sm">
-                        <thead>
-                          <tr className="text-xs text-muted-foreground">
-                            <th className="py-1 text-left font-normal">Nota</th>
-                            <th className="py-1 text-right font-normal">Atendente de IA</th>
-                            <th className="py-1 text-right font-normal">JEV</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row) => (
-                            <tr key={row.label} className="border-t">
-                              <td className="py-1.5">{row.label}</td>
-                              <td className="py-1.5 text-right font-semibold">{row.attendant ?? '—'}</td>
-                              <td className="py-1.5 text-right text-muted-foreground">{row.engine ?? '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        A nota que vale para o lead é a do atendente de IA. A do JEV é a leitura da última mensagem e aparece só para comparação.
-                      </p>
-                    </div>
-                  );
-                })()}
 
                 {lead.flipAiLiveIntelligence.brainAssessment && (
                   <div className="rounded-lg border bg-white p-3 text-sm">
@@ -774,8 +698,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div><strong>Intenção:</strong> {intentLabels[lead.flipAiLiveIntelligence.intent] || lead.flipAiLiveIntelligence.intent}</div>
                       <div><strong>Objeção:</strong> {objectionLabels[lead.flipAiLiveIntelligence.objection] || lead.flipAiLiveIntelligence.objection}</div>
                       <div><strong>Jornada:</strong> {journeyLabels[lead.flipAiLiveIntelligence.journeyStage] || lead.flipAiLiveIntelligence.journeyStage}</div>
-                      <div><strong>Urgência:</strong> {lead.flipAiLiveIntelligence.urgencyScore}/100</div>
-                      <div><strong>Prontidão:</strong> {lead.flipAiLiveIntelligence.readinessScore}/100</div>
                       <div>
                         <strong>Presencial:</strong>{' '}
                         {lead.flipAiLiveIntelligence.actionEligibility?.inPersonRequested ? 'Interesse detectado' : 'Não indicado'}
@@ -817,8 +739,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 </div>
 
                 <div className="rounded-lg border border-blue-200 bg-white p-3 text-xs text-muted-foreground">
-                  O score é calculado pelo FlipForm com regra determinística: Fit 40% + Intenção 30% + Urgência 15% + Prontidão 10% + Confiança 5%.
-                  Agenda é independente do score e exige duas condições: desejo presencial do cliente e capacidade habilitada no agente.
+                  Esta leitura não dá nota ao lead. Agenda exige duas condições: desejo presencial do cliente e capacidade habilitada no agente.
                   Mesmo quando a coleta de disponibilidade é permitida, esta leitura não cria agenda nem compromisso, não move etapa, não altera temperatura do CRM e não executa ações automaticamente.
                 </div>
               </section>

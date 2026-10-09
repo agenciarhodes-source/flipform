@@ -51,7 +51,7 @@ def test_pr343_ui_makes_handoff_advisory_and_continuity_first():
     assert "não move o lead" in modal
     assert "não cria novo responsável" in modal
     assert "não envia mensagem automaticamente" in modal
-    assert "peso 30%" in modal
+    assert "peso 30%" not in modal
 
 
 def test_pr343_handoff_policy_explicitly_avoids_restarting_the_interview():
