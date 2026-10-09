@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { toPublicFlipAiErrorMessage } from '@/lib/flip-ai/public-error-message';
 import { normalizeHostname, isAdminHostname } from '@/lib/host-routing';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { resolvePublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
@@ -49,7 +50,7 @@ function attachSessionCookie(response: NextResponse, token: string, created: boo
 function jsonError(error: unknown, token: string, created: boolean) {
   if (error instanceof FlipAiError) {
     return attachSessionCookie(
-      secureJson({ error: error.message, code: error.code }, error.status),
+      secureJson({ error: toPublicFlipAiErrorMessage(error.code, error.message), code: error.code }, error.status),
       token,
       created,
     );
