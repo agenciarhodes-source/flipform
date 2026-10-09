@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
+  applyFinalDisqualification,
   buildFlipAiLeadIntelligenceSnapshot,
   parseConversationDecision,
   type FlipAiLeadIntelligenceSnapshot,
@@ -54,7 +55,7 @@ export async function getFlipAiLeadIntelligence(input: {
     agentId: currentRow.agentId,
   });
 
-  return buildFlipAiLeadIntelligenceSnapshot({
+  const snapshot = buildFlipAiLeadIntelligenceSnapshot({
     decision,
     previousDecision,
     updatedAt: currentRow.createdAt,
@@ -62,4 +63,12 @@ export async function getFlipAiLeadIntelligence(input: {
     usageEventId: currentRow.id,
     actionCapabilities,
   });
+
+  const final = await prisma.flipAiQualification.findFirst({
+    where: { tenantId: input.tenantId, conversationId: currentRow.conversationId },
+    select: { classification: true, fitScore: true, intentScore: true },
+  }).catch(() => null);
+  return final?.classification === 'disqualified'
+    ? applyFinalDisqualification(snapshot, final)
+    : snapshot;
 }

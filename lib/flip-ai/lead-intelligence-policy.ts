@@ -8,6 +8,7 @@ import {
 } from './action-eligibility';
 import type { FlipAiActionCapabilities } from './action-capabilities';
 
+import { FLIP_AI_DISQUALIFIED_SCORE_CAP } from './qualification-score';
 import {
   JEV_INTENTS,
   JEV_JOURNEY_STAGES,
@@ -50,7 +51,29 @@ export type FlipAiLeadIntelligenceSnapshot = {
   updatedAt: string;
   conversationId: string;
   usageEventId: string;
+  /** Set when the finished qualification of the conversation overrode the per-message reading. */
+  finalQualificationApplied?: boolean;
 };
+
+/**
+ * The per-message reading only sees the latest turn; the finished qualification saw the whole
+ * conversation. When that one says disqualified, the lead card must not show a warmer picture.
+ */
+export function applyFinalDisqualification(
+  snapshot: FlipAiLeadIntelligenceSnapshot,
+  final: { fitScore: number; intentScore: number },
+): FlipAiLeadIntelligenceSnapshot {
+  return {
+    ...snapshot,
+    classification: 'disqualified',
+    temperature: 'cold',
+    score: Math.min(snapshot.score ?? 0, FLIP_AI_DISQUALIFIED_SCORE_CAP),
+    fitScore: Math.min(snapshot.fitScore, boundScore(final.fitScore)),
+    intentScore: Math.min(snapshot.intentScore, boundScore(final.intentScore)),
+    scoreDelta: null,
+    finalQualificationApplied: true,
+  };
+}
 
 const INTENT_STRENGTH: Record<FlipAiConversationDecision['intent'], number> = {
   information: 45,

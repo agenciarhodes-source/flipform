@@ -17,6 +17,8 @@ test('temperatura sugerida segue a classificação e o score', () => {
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 60, intentScore: 55, confidence: 0.7 }).temperature, 'warm');
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 40, intentScore: 30, confidence: 0.6 }).temperature, 'cold');
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 95, intentScore: 95, confidence: 0.9 }).temperature, 'cold');
+  assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 95, intentScore: 95, confidence: 0.9 }).score, 10);
+  assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 10, intentScore: 30, confidence: 0.9 }).score, 10);
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'qualified', fitScore: 10, intentScore: 10, confidence: 0.6 }).temperature, 'hot');
 });
 
