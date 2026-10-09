@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { LogoutButton } from "@/components/logout-button";
 import { requireBillingAccess } from "@/lib/billing-access";
 
 function reasonLabel(reason: string) {
@@ -47,13 +48,12 @@ export default async function BillingBlockedPage() {
               Regularizar pagamento
             </Link>
           )}
-          <Link
-            href="/api/auth/logout"
-            prefetch={false}
+          <LogoutButton
+            redirectTo="/login"
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             Sair da conta
-          </Link>
+          </LogoutButton>
         </div>
       </div>
     </div>

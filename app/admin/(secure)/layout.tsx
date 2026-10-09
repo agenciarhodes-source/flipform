@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/auth";
+import { LogoutButton } from "@/components/logout-button";
 import {
   LayoutDashboard,
   Building2,
@@ -64,13 +65,12 @@ export default async function AdminLayout({
             <div className="text-slate-300">{session.name}</div>
             <div className="truncate text-[11px]">{session.email}</div>
           </div>
-          <Link
-            href="/api/auth/logout"
-            prefetch={false}
-            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800 transition"
+          <LogoutButton
+            redirectTo="/admin/login"
+            className="flex w-full items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800 transition"
           >
             <LogOut className="w-3.5 h-3.5" /> Sair
-          </Link>
+          </LogoutButton>
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">{children}</main>
