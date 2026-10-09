@@ -306,7 +306,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           <TabsList className="my-4 h-auto flex-wrap">
             <TabsTrigger value="info">Dados</TabsTrigger>
             <TabsTrigger value="answers">Respostas</TabsTrigger>
-            {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0) && (
+            {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0 || lead.flipAiConversation?.messages?.length > 0) && (
               <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
             )}
             <TabsTrigger value="history">Histórico</TabsTrigger>
@@ -549,6 +549,30 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   Quando aplicável, o Flip AI cria apenas uma tarefa interna para decisão humana. Ele não cria agenda, não reserva horário,
                   não move o lead, não cria novo responsável e não envia mensagem automaticamente.
                 </div>
+              </section>
+            )}
+
+            {!(lead.flipAiQualifications?.length > 0) && lead.flipAiConversation?.messages?.length > 0 && (
+              <section className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                <div>
+                  <h3 className="font-heading text-sm font-semibold">Conversa com o atendente de IA</h3>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    O atendente de IA ainda não fechou a qualificação desta conversa. O histórico abaixo mostra o que já foi tratado.
+                  </div>
+                </div>
+                <details className="rounded-lg border bg-white" open>
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Histórico da conversa</summary>
+                  <div className="space-y-2 border-t p-3">
+                    {[...lead.flipAiConversation.messages].reverse().map((message: any) => (
+                      <div key={message.id} className={`max-w-[88%] rounded-lg px-3 py-2 text-sm ${message.direction === 'outbound' ? 'ml-auto bg-violet-100' : 'bg-muted'}`}>
+                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+                          {message.direction === 'outbound' ? 'Atendente de IA' : 'Lead'} • {formatDateTime(message.createdAt)}
+                        </div>
+                        <div className="whitespace-pre-wrap">{message.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
               </section>
             )}
 

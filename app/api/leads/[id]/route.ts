@@ -66,6 +66,20 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     tenantId: session.tenantId,
     leadId: lead.id,
   }).catch(() => null);
+  // The conversation with the AI attendant is shown even when no qualification was finished.
+  const flipAiConversation = await prisma.conversation.findFirst({
+    where: { tenantId: session.tenantId, leadId: lead.id, provider: 'flip_ai' },
+    orderBy: { startedAt: 'desc' },
+    select: {
+      id: true,
+      messages: {
+        where: { type: 'text', text: { not: null } },
+        orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
+        take: 50,
+        select: { id: true, direction: true, text: true, createdAt: true },
+      },
+    },
+  }).catch(() => null);
   const [activeAgents, saleValueAuditLogs, flipAiHumanHandoff] = await Promise.all([
     ['owner', 'admin', 'manager'].includes(session.role)
       ? prisma.tenantUser.findMany({
@@ -103,6 +117,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
   return NextResponse.json({ lead: { ...lead,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
+    flipAiConversation,
     flipAiHumanHandoff,
     flipAiHumanActionRequest: flipAiHumanActionRequestView,
     saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
