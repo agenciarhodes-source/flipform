@@ -1613,3 +1613,23 @@ model PlatformTopUpFunding {
 
   @@map("platform_top_up_funding")
 }
+
+// A photo or document a visitor attached in the public chat. Kept only for a few days so
+// the team can download it from the lead; expired rows are deleted.
+model ChatAttachment {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  conversationId  String   @map("conversation_id")
+  clientMessageId String   @map("client_message_id")
+  name            String
+  mimeType        String   @map("mime_type")
+  sizeBytes       Int      @map("size_bytes")
+  content         Bytes
+  expiresAt       DateTime @map("expires_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([conversationId, clientMessageId])
+  @@index([tenantId, conversationId])
+  @@index([expiresAt])
+  @@map("chat_attachments")
+}

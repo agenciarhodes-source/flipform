@@ -306,7 +306,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           <TabsList className="my-4 h-auto flex-wrap">
             <TabsTrigger value="info">Dados</TabsTrigger>
             <TabsTrigger value="answers">Respostas</TabsTrigger>
-            {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0 || lead.flipAiConversation?.messages?.length > 0) && (
+            {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0 || lead.flipAiConversation?.messages?.length > 0 || lead.flipAiAttachments?.length > 0) && (
               <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
             )}
             <TabsTrigger value="history">Histórico</TabsTrigger>
@@ -549,6 +549,36 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                   Quando aplicável, o Flip AI cria apenas uma tarefa interna para decisão humana. Ele não cria agenda, não reserva horário,
                   não move o lead, não cria novo responsável e não envia mensagem automaticamente.
                 </div>
+              </section>
+            )}
+
+            {lead.flipAiAttachments?.length > 0 && (
+              <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <div>
+                  <h3 className="font-heading text-sm font-semibold">Documentos enviados</h3>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Arquivos que o lead enviou na conversa. Ficam disponíveis por 7 dias e depois são apagados; baixe o que precisar guardar.
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {lead.flipAiAttachments.map((attachment: any) => (
+                    <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{attachment.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {attachment.mimeType === 'application/pdf' ? 'PDF' : 'Imagem'} • {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                          {' '}• enviado em {formatDateTime(attachment.createdAt)} • disponível até {formatDateTime(attachment.expiresAt)}
+                        </div>
+                      </div>
+                      <a
+                        href={`/api/leads/${lead.id}/attachments/${attachment.id}`}
+                        className="shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                      >
+                        Baixar
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </section>
             )}
 

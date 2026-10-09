@@ -20,7 +20,7 @@ def test_modal_shows_the_history_even_without_a_finished_qualification():
     assert "!(lead.flipAiQualifications?.length > 0) && lead.flipAiConversation?.messages?.length > 0" in modal
     assert "Conversa com o atendente de IA" in modal
     assert modal.count("Histórico da conversa") == 2
-    assert "|| lead.flipAiConversation?.messages?.length > 0)" in modal
+    assert "|| lead.flipAiConversation?.messages?.length > 0 ||" in modal
 
 
 def test_attendant_finishes_the_qualification_when_handing_the_lead_to_the_team():

@@ -33,6 +33,7 @@ import {
   type FlipAiChatAttachment,
   type FlipAiModelContentPart,
 } from '@/lib/flip-ai/chat-attachment';
+import { storeChatAttachment } from '@/lib/flip-ai/chat-attachment-storage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -186,6 +187,17 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     turn = await preparePublicChatTurn(runtimeContext, session.token, body);
   } catch (error) {
     return jsonError(error, session.token, session.created);
+  }
+
+  if (attachment) {
+    // Kept for a few days so the team can download it from the lead. Best-effort: the
+    // conversation goes on even if the file cannot be stored.
+    await storeChatAttachment({
+      tenantId: turn.tenantId,
+      conversationId: turn.conversationId,
+      clientMessageId: turn.messageId,
+      attachment,
+    });
   }
 
   const encoder = new TextEncoder();
