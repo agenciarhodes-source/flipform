@@ -70,3 +70,11 @@ def test_purchase_notice_is_best_effort_and_sent_only_for_a_new_credit():
     assert "env.FLIP_AI_TOP_UP_NOTIFY_EMAIL" in lib
     assert "reason: 'not_configured'" in lib
     assert "FLIP_AI_TOP_UP_NOTIFY_EMAIL=" in read(".env.example")
+
+
+def test_list_shows_the_package_name_from_the_current_catalog():
+    lib = read(LIB)
+    assert "packageName: packageByCredits.get(order.credits) ?? null," in lib
+    card = read("app/admin/(secure)/treasury/top-up-funding-card.tsx")
+    assert ">Pacote</th>" in card
+    assert "{row.packageName || 'Avulso'}" in card

@@ -9,6 +9,7 @@ import { FOCUS_TOP_UP_EVENT, TOP_UP_FUNDING_CHANGED_EVENT } from '@/components/a
 type FundingRow = {
   orderId: string;
   tenantName: string;
+  packageName: string | null;
   credits: number;
   amountCents: number;
   creditedAt: string | null;
@@ -106,6 +107,7 @@ export function TopUpFundingCard() {
             <tr className="text-xs uppercase text-muted-foreground">
               <th className="px-3 py-2 text-left">Data</th>
               <th className="px-3 py-2 text-left">Empresa</th>
+              <th className="px-3 py-2 text-left">Pacote</th>
               <th className="px-3 py-2 text-right">Créditos</th>
               <th className="px-3 py-2 text-right">Valor pago</th>
               <th className="px-3 py-2 text-right">Colocar na OpenAI</th>
@@ -122,6 +124,7 @@ export function TopUpFundingCard() {
               >
                 <td className="px-3 py-2">{day(row.creditedAt)}</td>
                 <td className="px-3 py-2 font-medium">{row.tenantName}</td>
+                <td className="px-3 py-2">{row.packageName || 'Avulso'}</td>
                 <td className="px-3 py-2 text-right">{number.format(row.credits)}</td>
                 <td className="px-3 py-2 text-right">{brl.format(row.amountCents / 100)}</td>
                 <td className="px-3 py-2 text-right font-medium">{usd.format(row.recommendedUsd)}</td>
@@ -143,7 +146,7 @@ export function TopUpFundingCard() {
               </tr>
             ))}
             {list && list.rows.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Nenhuma recarga confirmada.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">Nenhuma recarga confirmada.</td></tr>
             )}
           </tbody>
         </table>
