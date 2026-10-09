@@ -11,7 +11,7 @@ export const FLIP_AI_TYPING_MAX_MS = 7_000;
 /** A reply is shown as at most this many chat bubbles. */
 export const FLIP_AI_REPLY_MAX_MESSAGES = 4;
 /** A bubble longer than this is split at sentence boundaries, so it stays easy to read. */
-export const FLIP_AI_BUBBLE_MAX_CHARACTERS = 200;
+export const FLIP_AI_BUBBLE_MAX_CHARACTERS = 180;
 
 /** How long the "Escrevendo..." indicator should still stay on screen before the reply appears. */
 export function resolveTypingDelayMs(replyLength: number, elapsedMs: number) {

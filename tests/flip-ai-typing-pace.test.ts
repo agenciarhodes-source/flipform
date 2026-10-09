@@ -40,7 +40,7 @@ test('mensagem longa é dividida em frases inteiras e a pergunta final fica sozi
   // Nothing is lost and a price is never cut at its thousands separator.
   assert.equal(parts.join(' '), long);
   assert.ok(parts.every((part) => !/R\$ \d$/.test(part)));
-  assert.ok(parts.slice(0, -1).every((part) => part.length <= 200));
+  assert.ok(parts.slice(0, -1).every((part) => part.length <= 180));
 });
 
 test('mensagem curta com pergunta no fim separa só a pergunta', () => {
