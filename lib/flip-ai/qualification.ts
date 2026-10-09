@@ -190,7 +190,12 @@ export async function finalizeFlipAiQualification(input: {
     const existing = await db.flipAiQualification.findFirst({
       where: { tenantId: input.runtime.tenantId, conversationId: input.conversationId },
     });
-    if (existing) return existing;
+    // A verdict is final, with one exception: a conversation closed as out of profile or without
+    // enough information is upgraded when the person later shows real fit. It is never downgraded.
+    const revising = Boolean(existing)
+      && (existing?.classification === 'disqualified' || existing?.classification === 'insufficient')
+      && (parsed.data.classification === 'qualified' || parsed.data.classification === 'nurture');
+    if (existing && !revising) return existing;
 
     const evidence = [...new Set(input.evidenceMessageIds)].slice(-20);
     if (!evidence.length) return null;
@@ -230,28 +235,33 @@ export async function finalizeFlipAiQualification(input: {
     const qualifiedLeadEventId = parsed.data.classification === 'qualified'
       ? `flip-ai-qualified:${input.conversationId}`
       : null;
-    const qualification = await db.flipAiQualification.create({
-      data: {
-        tenantId: input.runtime.tenantId,
-        agentId: input.runtime.id,
-        conversationId: input.conversationId,
-        leadId,
-        knowledgeIndexId: input.runtime.knowledgeIndexId,
-        classification: parsed.data.classification,
-        fitScore: parsed.data.fitScore,
-        intentScore: parsed.data.intentScore,
-        awarenessLevel: parsed.data.awarenessLevel,
-        journeyStage: parsed.data.journeyStage,
-        confidence: parsed.data.confidence,
-        summary: parsed.data.summary,
-        reasons: parsed.data.reasons,
-        nextAction: parsed.data.nextAction,
-        evidenceMessageIds: evidence,
-        model: input.model.slice(0, 200),
-        qualifiedLeadEventId,
-        qualifiedLeadTrackingStatus: qualifiedLeadEventId ? 'pending' : 'not_applicable',
-      },
-    });
+    const verdict = {
+      leadId,
+      knowledgeIndexId: input.runtime.knowledgeIndexId,
+      classification: parsed.data.classification,
+      fitScore: parsed.data.fitScore,
+      intentScore: parsed.data.intentScore,
+      awarenessLevel: parsed.data.awarenessLevel,
+      journeyStage: parsed.data.journeyStage,
+      confidence: parsed.data.confidence,
+      summary: parsed.data.summary,
+      reasons: parsed.data.reasons,
+      nextAction: parsed.data.nextAction,
+      evidenceMessageIds: evidence,
+      model: input.model.slice(0, 200),
+      qualifiedLeadEventId,
+      qualifiedLeadTrackingStatus: qualifiedLeadEventId ? 'pending' : 'not_applicable',
+    };
+    const qualification = existing
+      ? await db.flipAiQualification.update({ where: { id: existing.id }, data: verdict })
+      : await db.flipAiQualification.create({
+        data: {
+          tenantId: input.runtime.tenantId,
+          agentId: input.runtime.id,
+          conversationId: input.conversationId,
+          ...verdict,
+        },
+      });
     await db.flipAiConversationState.updateMany({
       where: {
         tenantId: input.runtime.tenantId,
@@ -266,8 +276,9 @@ export async function finalizeFlipAiQualification(input: {
         userId: null,
         entityType: 'flip_ai_qualification',
         entityId: qualification.id,
-        action: 'flip_ai.qualification.completed',
+        action: existing ? 'flip_ai.qualification.revised' : 'flip_ai.qualification.completed',
         metadata: {
+          ...(existing ? { previousClassification: existing.classification } : {}),
           agentId: input.runtime.id,
           conversationId: input.conversationId,
           leadId,
@@ -281,17 +292,33 @@ export async function finalizeFlipAiQualification(input: {
       },
     });
 
-    // The attendant's verdict sets the lead temperature once, when the qualification is created.
-    // Only a lead created by Flip AI that still has the capture default is changed, so a
-    // temperature chosen by a person is never overwritten. Stage and owner are not touched.
+    // The attendant's verdict sets the lead temperature when the qualification is created or revised.
+    // Only a lead created by Flip AI that a person has not edited is changed, so a temperature
+    // chosen by someone is never overwritten. Stage and owner are not touched.
     const temperature = summarizeFlipAiQualificationScore(parsed.data).temperature;
-    if (leadId && (temperature === 'hot' || temperature === 'cold')) {
+    if (leadId && temperature !== 'unknown') {
+      // On a revision the lead may carry the cold or warm it received from Flip AI itself; that is
+      // only replaced when no person has edited the lead.
+      const editedByPerson = existing
+        ? await db.auditLog.count({
+          where: {
+            tenantId: input.runtime.tenantId,
+            entityType: 'lead',
+            entityId: leadId,
+            action: 'lead.updated',
+            userId: { not: null },
+          },
+        })
+        : 0;
+      const replaceable: Array<'cold' | 'warm'> = existing && editedByPerson === 0
+        ? ['cold', 'warm']
+        : [FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE];
       const applied = await db.lead.updateMany({
         where: {
           id: leadId,
           tenantId: input.runtime.tenantId,
           source: 'flip_ai',
-          temperature: FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE,
+          temperature: { in: replaceable, not: temperature },
         },
         data: { temperature },
       });
@@ -304,8 +331,8 @@ export async function finalizeFlipAiQualification(input: {
             entityId: leadId,
             action: 'lead.flip_ai_temperature_applied',
             metadata: {
-              from: FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE,
               to: temperature,
+              revised: Boolean(existing),
               qualificationId: qualification.id,
               classification: parsed.data.classification,
             },

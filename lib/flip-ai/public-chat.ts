@@ -977,6 +977,7 @@ export function buildPublicChatInstructions(
     'Separe fit de intenção. Use qualified apenas para perfil e momento realmente adequados; nurture para bom perfil ainda sem momento; disqualified para incompatibilidade clara; insufficient quando os dados não sustentam uma decisão.',
     'Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados, exceto quando a própria pessoa informar o dado que faltava nesta mensagem e você o preencher em identity. A classificação é apenas uma recomendação: o backend revalida o Lead e controla qualquer evento externo.',
     'Sempre que você disser que vai encaminhar a pessoa ou o contato dela para o time, ou quando ela acabar de completar nome e telefone, finalize qualification nesta mesma resposta, com resumo, motivos e próxima ação. Nunca encaminhe alguém deixando qualification como null.',
+    'Se a conversa já tinha sido tratada como fora do perfil ou sem informação suficiente e a pessoa trouxer um fato novo que mostre aderência, reavalie: finalize qualification outra vez com a nova classificação, o novo resumo e os novos motivos.',
   ].filter(Boolean).join('\n\n');
 }
 
