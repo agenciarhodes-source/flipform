@@ -11,7 +11,7 @@ import {
   parsePublicChatDecision,
   PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
-import { OpenAiResponseError } from '@/lib/flip-ai/openai-responses';
+import { OpenAiResponseError, type OpenAiConversationInput } from '@/lib/flip-ai/openai-responses';
 import { toPublicFlipAiErrorMessage } from '@/lib/flip-ai/public-error-message';
 import {
   assertFlipAiConversationRuntimeReady,
@@ -25,6 +25,14 @@ import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversati
 import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { getClientIp } from '@/lib/rate-limit';
+import {
+  attachmentInfo,
+  buildAttachmentModelContent,
+  unreadableAttachmentNote,
+  validateChatAttachment,
+  type FlipAiChatAttachment,
+  type FlipAiModelContentPart,
+} from '@/lib/flip-ai/chat-attachment';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,8 +146,28 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   }
 
   let body: unknown;
+  let attachment: FlipAiChatAttachment | null = null;
   try {
-    body = await request.json();
+    if ((request.headers.get('content-type') || '').toLowerCase().startsWith('multipart/form-data')) {
+      // A message with a photo or document: the JSON travels in "payload" and the bytes in "file".
+      const form = await request.formData();
+      const payload = JSON.parse(String(form.get('payload') || ''));
+      const file = form.get('file');
+      if (!(file instanceof File) || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error('invalid_multipart');
+      }
+      const checked = validateChatAttachment({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
+      if (!checked.ok) {
+        return jsonError(new FlipAiError('INVALID_PUBLIC_CHAT_ATTACHMENT', 400, checked.message),
+          session.token, session.created);
+      }
+      attachment = checked.attachment;
+      // The description of the file always comes from the bytes the server received.
+      body = { ...payload, attachment: attachmentInfo(attachment) };
+    } else {
+      body = await request.json();
+      if (body && typeof body === 'object' && 'attachment' in body) throw new Error('attachment_without_file');
+    }
   } catch {
     return jsonError(new FlipAiError('INVALID_PUBLIC_CHAT_MESSAGE', 400, 'Revise a mensagem enviada.'),
       session.token, session.created);
@@ -220,17 +248,45 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return jsonError(error, session.token, session.created);
   }
 
+  // The file is attached to the visitor's last message for this model call only; it is not stored.
+  const withLastUserContent = (
+    content: (text: string) => string | FlipAiModelContentPart[],
+  ): OpenAiConversationInput => {
+    const lastUser = context.messages.map((message) => message.role).lastIndexOf('user');
+    return {
+      instructions: context.instructions,
+      messages: context.messages.map((message, index) => (
+        index === lastUser
+          ? { role: message.role, content: content(typeof message.content === 'string' ? message.content : '') }
+          : message
+      )),
+    };
+  };
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const rawResult = await executeFlipAiConversationResponse({
-          tenantId: turn.tenantId,
-          conversationId: turn.conversationId,
-          agentId: turn.agentId,
-          context,
-          textFormat: PUBLIC_CHAT_DECISION_FORMAT,
-          timeoutMs: 55_000,
-        });
+        const call = (modelContext: OpenAiConversationInput) =>
+          executeFlipAiConversationResponse({
+            tenantId: turn.tenantId,
+            conversationId: turn.conversationId,
+            agentId: turn.agentId,
+            context: modelContext,
+            textFormat: PUBLIC_CHAT_DECISION_FORMAT,
+            timeoutMs: 55_000,
+          });
+        const file = attachment;
+        const rawResult = file
+          ? await call(withLastUserContent((text) => buildAttachmentModelContent(text, file))).catch((error) => {
+            // The provider refused or could not read the file: the visitor still gets a normal reply
+            // that confirms the file arrived, instead of an error in the middle of the conversation.
+            const refused = error instanceof OpenAiResponseError
+              && error.kind === 'definitive'
+              && /^OPENAI_RESPONSE_HTTP_4\d\d$/.test(error.code);
+            if (!refused) throw error;
+            return call(withLastUserContent((text) => unreadableAttachmentNote(text, file)));
+          })
+          : await call(context);
         const decision = parsePublicChatDecision(rawResult.text);
         decision.qualification = applyBrainFinalQualification(decision.qualification, context.brainAssessment);
         const result = { ...rawResult, text: decision.reply };
