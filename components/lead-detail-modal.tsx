@@ -552,13 +552,88 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               </section>
             )}
 
+            {lead.flipAiQualifications?.map((qualification: any) => (
+              <section key={qualification.id} className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-violet-700" />
+                      <h3 className="font-heading text-sm font-semibold">Qualificação do lead</h3>
+                      <Badge variant="outline">{qualificationLabels[qualification.classification] || qualification.classification}</Badge>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Análise da conversa inteira feita pelo atendente de IA {qualification.agent?.name || 'Flip AI'} • {formatDateTime(qualification.createdAt)}
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Consciência {qualification.awarenessLevel}/5 • {journeyLabels[qualification.journeyStage] || qualification.journeyStage}
+                  </div>
+                </div>
+                {(() => {
+                  // The attendant's qualification is the lead's score; the JEV card hides its own when this exists.
+                  const scoreSummary = summarizeFlipAiQualificationScore(qualification);
+                  return (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border bg-white p-3">
+                        <div className="text-xs text-muted-foreground">Score geral</div>
+                        <div className="text-2xl font-bold">{scoreSummary.score == null ? '—' : scoreSummary.score}</div>
+                        <div className="text-xs text-muted-foreground">de 0 a 100</div>
+                      </div>
+                      <div className="rounded-lg border bg-white p-3">
+                        <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
+                        <div className="text-xl font-bold">{temperatureLabels[scoreSummary.temperature] || 'Em análise'}</div>
+                        <div className="text-xs text-muted-foreground">Sugestão: não altera a temperatura do lead no CRM.</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Fit Score</div>
+                    <div className="text-2xl font-bold">{qualification.fitScore}</div>
+                  </div>
+                  <div className="rounded-lg border bg-white p-3">
+                    <div className="text-xs text-muted-foreground">Intent Score</div>
+                    <div className="text-2xl font-bold">{qualification.intentScore}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo</div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm">{qualification.summary}</p>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Motivos</div>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+                    {qualification.reasons.map((reason: string, index: number) => <li key={index}>{reason}</li>)}
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-violet-200 bg-white p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Próxima ação</div>
+                  <p className="mt-1 text-sm font-medium">{qualification.nextAction}</p>
+                </div>
+                <details className="rounded-lg border bg-white">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Histórico da conversa</summary>
+                  <div className="space-y-2 border-t p-3">
+                    {[...(qualification.conversation?.messages || [])].reverse().map((message: any) => (
+                      <div key={message.id} className={`max-w-[88%] rounded-lg px-3 py-2 text-sm ${message.direction === 'outbound' ? 'ml-auto bg-violet-100' : 'bg-muted'}`}>
+                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
+                          {message.direction === 'outbound' ? qualification.agent?.name || 'Flip AI' : 'Lead'} • {formatDateTime(message.createdAt)}
+                        </div>
+                        <div className="whitespace-pre-wrap">{message.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </section>
+            ))}
+
             {lead.flipAiLiveIntelligence && (
               <section className="space-y-4 rounded-xl border border-blue-200 bg-blue-50/40 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-blue-700" />
-                      <h3 className="font-heading text-sm font-semibold">Inteligência em tempo real</h3>
+                      <h3 className="font-heading text-sm font-semibold">Inteligência em tempo real — momento da conversa</h3>
                       <Badge variant="outline">
                         {qualificationLabels[lead.flipAiLiveIntelligence.classification] || lead.flipAiLiveIntelligence.classification}
                       </Badge>
@@ -571,10 +646,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     {lead.flipAiLiveIntelligence.finalQualificationApplied
                       ? 'Qualificação final da conversa: desqualificado'
                       : `JEV • confiança ${Math.round(Number(lead.flipAiLiveIntelligence.confidence || 0) * 100)}%`}
+                    {lead.flipAiQualifications?.length > 0 && (
+                      <div className="mt-1 max-w-xs">
+                        Leitura mensagem a mensagem, usada para conduzir a conversa. A qualificação do lead é a análise do atendente de IA acima.
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {!(lead.flipAiQualifications?.length > 0) && (<>
                   <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Score</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? '—' : lead.flipAiLiveIntelligence.score}</div>
@@ -589,12 +670,13 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     <div className="text-xl font-bold">{lead.flipAiLiveIntelligence.brainAssessment && lead.flipAiLiveIntelligence.brainAssessment.score == null ? 'Em análise' : temperatureLabels[lead.flipAiLiveIntelligence.temperature] || lead.flipAiLiveIntelligence.temperature}</div>
                     <div className="text-xs text-muted-foreground">Não altera o CRM automaticamente</div>
                   </div>
-                  {!lead.flipAiLiveIntelligence.brainAssessment && <div className="rounded-lg border bg-white p-3">
+                  </>)}
+                  {!lead.flipAiLiveIntelligence.brainAssessment && !(lead.flipAiQualifications?.length > 0) && <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Fit</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.fitScore}</div>
                     <div className="text-xs text-muted-foreground">peso 40%</div>
                   </div>}
-                  {!lead.flipAiLiveIntelligence.brainAssessment && <div className="rounded-lg border bg-white p-3">
+                  {!lead.flipAiLiveIntelligence.brainAssessment && !(lead.flipAiQualifications?.length > 0) && <div className="rounded-lg border bg-white p-3">
                     <div className="text-xs text-muted-foreground">Intenção</div>
                     <div className="text-2xl font-bold">{lead.flipAiLiveIntelligence.intentScore}</div>
                     <div className="text-xs text-muted-foreground">peso 30%</div>
@@ -679,79 +761,6 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 </div>
               </section>
             )}
-
-            {lead.flipAiQualifications?.map((qualification: any) => (
-              <section key={qualification.id} className="space-y-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-violet-700" />
-                      <h3 className="font-heading text-sm font-semibold">{qualification.agent?.name || 'Flip AI'}</h3>
-                      <Badge variant="outline">{qualificationLabels[qualification.classification] || qualification.classification}</Badge>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{formatDateTime(qualification.createdAt)}</div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Consciência {qualification.awarenessLevel}/5 • {journeyLabels[qualification.journeyStage] || qualification.journeyStage}
-                  </div>
-                </div>
-                {!lead.flipAiLiveIntelligence && (() => {
-                  // Shown only when there is no live reading, so the lead never displays two competing scores.
-                  const scoreSummary = summarizeFlipAiQualificationScore(qualification);
-                  return (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-lg border bg-white p-3">
-                        <div className="text-xs text-muted-foreground">Score geral</div>
-                        <div className="text-2xl font-bold">{scoreSummary.score == null ? '—' : scoreSummary.score}</div>
-                        <div className="text-xs text-muted-foreground">de 0 a 100</div>
-                      </div>
-                      <div className="rounded-lg border bg-white p-3">
-                        <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
-                        <div className="text-xl font-bold">{temperatureLabels[scoreSummary.temperature] || 'Em análise'}</div>
-                        <div className="text-xs text-muted-foreground">Sugestão: não altera a temperatura do lead no CRM.</div>
-                      </div>
-                    </div>
-                  );
-                })()}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Fit Score</div>
-                    <div className="text-2xl font-bold">{qualification.fitScore}</div>
-                  </div>
-                  <div className="rounded-lg border bg-white p-3">
-                    <div className="text-xs text-muted-foreground">Intent Score</div>
-                    <div className="text-2xl font-bold">{qualification.intentScore}</div>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Resumo</div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm">{qualification.summary}</p>
-                </div>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Motivos</div>
-                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
-                    {qualification.reasons.map((reason: string, index: number) => <li key={index}>{reason}</li>)}
-                  </ul>
-                </div>
-                <div className="rounded-lg border border-violet-200 bg-white p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Próxima ação</div>
-                  <p className="mt-1 text-sm font-medium">{qualification.nextAction}</p>
-                </div>
-                <details className="rounded-lg border bg-white">
-                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium">Histórico da conversa</summary>
-                  <div className="space-y-2 border-t p-3">
-                    {[...(qualification.conversation?.messages || [])].reverse().map((message: any) => (
-                      <div key={message.id} className={`max-w-[88%] rounded-lg px-3 py-2 text-sm ${message.direction === 'outbound' ? 'ml-auto bg-violet-100' : 'bg-muted'}`}>
-                        <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-                          {message.direction === 'outbound' ? qualification.agent?.name || 'Flip AI' : 'Lead'} • {formatDateTime(message.createdAt)}
-                        </div>
-                        <div className="whitespace-pre-wrap">{message.text}</div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              </section>
-            ))}
           </TabsContent>
 
           <TabsContent value="history" className="pb-6 space-y-2">
