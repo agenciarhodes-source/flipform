@@ -104,21 +104,6 @@ jobs:
     needs: validate
     timeout-minutes: 20
 
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: flipform_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres -d flipform_ci"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
     env:
       NODE_ENV: test
       JWT_SECRET_CURRENT: staging-local-secret
@@ -153,6 +138,20 @@ jobs:
 
       - name: Prisma generate
         run: npx prisma generate
+
+      # The disposable database runs on the runner itself, using the PostgreSQL that ships with
+      # the image plus the pgvector package. This job used to pull a database image from Docker
+      # Hub and failed before any test ran whenever that registry was unavailable.
+      - name: Start PostgreSQL with pgvector
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          PG_MAJOR="$(pg_lsclusters -h | awk 'NR==1 {print $1}')"
+          sudo apt-get update -y
+          sudo apt-get install -y "postgresql-${PG_MAJOR}-pgvector"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo -u postgres createdb flipform_ci
+          pg_isready -h 127.0.0.1 -p 5432
 
       # The repository contains legacy repair migrations that assume a pre-existing
       # production schema, so migrate deploy cannot bootstrap a brand-new database.
