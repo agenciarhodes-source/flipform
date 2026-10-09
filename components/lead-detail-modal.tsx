@@ -582,7 +582,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div className="rounded-lg border bg-white p-3">
                         <div className="text-xs text-muted-foreground">Temperatura sugerida</div>
                         <div className="text-xl font-bold">{temperatureLabels[scoreSummary.temperature] || 'Em análise'}</div>
-                        <div className="text-xs text-muted-foreground">Sugestão: não altera a temperatura do lead no CRM.</div>
+                        <div className="text-xs text-muted-foreground">Aplicada ao lead na qualificação, se ninguém tiver alterado a temperatura antes.</div>
                       </div>
                     </div>
                   );
