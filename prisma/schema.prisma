@@ -1601,3 +1601,15 @@ model PlatformFlipAiSettings {
 
   @@map("platform_flip_ai_settings")
 }
+
+// Manual note that the provider balance for a credit purchase was recharged.
+// Kept apart from the order itself: it never changes payments or wallets.
+model PlatformTopUpFunding {
+  orderId    String   @id @map("order_id")
+  fundedUsd  Decimal  @map("funded_usd") @db.Decimal(12, 2)
+  fundedAt   DateTime @map("funded_at")
+  fundedById String?  @map("funded_by_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("platform_top_up_funding")
+}

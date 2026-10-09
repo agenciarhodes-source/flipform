@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { notifyTopUpCredited } from '@/lib/flip-ai/top-up-funding';
 import Stripe from 'stripe';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { captureServerException } from '@/lib/observability';
@@ -49,6 +50,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ignored: true });
     }
     const result = await applyVerifiedStripeTopUpPayment(verified);
+    if (!result.reused && result.status === 'credited') {
+      // The payment is already settled; the owner notice is best-effort and never fails the webhook.
+      await notifyTopUpCredited({ orderId: verified.orderId }).catch(() => undefined);
+    }
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     if (error instanceof StripeTopUpWebhookError) {

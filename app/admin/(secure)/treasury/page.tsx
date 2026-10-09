@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AlertTriangle, Landmark, Loader2, RefreshCw, ShieldCheck, WalletCards } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { TopUpFundingCard } from './top-up-funding-card';
 
 const number = new Intl.NumberFormat('pt-BR');
 const usd = new Intl.NumberFormat('en-US', {
@@ -252,6 +253,8 @@ export default function AdminAiTreasuryPage() {
         </table>
       </div>
     </Card>
+
+    <TopUpFundingCard />
 
     <Card className="p-0 overflow-hidden">
       <div className="p-4 border-b">
