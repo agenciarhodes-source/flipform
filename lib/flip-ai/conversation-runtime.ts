@@ -4,7 +4,9 @@ import { FlipAiError } from './access';
 import { getFlipAiCreditBalanceForTenant } from './credits';
 import { getActiveFlipAiTextModel } from './text-model-setting';
 import {
+  FLIP_AI_RECOVERY_MAX_OUTPUT_TOKENS,
   FLIP_AI_TEXT_MODEL,
+  OpenAiResponseError,
   streamOpenAiText,
   type OpenAiConversationInput,
   type OpenAiJsonSchemaFormat,
@@ -92,15 +94,25 @@ export async function executeFlipAiConversationResponse(input: {
 }): Promise<OpenAiTextResult> {
   const plan = await assertFlipAiConversationRuntimeReady({ tenantId: input.tenantId });
 
-  return streamOpenAiText(
-    input.context,
-    input.onDelta || (() => undefined),
-    {
-      timeoutMs: input.timeoutMs || 55_000,
-      model: plan.model,
-      textFormat: input.textFormat,
-      safetyIdentifier: input.conversationId,
-      promptCacheKey: input.agentId,
-    },
-  );
+  const options = {
+    timeoutMs: input.timeoutMs || 55_000,
+    model: plan.model,
+    textFormat: input.textFormat,
+    safetyIdentifier: input.conversationId,
+    promptCacheKey: input.agentId,
+  };
+  const onDelta = input.onDelta || (() => undefined);
+
+  try {
+    return await streamOpenAiText(input.context, onDelta, options);
+  } catch (error) {
+    // A truncated response is the one failure that is safe to repeat: the provider confirmed it
+    // did not finish, and nothing reached the visitor unless the caller streams partial text.
+    const truncated = error instanceof OpenAiResponseError && error.code === 'OPENAI_RESPONSE_TRUNCATED';
+    if (!truncated || input.onDelta) throw error;
+    return streamOpenAiText(input.context, onDelta, {
+      ...options,
+      maxOutputTokens: FLIP_AI_RECOVERY_MAX_OUTPUT_TOKENS,
+    });
+  }
 }
