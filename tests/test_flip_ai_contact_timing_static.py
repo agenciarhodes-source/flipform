@@ -18,6 +18,6 @@ def test_contact_timing_is_pure_guidance_and_touches_no_lead_or_crm_data():
     timing = read("lib/flip-ai/contact-timing.ts")
     for forbidden in ["prisma", "server-only", "fetch(", "lead.update", "stageId"]:
         assert forbidden not in timing, forbidden
-    for moment in ["discover_first", "ask_now", "handle_objection_first", "hold_after_request", "stop_requesting", "out_of_profile"]:
+    for moment in ["discover_first", "ask_now", "handle_objection_first", "hold_after_request", "stop_requesting"]:
         assert moment + ":" in timing, moment
     assert "tests/flip-ai-contact-timing.test.ts" in read(".github/workflows/ci.yml")

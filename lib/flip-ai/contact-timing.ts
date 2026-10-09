@@ -3,6 +3,8 @@ import type { FlipAiConversationDecision } from './decision-engine';
 /**
  * When to ask for name and phone. Deterministic: it reads how many times the agent
  * already asked, how long ago, and the JEV reading of the conversation moment.
+ * Whether someone is out of profile is never decided here: only the attendant judges that,
+ * from what the person actually said.
  * It only shapes the guidance given to the model; it never creates or changes a Lead.
  */
 
@@ -17,8 +19,7 @@ export type FlipAiContactMoment =
   | 'ask_now'
   | 'handle_objection_first'
   | 'hold_after_request'
-  | 'stop_requesting'
-  | 'out_of_profile';
+  | 'stop_requesting';
 
 const CONTACT_REQUEST_PATTERN = new RegExp([
   'como (voc[eê]|vc) se chama',
@@ -66,7 +67,6 @@ export function resolveContactMoment(input: {
   const { requests, repliesSinceLastRequest } = summarizeContactRequests(input.assistantMessages || []);
   const decision = input.decision || null;
 
-  if (decision && decision.fitScore <= 25 && decision.confidence >= 0.65) return 'out_of_profile';
   if (requests >= FLIP_AI_CONTACT_MAX_REQUESTS) return 'stop_requesting';
   if (repliesSinceLastRequest !== null && repliesSinceLastRequest < FLIP_AI_CONTACT_COOLDOWN_REPLIES) {
     return 'hold_after_request';
@@ -76,7 +76,9 @@ export function resolveContactMoment(input: {
     // No reading of the moment: keep the simple rule based on how much the person already said.
     return input.inboundMessages >= 3 ? 'ask_now' : 'discover_first';
   }
-  if (decision.objection !== 'none' && decision.objectionConfidence >= 0.5) return 'handle_objection_first';
+  // The engine labels plain questions (price, deadline, reports) with an objection topic, often with
+  // high confidence. It is only treated as a real objection when the intent itself is an objection.
+  if (decision.intent === 'objection' && decision.objection !== 'none') return 'handle_objection_first';
   if (input.inboundMessages >= 2 && isBuyingMoment(decision)) return 'ask_now';
   if (input.inboundMessages >= FLIP_AI_CONTACT_FALLBACK_INBOUND_MESSAGES) return 'ask_now';
   return 'discover_first';
@@ -88,5 +90,4 @@ export const FLIP_AI_CONTACT_GUIDANCE: Record<FlipAiContactMoment, string> = {
   handle_objection_first: 'MOMENTO DA CONVERSA: a pessoa trouxe uma objeção. Não peça nome nem telefone nesta resposta. Reconheça o ponto, responda ao motivo real da resistência e só volte ao contato depois que a objeção estiver tratada.',
   hold_after_request: 'MOMENTO DA CONVERSA: você pediu o contato há pouco e a pessoa não informou. Não repita o pedido nesta resposta. Responda de verdade ao que ela acabou de dizer, mostre que entendeu a situação e retome o contato mais adiante, em um ponto natural da conversa.',
   stop_requesting: 'MOMENTO DA CONVERSA: você já pediu o contato algumas vezes sem resposta. Não peça nome nem telefone de novo. Continue ajudando e aceite o contato apenas se a própria pessoa oferecer.',
-  out_of_profile: 'MOMENTO DA CONVERSA: os sinais indicam que a pessoa está fora do perfil atendido. Não peça nome nem telefone. Confirme o que ela procura em uma frase, se ainda houver dúvida, e encerre com educação.',
 };

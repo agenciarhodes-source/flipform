@@ -60,14 +60,15 @@ export async function captureFlipAiLead(input: {
   const name = input.decision.name?.trim().slice(0, 160) || '';
   const phone = normalizeBrazilianPhone(input.decision.phone);
   if (!name || !phone || !isValidBrazilianPhone(phone)) return null;
-  // Out-of-profile contacts are not registered: no Lead, no rotation and no Lead event.
-  // The conversation and its qualification stay stored for review.
-  if (input.finalClassification === 'disqualified') return null;
+  // A contact the person chose to give is never thrown away. When the conversation was closed as
+  // out of profile, the Lead is still registered, but cold and without the Lead tracking event,
+  // so ad platforms are not told that a good lead arrived.
   const storedQualification = await prisma.flipAiQualification.findFirst({
     where: { tenantId: input.runtime.tenantId, conversationId: input.conversationId },
     select: { classification: true },
   }).catch(() => null);
-  if (storedQualification?.classification === 'disqualified') return null;
+  const disqualified = input.finalClassification === 'disqualified'
+    || (!input.finalClassification && storedQualification?.classification === 'disqualified');
   if (!(await hasUserEvidence({
     tenantId: input.runtime.tenantId,
     conversationId: input.conversationId,
@@ -82,7 +83,7 @@ export async function captureFlipAiLead(input: {
     stageId: input.runtime.initialStageId,
     rotationId: input.runtime.rotationId,
     source: 'flip_ai',
-    temperature: 'warm',
+    temperature: disqualified ? 'cold' : 'warm',
     requireValidPhone: true,
     identity: { displayName: name, phone },
     attribution: input.attribution,
@@ -94,6 +95,13 @@ export async function captureFlipAiLead(input: {
     },
   });
   if (outcome.kind !== 'created' && outcome.kind !== 'linked_existing') return null;
+
+  // A qualification finished before the contact arrived is attached to the Lead now.
+  await prisma.flipAiQualification.updateMany({
+    where: { tenantId: input.runtime.tenantId, conversationId: input.conversationId, leadId: null },
+    data: { leadId: outcome.leadId },
+  }).catch(() => undefined);
+  if (disqualified) return {};
 
   const eventId = `flip-ai-lead:${input.conversationId}`;
   const metaAttribution: MetaSubmissionAttribution = {
