@@ -211,8 +211,9 @@ def test_public_chat_balances_discovery_with_contact_capture():
     chat = read("lib/flip-ai/public-chat.ts")
     assert "normalmente use no máximo três frases curtas e cerca de 70 palavras" in chat
     assert "nunca faça mais de três perguntas de diagnóstico" in chat
-    assert "CAPTURA PRIORITÁRIA" in chat
-    assert "peça agora o dado de contato que falta" in chat
+    timing = read("lib/flip-ai/contact-timing.ts")
+    assert "CAPTURA PRIORITÁRIA" in timing
+    assert "peça agora o dado de contato que falta" in timing
     assert "Depois de pedir contato, não acrescente outra pergunta de diagnóstico" in chat
 
 
