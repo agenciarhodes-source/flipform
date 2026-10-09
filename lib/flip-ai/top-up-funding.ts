@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendEmail } from '@/lib/email';
+import { getFlipAiCreditPackages } from './credit-packages';
 
 /**
  * Manual control of the provider recharge owed for each credit package a company bought.
@@ -20,6 +21,8 @@ export type TopUpFundingRow = {
   orderId: string;
   tenantId: string;
   tenantName: string;
+  /** Catalog package with the same amount of credits, when one still exists. */
+  packageName: string | null;
   credits: number;
   amountCents: number;
   currency: string;
@@ -67,6 +70,13 @@ export async function listTopUpFunding(limit = 200): Promise<{
     return [];
   });
   const fundedByOrder = new Map(funding.map((item) => [item.orderId, item]));
+  // Purchases do not store the package, so the name comes from the current catalog by credit amount.
+  let packageByCredits = new Map<number, string>();
+  try {
+    packageByCredits = new Map(getFlipAiCreditPackages().map((item) => [item.credits, item.name]));
+  } catch {
+    // An invalid catalog only leaves the package name empty.
+  }
 
   const rows = orders.map((order): TopUpFundingRow => {
     const mark = fundedByOrder.get(order.id);
@@ -74,6 +84,7 @@ export async function listTopUpFunding(limit = 200): Promise<{
       orderId: order.id,
       tenantId: order.tenantId,
       tenantName: order.tenant.name,
+      packageName: packageByCredits.get(order.credits) ?? null,
       credits: order.credits,
       amountCents: order.amountCents,
       currency: order.currency,
