@@ -62,6 +62,19 @@ function moneyFromCents(value: number) {
   return brl.format(value / 100);
 }
 
+function creditsLabel(credits: number) {
+  if (credits >= 1_000_000 && credits % 100_000 === 0) {
+    const millions = credits / 1_000_000;
+    return `${number.format(millions)} ${millions === 1 ? 'milhão' : 'milhões'}`;
+  }
+  return number.format(credits);
+}
+
+/** Price in cents for each million credits, so packages of different sizes can be compared. */
+function centsPerMillion(item: CreditPackage) {
+  return (item.amountCents / item.credits) * 1_000_000;
+}
+
 function statusLabel(status: StorefrontOrder['status']) {
   if (status === 'credited') return 'Créditos liberados';
   if (status === 'paid') return 'Pagamento confirmado';
@@ -167,6 +180,9 @@ export function FlipAiCreditWalletClient({ initialStorefront }: { initialStorefr
   }
 
   const latestOrders = useMemo(() => storefront.orders.slice(0, 10), [storefront.orders]);
+  const packageRates = storefront.packages.map(centsPerMillion);
+  const highestRate = packageRates.length ? Math.max(...packageRates) : 0;
+  const lowestRate = packageRates.length ? Math.min(...packageRates) : 0;
 
   return (
     <div className="space-y-6">
@@ -221,29 +237,50 @@ export function FlipAiCreditWalletClient({ initialStorefront }: { initialStorefr
               {purchaseUnavailableMessage(storefront.purchases.reason)}
             </div>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {storefront.packages.map((item) => (
-                <div key={item.id} className="rounded-lg border p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="font-semibold">{item.name}</div>
-                      <div className="mt-1 text-sm text-muted-foreground">{item.description}</div>
-                    </div>
-                    <Badge variant="secondary">{number.format(item.credits)} créditos</Badge>
-                  </div>
-                  <div className="mt-5 text-2xl font-semibold">{moneyFromCents(item.amountCents)}</div>
-                  <Button
-                    className="mt-4 w-full"
-                    onClick={() => void buy(item.id)}
-                    disabled={Boolean(busyPackage)}
+            <div className="grid gap-4 pt-3 md:grid-cols-2 xl:grid-cols-3">
+              {storefront.packages.map((item) => {
+                const rate = centsPerMillion(item);
+                const savings = highestRate > 0 ? Math.round((1 - rate / highestRate) * 100) : 0;
+                const bestValue = storefront.packages.length > 1 && rate === lowestRate && savings > 0;
+                return (
+                  <div
+                    key={item.id}
+                    className={`relative flex flex-col rounded-xl border p-5 transition-shadow hover:shadow-md ${bestValue ? 'border-primary shadow-sm ring-1 ring-primary' : ''}`}
                   >
-                    {busyPackage === item.id
-                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      : <CreditCard className="mr-2 h-4 w-4" />}
-                    Comprar créditos
-                  </Button>
-                </div>
-              ))}
+                    {bestValue && (
+                      <span className="absolute -top-3 left-5 rounded-full bg-primary px-3 py-0.5 text-xs font-medium text-primary-foreground">
+                        Melhor custo por crédito
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{item.name}</div>
+                      {savings > 0 && <Badge variant="secondary">Economize {savings}%</Badge>}
+                    </div>
+                    <div className="mt-4">
+                      <span className="text-3xl font-semibold tracking-tight">{creditsLabel(item.credits)}</span>
+                      <span className="ml-2 text-sm text-muted-foreground">de créditos</span>
+                    </div>
+                    <p className="mt-2 flex-1 text-sm text-muted-foreground">{item.description}</p>
+                    <div className="mt-5 border-t pt-4">
+                      <div className="text-2xl font-semibold">{moneyFromCents(item.amountCents)}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {moneyFromCents(rate)} por milhão de créditos · pagamento único
+                      </div>
+                    </div>
+                    <Button
+                      className="mt-4 w-full"
+                      variant={bestValue ? 'default' : 'outline'}
+                      onClick={() => void buy(item.id)}
+                      disabled={Boolean(busyPackage)}
+                    >
+                      {busyPackage === item.id
+                        ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        : <CreditCard className="mr-2 h-4 w-4" />}
+                      Comprar créditos
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
           <div className="mt-4 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
