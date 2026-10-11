@@ -59,6 +59,8 @@ export function presignS3Url(input: {
   expiresSeconds: number;
   now?: Date;
   signedHeaders?: Record<string, string>;
+  /** Extra query parameters, covered by the signature (for example a forced download name). */
+  extraQuery?: Record<string, string>;
 }) {
   const now = input.now || new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
@@ -79,6 +81,7 @@ export function presignS3Url(input: {
     'X-Amz-Date': amzDate,
     'X-Amz-Expires': String(expires),
     'X-Amz-SignedHeaders': signedHeaderList,
+    ...(input.extraQuery || {}),
   };
   const canonicalQuery = Object.keys(query).sort()
     .map((name) => `${encodeRfc3986(name)}=${encodeRfc3986(query[name] ?? '')}`)
@@ -116,6 +119,7 @@ function objectUrl(config: AttachmentStorageConfig, input: {
   expiresSeconds: number;
   now?: Date;
   signedHeaders?: Record<string, string>;
+  extraQuery?: Record<string, string>;
 }) {
   return presignS3Url({
     method: input.method,
@@ -127,6 +131,7 @@ function objectUrl(config: AttachmentStorageConfig, input: {
     expiresSeconds: input.expiresSeconds,
     now: input.now,
     signedHeaders: input.signedHeaders,
+    extraQuery: input.extraQuery,
   });
 }
 
@@ -146,9 +151,27 @@ export function createAttachmentUploadUrl(config: AttachmentStorageConfig, input
   });
 }
 
+/** Header value that makes the browser save the file under its own name instead of opening it. */
+export function attachmentContentDisposition(name: string) {
+  const asciiName = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeRfc3986(name)}`;
+}
+
 /** Link a team member's browser uses to download one file. Valid for one minute. */
-export function createAttachmentDownloadUrl(config: AttachmentStorageConfig, input: { key: string; now?: Date }) {
-  return objectUrl(config, { method: 'GET', key: input.key, expiresSeconds: 60, now: input.now });
+export function createAttachmentDownloadUrl(config: AttachmentStorageConfig, input: {
+  key: string;
+  downloadName?: string;
+  now?: Date;
+}) {
+  return objectUrl(config, {
+    method: 'GET',
+    key: input.key,
+    expiresSeconds: 60,
+    now: input.now,
+    ...(input.downloadName
+      ? { extraQuery: { 'response-content-disposition': attachmentContentDisposition(input.downloadName) } }
+      : {}),
+  });
 }
 
 /** Reads the stored file on the server, refusing anything larger than `maxBytes`. */
