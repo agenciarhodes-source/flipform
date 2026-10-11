@@ -11,7 +11,7 @@ import {
   parsePublicChatDecision,
   PUBLIC_CHAT_DECISION_FORMAT,
 } from '@/lib/flip-ai/public-chat';
-import { OpenAiResponseError } from '@/lib/flip-ai/openai-responses';
+import { OpenAiResponseError, type OpenAiConversationInput } from '@/lib/flip-ai/openai-responses';
 import { toPublicFlipAiErrorMessage } from '@/lib/flip-ai/public-error-message';
 import {
   assertFlipAiConversationRuntimeReady,
@@ -25,6 +25,18 @@ import type { LeadAttributionSnapshot } from '@/lib/leads/ensure-from-conversati
 import type { PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { getClientIp } from '@/lib/rate-limit';
+import {
+  attachmentInfo,
+  buildAttachmentModelContent,
+  unreadableAttachmentNote,
+  type FlipAiChatAttachment,
+  type FlipAiModelContentPart,
+} from '@/lib/flip-ai/chat-attachment';
+import {
+  attachUploadToTurn,
+  ChatAttachmentUploadError,
+  claimUploadedChatAttachment,
+} from '@/lib/flip-ai/chat-attachment-upload';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -138,8 +150,16 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   }
 
   let body: unknown;
+  let attachmentId: unknown;
   try {
     body = await request.json();
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      // The browser can only name a file it uploaded; its description always comes from the server.
+      if ('attachment' in body) throw new Error('attachment_declared_by_client');
+      const { attachmentId: declared, ...rest } = body as Record<string, unknown>;
+      attachmentId = declared;
+      body = rest;
+    }
   } catch {
     return jsonError(new FlipAiError('INVALID_PUBLIC_CHAT_MESSAGE', 400, 'Revise a mensagem enviada.'),
       session.token, session.created);
@@ -153,11 +173,44 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return attachSessionCookie(NextResponse.json({ error: 'Not found' }, { status: 404 }), session.token, session.created);
   }
 
+  let attachment: FlipAiChatAttachment | null = null;
+  let acceptedAttachmentId: string | null = null;
+  if (attachmentId !== undefined && attachmentId !== null) {
+    try {
+      // The file is read back from private storage and checked before anything else happens.
+      const claimed = await claimUploadedChatAttachment({
+        tenantId: runtimeContext.tenantId,
+        sessionToken: session.token,
+        attachmentId,
+      });
+      attachment = claimed.attachment;
+      acceptedAttachmentId = claimed.id;
+      body = { ...(body as Record<string, unknown>), attachment: attachmentInfo(attachment) };
+    } catch (error) {
+      const known = error instanceof ChatAttachmentUploadError;
+      return jsonError(new FlipAiError(
+        known ? error.code : 'CHAT_ATTACHMENT_FAILED',
+        known ? error.status : 503,
+        known ? error.message : 'Não foi possível usar o arquivo enviado. Envie novamente.',
+      ), session.token, session.created);
+    }
+  }
+
   let turn: Awaited<ReturnType<typeof preparePublicChatTurn>>;
   try {
     turn = await preparePublicChatTurn(runtimeContext, session.token, body);
   } catch (error) {
     return jsonError(error, session.token, session.created);
+  }
+
+  if (acceptedAttachmentId) {
+    await attachUploadToTurn({
+      tenantId: runtimeContext.tenantId,
+      attachmentId: acceptedAttachmentId,
+      conversationId: turn.conversationId,
+      // The identifier the browser gave to this message, already validated when the turn was prepared.
+      clientMessageId: String((body as Record<string, unknown>).messageId || ''),
+    });
   }
 
   const encoder = new TextEncoder();
@@ -220,17 +273,45 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return jsonError(error, session.token, session.created);
   }
 
+  // The file goes to the model with the visitor's last message, for this call only.
+  const withLastUserContent = (
+    content: (text: string) => string | FlipAiModelContentPart[],
+  ): OpenAiConversationInput => {
+    const lastUser = context.messages.map((message) => message.role).lastIndexOf('user');
+    return {
+      instructions: context.instructions,
+      messages: context.messages.map((message, index) => (
+        index === lastUser
+          ? { role: message.role, content: content(typeof message.content === 'string' ? message.content : '') }
+          : message
+      )),
+    };
+  };
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const rawResult = await executeFlipAiConversationResponse({
-          tenantId: turn.tenantId,
-          conversationId: turn.conversationId,
-          agentId: turn.agentId,
-          context,
-          textFormat: PUBLIC_CHAT_DECISION_FORMAT,
-          timeoutMs: 55_000,
-        });
+        const call = (modelContext: OpenAiConversationInput) =>
+          executeFlipAiConversationResponse({
+            tenantId: turn.tenantId,
+            conversationId: turn.conversationId,
+            agentId: turn.agentId,
+            context: modelContext,
+            textFormat: PUBLIC_CHAT_DECISION_FORMAT,
+            timeoutMs: 55_000,
+          });
+        const file = attachment;
+        const rawResult = file
+          ? await call(withLastUserContent((text) => buildAttachmentModelContent(text, file))).catch((error) => {
+            // The provider refused or could not read the file: the visitor still gets a normal reply
+            // that confirms the file arrived, instead of an error in the middle of the conversation.
+            const refused = error instanceof OpenAiResponseError
+              && error.kind === 'definitive'
+              && /^OPENAI_RESPONSE_HTTP_4\d\d$/.test(error.code);
+            if (!refused) throw error;
+            return call(withLastUserContent((text) => unreadableAttachmentNote(text, file)));
+          })
+          : await call(context);
         const decision = parsePublicChatDecision(rawResult.text);
         decision.qualification = applyBrainFinalQualification(decision.qualification, context.brainAssessment);
         const result = { ...rawResult, text: decision.reply };

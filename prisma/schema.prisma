@@ -1619,7 +1619,10 @@ model PlatformTopUpFunding {
 model ChatAttachment {
   id              String    @id @default(uuid())
   tenantId        String    @map("tenant_id")
-  conversationId  String    @map("conversation_id")
+  // Hash of the anonymous chat session that requested the upload; never the cookie itself.
+  sessionRef      String    @map("session_ref")
+  // Set when the file is accepted together with the message it came with.
+  conversationId  String?   @map("conversation_id")
   clientMessageId String?   @map("client_message_id")
   objectKey       String    @unique @map("object_key")
   name            String
@@ -1634,6 +1637,7 @@ model ChatAttachment {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   @@index([tenantId, conversationId, status])
+  @@index([tenantId, sessionRef, createdAt])
   @@index([status, expiresAt])
   @@map("chat_attachments")
 }
