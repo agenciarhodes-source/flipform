@@ -4,7 +4,8 @@
 CREATE TABLE "chat_attachments" (
   "id" TEXT NOT NULL,
   "tenant_id" TEXT NOT NULL,
-  "conversation_id" TEXT NOT NULL,
+  "session_ref" TEXT NOT NULL,
+  "conversation_id" TEXT,
   "client_message_id" TEXT,
   "object_key" TEXT NOT NULL,
   "name" TEXT NOT NULL,
@@ -23,4 +24,6 @@ CREATE TABLE "chat_attachments" (
 CREATE UNIQUE INDEX "chat_attachments_object_key_key" ON "chat_attachments"("object_key");
 CREATE INDEX "chat_attachments_tenant_id_conversation_id_status_idx"
   ON "chat_attachments"("tenant_id", "conversation_id", "status");
+CREATE INDEX "chat_attachments_tenant_id_session_ref_created_at_idx"
+  ON "chat_attachments"("tenant_id", "session_ref", "created_at");
 CREATE INDEX "chat_attachments_status_expires_at_idx" ON "chat_attachments"("status", "expires_at");

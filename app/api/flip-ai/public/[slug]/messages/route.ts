@@ -29,10 +29,14 @@ import {
   attachmentInfo,
   buildAttachmentModelContent,
   unreadableAttachmentNote,
-  validateChatAttachment,
   type FlipAiChatAttachment,
   type FlipAiModelContentPart,
 } from '@/lib/flip-ai/chat-attachment';
+import {
+  attachUploadToTurn,
+  ChatAttachmentUploadError,
+  claimUploadedChatAttachment,
+} from '@/lib/flip-ai/chat-attachment-upload';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -146,27 +150,15 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   }
 
   let body: unknown;
-  let attachment: FlipAiChatAttachment | null = null;
+  let attachmentId: unknown;
   try {
-    if ((request.headers.get('content-type') || '').toLowerCase().startsWith('multipart/form-data')) {
-      // A message with a photo or document: the JSON travels in "payload" and the bytes in "file".
-      const form = await request.formData();
-      const payload = JSON.parse(String(form.get('payload') || ''));
-      const file = form.get('file');
-      if (!(file instanceof File) || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        throw new Error('invalid_multipart');
-      }
-      const checked = validateChatAttachment({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-      if (!checked.ok) {
-        return jsonError(new FlipAiError('INVALID_PUBLIC_CHAT_ATTACHMENT', 400, checked.message),
-          session.token, session.created);
-      }
-      attachment = checked.attachment;
-      // The description of the file always comes from the bytes the server received.
-      body = { ...payload, attachment: attachmentInfo(attachment) };
-    } else {
-      body = await request.json();
-      if (body && typeof body === 'object' && 'attachment' in body) throw new Error('attachment_without_file');
+    body = await request.json();
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      // The browser can only name a file it uploaded; its description always comes from the server.
+      if ('attachment' in body) throw new Error('attachment_declared_by_client');
+      const { attachmentId: declared, ...rest } = body as Record<string, unknown>;
+      attachmentId = declared;
+      body = rest;
     }
   } catch {
     return jsonError(new FlipAiError('INVALID_PUBLIC_CHAT_MESSAGE', 400, 'Revise a mensagem enviada.'),
@@ -181,11 +173,43 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return attachSessionCookie(NextResponse.json({ error: 'Not found' }, { status: 404 }), session.token, session.created);
   }
 
+  let attachment: FlipAiChatAttachment | null = null;
+  let acceptedAttachmentId: string | null = null;
+  if (attachmentId !== undefined && attachmentId !== null) {
+    try {
+      // The file is read back from private storage and checked before anything else happens.
+      const claimed = await claimUploadedChatAttachment({
+        tenantId: runtimeContext.tenantId,
+        sessionToken: session.token,
+        attachmentId,
+      });
+      attachment = claimed.attachment;
+      acceptedAttachmentId = claimed.id;
+      body = { ...(body as Record<string, unknown>), attachment: attachmentInfo(attachment) };
+    } catch (error) {
+      const known = error instanceof ChatAttachmentUploadError;
+      return jsonError(new FlipAiError(
+        known ? error.code : 'CHAT_ATTACHMENT_FAILED',
+        known ? error.status : 503,
+        known ? error.message : 'Não foi possível usar o arquivo enviado. Envie novamente.',
+      ), session.token, session.created);
+    }
+  }
+
   let turn: Awaited<ReturnType<typeof preparePublicChatTurn>>;
   try {
     turn = await preparePublicChatTurn(runtimeContext, session.token, body);
   } catch (error) {
     return jsonError(error, session.token, session.created);
+  }
+
+  if (acceptedAttachmentId) {
+    await attachUploadToTurn({
+      tenantId: turn.tenantId,
+      attachmentId: acceptedAttachmentId,
+      conversationId: turn.conversationId,
+      clientMessageId: turn.messageId,
+    });
   }
 
   const encoder = new TextEncoder();
@@ -248,7 +272,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return jsonError(error, session.token, session.created);
   }
 
-  // The file is attached to the visitor's last message for this model call only; it is not stored.
+  // The file goes to the model with the visitor's last message, for this call only.
   const withLastUserContent = (
     content: (text: string) => string | FlipAiModelContentPart[],
   ): OpenAiConversationInput => {

@@ -1,12 +1,11 @@
 /**
  * A photo or document the visitor attaches to a chat message.
  *
- * The file is read by the conversation model for that turn only. It is not stored: the
- * conversation keeps the file name, its type and size, and what the attendant understood of it.
+ * The browser sends the file straight to private storage; the server reads it back, checks
+ * its real type and size, and gives it to the conversation model for that turn.
  */
 
-/** Kept under the request body limit of the hosting platform. */
-export const FLIP_AI_ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
+export const FLIP_AI_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 
 export const FLIP_AI_ATTACHMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const;
 export type FlipAiAttachmentMimeType = typeof FLIP_AI_ATTACHMENT_MIME_TYPES[number];
@@ -49,7 +48,7 @@ export function validateChatAttachment(input: { name: string; bytes: Uint8Array 
   | { ok: false; message: string } {
   if (input.bytes.byteLength === 0) return { ok: false, message: 'O arquivo enviado está vazio.' };
   if (input.bytes.byteLength > FLIP_AI_ATTACHMENT_MAX_BYTES) {
-    return { ok: false, message: 'O arquivo é maior que 4 MB. Envie um arquivo menor ou uma foto.' };
+    return { ok: false, message: 'O arquivo é maior que 5 MB. Envie um arquivo menor ou uma foto.' };
   }
   const mimeType = sniffAttachmentMimeType(input.bytes);
   if (!mimeType) return { ok: false, message: 'Envie uma foto (JPG, PNG ou WEBP) ou um documento em PDF.' };

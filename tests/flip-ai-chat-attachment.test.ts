@@ -31,7 +31,7 @@ test('arquivo vazio ou grande demais é recusado com mensagem clara', () => {
   big.set(PNG);
   const result = validateChatAttachment({ name: 'a.png', bytes: big });
   assert.equal(result.ok, false);
-  if (!result.ok) assert.match(result.message, /4 MB/);
+  if (!result.ok) assert.match(result.message, /5 MB/);
 });
 
 test('foto vai como imagem e PDF como arquivo, junto com a mensagem da pessoa', () => {

@@ -29,7 +29,7 @@ type RetryTurn = {
 };
 
 // Mirrors the server limits; the server checks the real bytes again.
-const ATTACHMENT_MAX_BYTES = 4 * 1024 * 1024;
+const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
 function attachmentLabel(file: File) {
@@ -70,7 +70,10 @@ const VOICE_LABEL: Record<FlipAiVoiceState, string> = {
   error: '',
 };
 
-export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
+export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
+  agent: PublicFlipAiAgent;
+  attachmentsEnabled?: boolean;
+}) {
   const color = safeColor(agent.primaryColor);
   const backgroundColor = optionalColor(agent.chatBackgroundColor, '#F8FAFC');
   const userMessageColor = optionalColor(agent.userMessageColor, color);
@@ -109,6 +112,23 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     voiceRef.current = null;
   }, []);
 
+  async function uploadAttachment(attachedFile: File) {
+    const prepared = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/attachments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: attachedFile.name, mimeType: attachedFile.type, sizeBytes: attachedFile.size }),
+    });
+    const upload = await prepared.json().catch(() => ({})) as {
+      attachmentId?: string; uploadUrl?: string; headers?: Record<string, string>; error?: string;
+    };
+    if (!prepared.ok || !upload.attachmentId || !upload.uploadUrl) {
+      throw new Error(upload.error || 'Não foi possível enviar o arquivo.');
+    }
+    const stored = await fetch(upload.uploadUrl, { method: 'PUT', headers: upload.headers || {}, body: attachedFile });
+    if (!stored.ok) throw new Error('Não foi possível enviar o arquivo. Tente novamente.');
+    return upload.attachmentId;
+  }
+
   async function sendTurn(
     messageId: string,
     text: string,
@@ -141,22 +161,21 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     let assistantText = '';
     const startedAt = Date.now();
     try {
-      const payload = JSON.stringify({
-        messageId,
-        text,
-        confirmRetry,
-        inputMode,
-        attribution: buildPublicAttribution(window.location.href, document.referrer),
+      // A photo or document goes first, straight to private storage, through a link the server
+      // signs for that one file. The message then only names the uploaded file.
+      const attachmentId = attachedFile ? await uploadAttachment(attachedFile) : undefined;
+      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          text,
+          confirmRetry,
+          inputMode,
+          attribution: buildPublicAttribution(window.location.href, document.referrer),
+          ...(attachmentId ? { attachmentId } : {}),
+        }),
       });
-      let requestInit: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload };
-      if (attachedFile) {
-        // With a photo or document the browser sends a multipart body and sets its own content type.
-        const form = new FormData();
-        form.set('payload', payload);
-        form.set('file', attachedFile);
-        requestInit = { method: 'POST', body: form };
-      }
-      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(agent.slug)}/messages`, requestInit);
       if (!response.ok || !response.body) {
         const problem = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(problem.error || 'Não foi possível enviar sua mensagem.');
@@ -258,7 +277,7 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (!chosen) return;
     if (chosen.size > ATTACHMENT_MAX_BYTES) {
-      setError('O arquivo é maior que 4 MB. Envie um arquivo menor ou uma foto.');
+      setError('O arquivo é maior que 5 MB. Envie um arquivo menor ou uma foto.');
       return;
     }
     if (!ATTACHMENT_ACCEPT.split(',').includes(chosen.type)) {
@@ -377,12 +396,14 @@ export function PublicFlipAiChatShell({ agent }: { agent: PublicFlipAiAgent }) {
               disabled={sending || voiceActive} maxLength={2_000} autoComplete="off" aria-label="Mensagem"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-500"
               placeholder={voiceActive ? 'Conversa por voz ativa' : 'Digite sua mensagem...'} />
-            <button disabled={sending || voiceActive} type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Anexar foto ou documento"
-              className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-slate-700 disabled:opacity-50">
-              <Paperclip className="h-4 w-4" />
-            </button>
+            {attachmentsEnabled && (
+              <button disabled={sending || voiceActive} type="button"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Anexar foto ou documento"
+                className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-slate-700 disabled:opacity-50">
+                <Paperclip className="h-4 w-4" />
+              </button>
+            )}
             <button disabled={sending && !voiceActive} type="button"
               onClick={() => void toggleVoice()}
               aria-label={voiceActive ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
