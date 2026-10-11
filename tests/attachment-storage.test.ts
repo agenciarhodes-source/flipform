@@ -86,3 +86,13 @@ test('leitura recusa arquivo maior que o limite e exclusão trata arquivo ausent
   const denied = (async () => new Response(null, { status: 403 })) as typeof fetch;
   await assert.rejects(deleteAttachmentObject(config, { key: 'k', fetchImpl: denied }));
 });
+
+test('link de download força o nome do arquivo e a assinatura cobre esse parâmetro', () => {
+  const url = createAttachmentDownloadUrl(config, {
+    key: 'tenants/t1/chat/a1',
+    downloadName: 'comprovante endereço.pdf',
+    now: new Date('2026-10-10T12:00:00.000Z'),
+  });
+  assert.match(url, /response-content-disposition=attachment%3B%20filename%3D%22comprovante%20endere_o\.pdf%22%3B%20filename%2A%3DUTF-8%27%27comprovante%2520endere%25C3%25A7o\.pdf/);
+  assert.match(url, /X-Amz-Signature=0ecabcd6346aeab9994ef8d793d2b801c65fbd13c58b62611da9550340c91e4f$/);
+});

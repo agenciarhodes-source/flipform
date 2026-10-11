@@ -14,6 +14,7 @@ import { logAudit } from '@/lib/audit';
 import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
 import { getFlipAiHumanHandoff } from '@/lib/flip-ai/human-handoff';
 import { getFlipAiHumanActionRequest } from '@/lib/flip-ai/human-action-request';
+import { canDeleteChatAttachment, listLeadChatAttachments } from '@/lib/flip-ai/chat-attachment-library';
 
 export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const qualificationSchemaReady = await prisma.$queryRaw<Array<{ ready: boolean }>>(Prisma.sql`
@@ -80,6 +81,9 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
       },
     },
   }).catch(() => null);
+  // Files the lead sent in the chat that are still within the retention period.
+  const chatAttachments = await listLeadChatAttachments({ tenantId: session.tenantId, leadId: lead.id })
+    .catch(() => []);
   const [activeAgents, saleValueAuditLogs, flipAiHumanHandoff] = await Promise.all([
     ['owner', 'admin', 'manager'].includes(session.role)
       ? prisma.tenantUser.findMany({
@@ -118,6 +122,8 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiConversation,
+    chatAttachments,
+    canDeleteChatAttachments: canDeleteChatAttachment(session.role),
     flipAiHumanHandoff,
     flipAiHumanActionRequest: flipAiHumanActionRequestView,
     saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
