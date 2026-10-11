@@ -37,6 +37,7 @@ import {
   ChatAttachmentUploadError,
   claimUploadedChatAttachment,
 } from '@/lib/flip-ai/chat-attachment-upload';
+import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -186,6 +187,20 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       attachment = claimed.attachment;
       acceptedAttachmentId = claimed.id;
       body = { ...(body as Record<string, unknown>), attachment: attachmentInfo(attachment) };
+      if (attachment.kind === 'audio') {
+        // A voice message: what the person said becomes the text of this turn.
+        const heard = await transcribeVoiceNote({
+          bytes: Buffer.from(attachment.base64, 'base64'),
+          mimeType: attachment.mimeType,
+        }).catch(() => null);
+        if (!heard?.text) {
+          return jsonError(new FlipAiError(
+            'CHAT_VOICE_NOTE_NOT_UNDERSTOOD', 422,
+            'Não consegui entender o áudio. Grave de novo, mais perto do microfone, ou escreva a mensagem.',
+          ), session.token, session.created);
+        }
+        body = { ...(body as Record<string, unknown>), text: heard.text.slice(0, 2_000), inputMode: 'text' };
+      }
     } catch (error) {
       const known = error instanceof ChatAttachmentUploadError;
       return jsonError(new FlipAiError(
@@ -300,7 +315,8 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
             textFormat: PUBLIC_CHAT_DECISION_FORMAT,
             timeoutMs: 55_000,
           });
-        const file = attachment;
+        // A voice message was already turned into text; only photos and documents go to the model.
+        const file = attachment && attachment.kind !== 'audio' ? attachment : null;
         const rawResult = file
           ? await call(withLastUserContent((text) => buildAttachmentModelContent(text, file))).catch((error) => {
             // The provider refused or could not read the file: the visitor still gets a normal reply
