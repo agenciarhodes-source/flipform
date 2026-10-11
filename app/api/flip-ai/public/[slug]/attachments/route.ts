@@ -4,6 +4,7 @@ import { resolvePublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { getOrCreatePublicSessionToken } from '@/lib/flip-ai/public-chat';
 import { ChatAttachmentUploadError, issueChatAttachmentUpload } from '@/lib/flip-ai/chat-attachment-upload';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
+import { purgeExpiredChatAttachments } from '@/lib/flip-ai/chat-attachment-library';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,6 +62,10 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   if (!runtimeContext) {
     return withSession(NextResponse.json({ error: 'Not found' }, { status: 404 }), session.token, session.created);
   }
+
+  // Every new upload is also the moment a few expired files are cleared, so the 7-day limit
+  // does not depend on a scheduler. Best-effort: it never blocks the visitor.
+  await purgeExpiredChatAttachments({ limit: 10 }).catch(() => undefined);
 
   try {
     const upload = await issueChatAttachmentUpload({

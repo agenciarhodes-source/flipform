@@ -129,3 +129,51 @@ export async function deleteLeadChatAttachment(input: {
   });
   return { id: file.id, name: file.name };
 }
+
+/** An upload link that was never used is cleared after this long. */
+const ABANDONED_UPLOAD_MS = 60 * 60 * 1000;
+
+/**
+ * Removes from storage every file whose retention ended, plus uploads that were started and
+ * never attached to a message. The record stays, marked as deleted. Safe to run often.
+ */
+export async function purgeExpiredChatAttachments(input: { limit?: number; now?: Date } = {}) {
+  const storage = resolveAttachmentStorage();
+  if (!storage.ready) return { available: false, removed: 0, failed: 0 };
+  const now = input.now || new Date();
+  const limit = Math.max(1, Math.min(500, Math.trunc(input.limit || 200)));
+  let rows: Array<{ id: string; objectKey: string }>;
+  try {
+    rows = await prisma.chatAttachment.findMany({
+      where: {
+        OR: [
+          { status: { in: ['pending', 'ready'] }, expiresAt: { lte: now } },
+          { status: 'pending', createdAt: { lte: new Date(now.getTime() - ABANDONED_UPLOAD_MS) } },
+        ],
+      },
+      orderBy: { expiresAt: 'asc' },
+      take: limit,
+      select: { id: true, objectKey: true },
+    });
+  } catch (error) {
+    if (isSchemaPending(error)) return { available: false, removed: 0, failed: 0 };
+    throw error;
+  }
+
+  let removed = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      // Storage first: a record is only marked as deleted once the file is really gone.
+      await deleteAttachmentObject(storage.config, { key: row.objectKey });
+      await prisma.chatAttachment.updateMany({
+        where: { id: row.id, status: { in: ['pending', 'ready'] } },
+        data: { status: 'deleted', deletedAt: now },
+      });
+      removed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { available: true, removed, failed };
+}
