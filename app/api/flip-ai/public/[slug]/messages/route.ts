@@ -205,10 +205,11 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
 
   if (acceptedAttachmentId) {
     await attachUploadToTurn({
-      tenantId: turn.tenantId,
+      tenantId: runtimeContext.tenantId,
       attachmentId: acceptedAttachmentId,
       conversationId: turn.conversationId,
-      clientMessageId: turn.messageId,
+      // The identifier the browser gave to this message, already validated when the turn was prepared.
+      clientMessageId: String((body as Record<string, unknown>).messageId || ''),
     });
   }
 
