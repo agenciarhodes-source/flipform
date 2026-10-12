@@ -23,7 +23,7 @@ def test_reply_to_a_voice_message_is_written_not_spoken():
     chat = read("lib/flip-ai/public-chat.ts")
     assert "responde normalmente, por escrito" in chat
     shell = read(SHELL)
-    assert "void sendTurn(crypto.randomUUID(), VOICE_NOTE_LABEL, false, false, 'text', voiceNote, URL.createObjectURL(blob));" in shell
+    assert "void sendTurn(crypto.randomUUID(), VOICE_NOTE_LABEL, false, false, 'text', voiceNote, URL.createObjectURL(blob)," in shell
 
 
 def test_recording_is_tap_to_record_then_send_or_cancel_with_a_time_limit():
@@ -35,7 +35,8 @@ def test_recording_is_tap_to_record_then_send_or_cancel_with_a_time_limit():
     assert "if (next >= VOICE_NOTE_MAX_SECONDS && recorder.state !== 'inactive') recorder.stop();" in shell
     assert "stream.getTracks().forEach((track) => track.stop());" in shell
     assert "onClick={() => void (attachmentsEnabled ? startRecording() : toggleVoice())}" in shell
-    assert "<audio controls" in shell
+    assert "recordedSecondsRef.current = next;" in shell
+    assert "audio.currentTime = 1e9;" in shell
 
 
 def test_voice_messages_use_the_same_checked_storage_as_other_files():
