@@ -1619,6 +1619,9 @@ model AgentSpeechSetting {
   agentId     String   @id @map("agent_id")
   tenantId    String   @map("tenant_id")
   voice       String
+  // never: replies are always written. on_request: audio only for a person who asked for it.
+  // auto: also for explanations too long to read comfortably.
+  audioMode   String   @default("auto") @map("audio_mode")
   updatedById String?  @map("updated_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")

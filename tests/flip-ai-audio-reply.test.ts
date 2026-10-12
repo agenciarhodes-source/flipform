@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS,
+  audioModeNote,
+  resolveAudioMode,
   prefersAudioReplies,
   shouldReplyWithAudio,
 } from '../lib/flip-ai/audio-reply';
@@ -49,4 +51,17 @@ test('falha do provedor de voz vira erro tratável, sem nova tentativa', async (
     (error: unknown) => error instanceof OpenAiSpeechError && error.code === 'OPENAI_SPEECH_HTTP_500',
   );
   assert.equal(calls, 1);
+});
+
+test('a empresa decide quando o atendente pode responder em áudio', () => {
+  const long = 'a'.repeat(FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS + 1);
+  const asked = [{ key: 'prefere_audio', value: 'sim' }];
+  assert.equal(shouldReplyWithAudio({ reply: long, mode: 'auto' }), true);
+  assert.equal(shouldReplyWithAudio({ reply: long, mode: 'on_request' }), false);
+  assert.equal(shouldReplyWithAudio({ reply: 'Claro.', storedFacts: asked, mode: 'on_request' }), true);
+  assert.equal(shouldReplyWithAudio({ reply: long, storedFacts: asked, mode: 'never' }), false);
+  assert.equal(resolveAudioMode('valor-estranho'), 'auto');
+  assert.equal(audioModeNote('auto'), '');
+  assert.match(audioModeNote('never'), /não há respostas em áudio/);
+  assert.match(audioModeNote('on_request'), /quando a própria pessoa pedir/);
 });
