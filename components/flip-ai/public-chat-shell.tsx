@@ -668,7 +668,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
             {VOICE_LABEL[voiceState]}
           </p>}
           <p className="mt-2 text-center text-[11px] text-slate-500">
-            Atendimento por assistente virtual de IA, inclusive nos áudios. Não envie senhas ou dados bancários.
+            Você está em ambiente virtual. Não envie senhas ou dados bancários.
           </p>
         </form>
       </section>

@@ -37,8 +37,6 @@ def test_audio_bubble_is_played_on_demand_labelled_and_offers_the_text():
     # Sent and received audio use the same bar, with play, progress and time.
     assert "return <ChatAudioPlayer src={url} label=\"resposta em áudio\" />;" in shell
     assert "<ChatAudioPlayer src={message.audioUrl} knownSeconds={message.audioSeconds} label=\"áudio enviado\" />" in shell
-    # The person is told once, in the chat footer, that the attendant and its audio are AI.
-    assert "Atendimento por assistente virtual de IA, inclusive nos áudios." in shell
     assert "body: JSON.stringify({ messageId })," in shell
     # If the audio cannot be produced the person still gets the written answer.
     assert "if (failed) return <span className=\"whitespace-pre-line\">{text}</span>;" in shell
