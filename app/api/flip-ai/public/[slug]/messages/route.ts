@@ -38,6 +38,7 @@ import {
   claimUploadedChatAttachment,
 } from '@/lib/flip-ai/chat-attachment-upload';
 import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
+import { shouldReplyWithAudio } from '@/lib/flip-ai/audio-reply';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -343,6 +344,15 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           context.actionPermission,
         );
         controller.enqueue(encoder.encode(sseData('delta', { delta: decision.reply })));
+        // Long explanations, or a person who asked to be answered by voice, are delivered as audio.
+        // The chat asks for the speech only when the person presses play.
+        if (shouldReplyWithAudio({
+          reply: decision.reply,
+          storedFacts: context.memorySnapshot?.facts,
+          patchFacts: decision.memoryPatch?.facts,
+        })) {
+          controller.enqueue(encoder.encode(sseData('audio', { enabled: true })));
+        }
         if (context.sources.length) controller.enqueue(encoder.encode(sseData('sources', { sources: context.sources })));
 
         const leadCapture = await tryCaptureLead({
