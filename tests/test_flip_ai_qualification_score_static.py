@@ -48,4 +48,5 @@ def test_incomplete_qualification_still_shows_a_partial_score_and_discovery_come
     assert "leitura parcial, faltam informações" in read("components/lead-detail-modal.tsx")
     timing = read("lib/flip-ai/contact-timing.ts")
     assert "confira se você já sabe o que a pessoa faz" in timing
+    assert "Ainda não é hora do contato: não peça nome nem telefone nesta resposta." in timing
     assert "Evite encaminhar alguém como insufficient" in read("lib/flip-ai/public-chat.ts")
