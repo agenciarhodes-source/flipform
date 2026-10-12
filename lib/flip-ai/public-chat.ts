@@ -34,7 +34,7 @@ import {
 } from './decision-engine';
 import { brainAssessmentPrompt, type BrainAssessment } from './brain-profiles';
 import { runJevConversationDecision } from './jev-decision-engine';
-import { FLIP_AI_CONTACT_GUIDANCE, resolveContactMoment } from './contact-timing';
+import { FLIP_AI_CONTACT_GUIDANCE, resolveContactMoment, type FlipAiContactMoment } from './contact-timing';
 import { audioReplyInstructions } from './audio-reply';
 import { FLIP_AI_ATTACHMENT_MAX_BYTES, FLIP_AI_ATTACHMENT_MIME_TYPES } from './chat-attachment';
 import { jevSubjectReference, redactJevText } from './jev-privacy';
@@ -1016,6 +1016,7 @@ export async function buildPublicChatContext(
   availabilitySnapshot: FlipAiAvailabilitySnapshot | null;
   actionEligibility: FlipAiActionEligibility | null;
   actionPermission: FlipAiActionPermission | null;
+  contactMoment: FlipAiContactMoment | null;
 }> {
   const usage = await prisma.flipAiUsageEvent.findFirstOrThrow({
     where: { id: turn.eventId, tenantId: turn.tenantId, conversationId: turn.conversationId },
@@ -1308,14 +1309,22 @@ export async function buildPublicChatContext(
       AND metadata->>'attemptToken' = ${turn.attemptToken}
   `).catch(() => undefined);
 
+  const identityVerified = Boolean(identity?.lead?.name.trim() && identity.lead.phone
+    && isValidBrazilianPhone(identity.lead.phone));
+  const assistantMessages = chronological.flatMap((message) => message.role === 'assistant' ? [message.content] : []);
+  // The same moment that shapes the guidance is returned, so the reply can be held to it.
+  const contactMoment = identityVerified
+    ? null
+    : resolveContactMoment({ inboundMessages, assistantMessages, decision });
+
   return {
     instructions: buildPublicChatInstructions(runtime, hits, state?.summary,
-      Boolean(identity?.lead?.name.trim() && identity.lead.phone
-        && isValidBrazilianPhone(identity.lead.phone)), external, entryContext, {
+      identityVerified, external, entryContext, {
           completedTurns: state?.turnCount || 0,
           inboundMessages,
         }, decision, turn.inputMode, memorySnapshot, knownIdentity, availabilitySnapshot,
-        chronological.flatMap((message) => message.role === 'assistant' ? [message.content] : [])),
+        assistantMessages),
+    contactMoment,
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],

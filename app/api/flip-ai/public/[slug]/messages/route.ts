@@ -38,6 +38,7 @@ import {
   claimUploadedChatAttachment,
 } from '@/lib/flip-ai/chat-attachment-upload';
 import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
+import { enforceContactMoment } from '@/lib/flip-ai/contact-timing';
 import { audioModeNote, shouldReplyWithAudio } from '@/lib/flip-ai/audio-reply';
 import { getAgentAudioMode } from '@/lib/flip-ai/agent-speech-setting';
 
@@ -338,6 +339,8 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           : await call(context);
         const decision = parsePublicChatDecision(rawResult.text);
         decision.qualification = applyBrainFinalQualification(decision.qualification, context.brainAssessment);
+        // The moment read for this turn is binding: a contact request outside it does not reach the person.
+        decision.reply = enforceContactMoment(decision.reply, context.contactMoment);
         const result = { ...rawResult, text: decision.reply };
         await completePublicChatTurn(
           turn,

@@ -23,6 +23,7 @@ export type FlipAiContactMoment =
 
 const CONTACT_REQUEST_PATTERN = new RegExp([
   'como (voc[eê]|vc) se chama',
+  'como (eu )?(posso )?te cham(ar|o)',
   'qual (e |é )?(o )?seu nome',
   'seu nome e (seu )?(telefone|whatsapp|n[uú]mero)',
   'nome e (o )?(telefone|whatsapp|n[uú]mero)',
@@ -91,3 +92,21 @@ export const FLIP_AI_CONTACT_GUIDANCE: Record<FlipAiContactMoment, string> = {
   hold_after_request: 'MOMENTO DA CONVERSA: você pediu o contato há pouco e a pessoa não informou. Não repita o pedido nesta resposta. Responda de verdade ao que ela acabou de dizer, mostre que entendeu a situação e retome o contato mais adiante, em um ponto natural da conversa.',
   stop_requesting: 'MOMENTO DA CONVERSA: você já pediu o contato algumas vezes sem resposta. Não peça nome nem telefone de novo. Continue ajudando e aceite o contato apenas se a própria pessoa oferecer.',
 };
+
+/**
+ * Makes the moment binding. The guidance tells the attendant when not to ask for contact, but a
+ * model can still slip one in; outside the "ask now" moment any sentence that asks for name or
+ * phone is taken out of the reply before it is shown. Nothing else in the reply is changed.
+ */
+export function enforceContactMoment(reply: string, moment: FlipAiContactMoment | null | undefined) {
+  if (!moment || moment === 'ask_now') return reply;
+  const blocks = reply.split(/\r?\n\s*\r?\n/)
+    .map((block) => block
+      .split(/(?<=[.!?…])\s+/)
+      .filter((sentence) => !isContactRequest(sentence))
+      .join(' ')
+      .trim())
+    .filter(Boolean);
+  // A reply that was nothing but the request is kept as written rather than sent empty.
+  return blocks.join('\n\n') || reply;
+}

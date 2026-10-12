@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isContactRequest, resolveContactMoment, summarizeContactRequests } from '../lib/flip-ai/contact-timing';
+import { enforceContactMoment, isContactRequest, resolveContactMoment, summarizeContactRequests } from '../lib/flip-ai/contact-timing';
 import type { FlipAiConversationDecision } from '../lib/flip-ai/decision-engine';
 
 const base: FlipAiConversationDecision = {
@@ -50,4 +50,23 @@ test('usa a leitura do momento para decidir a hora de pedir o contato', () => {
 test('sem leitura do JEV mantém a regra simples por quantidade de mensagens', () => {
   assert.equal(resolveContactMoment({ inboundMessages: 2 }), 'discover_first');
   assert.equal(resolveContactMoment({ inboundMessages: 3 }), 'ask_now');
+});
+
+test('fora do momento, o pedido de contato é retirado da resposta e o resto fica igual', () => {
+  const reply = 'Sim, trabalhamos com gestão de tráfego pago no Google e na Meta. Criação de sites não oferecemos.\n\nComo posso te chamar e qual é seu telefone?';
+  assert.equal(
+    enforceContactMoment(reply, 'discover_first'),
+    'Sim, trabalhamos com gestão de tráfego pago no Google e na Meta. Criação de sites não oferecemos.',
+  );
+  assert.equal(enforceContactMoment('Entendi o ponto. Qual seu nome e telefone?', 'handle_objection_first'), 'Entendi o ponto.');
+  assert.equal(enforceContactMoment('Claro. Qual é o seu negócio?', 'discover_first'), 'Claro. Qual é o seu negócio?');
+});
+
+test('no momento certo, ou sem leitura de momento, a resposta não é alterada', () => {
+  const reply = 'Perfeito. Como posso te chamar e qual é seu telefone?';
+  assert.equal(enforceContactMoment(reply, 'ask_now'), reply);
+  assert.equal(enforceContactMoment(reply, null), reply);
+  // A reply that is only the request is not sent empty.
+  assert.equal(enforceContactMoment('Qual seu nome e telefone?', 'discover_first'), 'Qual seu nome e telefone?');
+  assert.equal(isContactRequest('Como posso te chamar?'), true);
 });

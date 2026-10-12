@@ -21,3 +21,13 @@ def test_contact_timing_is_pure_guidance_and_touches_no_lead_or_crm_data():
     for moment in ["discover_first", "ask_now", "handle_objection_first", "hold_after_request", "stop_requesting"]:
         assert moment + ":" in timing, moment
     assert "tests/flip-ai-contact-timing.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_the_moment_is_binding_on_the_reply_not_only_guidance():
+    route = read("app/api/flip-ai/public/[slug]/messages/route.ts")
+    assert "decision.reply = enforceContactMoment(decision.reply, context.contactMoment);" in route
+    # The reply is held to the moment before it is stored or shown.
+    assert route.index("enforceContactMoment(decision.reply") < route.index("await completePublicChatTurn(")
+    chat = read("lib/flip-ai/public-chat.ts")
+    assert ": resolveContactMoment({ inboundMessages, assistantMessages, decision });" in chat
+    assert "contactMoment," in chat
