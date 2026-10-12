@@ -5,6 +5,8 @@ import { normalizeHostname, isAdminHostname } from '@/lib/host-routing';
 import { resolvePublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { synthesizeReplySpeech } from '@/lib/flip-ai/openai-speech';
 import { getAgentSpeechVoice } from '@/lib/flip-ai/agent-speech-setting';
+import { chargeAudioUsage, hasCreditsForAudio } from '@/lib/flip-ai/audio-usage';
+import { estimateSpeechUsage, FLIP_AI_VOICE_SPEECH_OPERATION } from '@/lib/flip-ai/audio-usage-policy';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -67,10 +69,23 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   });
   if (!message?.text) return refuse(404, 'Mensagem não encontrada.');
 
+  // Speaking a reply uses the company's credits. Without credits the person reads the same reply.
+  if (!await hasCreditsForAudio(runtimeContext.tenantId)) return refuse(402, 'Áudio indisponível no momento.');
+
   try {
     // Each attendant speaks with the voice chosen for it; the default applies when none was chosen.
     const voice = await getAgentSpeechVoice({ tenantId: runtimeContext.tenantId, agentId: runtimeContext.id });
     const speech = await synthesizeReplySpeech({ text: message.text, voice });
+    // Charged once per reply, however many times the same audio is asked for again.
+    await chargeAudioUsage({
+      tenantId: runtimeContext.tenantId,
+      agentId: runtimeContext.id,
+      requestKey: `voice-speech:${sessionHash}:${messageId}`,
+      operation: FLIP_AI_VOICE_SPEECH_OPERATION,
+      model: speech.model,
+      usage: estimateSpeechUsage(speech.characters),
+      metadata: { characters: speech.characters },
+    });
     const body = speech.audio.buffer.slice(
       speech.audio.byteOffset, speech.audio.byteOffset + speech.audio.byteLength,
     ) as ArrayBuffer;

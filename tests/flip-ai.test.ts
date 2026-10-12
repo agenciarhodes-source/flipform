@@ -1136,7 +1136,7 @@ test('PR 326 estimates OpenAI USD costs from confirmed tenant usage', () => {
     outputTokens: 50,
   });
   assert.deepEqual(search, { costNanoUsd: 20_080_000, coverage: 'full', reason: null });
-  assert.equal(OPENAI_PRICE_SNAPSHOT, '2026-10-08');
+  assert.equal(OPENAI_PRICE_SNAPSHOT, '2026-10-12');
 
   const nextLuna = estimateOpenAiUsageCost({
     operation: 'chat_response',
