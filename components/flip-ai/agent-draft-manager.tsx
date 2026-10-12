@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
 import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-editor';
+import { AgentVoicePicker } from '@/components/flip-ai/agent-voice-picker';
 import { AgentAvatarPicker } from '@/components/flip-ai/agent-avatar-picker';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
 import { EMPTY_FLIP_AI_ACTION_CAPABILITIES } from '@/lib/flip-ai/action-capabilities';
@@ -271,6 +272,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
             <span><span className="font-medium">{check.label}:</span> {check.detail}</span>
           </li>)}</ul>
         </div>
+        <AgentVoicePicker agentId={agent.id} />
         <div className="mt-4 flex flex-wrap gap-2">
           <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar</Button>
           {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>

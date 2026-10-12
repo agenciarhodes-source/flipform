@@ -1614,6 +1614,19 @@ model PlatformTopUpFunding {
   @@map("platform_top_up_funding")
 }
 
+// Voice an attendant uses in audio replies. An attendant without a row uses the default voice.
+model AgentSpeechSetting {
+  agentId     String   @id @map("agent_id")
+  tenantId    String   @map("tenant_id")
+  voice       String
+  updatedById String?  @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("agent_speech_settings")
+}
+
 // Record of a photo or document a visitor attached in the public chat. The file itself lives in
 // private object storage for a few days; this row only describes it and outlives the file.
 model ChatAttachment {
