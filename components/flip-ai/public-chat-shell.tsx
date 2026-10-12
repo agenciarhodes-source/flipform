@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { resolveTypingDelayMs, splitReplyIntoMessages } from '@/lib/flip-ai/typing-pace';
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Bot, LoaderCircle, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react';
+import { Bot, LoaderCircle, Mic, Paperclip, Play, RotateCcw, Send, Square, X } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
 import { FlipAiRealtimeVoiceClient, type FlipAiVoiceState } from '@/lib/flip-ai/realtime-client';
 import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
@@ -20,6 +20,8 @@ type ChatMessage = {
   sources?: ChatSource[];
   /** A voice message the visitor recorded, playable from the bubble. */
   audioUrl?: string;
+  /** Set on a reply that is delivered as audio: the message whose speech is requested on play. */
+  speechMessageId?: string;
 };
 
 type RetryTurn = {
@@ -42,6 +44,56 @@ function voiceNoteMimeType() {
   if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
   if (MediaRecorder.isTypeSupported('audio/ogg')) return 'audio/ogg';
   return null;
+}
+
+/** A reply delivered as audio: generated when the person presses play, with the text on demand. */
+function AssistantAudio({ slug, messageId, text }: { slug: string; messageId: string; text: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [showText, setShowText] = useState(false);
+
+  async function load() {
+    if (loading || url) return;
+    setLoading(true);
+    setFailed(false);
+    try {
+      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(slug)}/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      });
+      if (!response.ok) throw new Error('speech_unavailable');
+      setUrl(URL.createObjectURL(await response.blob()));
+    } catch {
+      // Without the audio the person still has the answer: the text is shown instead.
+      setFailed(true);
+      setShowText(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {url ? (
+        <audio controls autoPlay preload="auto" src={url} className="h-10 w-56 max-w-full" aria-label="Resposta em áudio" />
+      ) : (
+        <button type="button" onClick={() => void load()} disabled={loading}
+          className="inline-flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-60">
+          {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+          {loading ? 'Preparando áudio...' : 'Ouvir resposta'}
+        </button>
+      )}
+      <p className="text-[11px] text-slate-500">
+        Áudio gerado por IA.{failed ? ' Não foi possível tocar agora.' : ''}{' '}
+        <button type="button" onClick={() => setShowText((current) => !current)} className="underline underline-offset-2">
+          {showText ? 'Ocultar texto' : 'Ver texto'}
+        </button>
+      </p>
+      {showText && <p className="whitespace-pre-line text-sm">{text}</p>}
+    </div>
+  );
 }
 
 function clock(seconds: number) {
@@ -215,6 +267,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
       const decoder = new TextDecoder();
       let buffer = '';
       let completed = false;
+      let replyAsAudio = false;
       let streamError: string | null = null;
       while (true) {
         const chunk = await reader.read();
@@ -253,6 +306,8 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
             if (typeof parsed.data.gtmContainerId === 'string') {
               firePublicGtmLeadEvent(parsed.data.gtmContainerId);
             }
+          } else if (parsed.event === 'audio') {
+            replyAsAudio = parsed.data.enabled === true;
           } else if (parsed.event === 'done') {
             completed = true;
           } else if (parsed.event === 'error') {
@@ -263,6 +318,17 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
         if (chunk.done) break;
       }
       if (!completed) throw new Error(streamError || 'A resposta não pôde ser confirmada.');
+      if (replyAsAudio && !speakReply) {
+        // One bubble with a player; the speech is only generated when the person presses play.
+        const typingDelay = resolveTypingDelayMs(60, Date.now() - startedAt);
+        if (typingDelay > 0) await new Promise((resolve) => setTimeout(resolve, typingDelay));
+        setMessages((current) => current.map((message) => (
+          message.id === assistantId
+            ? { ...message, text: assistantText, streaming: false, speechMessageId: messageId }
+            : message
+        )));
+        return;
+      }
       // A spoken reply is paced by the voice itself and stays in one bubble.
       const parts = speakReply ? [assistantText] : splitReplyIntoMessages(assistantText);
       for (let index = 0; index < parts.length; index += 1) {
@@ -430,7 +496,9 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
               } : undefined}>
               {message.audioUrl
                 ? <audio controls preload="metadata" src={message.audioUrl} className="h-10 w-56 max-w-full" aria-label="Áudio enviado" />
-                : <span className="whitespace-pre-line">{message.text}</span>}
+                : message.speechMessageId
+                  ? <AssistantAudio slug={agent.slug} messageId={message.speechMessageId} text={message.text} />
+                  : <span className="whitespace-pre-line">{message.text}</span>}
               {message.sources?.length ? <ul className="mt-3 space-y-1 border-t pt-2 text-xs">
                 {message.sources.map((source) => <li key={source.url}>
                   <a className="font-medium underline underline-offset-2" href={source.url}
