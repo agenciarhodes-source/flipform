@@ -38,7 +38,8 @@ import {
   claimUploadedChatAttachment,
 } from '@/lib/flip-ai/chat-attachment-upload';
 import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
-import { shouldReplyWithAudio } from '@/lib/flip-ai/audio-reply';
+import { audioModeNote, shouldReplyWithAudio } from '@/lib/flip-ai/audio-reply';
+import { getAgentAudioMode } from '@/lib/flip-ai/agent-speech-setting';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -289,6 +290,12 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
     return jsonError(error, session.token, session.created);
   }
 
+  // The company decides when this attendant may answer in audio; the attendant is told when
+  // that is restricted, so it does not promise an audio that will not come.
+  const audioMode = await getAgentAudioMode({ tenantId: runtimeContext.tenantId, agentId: runtimeContext.id });
+  const modeNote = audioModeNote(audioMode);
+  if (modeNote) context = { ...context, instructions: `${context.instructions}\n\n${modeNote}` };
+
   // The file goes to the model with the visitor's last message, for this call only.
   const withLastUserContent = (
     content: (text: string) => string | FlipAiModelContentPart[],
@@ -350,6 +357,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           reply: decision.reply,
           storedFacts: context.memorySnapshot?.facts,
           patchFacts: decision.memoryPatch?.facts,
+          mode: audioMode,
         })) {
           controller.enqueue(encoder.encode(sseData('audio', { enabled: true })));
         }

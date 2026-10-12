@@ -10,7 +10,8 @@ export function AgentVoicePicker({ agentId }: { agentId: string }) {
   const [voices, setVoices] = useState<string[]>([]);
   const [saved, setSaved] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
-  const [busy, setBusy] = useState<'sample' | 'save' | null>(null);
+  const [busy, setBusy] = useState<'sample' | 'save' | 'mode' | null>(null);
+  const [audioMode, setAudioMode] = useState('auto');
   const playerRef = useRef<HTMLAudioElement | null>(null);
 
   const load = useCallback(async () => {
@@ -21,6 +22,7 @@ export function AgentVoicePicker({ agentId }: { agentId: string }) {
       setVoices(Array.isArray(payload.voices) ? payload.voices : []);
       setSaved(payload.voice);
       setSelected(payload.voice);
+      if (typeof payload.audioMode === 'string') setAudioMode(payload.audioMode);
     } catch {
       // The picker is optional: without it the attendant keeps the default voice.
       setVoices([]);
@@ -73,10 +75,47 @@ export function AgentVoicePicker({ agentId }: { agentId: string }) {
     }
   };
 
+  const changeMode = async (next: string) => {
+    if (busy || next === audioMode) return;
+    const previous = audioMode;
+    setAudioMode(next);
+    setBusy('mode');
+    try {
+      const response = await fetch(`/api/flip-ai/agents/${agentId}/voice`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioMode: next }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar.');
+      toast.success('Uso de áudio atualizado.');
+    } catch (error: any) {
+      setAudioMode(previous);
+      toast.error(error.message || 'Não foi possível salvar.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (!voices.length) return null;
   return (
     <div className="mt-4 rounded-md border p-3">
-      <p className="text-xs font-medium">Voz nas respostas em áudio</p>
+      <p className="text-xs font-medium">Respostas em áudio</p>
+      <select
+        aria-label="Quando responder em áudio"
+        className="mt-2 h-9 w-full rounded-md border bg-background px-2 text-sm"
+        value={audioMode}
+        disabled={busy !== null}
+        onChange={(event) => void changeMode(event.target.value)}
+      >
+        <option value="auto">Automático: explicações longas e quando a pessoa pedir</option>
+        <option value="on_request">Só quando a pessoa pedir ou não souber ler</option>
+        <option value="never">Nunca responder em áudio</option>
+      </select>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Áudio consome bem mais créditos que texto. Escolha quanto este atendente pode usar.
+      </p>
+      <p className="mt-3 text-xs font-medium">Voz nas respostas em áudio</p>
       <p className="mt-1 text-xs text-muted-foreground">
         Usada quando o atendente explica algo em áudio. Ouça as opções e escolha a que combina com a sua empresa.
       </p>

@@ -13,6 +13,15 @@ export const FLIP_AI_AUDIO_REPLY_MAX_CHARACTERS = 1_600;
 /** Memory fact the attendant records when the person asks for audio or cannot read. */
 export const FLIP_AI_AUDIO_PREFERENCE_KEY = 'prefere_audio';
 
+/** When an attendant may answer in audio. */
+export const FLIP_AI_AUDIO_MODES = ['never', 'on_request', 'auto'] as const;
+export type FlipAiAudioMode = typeof FLIP_AI_AUDIO_MODES[number];
+export const FLIP_AI_DEFAULT_AUDIO_MODE: FlipAiAudioMode = 'auto';
+
+export function resolveAudioMode(raw: unknown): FlipAiAudioMode {
+  return FLIP_AI_AUDIO_MODES.find((mode) => mode === raw) || FLIP_AI_DEFAULT_AUDIO_MODE;
+}
+
 type MemoryFact = { key: string; value: string | null };
 type MemoryFactPatch = { action: 'upsert' | 'remove'; key: string; value: string | null };
 
@@ -34,10 +43,24 @@ export function shouldReplyWithAudio(input: {
   reply: string;
   storedFacts?: MemoryFact[];
   patchFacts?: MemoryFactPatch[];
+  mode?: FlipAiAudioMode;
 }) {
-  if (!input.reply.trim()) return false;
+  const mode = input.mode || FLIP_AI_DEFAULT_AUDIO_MODE;
+  if (mode === 'never' || !input.reply.trim()) return false;
   if (prefersAudioReplies(input.storedFacts, input.patchFacts)) return true;
-  return input.reply.trim().length > FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS;
+  // Long explanations only become audio when the company left that choice to the attendant.
+  return mode === 'auto' && input.reply.trim().length > FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS;
+}
+
+/** What the attendant is told when the company restricted audio for it. */
+export function audioModeNote(mode: FlipAiAudioMode) {
+  if (mode === 'never') {
+    return 'CONFIGURAÇÃO DESTE ATENDIMENTO: aqui não há respostas em áudio. Ignore as orientações de RESPOSTA EM ÁUDIO, escreva sempre em mensagens curtas e, se a pessoa pedir áudio, explique com gentileza que este atendimento é por texto.';
+  }
+  if (mode === 'on_request') {
+    return 'CONFIGURAÇÃO DESTE ATENDIMENTO: só há resposta em áudio quando a própria pessoa pedir ou disser que não consegue ler. Não escreva textos longos para áudio por conta própria: explique em mensagens curtas.';
+  }
+  return '';
 }
 
 export function audioReplyInstructions() {
