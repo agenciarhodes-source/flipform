@@ -12,6 +12,8 @@ export const FLIP_AI_TYPING_MAX_MS = 7_000;
 export const FLIP_AI_REPLY_MAX_MESSAGES = 4;
 /** A bubble longer than this is split at sentence boundaries, so it stays easy to read. */
 export const FLIP_AI_BUBBLE_MAX_CHARACTERS = 200;
+/** A piece shorter than this is not worth a bubble of its own: it stays with its neighbour. */
+export const FLIP_AI_BUBBLE_MIN_CHARACTERS = 60;
 
 /** How long the "Escrevendo..." indicator should still stay on screen before the reply appears. */
 export function resolveTypingDelayMs(replyLength: number, elapsedMs: number) {
@@ -65,7 +67,30 @@ function isolateClosingQuestion(bubbles: string[]) {
   const sentences = sentencesOf(last);
   const question = sentences[sentences.length - 1] ?? '';
   if (sentences.length < 2 || !question.endsWith('?')) return bubbles;
-  return [...bubbles.slice(0, -1), sentences.slice(0, -1).join(' '), question];
+  const lead = sentences.slice(0, -1).join(' ');
+  // A short lead-in stays with its question: "Oi! Como posso ajudar?" is one message.
+  if (lead.length < FLIP_AI_BUBBLE_MIN_CHARACTERS) return bubbles;
+  return [...bubbles.slice(0, -1), lead, question];
+}
+
+/** Joins pieces too short to stand alone, while the result still fits in one bubble. */
+function mergeShortBubbles(bubbles: string[], max: number) {
+  const merged: string[] = [];
+  bubbles.forEach((bubble, index) => {
+    const previous = merged[merged.length - 1];
+    if (previous === undefined) {
+      merged.push(bubble);
+      return;
+    }
+    const fits = previous.length + 1 + bubble.length <= max;
+    const eitherShort = previous.length < FLIP_AI_BUBBLE_MIN_CHARACTERS || bubble.length < FLIP_AI_BUBBLE_MIN_CHARACTERS;
+    // A closing question after a substantial message keeps its own bubble.
+    const closingQuestion = index === bubbles.length - 1 && bubble.endsWith('?')
+      && previous.length >= FLIP_AI_BUBBLE_MIN_CHARACTERS;
+    if (fits && eitherShort && !closingQuestion) merged[merged.length - 1] = `${previous} ${bubble}`;
+    else merged.push(bubble);
+  });
+  return merged;
 }
 
 /**
@@ -81,7 +106,7 @@ export function splitReplyIntoMessages(
   const blocks = reply.split(/\r?\n\s*\r?\n/).map((block) => block.trim()).filter(Boolean);
   if (blocks.length === 0) return [reply.trim()];
   const size = Math.max(60, Math.trunc(maxCharacters));
-  const bubbles = isolateClosingQuestion(blocks.flatMap((block) => packSentences(block, size)));
+  const bubbles = mergeShortBubbles(isolateClosingQuestion(blocks.flatMap((block) => packSentences(block, size))), size);
   const limit = Math.max(1, Math.trunc(maxMessages));
   if (bubbles.length <= limit) return bubbles;
   if (limit === 1) return [bubbles.join(' ')];

@@ -23,9 +23,12 @@ test('o tempo que o modelo já gastou é descontado e nunca fica negativo', () =
 
 test('resposta com linhas em branco vira mensagens separadas, sem perder texto', () => {
   assert.deepEqual(splitReplyIntoMessages('Sim, fazemos.'), ['Sim, fazemos.']);
-  assert.deepEqual(splitReplyIntoMessages('Sim, fazemos.\n\nComo está hoje?'), ['Sim, fazemos.', 'Como está hoje?']);
-  assert.deepEqual(splitReplyIntoMessages('a\n\nb\r\n\r\nc\n\nd'), ['a', 'b', 'c', 'd']);
-  assert.deepEqual(splitReplyIntoMessages('a\n\nb\n\nc\n\nd\n\ne?'), ['a', 'b', 'c d', 'e?']);
+  // Pieces too short to stand alone are joined: nobody sends "Oi!" as a message of its own.
+  assert.deepEqual(splitReplyIntoMessages('Sim, fazemos.\n\nComo está hoje?'), ['Sim, fazemos. Como está hoje?']);
+  assert.deepEqual(splitReplyIntoMessages('Oi!\n\nComo posso ajudar com IA no seu negócio?'), ['Oi! Como posso ajudar com IA no seu negócio?']);
+  assert.deepEqual(splitReplyIntoMessages('a\n\nb\r\n\r\nc\n\nd'), ['a b c d']);
+  const first = 'Sim, fazemos gestão de tráfego pago em Google Ads e Meta Ads, com estratégia e otimização focadas em conversão.';
+  assert.deepEqual(splitReplyIntoMessages(`${first}\n\nVocê já anuncia hoje?`), [first, 'Você já anuncia hoje?']);
   assert.deepEqual(splitReplyIntoMessages('linha 1\nlinha 2'), ['linha 1\nlinha 2']);
   assert.deepEqual(splitReplyIntoMessages('  \n\n  '), ['']);
 });
@@ -46,7 +49,7 @@ test('mensagem longa é dividida em frases inteiras e a pergunta final fica sozi
 test('mensagem curta com pergunta no fim separa só a pergunta', () => {
   assert.deepEqual(
     splitReplyIntoMessages('Sim, fazemos gestão de tráfego. Você já anuncia hoje?'),
-    ['Sim, fazemos gestão de tráfego.', 'Você já anuncia hoje?'],
+    ['Sim, fazemos gestão de tráfego. Você já anuncia hoje?'],
   );
   assert.deepEqual(splitReplyIntoMessages('Você já anuncia hoje?'), ['Você já anuncia hoje?']);
 });

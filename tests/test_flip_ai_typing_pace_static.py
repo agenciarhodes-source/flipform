@@ -31,6 +31,8 @@ def test_reply_is_split_into_chat_bubbles_only_for_text_turns():
     pace = read("lib/flip-ai/typing-pace.ts")
     assert "FLIP_AI_REPLY_MAX_MESSAGES = 4;" in pace
     assert "FLIP_AI_BUBBLE_MAX_CHARACTERS = 200;" in pace
+    assert "FLIP_AI_BUBBLE_MIN_CHARACTERS = 60;" in pace
+    assert "if (lead.length < FLIP_AI_BUBBLE_MIN_CHARACTERS) return bubbles;" in pace
     style = read("lib/flip-ai/conversation-style.ts")
     assert "Cada mensagem deve ter no máximo cerca de 200 caracteres." in style
     assert "As mensagens não precisam ter o mesmo tamanho." in style
