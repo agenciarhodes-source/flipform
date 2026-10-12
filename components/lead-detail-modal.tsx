@@ -661,7 +661,9 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div className="rounded-lg border bg-white p-3">
                         <div className="text-xs text-muted-foreground">Score geral</div>
                         <div className="text-2xl font-bold">{scoreSummary.score == null ? '—' : scoreSummary.score}</div>
-                        <div className="text-xs text-muted-foreground">de 0 a 100</div>
+                        <div className="text-xs text-muted-foreground">
+                          {scoreSummary.partial ? 'de 0 a 100 • leitura parcial, faltam informações' : 'de 0 a 100'}
+                        </div>
                       </div>
                       <div className="rounded-lg border bg-white p-3">
                         <div className="text-xs text-muted-foreground">Temperatura sugerida</div>

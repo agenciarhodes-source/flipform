@@ -34,7 +34,7 @@ import {
 } from './decision-engine';
 import { brainAssessmentPrompt, type BrainAssessment } from './brain-profiles';
 import { runJevConversationDecision } from './jev-decision-engine';
-import { FLIP_AI_CONTACT_GUIDANCE, resolveContactMoment } from './contact-timing';
+import { FLIP_AI_CONTACT_GUIDANCE, resolveContactMoment, type FlipAiContactMoment } from './contact-timing';
 import { audioReplyInstructions } from './audio-reply';
 import { FLIP_AI_ATTACHMENT_MAX_BYTES, FLIP_AI_ATTACHMENT_MIME_TYPES } from './chat-attachment';
 import { jevSubjectReference, redactJevText } from './jev-privacy';
@@ -999,6 +999,7 @@ export function buildPublicChatInstructions(
     'Separe fit de intenção. Use qualified apenas para perfil e momento realmente adequados; nurture para bom perfil ainda sem momento; disqualified para incompatibilidade clara; insufficient quando os dados não sustentam uma decisão.',
     'Nunca marque qualified quando o backend ainda não confirmar nome e telefone validados, exceto quando a própria pessoa informar o dado que faltava nesta mensagem e você o preencher em identity. A classificação é apenas uma recomendação: o backend revalida o Lead e controla qualquer evento externo.',
     'Sempre que você disser que vai encaminhar a pessoa ou o contato dela para o time, ou quando ela acabar de completar nome e telefone, finalize qualification nesta mesma resposta, com resumo, motivos e próxima ação. Nunca encaminhe alguém deixando qualification como null.',
+    'Evite encaminhar alguém como insufficient. A triagem é o que sustenta a nota: use a resposta da pessoa à pergunta de triagem e o que ela já contou para definir fitScore e intentScore. Se a pessoa já passou o contato e você ainda não sabe se ela faz parte do público que a empresa atende, agradeça e faça essa única pergunta de triagem antes de encerrar; se ela não responder, finalize mesmo assim com o que há. Nunca deixe de registrar o contato por falta de triagem.',
     'Se a conversa já tinha sido tratada como fora do perfil ou sem informação suficiente e a pessoa trouxer um fato novo que mostre aderência, reavalie: finalize qualification outra vez com a nova classificação, o novo resumo e os novos motivos.',
   ].filter(Boolean).join('\n\n');
 }
@@ -1015,6 +1016,7 @@ export async function buildPublicChatContext(
   availabilitySnapshot: FlipAiAvailabilitySnapshot | null;
   actionEligibility: FlipAiActionEligibility | null;
   actionPermission: FlipAiActionPermission | null;
+  contactMoment: FlipAiContactMoment | null;
 }> {
   const usage = await prisma.flipAiUsageEvent.findFirstOrThrow({
     where: { id: turn.eventId, tenantId: turn.tenantId, conversationId: turn.conversationId },
@@ -1307,14 +1309,22 @@ export async function buildPublicChatContext(
       AND metadata->>'attemptToken' = ${turn.attemptToken}
   `).catch(() => undefined);
 
+  const identityVerified = Boolean(identity?.lead?.name.trim() && identity.lead.phone
+    && isValidBrazilianPhone(identity.lead.phone));
+  const assistantMessages = chronological.flatMap((message) => message.role === 'assistant' ? [message.content] : []);
+  // The same moment that shapes the guidance is returned, so the reply can be held to it.
+  const contactMoment = identityVerified
+    ? null
+    : resolveContactMoment({ inboundMessages, assistantMessages, decision });
+
   return {
     instructions: buildPublicChatInstructions(runtime, hits, state?.summary,
-      Boolean(identity?.lead?.name.trim() && identity.lead.phone
-        && isValidBrazilianPhone(identity.lead.phone)), external, entryContext, {
+      identityVerified, external, entryContext, {
           completedTurns: state?.turnCount || 0,
           inboundMessages,
         }, decision, turn.inputMode, memorySnapshot, knownIdentity, availabilitySnapshot,
-        chronological.flatMap((message) => message.role === 'assistant' ? [message.content] : [])),
+        assistantMessages),
+    contactMoment,
     messages,
     evidenceMessageIds,
     sources: external?.sources || [],
