@@ -71,7 +71,7 @@ export async function saveAgentSpeechVoice(session: SessionPayload, agentId: str
     await prisma.agentSpeechSetting.upsert({
       where: { agentId },
       update: { voice, updatedById: userId },
-      create: { agentId, tenantId, voice, updatedById: userId },
+      create: { agentId, tenantId, voice, audioMode: FLIP_AI_DEFAULT_AUDIO_MODE, updatedById: userId },
       select: { agentId: true },
     });
   } catch (error) {

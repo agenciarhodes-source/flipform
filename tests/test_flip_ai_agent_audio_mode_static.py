@@ -35,3 +35,11 @@ def test_migration_only_adds_one_column_with_a_default():
     assert "DEFAULT 'AUTO'" in sql
     assert "flip_ai" not in Path(MIGRATION).parent.name
     assert 'aria-label="Quando responder em áudio"' in read("components/flip-ai/agent-voice-picker.tsx")
+
+
+def test_audio_only_on_request_is_the_default_for_every_attendant():
+    rules = read("lib/flip-ai/audio-reply.ts")
+    assert "FLIP_AI_DEFAULT_AUDIO_MODE: FlipAiAudioMode = 'on_request';" in rules
+    setting = read("lib/flip-ai/agent-speech-setting.ts")
+    assert "create: { agentId, tenantId, voice, audioMode: FLIP_AI_DEFAULT_AUDIO_MODE, updatedById: userId }," in setting
+    assert "(recomendado)" in read("components/flip-ai/agent-voice-picker.tsx")
