@@ -16,7 +16,9 @@ export const FLIP_AI_AUDIO_PREFERENCE_KEY = 'prefere_audio';
 /** When an attendant may answer in audio. */
 export const FLIP_AI_AUDIO_MODES = ['never', 'on_request', 'auto'] as const;
 export type FlipAiAudioMode = typeof FLIP_AI_AUDIO_MODES[number];
-export const FLIP_AI_DEFAULT_AUDIO_MODE: FlipAiAudioMode = 'auto';
+// Audio costs many times a written reply, so an attendant only uses it for someone who asks,
+// unless the company turns the automatic mode on.
+export const FLIP_AI_DEFAULT_AUDIO_MODE: FlipAiAudioMode = 'on_request';
 
 export function resolveAudioMode(raw: unknown): FlipAiAudioMode {
   return FLIP_AI_AUDIO_MODES.find((mode) => mode === raw) || FLIP_AI_DEFAULT_AUDIO_MODE;

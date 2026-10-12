@@ -11,7 +11,7 @@ export function AgentVoicePicker({ agentId }: { agentId: string }) {
   const [saved, setSaved] = useState<string | null>(null);
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState<'sample' | 'save' | 'mode' | null>(null);
-  const [audioMode, setAudioMode] = useState('auto');
+  const [audioMode, setAudioMode] = useState('on_request');
   const playerRef = useRef<HTMLAudioElement | null>(null);
 
   const load = useCallback(async () => {
@@ -108,8 +108,8 @@ export function AgentVoicePicker({ agentId }: { agentId: string }) {
         disabled={busy !== null}
         onChange={(event) => void changeMode(event.target.value)}
       >
-        <option value="auto">Automático: explicações longas e quando a pessoa pedir</option>
-        <option value="on_request">Só quando a pessoa pedir ou não souber ler</option>
+        <option value="on_request">Só quando a pessoa pedir ou não souber ler (recomendado)</option>
+        <option value="auto">Automático: também nas explicações longas</option>
         <option value="never">Nunca responder em áudio</option>
       </select>
       <p className="mt-1 text-xs text-muted-foreground">

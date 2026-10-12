@@ -13,7 +13,9 @@ import { OpenAiSpeechError, resolveSpeechVoice, synthesizeReplySpeech } from '..
 test('resposta curta fica em texto e explicação longa vira áudio', () => {
   assert.equal(shouldReplyWithAudio({ reply: 'Sim, fazemos gestão de tráfego.' }), false);
   assert.equal(shouldReplyWithAudio({ reply: 'a'.repeat(FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS) }), false);
-  assert.equal(shouldReplyWithAudio({ reply: 'a'.repeat(FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS + 1) }), true);
+  assert.equal(shouldReplyWithAudio({ reply: 'a'.repeat(FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS + 1), mode: 'auto' }), true);
+  // Without a choice by the company, a long explanation stays written.
+  assert.equal(shouldReplyWithAudio({ reply: 'a'.repeat(FLIP_AI_AUDIO_REPLY_MIN_CHARACTERS + 1) }), false);
   assert.equal(shouldReplyWithAudio({ reply: '   ' }), false);
 });
 
@@ -60,8 +62,9 @@ test('a empresa decide quando o atendente pode responder em áudio', () => {
   assert.equal(shouldReplyWithAudio({ reply: long, mode: 'on_request' }), false);
   assert.equal(shouldReplyWithAudio({ reply: 'Claro.', storedFacts: asked, mode: 'on_request' }), true);
   assert.equal(shouldReplyWithAudio({ reply: long, storedFacts: asked, mode: 'never' }), false);
-  assert.equal(resolveAudioMode('valor-estranho'), 'auto');
+  assert.equal(resolveAudioMode('valor-estranho'), 'on_request');
   assert.equal(audioModeNote('auto'), '');
+  assert.equal(shouldReplyWithAudio({ reply: 'Claro.', storedFacts: asked }), true);
   assert.match(audioModeNote('never'), /não há respostas em áudio/);
   assert.match(audioModeNote('on_request'), /quando a própria pessoa pedir/);
 });
