@@ -78,7 +78,9 @@ export function KnowledgeMasterEditor({ agent, onClose, onSaved }: {
       if (!response.ok) throw new Error(data.error || 'Não foi possível salvar.');
       const saved = data.master as KnowledgeMasterSummary;
       setMaster({ ...saved, content }); setIndex(null); setHits([]); onSaved(saved);
-      setMessage(`Revisão ${saved.revision} salva. Agora processe a base.`);
+      setMessage(agent.status === 'published'
+        ? `Revisão ${saved.revision} salva. O chat continua com a revisão anterior até você processar a base.`
+        : `Revisão ${saved.revision} salva. Agora processe a base.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão. Reabra o editor antes de tentar novamente.');
     } finally { inFlight.current = false; setSaving(false); }
   }
@@ -133,7 +135,10 @@ export function KnowledgeMasterEditor({ agent, onClose, onSaved }: {
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div><div className="flex items-center gap-2"><FileText className="h-5 w-5 text-brand-600" aria-hidden="true" />
         <h2 className="text-lg font-medium">Markdown Mestre de {agent.name}</h2></div>
-        <p className="mt-1 text-sm text-muted-foreground">Fonte interna prioritária. Cada alteração cria uma revisão preservada.</p></div>
+        <p className="mt-1 text-sm text-muted-foreground">Fonte interna prioritária. Cada alteração cria uma revisão preservada.</p>
+        {agent.status === 'published' ? <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 p-2 text-sm text-blue-950">
+          Este atendente está no ar. Ao salvar, o chat continua respondendo com a revisão anterior; a nova passa a valer quando você clicar em Processar base.
+        </p> : null}</div>
       <Button type="button" variant="outline" onClick={onClose} disabled={saving || indexing || previewing}>Fechar</Button>
     </div>
     {loading ? <p role="status">Carregando…</p> : <div className="space-y-6">
@@ -151,6 +156,7 @@ export function KnowledgeMasterEditor({ agent, onClose, onSaved }: {
         </label>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={byteSize > 1_000_000}>{saving ? 'Salvando…' : master ? 'Criar nova revisão' : 'Salvar Markdown Mestre'}</Button>
+          <Button type="button" variant="outline" disabled={!content} onClick={() => { setContent(''); setMessage('Conteúdo apagado da tela. Cole ou importe o novo e salve; a revisão atual só muda ao salvar.'); }}>Apagar conteúdo</Button>
           <span className="text-xs text-muted-foreground">{master ? `Revisão ${master.revision}` : 'Ainda não salvo'} · {byteSize.toLocaleString('pt-BR')} / 1.000.000 bytes</span>
         </div>
       </fieldset></form>
