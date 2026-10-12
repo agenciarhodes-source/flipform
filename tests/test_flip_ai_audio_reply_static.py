@@ -34,10 +34,12 @@ def test_audio_is_a_choice_of_length_or_preference_not_a_reaction_to_a_voice_mes
 
 def test_audio_bubble_is_played_on_demand_labelled_and_offers_the_text():
     shell = read(SHELL)
-    assert "Áudio gerado por IA." in shell
-    assert "'Ver texto'" in shell
-    assert "'Ouvir resposta'" in shell
+    # Sent and received audio use the same bar, with play, progress and time.
+    assert "return <ChatAudioPlayer src={url} label=\"resposta em áudio\" />;" in shell
+    assert "<ChatAudioPlayer src={message.audioUrl} knownSeconds={message.audioSeconds} label=\"áudio enviado\" />" in shell
+    # The person is told once, in the chat footer, that the attendant and its audio are AI.
+    assert "Atendimento por assistente virtual de IA, inclusive nos áudios." in shell
     assert "body: JSON.stringify({ messageId })," in shell
     # If the audio cannot be produced the person still gets the written answer.
-    assert "setFailed(true);" in shell and "setShowText(true);" in shell
+    assert "if (failed) return <span className=\"whitespace-pre-line\">{text}</span>;" in shell
     assert "tests/flip-ai-audio-reply.test.ts" in read(".github/workflows/ci.yml")

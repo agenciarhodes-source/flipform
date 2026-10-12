@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { resolveTypingDelayMs, splitReplyIntoMessages } from '@/lib/flip-ai/typing-pace';
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Bot, LoaderCircle, Mic, Paperclip, Play, RotateCcw, Send, Square, X } from 'lucide-react';
+import { Bot, LoaderCircle, Mic, Paperclip, Pause, Play, RotateCcw, Send, Square, X } from 'lucide-react';
 import type { PublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
 import { FlipAiRealtimeVoiceClient, type FlipAiVoiceState } from '@/lib/flip-ai/realtime-client';
 import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
@@ -20,6 +20,8 @@ type ChatMessage = {
   sources?: ChatSource[];
   /** A voice message the visitor recorded, playable from the bubble. */
   audioUrl?: string;
+  /** Length of that recording, known from the recorder because the file itself does not carry it. */
+  audioSeconds?: number;
   /** Set on a reply that is delivered as audio: the message whose speech is requested on play. */
   speechMessageId?: string;
 };
@@ -46,58 +48,117 @@ function voiceNoteMimeType() {
   return null;
 }
 
-/** A reply delivered as audio: generated when the person presses play, with the text on demand. */
-function AssistantAudio({ slug, messageId, text }: { slug: string; messageId: string; text: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [showText, setShowText] = useState(false);
+function clock(seconds: number) {
+  const safe = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+}
 
-  async function load() {
-    if (loading || url) return;
-    setLoading(true);
-    setFailed(false);
-    try {
-      const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(slug)}/speech`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageId }),
-      });
-      if (!response.ok) throw new Error('speech_unavailable');
-      setUrl(URL.createObjectURL(await response.blob()));
-    } catch {
-      // Without the audio the person still has the answer: the text is shown instead.
-      setFailed(true);
-      setShowText(true);
-    } finally {
-      setLoading(false);
-    }
-  }
+/** The same audio bar for messages sent and received: play, progress and time, like a messaging app. */
+function ChatAudioPlayer({ src, knownSeconds, label }: { src: string; knownSeconds?: number; label: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [current, setCurrent] = useState(0);
+  const [duration, setDuration] = useState(knownSeconds && knownSeconds > 0 ? knownSeconds : 0);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    let probing = false;
+    const readDuration = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+        if (probing) {
+          probing = false;
+          audio.currentTime = 0;
+        }
+      } else if (!probing && audio.readyState >= 1) {
+        // Audio recorded in the browser has no length in its header; seeking far ahead makes it known.
+        probing = true;
+        audio.currentTime = 1e9;
+      }
+    };
+    const onTime = () => { if (!probing) setCurrent(audio.currentTime); };
+    const onEnded = () => { setPlaying(false); setCurrent(0); };
+    const onPause = () => setPlaying(false);
+    const onPlay = () => setPlaying(true);
+    audio.addEventListener('loadedmetadata', readDuration);
+    audio.addEventListener('durationchange', readDuration);
+    audio.addEventListener('timeupdate', onTime);
+    audio.addEventListener('ended', onEnded);
+    audio.addEventListener('pause', onPause);
+    audio.addEventListener('play', onPlay);
+    return () => {
+      audio.removeEventListener('loadedmetadata', readDuration);
+      audio.removeEventListener('durationchange', readDuration);
+      audio.removeEventListener('timeupdate', onTime);
+      audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('pause', onPause);
+      audio.removeEventListener('play', onPlay);
+    };
+  }, [src]);
+
+  const toggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) void audio.play().catch(() => setPlaying(false));
+    else audio.pause();
+  };
+
+  const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
   return (
-    <div className="space-y-2">
-      {url ? (
-        <audio controls autoPlay preload="auto" src={url} className="h-10 w-56 max-w-full" aria-label="Resposta em áudio" />
-      ) : (
-        <button type="button" onClick={() => void load()} disabled={loading}
-          className="inline-flex items-center gap-2 rounded-full border bg-slate-50 px-3 py-2 text-sm font-medium text-slate-800 disabled:opacity-60">
-          {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {loading ? 'Preparando áudio...' : 'Ouvir resposta'}
-        </button>
-      )}
-      <p className="text-[11px] text-slate-500">
-        Áudio gerado por IA.{failed ? ' Não foi possível tocar agora.' : ''}{' '}
-        <button type="button" onClick={() => setShowText((current) => !current)} className="underline underline-offset-2">
-          {showText ? 'Ocultar texto' : 'Ver texto'}
-        </button>
-      </p>
-      {showText && <p className="whitespace-pre-line text-sm">{text}</p>}
+    <div className="flex w-56 max-w-full items-center gap-3">
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      <button type="button" onClick={toggle} aria-label={playing ? `Pausar ${label}` : `Ouvir ${label}`}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/10">
+        {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+      </button>
+      <div className="h-1 flex-1 overflow-hidden rounded-full bg-black/15" aria-hidden="true">
+        <div className="h-full rounded-full bg-current" style={{ width: `${progress}%` }} />
+      </div>
+      <span className="shrink-0 text-xs tabular-nums">{clock(playing || current > 0 ? current : duration)}</span>
     </div>
   );
 }
 
-function clock(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+/** A reply delivered as audio. It is prepared as soon as it arrives, so the bar shows its length. */
+function AssistantAudio({ slug, messageId, text }: { slug: string; messageId: string; text: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let created: string | null = null;
+    (async () => {
+      try {
+        const response = await fetch(`/api/flip-ai/public/${encodeURIComponent(slug)}/speech`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageId }),
+        });
+        if (!response.ok) throw new Error('speech_unavailable');
+        created = URL.createObjectURL(await response.blob());
+        if (cancelled) URL.revokeObjectURL(created);
+        else setUrl(created);
+      } catch {
+        // Without the audio the person still gets the answer, in writing.
+        if (!cancelled) setFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [slug, messageId]);
+
+  if (failed) return <span className="whitespace-pre-line">{text}</span>;
+  if (!url) {
+    return (
+      <span role="status" className="inline-flex items-center gap-2 text-slate-500">
+        <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />Gravando áudio...
+      </span>
+    );
+  }
+  return <ChatAudioPlayer src={url} label="resposta em áudio" />;
 }
 
 // Mirrors the server limits; the server checks the real bytes again.
@@ -170,6 +231,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const discardRecordingRef = useRef(false);
+  const recordedSecondsRef = useRef(0);
   const [retryTurn, setRetryTurn] = useState<RetryTurn | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -216,6 +278,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
     inputMode: 'text' | 'voice' = 'text',
     attachedFile: File | null = null,
     audioUrl?: string,
+    audioSeconds?: number,
   ) {
     if (sendingRef.current) return;
     const assistantId = `ai:${messageId}`;
@@ -234,7 +297,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
           // The bubble shows the message and, below it, the name of the attached file.
           text: audioUrl ? VOICE_NOTE_LABEL
             : attachedFile && text !== attachmentLabel(attachedFile) ? `${text}\n${attachmentLabel(attachedFile)}` : text,
-          ...(audioUrl ? { audioUrl } : {}),
+          ...(audioUrl ? { audioUrl, audioSeconds } : {}),
         }]),
         { id: assistantId, role: 'assistant' as const, text: '', streaming: true },
       ];
@@ -419,14 +482,17 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
       }
       const extension = mimeType === 'audio/mp4' ? 'm4a' : mimeType === 'audio/ogg' ? 'ogg' : 'webm';
       const voiceNote = new File([blob], `audio-${Date.now()}.${extension}`, { type: mimeType });
-      void sendTurn(crypto.randomUUID(), VOICE_NOTE_LABEL, false, false, 'text', voiceNote, URL.createObjectURL(blob));
+      void sendTurn(crypto.randomUUID(), VOICE_NOTE_LABEL, false, false, 'text', voiceNote, URL.createObjectURL(blob),
+        recordedSecondsRef.current);
     };
     recorderRef.current = recorder;
+    recordedSecondsRef.current = 0;
     recorder.start();
     setRecordingSeconds(0);
     recordingTimerRef.current = window.setInterval(() => {
       setRecordingSeconds((current) => {
         const next = (current ?? 0) + 1;
+        recordedSecondsRef.current = next;
         // The recording is sent on its own when it reaches the limit.
         if (next >= VOICE_NOTE_MAX_SECONDS && recorder.state !== 'inactive') recorder.stop();
         return next;
@@ -495,7 +561,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
                 backgroundColor: userMessageColor, color: readableTextColor(userMessageColor),
               } : undefined}>
               {message.audioUrl
-                ? <audio controls preload="metadata" src={message.audioUrl} className="h-10 w-56 max-w-full" aria-label="Áudio enviado" />
+                ? <ChatAudioPlayer src={message.audioUrl} knownSeconds={message.audioSeconds} label="áudio enviado" />
                 : message.speechMessageId
                   ? <AssistantAudio slug={agent.slug} messageId={message.speechMessageId} text={message.text} />
                   : <span className="whitespace-pre-line">{message.text}</span>}
@@ -602,7 +668,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
             {VOICE_LABEL[voiceState]}
           </p>}
           <p className="mt-2 text-center text-[11px] text-slate-500">
-            Você está em ambiente virtual. Não envie senhas ou dados bancários.
+            Atendimento por assistente virtual de IA, inclusive nos áudios. Não envie senhas ou dados bancários.
           </p>
         </form>
       </section>
