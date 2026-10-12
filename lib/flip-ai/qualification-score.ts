@@ -7,7 +7,7 @@
  * Readiness 10 / Confidence 5), renormalised over the three components a
  * final qualification has.
  */
-export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-09.1';
+export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-12.1';
 /** A disqualified conversation never shows more than this, whatever the partial scores say. */
 export const FLIP_AI_DISQUALIFIED_SCORE_CAP = 10;
 
@@ -21,6 +21,8 @@ export type FlipAiQualificationScoreSummary = {
   policyVersion: string;
   score: number | null;
   temperature: FlipAiQualificationTemperature;
+  /** The attendant closed the conversation without enough information: the score is a first reading. */
+  partial: boolean;
 };
 
 function bound(value: unknown, max: number) {
@@ -35,9 +37,9 @@ export function summarizeFlipAiQualificationScore(qualification: {
   intentScore?: number | null;
   confidence?: number | null;
 }): FlipAiQualificationScoreSummary {
-  // Without enough information there is no honest score to show.
-  if (qualification.classification === 'insufficient' || !qualification.classification) {
-    return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score: null, temperature: 'unknown' };
+  // No qualification at all: there is nothing to score.
+  if (!qualification.classification) {
+    return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score: null, temperature: 'unknown', partial: false };
   }
 
   const weighted = Math.round(
@@ -49,11 +51,16 @@ export function summarizeFlipAiQualificationScore(qualification: {
     ? Math.min(weighted, FLIP_AI_DISQUALIFIED_SCORE_CAP)
     : weighted;
 
-  const temperature: FlipAiQualificationTemperature = qualification.classification === 'qualified'
-    ? 'hot'
-    : qualification.classification === 'nurture' && score >= 50
-      ? 'warm'
-      : 'cold';
+  // With information still missing, the lead keeps the neutral temperature it was captured with:
+  // the score is shown as a first reading and nobody is marked hot or cold on a guess.
+  const partial = qualification.classification === 'insufficient';
+  const temperature: FlipAiQualificationTemperature = partial
+    ? 'warm'
+    : qualification.classification === 'qualified'
+      ? 'hot'
+      : qualification.classification === 'nurture' && score >= 50
+        ? 'warm'
+        : 'cold';
 
-  return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score, temperature };
+  return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score, temperature, partial };
 }

@@ -40,3 +40,12 @@ def test_suggestion_never_writes_to_the_crm():
 
 def test_score_unit_tests_run_in_ci():
     assert "tests/flip-ai-qualification-score.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_incomplete_qualification_still_shows_a_partial_score_and_discovery_comes_before_contact():
+    score = read("lib/flip-ai/qualification-score.ts")
+    assert "const partial = qualification.classification === 'insufficient';" in score
+    assert "leitura parcial, faltam informações" in read("components/lead-detail-modal.tsx")
+    timing = read("lib/flip-ai/contact-timing.ts")
+    assert "confira se você já sabe o que a pessoa faz" in timing
+    assert "Evite encaminhar alguém como insufficient" in read("lib/flip-ai/public-chat.ts")
