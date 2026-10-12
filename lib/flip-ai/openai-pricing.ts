@@ -1,4 +1,4 @@
-export const OPENAI_PRICE_SNAPSHOT = '2026-10-08';
+export const OPENAI_PRICE_SNAPSHOT = '2026-10-12';
 export const OPENAI_PRICE_SOURCE = 'https://developers.openai.com/api/docs/pricing';
 
 export type OpenAiCostCoverage = 'full' | 'partial' | 'none';
@@ -35,6 +35,16 @@ const TOKEN_PRICES: Array<{ matches: (model: string) => boolean; price: TokenPri
     matches: (model) => model === 'text-embedding-3-small'
       || model.startsWith('text-embedding-3-small-'),
     price: { inputNanoUsd: 20, outputNanoUsd: 0 },
+  },
+  {
+    // Voice messages turned into text: audio in, text out.
+    matches: (model) => model === 'gpt-4o-mini-transcribe' || model.startsWith('gpt-4o-mini-transcribe-'),
+    price: { inputNanoUsd: 3_000, outputNanoUsd: 5_000 },
+  },
+  {
+    // Replies spoken by the attendant: text in, audio out.
+    matches: (model) => model === 'gpt-4o-mini-tts' || model.startsWith('gpt-4o-mini-tts-'),
+    price: { inputNanoUsd: 600, outputNanoUsd: 12_000 },
   },
 ];
 

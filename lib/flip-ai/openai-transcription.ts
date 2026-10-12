@@ -50,9 +50,13 @@ export async function transcribeVoiceNote(input: {
       signal: controller.signal,
     });
     if (!response.ok) throw new OpenAiTranscriptionError(`OPENAI_TRANSCRIPTION_HTTP_${response.status}`);
-    const payload = await response.json().catch(() => null) as { text?: unknown } | null;
+    const payload = await response.json().catch(() => null) as {
+      text?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown } | null;
+    } | null;
     const text = typeof payload?.text === 'string' ? payload.text.replace(/\s+/g, ' ').trim() : '';
-    return { text, model: FLIP_AI_VOICE_NOTE_TRANSCRIPTION_MODEL };
+    // What the provider says it used, so the company is charged for the real amount.
+    const reported = { inputTokens: payload?.usage?.input_tokens, outputTokens: payload?.usage?.output_tokens };
+    return { text, model: FLIP_AI_VOICE_NOTE_TRANSCRIPTION_MODEL, reported };
   } catch (error) {
     if (error instanceof OpenAiTranscriptionError) throw error;
     throw new OpenAiTranscriptionError('OPENAI_TRANSCRIPTION_FAILED');

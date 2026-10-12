@@ -38,6 +38,8 @@ import {
   claimUploadedChatAttachment,
 } from '@/lib/flip-ai/chat-attachment-upload';
 import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
+import { chargeAudioUsage, hasCreditsForAudio } from '@/lib/flip-ai/audio-usage';
+import { FLIP_AI_VOICE_TRANSCRIPTION_OPERATION, resolveTranscriptionUsage } from '@/lib/flip-ai/audio-usage-policy';
 import { enforceContactMoment } from '@/lib/flip-ai/contact-timing';
 import { audioModeNote, shouldReplyWithAudio } from '@/lib/flip-ai/audio-reply';
 import { getAgentAudioMode } from '@/lib/flip-ai/agent-speech-setting';
@@ -191,6 +193,13 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       acceptedAttachmentId = claimed.id;
       body = { ...(body as Record<string, unknown>), attachment: attachmentInfo(attachment) };
       if (attachment.kind === 'audio') {
+        // Listening to a voice message uses the company's credits, like every other reply.
+        if (!await hasCreditsForAudio(runtimeContext.tenantId)) {
+          return jsonError(new FlipAiError(
+            'FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
+            'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.',
+          ), session.token, session.created);
+        }
         // A voice message: what the person said becomes the text of this turn.
         const heard = await transcribeVoiceNote({
           bytes: Buffer.from(attachment.base64, 'base64'),
@@ -202,6 +211,14 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
             'Não consegui entender o áudio. Grave de novo, mais perto do microfone, ou escreva a mensagem.',
           ), session.token, session.created);
         }
+        await chargeAudioUsage({
+          tenantId: runtimeContext.tenantId,
+          agentId: runtimeContext.id,
+          requestKey: `voice-transcription:${claimed.id}`,
+          operation: FLIP_AI_VOICE_TRANSCRIPTION_OPERATION,
+          model: heard.model,
+          usage: resolveTranscriptionUsage({ reported: heard.reported, transcriptCharacters: heard.text.length }),
+        });
         body = { ...(body as Record<string, unknown>), text: heard.text.slice(0, 2_000), inputMode: 'text' };
       }
     } catch (error) {

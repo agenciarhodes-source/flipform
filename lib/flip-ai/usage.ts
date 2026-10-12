@@ -126,6 +126,8 @@ const OPERATION_LABELS: Record<string, string> = {
   web_search: 'Busca externa',
   realtime_session: 'Sessão de voz emitida',
   conversation_decision: 'Classificação JEV',
+  voice_transcription: 'Áudio recebido',
+  voice_speech: 'Resposta em áudio',
 };
 
 type AggregateRow = {
