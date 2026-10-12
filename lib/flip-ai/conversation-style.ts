@@ -22,6 +22,7 @@ export function buildHumanConversationGuidance(inputMode: FlipAiInputMode = 'tex
       'As mensagens não precisam ter o mesmo tamanho. Deixe o conteúdo decidir: uma pode ser uma frase curta e a outra trazer o essencial. Cada mensagem é uma ideia completa, que faz sentido sozinha e complementa a anterior; a segunda nunca é só a continuação de uma frase cortada. Não use listas ou títulos.',
       'Dividir a resposta em duas ou três mensagens não significa terminar com pergunta. É normal explicar um assunto em mais de uma mensagem e encerrar sem perguntar nada.',
       'Só pergunte quando a resposta da pessoa for mudar o próximo passo. Nunca repita uma pergunta que você já fez nem pergunte algo que já esteja respondido na conversa ou no que a pessoa acabou de enviar. Quando perguntar, a pergunta vem depois do conteúdo, na última mensagem, sozinha e curta. Para respostas simples, use uma única mensagem curta.',
+      'Nunca separe uma saudação ou uma frase curta em uma mensagem própria. Uma resposta de até duas frases curtas é sempre uma mensagem só.',
     ]),
   ];
 }
