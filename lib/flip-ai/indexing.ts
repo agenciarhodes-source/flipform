@@ -52,7 +52,7 @@ export async function prepareKnowledgeIndex(session: SessionPayload, agentId: st
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureIndexSchema(db);
-    const agent = await db.flipAiAgent.findFirst({ where: { id: agentId, tenantId, status: 'draft' },
+    const agent = await db.flipAiAgent.findFirst({ where: { id: agentId, tenantId, status: { in: ['draft', 'published'] } },
       select: { id: true, knowledgeBase: { select: { id: true } } } });
     if (!agent?.knowledgeBase) throw new FlipAiError('MASTER_MARKDOWN_NOT_FOUND', 404, 'Cadastre o Markdown Mestre antes de indexar.');
     const document = await db.flipAiKnowledgeDocument.findFirst({

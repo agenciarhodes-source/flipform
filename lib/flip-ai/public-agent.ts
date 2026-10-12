@@ -171,21 +171,22 @@ export async function resolvePublicFlipAiRuntime(input: {
       sourceKey: 'master',
       knowledgeBase: { agentId: endpoint.agent.id },
     },
-    select: { id: true, currentRevision: true, currentHash: true },
+    select: { id: true },
   });
   if (!document) return null;
 
+  // The chat answers from the newest revision that finished processing. While a newer revision
+  // is saved but not processed yet, the previous one keeps serving: editing never takes the chat down.
   const index = await prisma.flipAiKnowledgeIndex.findFirst({
     where: {
       tenantId: endpoint.agent.tenantId,
       agentId: endpoint.agent.id,
       documentId: document.id,
-      revision: document.currentRevision,
-      contentHash: document.currentHash,
       embeddingModel: FLIP_AI_EMBEDDING_MODEL,
       status: 'completed',
     },
-    select: { id: true },
+    orderBy: { revision: 'desc' },
+    select: { id: true, revision: true },
   });
   if (!index) return null;
   const [appearance, actionCapabilities] = await Promise.all([
@@ -210,7 +211,7 @@ export async function resolvePublicFlipAiRuntime(input: {
     tenantId: endpoint.agent.tenantId,
     tenantName: endpoint.agent.tenant.name,
     tenantLogoUrl: endpoint.agent.tenant.logoUrl,
-    knowledgeRevision: document.currentRevision,
+    knowledgeRevision: index.revision,
     knowledgeIndexId: index.id,
     pipelineId: endpoint.agent.pipelineId,
     initialStageId: endpoint.agent.initialStageId,

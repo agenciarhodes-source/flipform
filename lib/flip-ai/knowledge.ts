@@ -16,9 +16,11 @@ async function ensureKnowledgeSchema(db: FlipAiDb) {
   `);
   if (!rows[0]?.ready) throw new FlipAiError('FLIP_AI_KNOWLEDGE_SCHEMA_NOT_READY', 503, 'A base de conhecimento está em preparação.');
 }
-async function requireDraftAgent(db: FlipAiDb, tenantId: string, agentId: string) {
-  const agent = await db.flipAiAgent.findFirst({ where: { id: agentId, tenantId, status: 'draft' }, select: { id: true } });
-  if (!agent) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente em rascunho não encontrado.');
+// A published attendant can be edited too: the public chat keeps answering from the last
+// processed revision until the new one is processed.
+async function requireEditableAgent(db: FlipAiDb, tenantId: string, agentId: string) {
+  const agent = await db.flipAiAgent.findFirst({ where: { id: agentId, tenantId, status: { in: ['draft', 'published'] } }, select: { id: true } });
+  if (!agent) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
 }
 function summary(document: { title: string; currentRevision: number; byteSize: number; currentHash: string; updatedAt: Date }): KnowledgeMasterSummary {
   return { title: document.title, revision: document.currentRevision, byteSize: document.byteSize,
@@ -29,7 +31,7 @@ export async function getMasterMarkdown(session: SessionPayload, agentId: string
   return prisma.$transaction(async (db) => {
     const { tenantId } = await requireFlipAiAccess(db, session);
     await ensureKnowledgeSchema(db);
-    await requireDraftAgent(db, tenantId, agentId);
+    await requireEditableAgent(db, tenantId, agentId);
     const base = await db.flipAiKnowledgeBase.findFirst({ where: { tenantId, agentId }, select: { id: true } });
     if (!base) return null;
     const document = await db.flipAiKnowledgeDocument.findFirst({ where: { tenantId, knowledgeBaseId: base.id, sourceKey: 'master' } });
@@ -58,7 +60,7 @@ export async function saveMasterMarkdown(session: SessionPayload, agentId: strin
     const { tenantId, userId } = await requireFlipAiAccess(db, session);
     await ensureKnowledgeSchema(db);
     await db.$queryRaw(Prisma.sql`SELECT id FROM tenants WHERE id = ${tenantId} FOR UPDATE`);
-    await requireDraftAgent(db, tenantId, agentId);
+    await requireEditableAgent(db, tenantId, agentId);
 
     let base = await db.flipAiKnowledgeBase.findFirst({ where: { tenantId, agentId } });
     if (!base) base = await db.flipAiKnowledgeBase.create({ data: { tenantId, agentId, status: 'draft' } });

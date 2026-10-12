@@ -275,13 +275,13 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
         <AgentVoicePicker agentId={agent.id} />
         <div className="mt-4 flex flex-wrap gap-2">
           <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => editDraft(agent)}>Editar</Button>
-          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId} onClick={() => setKnowledgeAgentId(agent.id)}>
             <BookOpen className="mr-2 h-4 w-4" aria-hidden="true" />Markdown Mestre
-          </Button> : null}
-          {agent.status === 'draft' ? <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId}
+          </Button>
+          <Button variant="outline" disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId}
             onClick={() => setExternalAgentId(agent.id)}>
             <Globe2 className="mr-2 h-4 w-4" aria-hidden="true" />Fontes externas
-          </Button> : null}
+          </Button>
           <Button variant={agent.status === 'published' ? 'outline' : 'default'}
             disabled={busy || !!editor || !!knowledgeAgentId || !!externalAgentId || (agent.status === 'draft' && !agent.publication.ready)}
             onClick={() => togglePublication(agent)}>
