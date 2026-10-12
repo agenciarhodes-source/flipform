@@ -14,7 +14,7 @@ def test_only_a_stored_reply_of_the_callers_own_conversation_is_spoken():
     assert "externalMessageId: `ai:${sessionHash}:${messageId}`," in route
     assert "direction: 'outbound'," in route
     assert "tenantId: runtimeContext.tenantId," in route
-    assert "synthesizeReplySpeech({ text: message.text })" in route
+    assert "synthesizeReplySpeech({ text: message.text, voice })" in route
     # The browser sends only a message identifier, never the text to be spoken.
     assert "body?.messageId" in route and "body?.text" not in route
     assert route.index("rateLimit({ key: `flip-ai:speech:ip:") < route.index("synthesizeReplySpeech(")

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { normalizeHostname, isAdminHostname } from '@/lib/host-routing';
 import { resolvePublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import { synthesizeReplySpeech } from '@/lib/flip-ai/openai-speech';
+import { getAgentSpeechVoice } from '@/lib/flip-ai/agent-speech-setting';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -67,7 +68,9 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   if (!message?.text) return refuse(404, 'Mensagem não encontrada.');
 
   try {
-    const speech = await synthesizeReplySpeech({ text: message.text });
+    // Each attendant speaks with the voice chosen for it; the default applies when none was chosen.
+    const voice = await getAgentSpeechVoice({ tenantId: runtimeContext.tenantId, agentId: runtimeContext.id });
+    const speech = await synthesizeReplySpeech({ text: message.text, voice });
     const body = speech.audio.buffer.slice(
       speech.audio.byteOffset, speech.audio.byteOffset + speech.audio.byteLength,
     ) as ArrayBuffer;
