@@ -60,3 +60,17 @@ test('nome do arquivo é limpo e o aviso de arquivo ilegível não inventa conte
   assert.match(note, /não pôde ser lido/);
   assert.match(note, /não afirme nada sobre o conteúdo/);
 });
+
+test('mensagem de voz é reconhecida pelos bytes e tratada como áudio', () => {
+  const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 1, 2, 3]);
+  const mp4 = new Uint8Array([0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70, 0x4d, 0x34, 0x41]);
+  const ogg = new Uint8Array([0x4f, 0x67, 0x67, 0x53, 0, 2]);
+  assert.equal(sniffAttachmentMimeType(webm), 'audio/webm');
+  assert.equal(sniffAttachmentMimeType(mp4), 'audio/mp4');
+  assert.equal(sniffAttachmentMimeType(ogg), 'audio/ogg');
+  const voice = validateChatAttachment({ name: 'audio-1.webm', bytes: webm });
+  assert.equal(voice.ok, true);
+  if (voice.ok) assert.equal(voice.attachment.kind, 'audio');
+  // A photo is still a photo: the JPEG signature is checked before the MP3 one.
+  assert.equal(sniffAttachmentMimeType(JPEG), 'image/jpeg');
+});

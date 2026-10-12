@@ -575,7 +575,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 <div>
                   <h3 className="font-heading text-sm font-semibold">Documentos enviados</h3>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Arquivos que o lead enviou na conversa. Ficam disponíveis por 7 dias e depois são apagados; baixe o que precisar guardar.
+                    Arquivos e áudios que o lead enviou na conversa. Ficam disponíveis por 7 dias e depois são apagados; baixe o que precisar guardar.
                   </div>
                 </div>
                 <ul className="space-y-2">
@@ -584,7 +584,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                       <div className="min-w-0">
                         <div className="truncate font-medium">{attachment.name}</div>
                         <div className="text-xs text-muted-foreground">
-                          {attachment.mimeType === 'application/pdf' ? 'PDF' : 'Imagem'} • {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                          {attachment.mimeType === 'application/pdf' ? 'PDF' : String(attachment.mimeType).startsWith('audio/') ? '\u00c1udio' : 'Imagem'} • {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
                           {' '}• enviado em {formatDateTime(attachment.createdAt)} • disponível até {formatDateTime(attachment.expiresAt)}
                         </div>
                       </div>

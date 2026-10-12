@@ -7,9 +7,18 @@
 
 export const FLIP_AI_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 
-export const FLIP_AI_ATTACHMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const;
+export const FLIP_AI_ATTACHMENT_MIME_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'application/pdf',
+  // Voice messages recorded in the chat.
+  'audio/webm', 'audio/mp4', 'audio/ogg', 'audio/mpeg',
+] as const;
 export type FlipAiAttachmentMimeType = typeof FLIP_AI_ATTACHMENT_MIME_TYPES[number];
-export type FlipAiAttachmentKind = 'image' | 'document';
+export type FlipAiAttachmentKind = 'image' | 'document' | 'audio';
+
+export function attachmentKindOf(mimeType: string): FlipAiAttachmentKind {
+  if (mimeType.startsWith('audio/')) return 'audio';
+  return mimeType === 'application/pdf' ? 'document' : 'image';
+}
 
 export type FlipAiChatAttachmentInfo = {
   name: string;
@@ -35,6 +44,11 @@ export function sniffAttachmentMimeType(bytes: Uint8Array): FlipAiAttachmentMime
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8)) return 'image/webp';
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46, 0x2d])) return 'application/pdf';
+  // Containers a browser records voice in. The declared type must still match what is found here.
+  if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return 'audio/webm';
+  if (startsWith(bytes, [0x66, 0x74, 0x79, 0x70], 4)) return 'audio/mp4';
+  if (startsWith(bytes, [0x4f, 0x67, 0x67, 0x53])) return 'audio/ogg';
+  if (startsWith(bytes, [0x49, 0x44, 0x33]) || (bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0)) return 'audio/mpeg';
   return null;
 }
 
@@ -58,7 +72,7 @@ export function validateChatAttachment(input: { name: string; bytes: Uint8Array 
       name: cleanAttachmentName(input.name),
       mimeType,
       sizeBytes: input.bytes.byteLength,
-      kind: mimeType === 'application/pdf' ? 'document' : 'image',
+      kind: attachmentKindOf(mimeType),
       base64: Buffer.from(input.bytes).toString('base64'),
     },
   };

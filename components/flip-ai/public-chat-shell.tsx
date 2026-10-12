@@ -18,6 +18,8 @@ type ChatMessage = {
   text: string;
   streaming?: boolean;
   sources?: ChatSource[];
+  /** A voice message the visitor recorded, playable from the bubble. */
+  audioUrl?: string;
 };
 
 type RetryTurn = {
@@ -26,7 +28,25 @@ type RetryTurn = {
   speakReply: boolean;
   inputMode: 'text' | 'voice';
   file: File | null;
+  audioUrl?: string;
 };
+
+/** Longest voice message a visitor can record. */
+const VOICE_NOTE_MAX_SECONDS = 120;
+const VOICE_NOTE_LABEL = '🎤 Áudio';
+
+/** The container this browser can record in, among the ones the server accepts. */
+function voiceNoteMimeType() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  if (MediaRecorder.isTypeSupported('audio/webm')) return 'audio/webm';
+  if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
+  if (MediaRecorder.isTypeSupported('audio/ogg')) return 'audio/ogg';
+  return null;
+}
+
+function clock(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 // Mirrors the server limits; the server checks the real bytes again.
 const ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
@@ -94,6 +114,10 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [voiceState, setVoiceState] = useState<FlipAiVoiceState>('idle');
+  const [recordingSeconds, setRecordingSeconds] = useState<number | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
+  const discardRecordingRef = useRef(false);
   const [retryTurn, setRetryTurn] = useState<RetryTurn | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +134,9 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
   useEffect(() => () => {
     voiceRef.current?.stop(false);
     voiceRef.current = null;
+    discardRecordingRef.current = true;
+    if (recordingTimerRef.current !== null) window.clearInterval(recordingTimerRef.current);
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
   }, []);
 
   async function uploadAttachment(attachedFile: File) {
@@ -136,6 +163,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
     speakReply = false,
     inputMode: 'text' | 'voice' = 'text',
     attachedFile: File | null = null,
+    audioUrl?: string,
   ) {
     if (sendingRef.current) return;
     const assistantId = `ai:${messageId}`;
@@ -152,7 +180,9 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
           id: messageId,
           role: 'user' as const,
           // The bubble shows the message and, below it, the name of the attached file.
-          text: attachedFile && text !== attachmentLabel(attachedFile) ? `${text}\n${attachmentLabel(attachedFile)}` : text,
+          text: audioUrl ? VOICE_NOTE_LABEL
+            : attachedFile && text !== attachmentLabel(attachedFile) ? `${text}\n${attachmentLabel(attachedFile)}` : text,
+          ...(audioUrl ? { audioUrl } : {}),
         }]),
         { id: assistantId, role: 'assistant' as const, text: '', streaming: true },
       ];
@@ -254,7 +284,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
     } catch (failure) {
       setMessages((current) => current.map((message) =>
         message.id === assistantId ? { ...message, streaming: false } : message));
-      setRetryTurn({ messageId, text, speakReply, inputMode, file: attachedFile });
+      setRetryTurn({ messageId, text, speakReply, inputMode, file: attachedFile, audioUrl });
       setError(failure instanceof Error ? failure.message : 'Não foi possível enviar sua mensagem.');
     } finally {
       sendingRef.current = false;
@@ -286,6 +316,63 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
     }
     setError(null);
     setFile(chosen);
+  }
+
+  /** Tap to record, tap again to send: a voice message like in a messaging app. */
+  async function startRecording() {
+    if (recorderRef.current || sendingRef.current) return;
+    const mimeType = voiceNoteMimeType();
+    if (!mimeType || !navigator.mediaDevices?.getUserMedia) {
+      setError('Este navegador não permite gravar áudio. Escreva a mensagem.');
+      return;
+    }
+    setError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError('Não foi possível usar o microfone. Autorize o acesso ou escreva a mensagem.');
+      return;
+    }
+    const chunks: Blob[] = [];
+    const recorder = new MediaRecorder(stream, { mimeType });
+    discardRecordingRef.current = false;
+    recorder.ondataavailable = (event) => { if (event.data.size > 0) chunks.push(event.data); };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      if (recordingTimerRef.current !== null) window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+      recorderRef.current = null;
+      setRecordingSeconds(null);
+      if (discardRecordingRef.current) return;
+      const blob = new Blob(chunks, { type: mimeType });
+      if (blob.size === 0) return;
+      if (blob.size > ATTACHMENT_MAX_BYTES) {
+        setError('O áudio ficou grande demais. Grave uma mensagem mais curta.');
+        return;
+      }
+      const extension = mimeType === 'audio/mp4' ? 'm4a' : mimeType === 'audio/ogg' ? 'ogg' : 'webm';
+      const voiceNote = new File([blob], `audio-${Date.now()}.${extension}`, { type: mimeType });
+      void sendTurn(crypto.randomUUID(), VOICE_NOTE_LABEL, false, false, 'text', voiceNote, URL.createObjectURL(blob));
+    };
+    recorderRef.current = recorder;
+    recorder.start();
+    setRecordingSeconds(0);
+    recordingTimerRef.current = window.setInterval(() => {
+      setRecordingSeconds((current) => {
+        const next = (current ?? 0) + 1;
+        // The recording is sent on its own when it reaches the limit.
+        if (next >= VOICE_NOTE_MAX_SECONDS && recorder.state !== 'inactive') recorder.stop();
+        return next;
+      });
+    }, 1_000);
+  }
+
+  function stopRecording(send: boolean) {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    discardRecordingRef.current = !send;
+    recorder.stop();
   }
 
   async function toggleVoice() {
@@ -341,7 +428,9 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
               style={message.role === 'user' ? {
                 backgroundColor: userMessageColor, color: readableTextColor(userMessageColor),
               } : undefined}>
-              <span className="whitespace-pre-line">{message.text}</span>
+              {message.audioUrl
+                ? <audio controls preload="metadata" src={message.audioUrl} className="h-10 w-56 max-w-full" aria-label="Áudio enviado" />
+                : <span className="whitespace-pre-line">{message.text}</span>}
               {message.sources?.length ? <ul className="mt-3 space-y-1 border-t pt-2 text-xs">
                 {message.sources.map((source) => <li key={source.url}>
                   <a className="font-medium underline underline-offset-2" href={source.url}
@@ -368,6 +457,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
                     retryTurn.speakReply,
                     retryTurn.inputMode,
                     retryTurn.file,
+                    retryTurn.audioUrl,
                   )}
                   className="mt-2 inline-flex items-center gap-2 font-medium underline underline-offset-2">
                   <RotateCcw className="h-4 w-4" /> Confirmar nova tentativa
@@ -391,6 +481,24 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
           )}
           <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden"
             onChange={(event) => chooseFile(event.target.files?.[0] || null)} />
+          {recordingSeconds !== null ? (
+            <div className="flex items-center gap-3 rounded-full border bg-slate-50 px-2 py-2 pl-4" role="status">
+              <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" aria-hidden="true" />
+              <span className="flex-1 text-sm text-slate-700">
+                Gravando {clock(recordingSeconds)}
+                <span className="ml-1 text-xs text-slate-500">de {clock(VOICE_NOTE_MAX_SECONDS)}</span>
+              </span>
+              <button type="button" onClick={() => stopRecording(false)} aria-label="Cancelar gravação"
+                className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-slate-700">
+                <X className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => stopRecording(true)} aria-label="Enviar áudio"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+                style={{ backgroundColor: sendButtonColor, color: readableTextColor(sendButtonColor) }}>
+                <Send className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
           <div className="flex items-center gap-2 rounded-full border bg-slate-50 px-2 py-2 pl-4">
             <input value={input} onChange={(event) => setInput(event.target.value)}
               disabled={sending || voiceActive} maxLength={2_000} autoComplete="off" aria-label="Mensagem"
@@ -404,9 +512,11 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
                 <Paperclip className="h-4 w-4" />
               </button>
             )}
+            {/* With file storage available the microphone records a voice message; the live
+                voice conversation remains only as the fallback when storage is off. */}
             <button disabled={sending && !voiceActive} type="button"
-              onClick={() => void toggleVoice()}
-              aria-label={voiceActive ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
+              onClick={() => void (attachmentsEnabled ? startRecording() : toggleVoice())}
+              aria-label={attachmentsEnabled ? 'Gravar áudio' : voiceActive ? 'Encerrar conversa por voz' : 'Iniciar conversa por voz'}
               aria-pressed={voiceActive}
               className="flex h-9 w-9 items-center justify-center rounded-full border bg-white text-slate-700 disabled:opacity-50">
               {voiceState === 'connecting'
@@ -419,6 +529,7 @@ export function PublicFlipAiChatShell({ agent, attachmentsEnabled = false }: {
               {sending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             </button>
           </div>
+          )}
           {voiceActive && <p className="mt-2 text-center text-xs font-medium" style={{ color }} role="status">
             {VOICE_LABEL[voiceState]}
           </p>}
