@@ -12,7 +12,7 @@ export const FLIP_AI_CONTACT_MAX_REQUESTS = 3;
 /** Replies the agent must give after an unanswered request before asking again. */
 export const FLIP_AI_CONTACT_COOLDOWN_REPLIES = 2;
 /** Without a clear buying signal, the agent still asks once the visitor sent this many messages. */
-export const FLIP_AI_CONTACT_FALLBACK_INBOUND_MESSAGES = 5;
+export const FLIP_AI_CONTACT_FALLBACK_INBOUND_MESSAGES = 4;
 
 export type FlipAiContactMoment =
   | 'discover_first'
@@ -86,20 +86,24 @@ export function resolveContactMoment(input: {
 }
 
 export const FLIP_AI_CONTACT_GUIDANCE: Record<FlipAiContactMoment, string> = {
-  discover_first: 'Faça descoberta mínima: responda ao que a pessoa perguntou e busque somente o próximo dado que realmente muda a qualificação. Ainda não é hora do contato: não peça nome nem telefone nesta resposta. Primeiro entenda o que a pessoa faz e o que ela procura; só depois disso, em uma próxima resposta, avance para a identificação. Se a própria pessoa oferecer o contato, aceite.',
-  ask_now: 'CAPTURA PRIORITÁRIA: este é um bom momento para identificar a pessoa. Antes de pedir, confira se você já sabe o que a pessoa faz (o tipo de negócio ou a situação dela) e o que ela procura. Se faltar um desses dois, faça essa única pergunta nesta resposta e deixe o contato para a seguinte. Se a necessidade e um sinal básico de perfil já estiverem claros, peça agora o dado de contato que falta, sem abrir outra sequência de diagnóstico. Se houver uma dúvida direta, responda-a brevemente e, na mesma resposta, peça o dado de contato que falta, dizendo para que ele serve. Só adie isso por segurança ou quando ainda não for possível entender minimamente o que a pessoa procura.',
+  discover_first: 'Faça descoberta mínima, em forma de triagem rápida: responda ao que a pessoa perguntou e faça uma única pergunta, a que mais define se ela faz parte do público que a empresa atende segundo a base interna (por exemplo, o tipo de negócio, a situação ou o requisito que a empresa exige). Não faça perguntas genéricas de diagnóstico. A conversa inteira comporta no máximo duas perguntas de triagem. Não segure o contato: se a pessoa já demonstrou interesse claro ou já respondeu a uma pergunta de triagem, peça nome e telefone nesta mesma resposta. Se a própria pessoa oferecer o contato, aceite.',
+  ask_now: 'CAPTURA PRIORITÁRIA: este é o momento de identificar a pessoa, e o contato não pode ser adiado. Responda brevemente à dúvida direta, se houver, e peça agora o dado de contato que falta, dizendo para que ele serve, sem abrir outra sequência de diagnóstico. Se você ainda não sabe se a pessoa faz parte do público que a empresa atende, inclua antes do pedido uma única pergunta curta de triagem, na mesma resposta, e nunca troque o pedido de contato por ela. Só adie o contato por segurança.',
   handle_objection_first: 'MOMENTO DA CONVERSA: a pessoa trouxe uma objeção. Não peça nome nem telefone nesta resposta. Reconheça o ponto, responda ao motivo real da resistência e só volte ao contato depois que a objeção estiver tratada.',
   hold_after_request: 'MOMENTO DA CONVERSA: você pediu o contato há pouco e a pessoa não informou. Não repita o pedido nesta resposta. Responda de verdade ao que ela acabou de dizer, mostre que entendeu a situação e retome o contato mais adiante, em um ponto natural da conversa.',
   stop_requesting: 'MOMENTO DA CONVERSA: você já pediu o contato algumas vezes sem resposta. Não peça nome nem telefone de novo. Continue ajudando e aceite o contato apenas se a própria pessoa oferecer.',
 };
 
+/** Moments in which asking again would push the person away. Triage never blocks the contact. */
+const CONTACT_BLOCKED_MOMENTS: FlipAiContactMoment[] = ['handle_objection_first', 'hold_after_request', 'stop_requesting'];
+
 /**
- * Makes the moment binding. The guidance tells the attendant when not to ask for contact, but a
- * model can still slip one in; outside the "ask now" moment any sentence that asks for name or
- * phone is taken out of the reply before it is shown. Nothing else in the reply is changed.
+ * Holds the reply to the moments in which the contact must not be asked: an open objection, a
+ * request made a moment ago, or too many requests already. There, any sentence asking for name or
+ * phone is taken out before the reply is shown. During triage the request is never removed:
+ * capturing the lead comes first. Nothing else in the reply is changed.
  */
 export function enforceContactMoment(reply: string, moment: FlipAiContactMoment | null | undefined) {
-  if (!moment || moment === 'ask_now') return reply;
+  if (!moment || !CONTACT_BLOCKED_MOMENTS.includes(moment)) return reply;
   const blocks = reply.split(/\r?\n\s*\r?\n/)
     .map((block) => block
       .split(/(?<=[.!?…])\s+/)

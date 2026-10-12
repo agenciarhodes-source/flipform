@@ -52,14 +52,21 @@ test('sem leitura do JEV mantém a regra simples por quantidade de mensagens', (
   assert.equal(resolveContactMoment({ inboundMessages: 3 }), 'ask_now');
 });
 
-test('fora do momento, o pedido de contato é retirado da resposta e o resto fica igual', () => {
+test('com objeção aberta ou pedido recente, o pedido de contato é retirado e o resto fica igual', () => {
   const reply = 'Sim, trabalhamos com gestão de tráfego pago no Google e na Meta. Criação de sites não oferecemos.\n\nComo posso te chamar e qual é seu telefone?';
-  assert.equal(
-    enforceContactMoment(reply, 'discover_first'),
-    'Sim, trabalhamos com gestão de tráfego pago no Google e na Meta. Criação de sites não oferecemos.',
-  );
+  const kept = 'Sim, trabalhamos com gestão de tráfego pago no Google e na Meta. Criação de sites não oferecemos.';
+  assert.equal(enforceContactMoment(reply, 'hold_after_request'), kept);
+  assert.equal(enforceContactMoment(reply, 'stop_requesting'), kept);
   assert.equal(enforceContactMoment('Entendi o ponto. Qual seu nome e telefone?', 'handle_objection_first'), 'Entendi o ponto.');
-  assert.equal(enforceContactMoment('Claro. Qual é o seu negócio?', 'discover_first'), 'Claro. Qual é o seu negócio?');
+  assert.equal(enforceContactMoment('Claro. Qual é o seu negócio?', 'handle_objection_first'), 'Claro. Qual é o seu negócio?');
+});
+
+test('a triagem nunca segura o contato: na descoberta o pedido fica na resposta', () => {
+  const reply = 'Sim, fazemos gestão de tráfego. Você já anuncia hoje?\n\nComo posso te chamar e qual é seu telefone?';
+  assert.equal(enforceContactMoment(reply, 'discover_first'), reply);
+  // Without a reading of the moment, the fourth message of the person is already time to ask.
+  assert.equal(resolveContactMoment({ inboundMessages: 3, decision: base }), 'discover_first');
+  assert.equal(resolveContactMoment({ inboundMessages: 4, decision: base }), 'ask_now');
 });
 
 test('no momento certo, ou sem leitura de momento, a resposta não é alterada', () => {
@@ -67,6 +74,6 @@ test('no momento certo, ou sem leitura de momento, a resposta não é alterada',
   assert.equal(enforceContactMoment(reply, 'ask_now'), reply);
   assert.equal(enforceContactMoment(reply, null), reply);
   // A reply that is only the request is not sent empty.
-  assert.equal(enforceContactMoment('Qual seu nome e telefone?', 'discover_first'), 'Qual seu nome e telefone?');
+  assert.equal(enforceContactMoment('Qual seu nome e telefone?', 'hold_after_request'), 'Qual seu nome e telefone?');
   assert.equal(isContactRequest('Como posso te chamar?'), true);
 });

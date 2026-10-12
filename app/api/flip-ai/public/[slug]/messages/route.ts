@@ -339,7 +339,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
           : await call(context);
         const decision = parsePublicChatDecision(rawResult.text);
         decision.qualification = applyBrainFinalQualification(decision.qualification, context.brainAssessment);
-        // The moment read for this turn is binding: a contact request outside it does not reach the person.
+        // With an open objection or a request just made, a new contact request does not reach the person.
         decision.reply = enforceContactMoment(decision.reply, context.contactMoment);
         const result = { ...rawResult, text: decision.reply };
         await completePublicChatTurn(

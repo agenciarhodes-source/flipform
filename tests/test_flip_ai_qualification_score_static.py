@@ -42,11 +42,19 @@ def test_score_unit_tests_run_in_ci():
     assert "tests/flip-ai-qualification-score.test.ts" in read(".github/workflows/ci.yml")
 
 
-def test_incomplete_qualification_still_shows_a_partial_score_and_discovery_comes_before_contact():
+def test_incomplete_qualification_still_shows_a_partial_score_and_triage_never_holds_the_contact():
     score = read("lib/flip-ai/qualification-score.ts")
     assert "const partial = qualification.classification === 'insufficient';" in score
     assert "leitura parcial, faltam informações" in read("components/lead-detail-modal.tsx")
     timing = read("lib/flip-ai/contact-timing.ts")
-    assert "confira se você já sabe o que a pessoa faz" in timing
-    assert "Ainda não é hora do contato: não peça nome nem telefone nesta resposta." in timing
-    assert "Evite encaminhar alguém como insufficient" in read("lib/flip-ai/public-chat.ts")
+    assert "faça uma única pergunta, a que mais define se ela faz parte do público que a empresa atende" in timing
+    assert "no máximo duas perguntas de triagem" in timing
+    assert "Não segure o contato" in timing
+    assert "nunca troque o pedido de contato por ela" in timing
+    # The contact is never held back for triage.
+    assert "não peça nome nem telefone nesta resposta. Primeiro" not in timing
+    assert "FLIP_AI_CONTACT_FALLBACK_INBOUND_MESSAGES = 4;" in timing
+    assert "'handle_objection_first', 'hold_after_request', 'stop_requesting'];" in timing
+    chat = read("lib/flip-ai/public-chat.ts")
+    assert "A triagem é o que sustenta a nota" in chat
+    assert "Nunca deixe de registrar o contato por falta de triagem." in chat
