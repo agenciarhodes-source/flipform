@@ -9,6 +9,14 @@ import { createMetaOAuthStateForPurposeWithContext, META_OAUTH_STATE_TTL_SECONDS
 import { WHATSAPP_ONBOARDING_MODES, whatsappOnboardingStateContext } from '@/lib/meta/whatsapp-onboarding';
 import { WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH } from '@/lib/meta/whatsapp-signup-state';
 
+// Connecting an existing WhatsApp Business app may need a Meta configuration of its own.
+// When the platform sets one, only that flow uses it; a new number keeps the main configuration.
+function coexistenceConfigId(onboardingMode: string) {
+  if (onboardingMode !== 'coexistence') return null;
+  const configured = process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID?.trim() || '';
+  return /^\d{5,32}$/.test(configured) ? configured : null;
+}
+
 const bodySchema = z.object({
   onboardingMode: z.enum(WHATSAPP_ONBOARDING_MODES),
 }).strict();
@@ -39,7 +47,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   );
   const response = NextResponse.json({
     appId: config.appId,
-    configId: config.configId,
+    configId: coexistenceConfigId(parsed.data.onboardingMode) || config.configId,
     graphApiVersion: META_PLATFORM_GRAPH_API_VERSION,
     state: signupState.state,
     onboardingMode: parsed.data.onboardingMode,
