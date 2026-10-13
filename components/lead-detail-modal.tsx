@@ -260,8 +260,16 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
       const response = await fetch(`/api/inbox/leads/${encodeURIComponent(leadId)}/whatsapp-conversation`, {
         cache: 'no-store',
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      let data = await response.json().catch(() => ({}));
+      if (response.status === 404 && data.reason === 'conversation_not_found') {
+        // The lead never wrote: the conversation is opened so the first contact can be made.
+        const started = await fetch(`/api/inbox/leads/${encodeURIComponent(leadId)}/whatsapp-conversation`, { method: 'POST' });
+        data = await started.json().catch(() => ({}));
+        if (!started.ok) {
+          toast.info(data.error || 'Não foi possível iniciar a conversa do WhatsApp com este lead.');
+          return;
+        }
+      } else if (!response.ok) {
         if (response.status === 404 || response.status === 422) {
           toast.info(data.error || 'Ainda não há conversa do WhatsApp para este lead.');
           return;

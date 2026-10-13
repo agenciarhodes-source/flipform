@@ -64,3 +64,32 @@ def test_whatsapp_lead_phone_matching_accepts_brazilian_mobile_alias_with_or_wit
     assert "import { getBrazilianPhoneAliases } from '@/lib/leads';" in guard
     assert 'const aliases = getBrazilianPhoneAliases(phone)' in guard
     assert 'Prisma.join(normalizedPhone)' in guard
+
+
+def test_bubble_opens_a_conversation_for_a_lead_that_never_wrote():
+    route = read('app/api/inbox/leads/[id]/whatsapp-conversation/route.ts')
+    post = route.split("export const POST = withPermission('LEADS_CONTACT_WHATSAPP'", 1)[1]
+    assert 'tenantId: session.tenantId' in post
+    assert "...(session.role === 'agent' ? { assignedTo: session.userId } : {})" in post
+    assert 'startWhatsAppConversationForLead({' in post
+    assert 'findAccessibleInboxConversation(session, started.conversationId)' in post
+    # Reading never creates: only the explicit POST opens a conversation.
+    get = route.split("export const GET", 1)[1].split("export const POST", 1)[0]
+    assert 'startWhatsAppConversationForLead' not in get
+
+    linking = read('lib/conversations/whatsapp-lead-linking.ts')
+    start = linking.split('export async function startWhatsAppConversationForLead', 1)[1]
+    assert "if (existing.reason !== 'conversation_not_found')" in start
+    assert "where: { tenantId: input.tenantId, status: 'connected' }," in start
+    assert "metadata: { source: 'lead_contact', connectionId: connection.id, leadId: lead.id }," in start
+
+    for ui in [read('app/(app)/kanban/page.tsx'), read('components/lead-detail-modal.tsx')]:
+        assert "response.status === 404 && data.reason === 'conversation_not_found'" in ui
+        assert "whatsapp-conversation`, { method: 'POST' });" in ui
+
+
+def test_reply_of_a_lead_lands_in_the_conversation_the_company_opened():
+    runtime = read('lib/meta/whatsapp-runtime.ts')
+    assert "{ action: 'WHATSAPP_CONVERSATION_STARTED_FROM_LEAD' }," in runtime
+    assert "metadata.source === 'lead_contact')" in runtime
+    assert 'metadata.connectionId === input.connectionId' in runtime
