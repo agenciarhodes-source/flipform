@@ -2,7 +2,7 @@ import 'server-only';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { SessionPayload } from '@/lib/auth';
 import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
-import { isFlipAiOpenToAllPlans, isFlipAiPilotTenant } from './pilot-access';
+import { isFlipAiPilotTenant } from './pilot-access';
 import { canAccessFlipAi, canServeFlipAiPilot } from './policy';
 
 export type FlipAiDb = PrismaClient | Prisma.TransactionClient;
@@ -36,15 +36,9 @@ export async function requireFlipAiAccess(
     && ['owner', 'admin'].includes(role || '')
     && isFlipAiPilotTenant(session.tenantId, options?.pilotTenantIds)
     && canServeFlipAiPilot({ tenantStatus: tenant.status, subscription }));
-  // The platform may open Flip AI to every plan; the company still has to be in good standing.
-  const openAccess = Boolean(tenant
-    && ['owner', 'admin'].includes(role || '')
-    && isFlipAiOpenToAllPlans()
-    && canServeFlipAiPilot({ tenantStatus: tenant.status, subscription }));
-  if (!tenant || (!planAccess && !pilotAccess && !openAccess)) {
+  if (!tenant || (!planAccess && !pilotAccess)) {
     throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403,
       'O Flip AI está disponível para donos e administradores com plano Premium ativo ou piloto autorizado.');
   }
-  return { tenantId: session.tenantId, userId: session.userId,
-    accessMode: planAccess || openAccess ? 'plan' as const : 'pilot' as const };
+  return { tenantId: session.tenantId, userId: session.userId, accessMode: planAccess ? 'plan' as const : 'pilot' as const };
 }

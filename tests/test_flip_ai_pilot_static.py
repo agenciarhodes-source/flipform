@@ -35,17 +35,3 @@ def test_pilot_change_does_not_touch_business_data_or_integrations():
     source = "\n".join(files).lower()
     for forbidden in ["delete from", "truncate", "meta", "pixel", "google", "whatsapp", "waba"]:
         assert forbidden not in source
-
-
-def test_platform_switch_opens_flip_ai_to_every_plan_but_keeps_billing_health():
-    pilot = read("lib/flip-ai/pilot-access.ts")
-    assert "process.env.FLIP_AI_OPEN_TO_ALL_PLANS" in pilot
-    assert "=== 'true';" in pilot
-    access = read("lib/flip-ai/access.ts")
-    block = access.split("const openAccess = Boolean(tenant", 1)[1].split("if (!tenant", 1)[0]
-    assert "['owner', 'admin'].includes(role || '')" in block
-    assert "isFlipAiOpenToAllPlans()" in block
-    assert "canServeFlipAiPilot({ tenantStatus: tenant.status, subscription })" in block
-    public_agent = read("lib/flip-ai/public-agent.ts")
-    assert "const openAccess = isFlipAiOpenToAllPlans() && canServeFlipAiPilot(billingInput);" in public_agent
-    assert "if (!planAccess && !pilotAccess && !openAccess) return null;" in public_agent
