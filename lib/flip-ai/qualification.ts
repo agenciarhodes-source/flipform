@@ -313,11 +313,21 @@ export async function finalizeFlipAiQualification(input: {
       const replaceable: Array<'cold' | 'warm'> = existing && editedByPerson === 0
         ? ['cold', 'warm']
         : [FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE];
+      // A lead the attendant created may carry the campaign as its origin, so the creation
+      // record identifies it; older leads are still recognised by the origin itself.
+      const createdByFlipAi = await db.auditLog.count({
+        where: {
+          tenantId: input.runtime.tenantId,
+          entityType: 'lead',
+          entityId: leadId,
+          action: 'lead.flip_ai_created',
+        },
+      });
       const applied = await db.lead.updateMany({
         where: {
           id: leadId,
           tenantId: input.runtime.tenantId,
-          source: 'flip_ai',
+          ...(createdByFlipAi > 0 ? {} : { source: 'flip_ai' }),
           temperature: { in: replaceable, not: temperature },
         },
         data: { temperature },

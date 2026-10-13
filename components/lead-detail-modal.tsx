@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
+import { formatLeadSource } from '@/lib/leads';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle, Sparkles } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
@@ -345,7 +346,13 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             <section className="space-y-3 rounded-xl border bg-white p-4">
               <h3 className="font-heading text-sm font-semibold">Informações do lead</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><div className="text-muted-foreground">Origem</div><div className="font-medium capitalize">{lead.source}</div></div>
+              <div><div className="text-muted-foreground">Origem</div><div className="font-medium">{formatLeadSource(lead.source)}</div></div>
+              {(lead.flipAiAgentName || lead.form?.name) && (
+                <div>
+                  <div className="text-muted-foreground">{lead.flipAiAgentName ? 'Atendente de IA' : 'Formul\u00e1rio'}</div>
+                  <div className="font-medium">{lead.flipAiAgentName || lead.form?.name}</div>
+                </div>
+              )}
               <div><div className="text-muted-foreground">Status</div><div className="font-medium capitalize">{isFinalStage ? 'Ganho' : lead.status}</div></div>
               <div><div className="text-muted-foreground">Data de entrada</div><div className="font-medium">{formatDateTime(lead.enteredAt)}</div></div>
               <div><div className="text-muted-foreground">Cadastrado no sistema</div><div className="font-medium">{formatDateTime(lead.createdAt)}</div></div>
