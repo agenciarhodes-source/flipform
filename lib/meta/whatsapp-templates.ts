@@ -192,3 +192,46 @@ export async function createWhatsAppMessageTemplate(input: {
     language: input.template.language,
   } satisfies WhatsAppTemplateSummary;
 }
+
+export type WhatsAppSendableTemplate = {
+  name: string;
+  language: string;
+  category: string | null;
+  body: string;
+};
+
+/**
+ * A template can be sent with one click only when Meta approved it and it needs nothing filled
+ * in: text only, no variables. Anything else is left out instead of being sent incomplete.
+ */
+export function toSendableWhatsAppTemplate(raw: any): WhatsAppSendableTemplate | null {
+  const name = asString(raw?.name);
+  const language = asString(raw?.language);
+  if (!name || !language || asString(raw?.status)?.toUpperCase() !== 'APPROVED') return null;
+  const components: any[] = Array.isArray(raw?.components) ? raw.components : [];
+  if (JSON.stringify(components).includes('{{')) return null;
+  const header = components.find(component => asString(component?.type)?.toUpperCase() === 'HEADER');
+  if (header && asString(header?.format)?.toUpperCase() !== 'TEXT') return null;
+  const body = asString(components.find(component => asString(component?.type)?.toUpperCase() === 'BODY')?.text);
+  if (!body) return null;
+  return { name, language, category: asString(raw?.category)?.toUpperCase() || null, body };
+}
+
+export async function listSendableWhatsAppTemplates(input: {
+  accessToken: string;
+  appSecret: string;
+  wabaId: string;
+}) {
+  if (!/^\d+$/.test(input.wabaId)) throw new Error('Meta WhatsApp template WABA id is invalid');
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/message_templates`);
+  url.search = new URLSearchParams({
+    fields: 'name,status,category,language,components',
+    limit: '100',
+    appsecret_proof: createAppSecretProof(input.accessToken, input.appSecret),
+  }).toString();
+  const data = await metaJson(url, 'list_sendable_templates', { accessToken: input.accessToken });
+  const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+  return rows
+    .map(toSendableWhatsAppTemplate)
+    .filter((item): item is WhatsAppSendableTemplate => item !== null);
+}

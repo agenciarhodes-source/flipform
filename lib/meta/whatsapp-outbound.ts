@@ -54,7 +54,21 @@ type OutboxMetadata = {
   agentSignatureMode?: WhatsAppAgentSignatureMode;
   agentSignature?: string;
   agentSignatureSkippedReason?: 'message_limit';
+  /** An approved template sent in place of free text, to reach someone outside the 24-hour window. */
+  template?: WhatsAppOutboundTemplate;
 };
+
+export type WhatsAppOutboundTemplate = { name: string; language: string };
+
+function normalizeOutboundTemplate(template: WhatsAppOutboundTemplate | undefined) {
+  if (!template) return undefined;
+  const name = template.name.trim();
+  const language = template.language.trim();
+  if (!/^[a-z0-9_]{1,512}$/.test(name) || !/^[a-z]{2,3}(_[A-Z]{2})?$/.test(language)) {
+    throw new WhatsAppOutboundError('INVALID_REQUEST', 'WhatsApp template is invalid');
+  }
+  return { name, language };
+}
 
 function sha256(value: string) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -179,7 +193,9 @@ async function enqueueWhatsAppTextMessage(input: {
   requestedByUserId: string;
   text: string;
   idempotencyKey: string;
+  template?: WhatsAppOutboundTemplate;
 }) {
+  const template = normalizeOutboundTemplate(input.template);
   const tenantId = input.tenantId.trim();
   const conversationId = input.conversationId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
@@ -194,7 +210,8 @@ async function enqueueWhatsAppTextMessage(input: {
   const recipientWaId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
   const connection = await resolveConnectedWhatsAppConnection(tenantId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
-  const fingerprint = requestFingerprint(conversationId, text);
+  const fingerprint = requestFingerprint(conversationId,
+    template ? `template\u0000${template.name}\u0000${template.language}` : text);
   const idempotencyKeyHash = sha256(idempotencyKey);
 
   const existing = await findExistingOutboxMessage(tenantId, externalMessageId);
@@ -241,8 +258,10 @@ async function enqueueWhatsAppTextMessage(input: {
     requestFingerprint: fingerprint,
     dispatchState: 'queued',
     agentSignatureMode: signatureSettings.mode,
-    ...(signature.signature ? { agentSignature: signature.signature } : {}),
-    ...(signature.skippedReason ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
+    // A template is sent exactly as Meta approved it, so it never carries the attendant's signature.
+    ...(signature.signature && !template ? { agentSignature: signature.signature } : {}),
+    ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
+    ...(template ? { template } : {}),
   };
 
   try {
@@ -478,9 +497,13 @@ async function sendMetaWhatsAppText(input: {
   phoneNumberId: string;
   recipientWaId: string;
   text: string;
+  template?: WhatsAppOutboundTemplate;
   accessToken: string;
 }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`);
+  const content = input.template
+    ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language } } }
+    : { type: 'text', text: { preview_url: false, body: input.text } };
   let response: Response;
   try {
     response = await fetch(url, {
@@ -495,8 +518,7 @@ async function sendMetaWhatsAppText(input: {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: input.recipientWaId,
-        type: 'text',
-        text: { preview_url: false, body: input.text },
+        ...content,
       }),
     });
   } catch {
@@ -561,6 +583,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
   requestedByUserId: string;
   text: string;
   idempotencyKey: string;
+  /** When set, this approved template is sent and `text` is only what the Inbox shows. */
+  template?: WhatsAppOutboundTemplate;
 }): Promise<WhatsAppOutboundResult> {
   const queued = await enqueueWhatsAppTextMessage(input);
   const begun = await beginDispatch(input.tenantId, queued.message.id);
@@ -620,6 +644,7 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     phoneNumberId: begun.metadata.phoneNumberId,
     recipientWaId: begun.metadata.recipientWaId,
     text: providerText,
+    template: begun.metadata.template,
     accessToken: credentials.systemUserAccessToken,
   });
   if (provider.kind === 'unknown') {
