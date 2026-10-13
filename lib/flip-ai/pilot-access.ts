@@ -29,3 +29,11 @@ export function isFlipAiPilotTenant(
   const allowlist = parseFlipAiPilotTenantIds(raw);
   return allowlist.valid && allowlist.tenantIds.has(tenantId.toLowerCase());
 }
+
+/**
+ * Platform-wide switch. When on, every active company may use Flip AI whatever its plan;
+ * billing health and the prepaid credit wallet still apply. Anything but "true" keeps it off.
+ */
+export function isFlipAiOpenToAllPlans(raw = process.env.FLIP_AI_OPEN_TO_ALL_PLANS): boolean {
+  return String(raw || '').trim().toLowerCase() === 'true';
+}
