@@ -2,7 +2,8 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getBrazilianPhoneAliases } from '@/lib/leads';
+import { getBrazilianPhoneAliases, isValidBrazilianPhone, normalizeBrazilianLeadPhone } from '@/lib/leads';
+import { ensureConversation } from './core';
 
 type LeadPhoneRow = {
   id: string;
@@ -240,4 +241,67 @@ export async function findOrLinkWhatsAppConversationForLead(input: {
   if (!linked.linked) return { conversationId: null, reason: linked.reason };
 
   return { conversationId: rows[0].id, reason: 'linked' as const };
+}
+
+/** Marks a conversation the company opened from a lead, before the lead ever wrote. */
+export const WHATSAPP_LEAD_CONVERSATION_STARTED_ACTION = 'WHATSAPP_CONVERSATION_STARTED_FROM_LEAD';
+
+/**
+ * Opens the WhatsApp conversation of a lead that never wrote, so the company can make the first
+ * contact from the Inbox. It only creates when no conversation exists for any form of the lead's
+ * number, and it records which connection it was opened for, so the lead's reply lands in this
+ * same conversation even when WhatsApp reports the number without the ninth digit.
+ */
+export async function startWhatsAppConversationForLead(input: {
+  tenantId: string;
+  leadId: string;
+  userId: string;
+}) {
+  const existing = await findOrLinkWhatsAppConversationForLead({ tenantId: input.tenantId, leadId: input.leadId });
+  if (existing.conversationId) return { conversationId: existing.conversationId, created: false, reason: existing.reason };
+  if (existing.reason !== 'conversation_not_found') return { conversationId: null, created: false, reason: existing.reason };
+
+  const lead = await prisma.lead.findFirst({
+    where: { id: input.leadId, tenantId: input.tenantId },
+    select: { id: true, name: true, phone: true, assignedTo: true },
+  });
+  if (!lead) return { conversationId: null, created: false, reason: 'lead_not_found' as const };
+  const recipient = normalizeBrazilianLeadPhone(lead.phone);
+  if (!recipient || !isValidBrazilianPhone(recipient)) {
+    return { conversationId: null, created: false, reason: 'invalid_phone' as const };
+  }
+
+  const connection = await prisma.tenantWhatsAppConnection.findFirst({
+    where: { tenantId: input.tenantId, status: 'connected' },
+    select: { id: true },
+  });
+  if (!connection) return { conversationId: null, created: false, reason: 'not_connected' as const };
+
+  const ensured = await ensureConversation({
+    tenantId: input.tenantId,
+    channel: 'whatsapp',
+    provider: 'meta',
+    externalUserId: recipient,
+    phone: recipient,
+    displayName: lead.name,
+  });
+  const linked = await safelyLinkConversation({
+    tenantId: input.tenantId,
+    conversationId: ensured.conversation.id,
+    leadId: lead.id,
+    leadAssignedTo: lead.assignedTo,
+  });
+  if (!linked.linked) return { conversationId: null, created: false, reason: linked.reason };
+
+  await prisma.auditLog.create({
+    data: {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      entityType: 'conversation',
+      entityId: ensured.conversation.id,
+      action: WHATSAPP_LEAD_CONVERSATION_STARTED_ACTION,
+      metadata: { source: 'lead_contact', connectionId: connection.id, leadId: lead.id },
+    },
+  });
+  return { conversationId: ensured.conversation.id, created: true, reason: 'started' as const };
 }

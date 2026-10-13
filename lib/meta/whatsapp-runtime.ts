@@ -156,7 +156,12 @@ async function resolvePreparedMetaReviewRecipient(input: {
       tenantId: input.tenantId,
       entityType: 'conversation',
       entityId: { in: conversations.map(conversation => conversation.id) },
-      action: 'WHATSAPP_META_REVIEW_TEST_CONVERSATION_PREPARED',
+      // Conversations opened ahead of the person's first message: the App Review test
+      // conversation, and a conversation the company started from a lead.
+      OR: [
+        { action: 'WHATSAPP_META_REVIEW_TEST_CONVERSATION_PREPARED' },
+        { action: 'WHATSAPP_CONVERSATION_STARTED_FROM_LEAD' },
+      ],
     },
     orderBy: { createdAt: 'desc' },
     select: { entityId: true, metadata: true },
@@ -164,7 +169,7 @@ async function resolvePreparedMetaReviewRecipient(input: {
 
   const prepared = audits.find((audit) => {
     const metadata = jsonObject(audit.metadata);
-    return metadata.source === 'platform_admin_meta_review'
+    return (metadata.source === 'platform_admin_meta_review' || metadata.source === 'lead_contact')
       && metadata.connectionId === input.connectionId;
   });
   if (!prepared) return input.providerWaId;
