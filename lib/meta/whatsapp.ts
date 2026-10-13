@@ -255,7 +255,9 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
   accessToken: string;
   appSecret: string;
   wabaId: string;
-  phoneNumberId: string;
+  // Absent only when connecting an existing WhatsApp Business app: Meta then returns the
+  // account alone, and the number is the single one that account holds.
+  phoneNumberId?: string | null;
 }) {
   const proof = createAppSecretProof(input.accessToken, input.appSecret);
   const wabaUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}`);
@@ -270,13 +272,20 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
     appsecret_proof: proof,
   }).toString();
   const phones = await metaJson(phonesUrl, 'waba_phone_numbers', { accessToken: input.accessToken });
-  const phoneRaw = Array.isArray(phones?.data)
-    ? phones.data.find((item: any) => String(item?.id ?? '') === input.phoneNumberId)
-    : null;
-  if (!phoneRaw) throw new Error('Meta WhatsApp phone is not part of authorized WABA');
+  const listed: any[] = Array.isArray(phones?.data) ? phones.data : [];
+  const phoneRaw = input.phoneNumberId
+    ? listed.find((item: any) => String(item?.id ?? '') === input.phoneNumberId)
+    : listed.length === 1 ? listed[0] : null;
+  if (!phoneRaw) {
+    throw new Error(input.phoneNumberId
+      ? 'Meta WhatsApp phone is not part of authorized WABA'
+      : 'Meta WhatsApp account does not hold exactly one phone');
+  }
+  const phoneId = String(phoneRaw.id ?? '');
+  if (!/^\d{1,64}$/.test(phoneId)) throw new Error('Meta WhatsApp phone id is invalid');
 
   const phone: WhatsAppPhone = {
-    id: input.phoneNumberId,
+    id: phoneId,
     displayPhoneNumber: typeof phoneRaw.display_phone_number === 'string' ? phoneRaw.display_phone_number : null,
     verifiedName: typeof phoneRaw.verified_name === 'string' ? phoneRaw.verified_name : null,
     qualityRating: typeof phoneRaw.quality_rating === 'string' ? phoneRaw.quality_rating : null,

@@ -23,9 +23,10 @@ const bodySchema = z.object({
   code: z.string().trim().min(8).max(4096),
   state: z.string().trim().min(16).max(256),
   wabaId: idSchema,
-  phoneNumberId: idSchema,
+  // Meta does not return the number when an existing WhatsApp Business app is connected.
+  phoneNumberId: idSchema.optional(),
   onboardingMode: z.enum(WHATSAPP_ONBOARDING_MODES),
-}).strict();
+}).strict().refine((body) => body.onboardingMode === 'coexistence' || Boolean(body.phoneNumberId));
 
 function clearSignupState(response: NextResponse) {
   response.cookies.set(WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, '', {

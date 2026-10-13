@@ -86,7 +86,7 @@ export function WhatsAppEmbeddedSignupCard() {
   const modeRef = useRef<WhatsAppOnboardingMode | null>(null);
   const stateRef = useRef<string | null>(null);
   const codeRef = useRef<string | null>(null);
-  const sessionRef = useRef<{ wabaId: string; phoneNumberId: string } | null>(null);
+  const sessionRef = useRef<{ wabaId: string; phoneNumberId?: string } | null>(null);
   const completingRef = useRef(false);
 
   const loadConnection = useCallback(async () => {
@@ -155,7 +155,19 @@ export function WhatsAppEmbeddedSignupCard() {
         try { payload = JSON.parse(payload); } catch { return; }
       }
       if (!payload || payload.type !== 'WA_EMBEDDED_SIGNUP') return;
-      if (payload.event === 'FINISH') {
+      if (payload.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+        // Connecting an existing WhatsApp Business app ends with its own event, which carries
+        // the account only; the server finds the number inside that account.
+        const wabaId = String(payload.data?.waba_id || '');
+        const phoneNumberId = String(payload.data?.phone_number_id || '');
+        if (!/^\d+$/.test(wabaId)) {
+          toast.error('A Meta não retornou os dados necessários para conectar o WhatsApp.');
+          setConnecting(false);
+          return;
+        }
+        sessionRef.current = /^\d+$/.test(phoneNumberId) ? { wabaId, phoneNumberId } : { wabaId };
+        void completeIfReady();
+      } else if (payload.event === 'FINISH') {
         const wabaId = String(payload.data?.waba_id || '');
         const phoneNumberId = String(payload.data?.phone_number_id || '');
         if (!/^\d+$/.test(wabaId) || !/^\d+$/.test(phoneNumberId)) {

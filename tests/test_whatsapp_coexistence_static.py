@@ -56,3 +56,16 @@ def test_coexistence_change_has_no_schema_or_migration():
 
     assert 'coexistence' in contract
     assert 'onboardingMode' not in model
+
+
+def test_existing_business_app_connection_completes_on_its_own_event_without_a_phone_id():
+    ui = read('app/(app)/integrations/whatsapp-embedded-signup-card.tsx')
+    assert "payload.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'" in ui
+    assert "{ wabaId, phoneNumberId } : { wabaId };" in ui
+    route = read('app/api/integrations/whatsapp/embedded-signup/complete/route.ts')
+    assert "phoneNumberId: idSchema.optional()," in route
+    # A new number still has to name its phone.
+    assert "body.onboardingMode === 'coexistence' || Boolean(body.phoneNumberId)" in route
+    whatsapp = read('lib/meta/whatsapp.ts')
+    assert ": listed.length === 1 ? listed[0] : null;" in whatsapp
+    assert "Meta WhatsApp account does not hold exactly one phone" in whatsapp
