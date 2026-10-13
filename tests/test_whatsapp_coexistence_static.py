@@ -69,3 +69,11 @@ def test_existing_business_app_connection_completes_on_its_own_event_without_a_p
     whatsapp = read('lib/meta/whatsapp.ts')
     assert ": listed.length === 1 ? listed[0] : null;" in whatsapp
     assert "Meta WhatsApp account does not hold exactly one phone" in whatsapp
+
+
+def test_existing_business_app_flow_can_use_its_own_meta_configuration():
+    route = read('app/api/integrations/whatsapp/embedded-signup/config/route.ts')
+    assert "process.env.META_WHATSAPP_COEXISTENCE_CONFIG_ID" in route
+    assert "if (onboardingMode !== 'coexistence') return null;" in route
+    # Without the setting, or for a new number, the main configuration is used.
+    assert "configId: coexistenceConfigId(parsed.data.onboardingMode) || config.configId," in route
