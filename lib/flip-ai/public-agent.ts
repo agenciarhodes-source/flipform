@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { normalizeHostname } from '@/lib/host-routing';
 import { FLIP_AI_EMBEDDING_MODEL } from './openai-embeddings';
-import { isFlipAiPilotTenant } from './pilot-access';
+import { isFlipAiOpenToAllPlans, isFlipAiPilotTenant } from './pilot-access';
 import { canServeFlipAiPilot, canServeFlipAiPublic } from './policy';
 import { loadFlipAiAgentActionCapabilities } from './action-capabilities-server';
 import type { FlipAiActionCapabilities } from './action-capabilities';
@@ -157,7 +157,9 @@ export async function resolvePublicFlipAiRuntime(input: {
   const planAccess = canServeFlipAiPublic(billingInput);
   const pilotAccess = isFlipAiPilotTenant(endpoint.agent.tenantId)
     && canServeFlipAiPilot(billingInput);
-  if (!planAccess && !pilotAccess) return null;
+  // The platform-wide switch serves every company in good standing, whatever its plan.
+  const openAccess = isFlipAiOpenToAllPlans() && canServeFlipAiPilot(billingInput);
+  if (!planAccess && !pilotAccess && !openAccess) return null;
   if (
     endpoint.agent.pipeline.tenantId !== endpoint.agent.tenantId
     || endpoint.agent.pipeline.isArchived

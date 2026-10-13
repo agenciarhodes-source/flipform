@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { agentPublicationSchema, canAccessFlipAi, canServeFlipAiPilot, canServeFlipAiPublic, createAgentDraftSchema, updateAgentDraftSchema, knowledgeMasterSchema } from '../lib/flip-ai/policy';
 import { requireFlipAiAccess, FlipAiError, type FlipAiDb } from '../lib/flip-ai/access';
-import { isFlipAiPilotTenant, parseFlipAiPilotTenantIds } from '../lib/flip-ai/pilot-access';
+import { isFlipAiOpenToAllPlans, isFlipAiPilotTenant, parseFlipAiPilotTenantIds } from '../lib/flip-ai/pilot-access';
 import type { SessionPayload } from '../lib/auth';
 import { batchKnowledgeChunks, chunkMasterMarkdown, FLIP_AI_CHUNK_MAX_BYTES } from '../lib/flip-ai/chunking';
 import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_DIMENSIONS, OpenAiEmbeddingError } from '../lib/flip-ai/openai-embeddings';
@@ -115,6 +115,10 @@ test('billing is fail-closed, including grace deadlines', () => {
   const now = new Date('2026-09-09T12:00:00Z');
   assert.equal(canAccessFlipAi({ ...allowed, tenantStatus: 'past_due', now }), false);
   for (const ms of [-1, 0, 1]) assert.equal(canAccessFlipAi({ ...allowed, now, subscription: { status: 'past_due', plan, gracePeriodEndsAt: new Date(now.getTime() + ms) } }), ms > 0);
+});
+test('the switch that opens Flip AI to every plan is off unless explicitly true', () => {
+  for (const raw of [undefined, '', '1', 'yes', 'on', 'false', '*']) assert.equal(isFlipAiOpenToAllPlans(raw), false);
+  for (const raw of ['true', ' TRUE ', 'True']) assert.equal(isFlipAiOpenToAllPlans(raw), true);
 });
 test('pilot allowlist is exact, bounded and fail-closed', () => {
   const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
