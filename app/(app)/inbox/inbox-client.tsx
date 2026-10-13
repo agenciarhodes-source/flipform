@@ -127,6 +127,22 @@ function formatMessageDate(value: string | null | undefined) {
   });
 }
 
+interface SendableTemplate {
+  name: string;
+  language: string;
+  category: string | null;
+  body: string;
+}
+
+const WHATSAPP_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Meta only accepts free text for someone who wrote in the last 24 hours. */
+function isServiceWindowOpen(lastInboundAt: string | null) {
+  if (!lastInboundAt) return false;
+  const last = new Date(lastInboundAt).getTime();
+  return Number.isFinite(last) && Date.now() - last < WHATSAPP_SERVICE_WINDOW_MS;
+}
+
 function createIdempotencyKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -161,12 +177,45 @@ export function InboxClient({
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<SendableTemplate[] | null>(null);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [templateKey, setTemplateKey] = useState('');
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const requestedConversationIdRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
   const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp : false;
+  const needsTemplate = Boolean(selected && selected.channel === 'whatsapp' && selectedChannelCanSend
+    && !isServiceWindowOpen(selected.lastInboundAt));
+  const chosenTemplate = templates?.find((template) => `${template.name}:${template.language}` === templateKey) || null;
+
+  useEffect(() => {
+    if (!needsTemplate || templates !== null) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch('/api/inbox/whatsapp-templates', { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) {
+          setTemplatesError(data.error || 'Não foi possível carregar os modelos do WhatsApp.');
+          setTemplates([]);
+          return;
+        }
+        const loaded: SendableTemplate[] = Array.isArray(data.templates) ? data.templates : [];
+        setTemplates(loaded);
+        setTemplatesError(null);
+        if (loaded[0]) setTemplateKey(`${loaded[0].name}:${loaded[0].language}`);
+      } catch {
+        if (!cancelled) {
+          setTemplatesError('Não foi possível carregar os modelos do WhatsApp.');
+          setTemplates([]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [needsTemplate, templates]);
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -348,6 +397,42 @@ export function InboxClient({
     } catch (sendError) {
       if (selectedIdRef.current === conversationId) {
         setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar a mensagem.');
+      }
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function sendTemplate() {
+    if (!selected || sending || !needsTemplate || !chosenTemplate) return;
+    const conversationId = selected.id;
+    setSending(true);
+    setError(null);
+    setWarning(null);
+    try {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp-template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateName: chosenTemplate.name,
+          language: chosenTemplate.language,
+          idempotencyKey: createIdempotencyKey(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 202) {
+        throw new Error(data.error || 'Não foi possível enviar o modelo.');
+      }
+      if (selectedIdRef.current === conversationId && response.status === 202) {
+        setWarning(data.warning || 'O status do envio ainda está sendo confirmado. O Flipform não repetirá o envio automaticamente.');
+      }
+      await Promise.all([
+        loadMessages(conversationId, true),
+        loadConversations(true),
+      ]);
+    } catch (sendError) {
+      if (selectedIdRef.current === conversationId) {
+        setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar o modelo.');
       }
     } finally {
       setSending(false);
@@ -540,6 +625,43 @@ export function InboxClient({
                   ) : !selectedChannelCanSend ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
                       Seu perfil possui acesso somente de leitura para esta conversa.
+                    </div>
+                  ) : needsTemplate ? (
+                    <div className="rounded-md border bg-muted/30 p-3">
+                      <p className="text-sm font-medium">Inicie a conversa com um modelo aprovado</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Esta pessoa não escreveu nas últimas 24 horas, e o WhatsApp só aceita um modelo aprovado como primeira mensagem. Quando ela responder, você escreve livremente por aqui.
+                      </p>
+                      {templates === null ? (
+                        <p className="mt-3 text-sm text-muted-foreground">Carregando modelos...</p>
+                      ) : templates.length === 0 ? (
+                        <p className="mt-3 text-sm text-amber-800">
+                          {templatesError || 'Nenhum modelo aprovado disponível. Crie um modelo sem variáveis em Integrações e aguarde a aprovação da Meta.'}
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-2">
+                          <select
+                            value={templateKey}
+                            onChange={(event) => setTemplateKey(event.target.value)}
+                            disabled={sending}
+                            aria-label="Modelo de mensagem"
+                            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                          >
+                            {templates.map((template) => (
+                              <option key={`${template.name}:${template.language}`} value={`${template.name}:${template.language}`}>
+                                {template.name} ({template.language})
+                              </option>
+                            ))}
+                          </select>
+                          {chosenTemplate && (
+                            <p className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm">{chosenTemplate.body}</p>
+                          )}
+                          <Button type="button" onClick={() => void sendTemplate()} disabled={sending || !chosenTemplate}>
+                            {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                            Enviar modelo
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-end gap-2">
