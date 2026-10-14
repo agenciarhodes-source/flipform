@@ -87,3 +87,9 @@ def test_a_failed_connection_records_the_step_that_failed_without_secrets():
     assert "action: 'whatsapp.embedded_signup.failed'," in route
     failure = route.split("const failure = {", 1)[1].split("};", 1)[0]
     assert 'accessToken' not in failure and 'code' not in failure.replace('providerCode', '')
+
+
+def test_summary_card_does_not_ask_a_coexistence_number_for_pin_activation():
+    card = read('app/(app)/integrations/client-connection-onboarding.tsx')
+    assert "payload.connection?.onboardingMode === 'coexistence';" in card
+    assert "if (!activated) {" in card

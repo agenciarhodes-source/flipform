@@ -63,7 +63,9 @@ function whatsappSummary(payload: any): ChannelSummary {
     };
   }
 
-  if (!payload.connection?.registeredAt) {
+  // A number connected in coexistence is already active in the app: there is no PIN registration.
+  const activated = Boolean(payload.connection?.registeredAt) || payload.connection?.onboardingMode === 'coexistence';
+  if (!activated) {
     return {
       level: 'action_required',
       label: 'Ativação pendente',
