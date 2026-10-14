@@ -57,7 +57,8 @@ def test_whatsapp_reconnect_reuses_or_soft_revokes_bindings_without_deleting_his
     assert 'const previousBinding = await tx.tenantWhatsAppConnection.findFirst({' in complete
     assert 'const reusableBinding = await tx.tenantWhatsAppConnection.findFirst({' in complete
     assert 'tenantWhatsAppConnection.updateMany({' in complete
-    assert "data: { status: 'revoked', revokedAt: now }" in complete
+    # Soft revoke; the customer's credential is cleared with it.
+    assert "data: { status: 'revoked', revokedAt: now, " in complete
     assert 'tenantWhatsAppConnection.update({' in complete
     assert 'tenantWhatsAppConnection.create({' in complete
     assert 'previousWabaId:' in complete
@@ -70,7 +71,8 @@ def test_whatsapp_reconnect_reuses_or_soft_revokes_bindings_without_deleting_his
 def test_whatsapp_disconnect_is_soft_revoke_not_record_deletion():
     route = read('app/api/integrations/whatsapp/connection/route.ts')
 
-    assert "data: { status: 'revoked', revokedAt: now }" in route
+    # Soft revoke; the customer's credential is cleared with it.
+    assert "data: { status: 'revoked', revokedAt: now, " in route
     assert 'WHATSAPP_CONNECTION_REVOKED' in route
     assert '.delete(' not in route
     assert '.deleteMany(' not in route

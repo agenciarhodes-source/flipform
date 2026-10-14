@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { CLEARED_CONNECTION_CREDENTIAL } from '@/lib/meta/whatsapp-connection-token';
 import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
@@ -130,7 +131,8 @@ export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextReques
     await prisma.$transaction(async tx => {
       await tx.tenantWhatsAppConnection.update({
         where: { id: connection.id },
-        data: { status: 'revoked', revokedAt: now },
+        // The customer's credential is removed together with the connection.
+        data: { status: 'revoked', revokedAt: now, ...CLEARED_CONNECTION_CREDENTIAL },
       });
       await tx.auditLog.create({
         data: {

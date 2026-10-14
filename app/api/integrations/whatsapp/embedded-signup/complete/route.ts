@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
@@ -10,7 +11,6 @@ import { verifyMetaOAuthStateForPurposeWithContext } from '@/lib/meta/oauth-stat
 import { WHATSAPP_ONBOARDING_MODES, whatsappOnboardingStateContext } from '@/lib/meta/whatsapp-onboarding';
 import { WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE, WHATSAPP_EMBEDDED_SIGNUP_STATE_COOKIE_PATH } from '@/lib/meta/whatsapp-signup-state';
 import {
-  ensureSystemUserAssignedToWhatsAppWaba,
   exchangeWhatsAppEmbeddedSignupCode,
   subscribeAppToWhatsAppWaba,
   validateWhatsAppEmbeddedSignupToken,
@@ -108,34 +108,27 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       return clearSignupState(NextResponse.json({ error: 'Este WhatsApp já está vinculado a outra empresa no FlipForm.' }, { status: 409 }));
     }
 
-    // Meta's Tech Provider flow assigns a platform System User to the customer's WABA.
-    // The admin token is used only for this management step; the runtime token is then
-    // proven to have management + messaging scopes and exact WABA/phone access.
-    step = 'assign_system_user';
-    await ensureSystemUserAssignedToWhatsAppWaba({
-      adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
-      appSecret: credentials.appSecret,
-      wabaId: onboardingSelection.waba.id,
-      businessId: credentials.businessId,
-      systemUserId: credentials.systemUserId,
-    });
+    // Meta's Tech Provider flow: the business token returned to this signup is the customer's own
+    // never-expiring credential for its WhatsApp account, and every later call uses it. Adding the
+    // platform user to the customer's account needed an advanced permission the app does not have.
+    const runtimeToken = exchanged.accessToken;
     step = 'validate_runtime_token';
     const runtimeValidation = await validateWhatsAppSystemUserToken({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken: runtimeToken,
       debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
       wabaId: onboardingSelection.waba.id,
     });
     step = 'validate_runtime_selection';
     const runtimeSelection = await validateWhatsAppWabaPhoneSelection({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken: runtimeToken,
       appSecret: credentials.appSecret,
       wabaId: onboardingSelection.waba.id,
       phoneNumberId: onboardingSelection.phone.id,
     });
     step = 'subscribe_app';
     await subscribeAppToWhatsAppWaba({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken: runtimeToken,
       appSecret: credentials.appSecret,
       wabaId: runtimeSelection.waba.id,
     });
@@ -175,7 +168,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
           status: 'connected',
           ...(reusableBinding ? { id: { not: reusableBinding.id } } : {}),
         },
-        data: { status: 'revoked', revokedAt: now },
+        // A replaced connection no longer keeps the customer's credential.
+        data: { status: 'revoked', revokedAt: now, accessTokenEncrypted: null },
       });
 
       const connectionData = {
@@ -187,7 +181,9 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
         verifiedName: runtimeSelection.phone.verifiedName,
         qualityRating: runtimeSelection.phone.qualityRating,
         connectedAt: now,
+        // Marks when the platform was authorized on this account; with the business token that is now.
         systemUserAssignedAt: now,
+        accessTokenEncrypted: encryptIntegrationSecret(runtimeToken),
         subscribedAt: now,
         lastValidatedAt: now,
         revokedAt: null,
@@ -220,7 +216,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
             previousStatus: previousBinding?.status ?? null,
             onboardingScopeCount: onboardingValidation.grantedScopes.length,
             runtimeScopeCount: runtimeValidation.grantedScopes.length,
-            credentialMode: 'platform_system_user',
+            credentialMode: 'business_token',
             onboardingMode: parsed.data.onboardingMode,
           } as any,
         },
@@ -231,7 +227,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     console.info('WhatsApp Embedded Signup completed', {
       tenantId: session.tenantId,
       connectionId: connection.id,
-      credentialMode: 'platform_system_user',
+      credentialMode: 'business_token',
       onboardingMode: parsed.data.onboardingMode,
       hasDisplayPhoneNumber: Boolean(connection.displayPhoneNumber),
       onboardingScopeCount: onboardingValidation.grantedScopes.length,

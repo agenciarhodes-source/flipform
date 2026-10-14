@@ -4,6 +4,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
+import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getWhatsAppOnboardingMode } from '@/lib/meta/whatsapp-connection-health';
 import {
   registerWhatsAppPhoneNumber,
@@ -33,7 +34,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
   const connection = await prisma.tenantWhatsAppConnection.findFirst({
     where: { tenantId: session.tenantId, status: 'connected' },
     orderBy: { connectedAt: 'desc' },
-    select: { id: true, wabaId: true, phoneNumberId: true, connectedAt: true },
+    select: { id: true, wabaId: true, phoneNumberId: true, connectedAt: true, accessTokenEncrypted: true },
   });
   if (!connection) {
     return NextResponse.json({ error: 'Conecte o WhatsApp desta empresa antes de registrar o número.' }, { status: 409 });
@@ -56,9 +57,10 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     return NextResponse.json({ error: 'A credencial técnica do WhatsApp não está configurada pela plataforma.' }, { status: 503 });
   }
 
+  const accessToken = connectionAccessToken(connection.accessTokenEncrypted) || credentials.systemUserAccessToken;
   try {
     await validateWhatsAppSystemUserToken({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken,
       debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
       wabaId: connection.wabaId,
@@ -67,7 +69,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     // Revalidate the exact server-side binding before entering the serialized
     // registration section. The browser never chooses these provider assets.
     await validateWhatsAppWabaPhoneSelection({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken,
       appSecret: credentials.appSecret,
       wabaId: connection.wabaId,
       phoneNumberId: connection.phoneNumberId,
@@ -101,7 +103,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       }
 
       await registerWhatsAppPhoneNumber({
-        accessToken: credentials.systemUserAccessToken,
+        accessToken,
         phoneNumberId: current.phoneNumberId,
         pin: parsed.data.pin,
       });

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
+import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
 import {
@@ -624,15 +625,18 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
       phoneNumberId: begun.metadata.phoneNumberId,
       status: 'connected',
     },
-    select: { id: true },
+    select: { id: true, accessTokenEncrypted: true },
   });
   if (!connection) {
     await markProviderRejected({ tenantId: input.tenantId, messageId: begun.row.id, errorCode: 'connection_revoked' });
     return { status: 'failed', messageId: begun.row.id, providerMessageId: null, idempotent: !queued.created };
   }
 
-  const credentials = await getPlatformWhatsAppSendCredentials();
-  if (!credentials) {
+  // The customer's own token when the connection has one; the platform credential otherwise.
+  const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
+  const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
+  const accessToken = ownToken || credentials?.systemUserAccessToken;
+  if (!accessToken) {
     await markProviderRejected({ tenantId: input.tenantId, messageId: begun.row.id, errorCode: 'runtime_credentials_missing' });
     return { status: 'failed', messageId: begun.row.id, providerMessageId: null, idempotent: !queued.created };
   }
@@ -645,7 +649,7 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     recipientWaId: begun.metadata.recipientWaId,
     text: providerText,
     template: begun.metadata.template,
-    accessToken: credentials.systemUserAccessToken,
+    accessToken,
   });
   if (provider.kind === 'unknown') {
     await markDeliveryUnknown({ tenantId: input.tenantId, messageId: begun.row.id });
