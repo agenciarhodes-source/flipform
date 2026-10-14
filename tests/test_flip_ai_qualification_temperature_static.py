@@ -15,7 +15,8 @@ def test_temperature_is_applied_inside_the_qualification_transaction():
 
 
 def test_only_flip_ai_leads_of_the_same_company_that_nobody_edited_are_changed():
-    for guard in ["id: leadId,", "tenantId: input.runtime.tenantId,", "source: 'flip_ai',",
+    for guard in ["id: leadId,", "tenantId: input.runtime.tenantId,",
+                  "...(createdByFlipAi > 0 ? {} : { source: 'flip_ai' }),", "action: 'lead.flip_ai_created',",
                   "temperature: { in: replaceable, not: temperature },"]:
         assert guard in BLOCK, guard
     assert ": [FLIP_AI_CAPTURE_DEFAULT_TEMPERATURE];" in BLOCK

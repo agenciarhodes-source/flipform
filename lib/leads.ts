@@ -52,6 +52,7 @@ const LEAD_SOURCE_LABELS: Record<string, string> = {
   instagram_ads: 'Instagram Ads',
   google_ads: 'Google Ads',
   tiktok_ads: 'TikTok Ads',
+  flip_ai: 'Atendente de IA',
 };
 
 export function formatLeadSource(source?: string | null): string {

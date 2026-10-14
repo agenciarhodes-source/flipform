@@ -103,6 +103,12 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
       intelligence: flipAiLiveIntelligence,
     }).catch(() => null),
   ]);
+  // Which attendant talked to this lead: the equivalent of the form name for a chat lead.
+  const flipAiAgentName = await prisma.flipAiConversationState.findFirst({
+    where: { tenantId: session.tenantId, conversation: { leadId: lead.id } },
+    orderBy: { updatedAt: 'desc' },
+    select: { agent: { select: { name: true } } },
+  }).then((state) => state?.agent.name || null).catch(() => null);
   const flipAiHumanActionRequest = await getFlipAiHumanActionRequest({
     tenantId: session.tenantId,
     leadId: lead.id,
@@ -118,7 +124,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     }
     : null;
 
-  return NextResponse.json({ lead: { ...lead,
+  return NextResponse.json({ lead: { ...lead, flipAiAgentName,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiConversation,

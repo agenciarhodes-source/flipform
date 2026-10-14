@@ -6,6 +6,7 @@ import { isValidBrazilianPhone, normalizeBrazilianPhone } from '@/lib/leads';
 import { dispatchFormSubmissionTracking, getTrackingConfig, type MetaSubmissionAttribution } from '@/lib/tracking';
 import { resolveMetaRuntimeConfig, toPublicMetaPixelConfig } from '@/lib/meta/runtime';
 import type { PublicFlipAiRuntime } from './public-agent';
+import { resolveFlipAiLeadSource } from './lead-source';
 
 export type FlipAiIdentityDecision = { name: string | null; phone: string | null };
 
@@ -82,7 +83,8 @@ export async function captureFlipAiLead(input: {
     pipelineId: input.runtime.pipelineId,
     stageId: input.runtime.initialStageId,
     rotationId: input.runtime.rotationId,
-    source: 'flip_ai',
+    // The origin shown to the team is the campaign the person came from, when the page says so.
+    source: resolveFlipAiLeadSource(input.attribution),
     temperature: disqualified ? 'cold' : 'warm',
     requireValidPhone: true,
     identity: { displayName: name, phone },
