@@ -64,6 +64,7 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string; ta
   if (data.description !== undefined) updateData.description = data.description;
   if (data.dueDate !== undefined) updateData.dueDate = data.dueDate ? new Date(data.dueDate) : null;
   if (data.priority !== undefined) updateData.priority = data.priority;
+  if (data.remindMinutesBefore !== undefined) updateData.remindMinutesBefore = data.remindMinutesBefore;
   if (data.assignedTo !== undefined) updateData.assignedTo = data.assignedTo;
 
   let actionLog: string | null = null;

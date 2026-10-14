@@ -74,6 +74,7 @@ export const POST = withPermission('TASKS_CREATE', async (req, session, ctx: { p
       title: data.title,
       description: data.description ?? null,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      remindMinutesBefore: data.remindMinutesBefore ?? null,
       priority: data.priority ?? 'medium',
       assignedTo: data.assignedTo ?? null,
       createdBy: session.userId,

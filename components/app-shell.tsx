@@ -40,6 +40,7 @@ import {
 import type { SessionPayload } from "@/lib/auth";
 import { LeadNotificationCenter } from "@/components/lead-notification-center";
 import { UnansweredConversationsAlert } from "@/components/unanswered-conversations-alert";
+import { TaskReminderAlert } from "@/components/task-reminder-alert";
 
 type NavItem = {
   href: string;
@@ -292,6 +293,7 @@ export function AppShell({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {!inGroupView && <TaskReminderAlert />}
             {!inGroupView && <UnansweredConversationsAlert />}
             {!inGroupView && <LeadNotificationCenter tenantId={session.tenantId} userId={session.userId} />}
           <DropdownMenu>

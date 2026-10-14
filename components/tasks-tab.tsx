@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { DEFAULT_TASK_REMINDER_MINUTES, TASK_REMINDER_OPTIONS } from '@/lib/tasks/reminders';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ export interface TaskItem {
   title: string;
   description: string | null;
   dueDate: string | null;
+  remindMinutesBefore?: number | null;
   priority: 'low' | 'medium' | 'high';
   status: 'pending' | 'completed' | 'overdue';
   assignedTo: string | null;
@@ -82,6 +84,7 @@ interface TaskFormData {
   dueDate: string; // local input
   priority: TaskItem['priority'];
   assignedTo: string | 'none';
+  remind: string; // minutes before, or 'none'
 }
 
 const EMPTY_FORM: TaskFormData = {
@@ -90,6 +93,7 @@ const EMPTY_FORM: TaskFormData = {
   dueDate: '',
   priority: 'medium',
   assignedTo: 'none',
+  remind: String(DEFAULT_TASK_REMINDER_MINUTES),
 };
 
 export function TasksTab({
@@ -139,6 +143,7 @@ export function TasksTab({
       dueDate: toLocalInput(task.dueDate),
       priority: task.priority,
       assignedTo: task.assignedTo ?? 'none',
+      remind: task.remindMinutesBefore ? String(task.remindMinutesBefore) : 'none',
     });
     setFormOpen(true);
   };
@@ -156,6 +161,7 @@ export function TasksTab({
         dueDate: fromLocalInput(form.dueDate),
         priority: form.priority,
         assignedTo: form.assignedTo === 'none' ? null : form.assignedTo,
+        remindMinutesBefore: form.remind === 'none' ? null : Number(form.remind),
       };
       const url = editing
         ? `/api/leads/${leadId}/tasks/${editing.id}`
@@ -351,6 +357,22 @@ export function TasksTab({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Avisar</label>
+              <Select value={form.remind} onValueChange={(v) => setForm({ ...form, remind: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TASK_REMINDER_OPTIONS.map((option) => (
+                    <SelectItem key={option.label} value={option.minutes === null ? 'none' : String(option.minutes)}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.remind !== 'none' && !form.dueDate ? (
+                <p className="mt-1 text-xs text-muted-foreground">Defina o vencimento para o aviso funcionar.</p>
+              ) : null}
             </div>
             <div>
               <label className="text-sm font-medium">Responsável</label>
