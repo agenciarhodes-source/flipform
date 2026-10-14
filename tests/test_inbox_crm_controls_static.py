@@ -42,11 +42,14 @@ def test_assignment_is_manager_only_and_rejects_viewers():
     assert "data: { assignedTo: normalizedUserId }" in source
 
 
-def test_assignment_does_not_silently_change_lead_owner():
+def test_assignment_transfers_the_lead_explicitly_and_audited():
     source = read("lib/inbox/actions.ts")
-    assign_section = source.split("export async function assignInboxConversation", 1)[1]
-    assert "tx.lead.update" not in assign_section
-    assert "lead.update" not in assign_section
+    assign_section = source.split("export async function assignInboxConversation", 1)[1].split("export async function", 1)[0]
+    # Only a manager reaches this point, and only an attendant can own a lead.
+    assert "if (conversation.leadId && (!assignee || assignee.role === 'agent'))" in assign_section
+    assert "await tx.lead.update({ where: { id: lead.id }, data: { assignedTo: normalizedUserId } });" in assign_section
+    assert "previousAssignedTo: lead.assignedTo," in assign_section
+    assert "pipeline" not in assign_section.lower() and "stageId" not in assign_section
 
 
 def test_status_actions_only_change_conversation_state():
@@ -85,7 +88,7 @@ def test_ui_exposes_explicit_lead_assignment_and_status_actions():
     assert "/lead`" in source
     assert "/assignee`" in source
     assert "/status`" in source
-    assert "Isso não altera o responsável do Lead no Kanban." in source
+    assert "Ao escolher um atendente, o lead e o histórico da conversa vão junto para ele." in source
 
 
 def test_inbox_selection_updates_ref_synchronously():
