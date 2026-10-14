@@ -62,6 +62,8 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     return clearSignupState(NextResponse.json({ error: 'Sessão de conexão do WhatsApp inválida ou expirada.' }, { status: 403 }));
   }
 
+  // Which step was running when the connection failed, kept so a failure can be explained.
+  let step = 'platform_credentials';
   try {
     const credentials = await getPlatformWhatsAppEmbeddedSignupCredentials();
     if (!credentials) {
@@ -71,17 +73,20 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     // The Embedded Signup user token is short-lived onboarding evidence only.
     // Meta documents /debug_token with a System User Access Token authorizing
     // the request, so the transient user token is never used as the debugger.
+    step = 'exchange_code';
     const exchanged = await exchangeWhatsAppEmbeddedSignupCode({
       appId: credentials.appId,
       appSecret: credentials.appSecret,
       code: parsed.data.code,
     });
+    step = 'validate_signup_token';
     const onboardingValidation = await validateWhatsAppEmbeddedSignupToken({
       accessToken: exchanged.accessToken,
       debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
       wabaId: parsed.data.wabaId,
     });
+    step = 'validate_signup_selection';
     const onboardingSelection = await validateWhatsAppWabaPhoneSelection({
       accessToken: exchanged.accessToken,
       appSecret: credentials.appSecret,
@@ -106,6 +111,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     // Meta's Tech Provider flow assigns a platform System User to the customer's WABA.
     // The admin token is used only for this management step; the runtime token is then
     // proven to have management + messaging scopes and exact WABA/phone access.
+    step = 'assign_system_user';
     await ensureSystemUserAssignedToWhatsAppWaba({
       adminSystemUserAccessToken: credentials.adminSystemUserAccessToken,
       appSecret: credentials.appSecret,
@@ -113,18 +119,21 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       businessId: credentials.businessId,
       systemUserId: credentials.systemUserId,
     });
+    step = 'validate_runtime_token';
     const runtimeValidation = await validateWhatsAppSystemUserToken({
       accessToken: credentials.systemUserAccessToken,
       debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
       wabaId: onboardingSelection.waba.id,
     });
+    step = 'validate_runtime_selection';
     const runtimeSelection = await validateWhatsAppWabaPhoneSelection({
       accessToken: credentials.systemUserAccessToken,
       appSecret: credentials.appSecret,
       wabaId: onboardingSelection.waba.id,
       phoneNumberId: onboardingSelection.phone.id,
     });
+    step = 'subscribe_app';
     await subscribeAppToWhatsAppWaba({
       accessToken: credentials.systemUserAccessToken,
       appSecret: credentials.appSecret,
@@ -132,6 +141,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     });
 
     const now = new Date();
+    step = 'save_connection';
     const connection = await prisma.$transaction(async tx => {
       // Serialize all connection replacements for one tenant. Without this lock,
       // two concurrent signups could both revoke the previous row and then leave
@@ -244,11 +254,32 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return clearSignupState(NextResponse.json({ error: 'Este WABA ou número de WhatsApp já está vinculado no FlipForm.' }, { status: 409 }));
     }
+    const provider = error as Error & { status?: number; providerCode?: string | number | null; providerType?: string | null };
+    const failure = {
+      step,
+      onboardingMode: parsed.data.onboardingMode,
+      // Messages raised by the Meta helpers name the operation only; they never carry tokens.
+      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+      httpStatus: typeof provider?.status === 'number' ? provider.status : null,
+      providerCode: provider?.providerCode == null ? null : String(provider.providerCode),
+      providerType: provider?.providerType ?? null,
+    };
     console.error('WhatsApp Embedded Signup completion failed', {
       tenantId: session.tenantId,
       operation: 'complete_embedded_signup',
       errorType: error instanceof Error ? error.name : 'unknown',
+      ...failure,
     });
+    await prisma.auditLog.create({
+      data: {
+        tenantId: session.tenantId,
+        userId: session.userId,
+        entityType: 'whatsapp_connection',
+        entityId: session.tenantId,
+        action: 'whatsapp.embedded_signup.failed',
+        metadata: failure,
+      },
+    }).catch(() => undefined);
     return clearSignupState(NextResponse.json({ error: 'Não foi possível concluir a conexão do WhatsApp com a Meta.' }, { status: 502 }));
   }
 });
