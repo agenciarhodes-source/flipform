@@ -1,4 +1,5 @@
 import 'server-only';
+import { connectionAccessToken } from './whatsapp-connection-token';
 
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -275,7 +276,7 @@ export async function validateWhatsAppConnectionHealth(input: { tenantId: string
   const connection = await prisma.tenantWhatsAppConnection.findFirst({
     where: { tenantId: input.tenantId, status: 'connected' },
     orderBy: { connectedAt: 'desc' },
-    select: { id: true, wabaId: true, phoneNumberId: true },
+    select: { id: true, wabaId: true, phoneNumberId: true, accessTokenEncrypted: true },
   });
   if (!connection) return getWhatsAppConnectionHealthForTenant(input.tenantId);
 
@@ -307,15 +308,16 @@ export async function validateWhatsAppConnectionHealth(input: { tenantId: string
     return getWhatsAppConnectionHealthForTenant(input.tenantId);
   }
 
+  const accessToken = connectionAccessToken(connection.accessTokenEncrypted) || credentials.systemUserAccessToken;
   try {
     await validateWhatsAppSystemUserToken({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken,
       debugAccessToken: credentials.systemUserAccessToken,
       appId: credentials.appId,
       wabaId: connection.wabaId,
     });
     const selection = await validateWhatsAppWabaPhoneSelection({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken,
       appSecret: credentials.appSecret,
       wabaId: connection.wabaId,
       phoneNumberId: connection.phoneNumberId,

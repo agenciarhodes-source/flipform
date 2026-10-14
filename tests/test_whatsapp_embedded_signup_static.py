@@ -16,7 +16,8 @@ def test_whatsapp_credentials_are_platform_scoped_and_ads_remains_separate():
     assert 'phoneNumberId' not in ads
     assert 'whatsappAdminSystemUserAccessTokenEncrypted' in platform
     assert 'whatsappSystemUserAccessTokenEncrypted' in platform
-    assert 'accessTokenEncrypted' not in whatsapp
+    # The customer's business token is kept, encrypted, as Meta documents for Tech Providers.
+    assert 'accessTokenEncrypted String?   @map("access_token_encrypted")' in whatsapp
     assert 'tokenExpiresAt' not in whatsapp
     assert 'grantedScopes' not in whatsapp
     assert 'wabaId' in whatsapp
@@ -92,17 +93,18 @@ def test_completion_uses_ephemeral_signup_token_then_platform_system_user():
     assert 'META_WHATSAPP_ONBOARDING_PURPOSE' in route
     assert 'exchangeWhatsAppEmbeddedSignupCode' in route
     assert 'validateWhatsAppEmbeddedSignupToken' in route
-    assert 'ensureSystemUserAssignedToWhatsAppWaba' in route
+    assert 'ensureSystemUserAssignedToWhatsAppWaba' not in route
+    assert 'const runtimeToken = exchanged.accessToken;' in route
     assert 'validateWhatsAppSystemUserToken' in route
     assert route.count('validateWhatsAppWabaPhoneSelection') >= 3
     assert 'subscribeAppToWhatsAppWaba' in route
     assert "tenantId: { not: session.tenantId }" in route
-    assert 'encryptIntegrationSecret(exchanged.accessToken)' not in route
-    assert 'accessTokenEncrypted' not in route
+    assert 'accessTokenEncrypted: encryptIntegrationSecret(runtimeToken),' in route
+    assert "data: { status: 'revoked', revokedAt: now, accessTokenEncrypted: null }," in route
     assert 'tokenExpiresAt' not in route
     assert 'prisma.$transaction' in route
     assert 'WHATSAPP_EMBEDDED_SIGNUP_CONNECTED' in route
-    assert "credentialMode: 'platform_system_user'" in route
+    assert "credentialMode: 'business_token'" in route
     assert 'debugAccessToken: credentials.systemUserAccessToken' in route
 
     embedded_scopes = helper.split('WHATSAPP_EMBEDDED_SIGNUP_REQUIRED_SCOPES = [', 1)[1].split('] as const', 1)[0]

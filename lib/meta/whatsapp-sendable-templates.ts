@@ -3,6 +3,7 @@ import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { getPlatformWhatsAppRuntimeCredentials } from './platform-settings';
 import { listSendableWhatsAppTemplates } from './whatsapp-templates';
+import { connectionAccessToken } from './whatsapp-connection-token';
 
 export class WhatsAppSendableTemplatesError extends Error {
   constructor(readonly code: 'NOT_CONNECTED' | 'PLATFORM_NOT_READY' | 'PROVIDER_UNAVAILABLE') {
@@ -16,7 +17,7 @@ export async function loadSendableWhatsAppTemplates(tenantId: string) {
     prisma.tenantWhatsAppConnection.findFirst({
       where: { tenantId, status: 'connected' },
       orderBy: { connectedAt: 'desc' },
-      select: { wabaId: true },
+      select: { wabaId: true, accessTokenEncrypted: true },
     }),
     getPlatformWhatsAppRuntimeCredentials(),
   ]);
@@ -24,7 +25,7 @@ export async function loadSendableWhatsAppTemplates(tenantId: string) {
   if (!credentials) throw new WhatsAppSendableTemplatesError('PLATFORM_NOT_READY');
   try {
     return await listSendableWhatsAppTemplates({
-      accessToken: credentials.systemUserAccessToken,
+      accessToken: connectionAccessToken(connection.accessTokenEncrypted) || credentials.systemUserAccessToken,
       appSecret: credentials.appSecret,
       wabaId: connection.wabaId,
     });

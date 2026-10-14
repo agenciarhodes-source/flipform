@@ -6,6 +6,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { withPermission } from '@/lib/rbac-server';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { validateWhatsAppSystemUserToken } from '@/lib/meta/whatsapp';
+import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import {
   createWhatsAppMessageTemplate,
   listWhatsAppMessageTemplates,
@@ -39,6 +40,7 @@ async function getTenantTemplateContext(tenantId: string) {
         id: true,
         wabaId: true,
         systemUserAssignedAt: true,
+        accessTokenEncrypted: true,
       },
     }),
     getPlatformWhatsAppRuntimeCredentials(),
@@ -54,8 +56,9 @@ async function getTenantTemplateContext(tenantId: string) {
     throw new WhatsAppTemplateContextError('A conexão do WhatsApp ainda está concluindo a autorização da plataforma.', 409);
   }
 
+  const accessToken = connectionAccessToken(connection.accessTokenEncrypted) || credentials.systemUserAccessToken;
   await validateWhatsAppSystemUserToken({
-    accessToken: credentials.systemUserAccessToken,
+    accessToken,
     debugAccessToken: credentials.systemUserAccessToken,
     appId: credentials.appId,
     wabaId: connection.wabaId,
@@ -64,7 +67,7 @@ async function getTenantTemplateContext(tenantId: string) {
   return {
     connectionId: connection.id,
     wabaId: connection.wabaId,
-    accessToken: credentials.systemUserAccessToken,
+    accessToken,
     appSecret: credentials.appSecret,
   };
 }

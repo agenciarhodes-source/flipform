@@ -143,7 +143,8 @@ def test_registration_pr_requires_no_schema_or_customer_data_mutation():
     schema = read('prisma/schema.prisma')
     whatsapp = schema.split('model TenantWhatsAppConnection {', 1)[1].split('\n}', 1)[0]
     assert 'pin' not in whatsapp.lower()
-    assert 'accessTokenEncrypted' not in whatsapp
+    # The encrypted business token from Embedded Signup is stored; the PIN never is.
+    assert 'accessTokenEncrypted String?' in whatsapp
     route = read('app/api/integrations/whatsapp/registration/route.ts')
     for forbidden in ('prisma.lead.', 'prisma.message.', 'prisma.conversation.', 'prisma.pipeline.'):
         assert forbidden not in route

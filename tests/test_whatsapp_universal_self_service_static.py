@@ -21,7 +21,7 @@ def test_tenant_onboarding_uses_one_universal_platform_box():
     assert 'config_id: config.configId' in client
 
     assert 'getPlatformWhatsAppEmbeddedSignupCredentials' in complete
-    assert 'ensureSystemUserAssignedToWhatsAppWaba' in complete
+    assert 'ensureSystemUserAssignedToWhatsAppWaba' not in complete
     assert 'subscribeAppToWhatsAppWaba' in complete
     assert "tenantId: { not: session.tenantId }" in complete
     assert 'FOR UPDATE' in complete

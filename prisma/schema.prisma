@@ -882,6 +882,8 @@ model TenantWhatsAppConnection {
   subscribedAt         DateTime? @map("subscribed_at")
   lastValidatedAt      DateTime? @map("last_validated_at")
   revokedAt            DateTime? @map("revoked_at")
+  // The customer's own business token from Embedded Signup, encrypted. Never sent to the browser.
+  accessTokenEncrypted String?   @map("access_token_encrypted")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 

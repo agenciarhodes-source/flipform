@@ -81,7 +81,7 @@ def test_existing_business_app_flow_can_use_its_own_meta_configuration():
 
 def test_a_failed_connection_records_the_step_that_failed_without_secrets():
     route = read('app/api/integrations/whatsapp/embedded-signup/complete/route.ts')
-    for step in ['exchange_code', 'validate_signup_token', 'validate_signup_selection', 'assign_system_user',
+    for step in ['exchange_code', 'validate_signup_token', 'validate_signup_selection',
                  'validate_runtime_token', 'validate_runtime_selection', 'subscribe_app', 'save_connection']:
         assert f"step = '{step}';" in route
     assert "action: 'whatsapp.embedded_signup.failed'," in route
