@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConversationActions } from './conversation-actions';
+import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
 
 interface InboxIdentity {
   id: string;
@@ -73,6 +74,27 @@ interface InboxMessage extends InboxMessageSummary {
   sentByUserId: string | null;
   sentByUser: InboxAssignee | null;
   metadata: unknown;
+}
+
+const AVATAR_COLORS = [
+  'bg-emerald-100 text-emerald-800',
+  'bg-sky-100 text-sky-800',
+  'bg-violet-100 text-violet-800',
+  'bg-amber-100 text-amber-800',
+  'bg-rose-100 text-rose-800',
+  'bg-teal-100 text-teal-800',
+  'bg-indigo-100 text-indigo-800',
+  'bg-orange-100 text-orange-800',
+];
+
+/** Initials on a colour of their own: WhatsApp does not share the customer's profile photo. */
+function ContactAvatar({ conversation }: { conversation: InboxConversation }) {
+  return (
+    <div aria-hidden="true"
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${AVATAR_COLORS[contactAvatarColorIndex(conversation.externalContactIdentity.id)]}`}>
+      {contactInitials(contactName(conversation))}
+    </div>
+  );
 }
 
 function contactName(conversation: InboxConversation) {
@@ -490,9 +512,7 @@ export function InboxClient({
                     onClick={() => selectConversation(conversation.id)}
                     className={`flex w-full gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 ${active ? 'bg-brand-50/70' : ''}`}
                   >
-                    <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                      <MessageSquareText className="h-5 w-5" />
-                    </div>
+                    <div className="mt-0.5"><ContactAvatar conversation={conversation} /></div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{contactName(conversation)}</span>
@@ -538,9 +558,7 @@ export function InboxClient({
                 <Button variant="ghost" size="icon" className="md:hidden" onClick={() => selectConversation(null)} aria-label="Voltar para conversas">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
-                  <MessageSquareText className="h-5 w-5" />
-                </div>
+                <ContactAvatar conversation={selected} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{contactName(selected)}</div>
                   <div className="truncate text-xs text-muted-foreground">
