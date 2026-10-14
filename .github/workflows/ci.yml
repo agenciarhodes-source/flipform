@@ -71,7 +71,7 @@ jobs:
       - name: Run Flip AI policy tests
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/flip-ai.test.ts tests/flip-ai-realtime-client.test.ts tests/brain-profiles.test.ts tests/flip-ai-qualification-score.test.ts tests/flip-ai-public-error-message.test.ts tests/flip-ai-truncated-response.test.ts tests/flip-ai-audio-reply.test.ts tests/flip-ai-voice-note-transcription.test.ts tests/attachment-storage.test.ts tests/flip-ai-handoff-priority.test.ts tests/flip-ai-contact-timing.test.ts tests/flip-ai-audio-usage.test.ts tests/flip-ai-lead-source.test.ts tests/flip-ai-campaign-link.test.ts tests/inbox-unanswered.test.ts tests/inbox-contact-avatar.test.ts tests/flip-ai-typing-pace.test.ts tests/flip-ai-chat-attachment.test.ts
+        run: npx tsx --test tests/flip-ai.test.ts tests/flip-ai-realtime-client.test.ts tests/brain-profiles.test.ts tests/flip-ai-qualification-score.test.ts tests/flip-ai-public-error-message.test.ts tests/flip-ai-truncated-response.test.ts tests/flip-ai-audio-reply.test.ts tests/flip-ai-voice-note-transcription.test.ts tests/attachment-storage.test.ts tests/flip-ai-handoff-priority.test.ts tests/flip-ai-contact-timing.test.ts tests/flip-ai-audio-usage.test.ts tests/flip-ai-lead-source.test.ts tests/flip-ai-campaign-link.test.ts tests/inbox-unanswered.test.ts tests/inbox-contact-avatar.test.ts tests/task-reminders.test.ts tests/flip-ai-typing-pace.test.ts tests/flip-ai-chat-attachment.test.ts
 
       - name: Run tracking unit tests
         env:

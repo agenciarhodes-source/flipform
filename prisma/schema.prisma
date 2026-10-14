@@ -533,6 +533,8 @@ model Task {
   title       String
   description String?
   dueDate     DateTime?    @map("due_date")
+  /// Minutes before the due date to remind the owner. Null means no reminder.
+  remindMinutesBefore Int? @map("remind_minutes_before")
   priority    TaskPriority @default(medium)
   status      TaskStatus   @default(pending)
   completedAt DateTime?    @map("completed_at")
