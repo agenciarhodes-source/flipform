@@ -156,11 +156,24 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
       if (!assignee) return NextResponse.json({ error: 'Responsável inválido. Selecione um Atendente/Vendedor ativo deste tenant.' }, { status: 400 });
     }
   }
-  await prisma.lead.update({ where: { id: lead.id }, data: allowed });
+  // A transfer moves the whole service: the lead and its WhatsApp and Instagram conversations,
+  // with every message, go to the new owner together, so two people never answer the same person.
+  const transferring = Object.prototype.hasOwnProperty.call(allowed, 'assignedTo')
+    && allowed.assignedTo !== lead.assignedTo;
+  const conversationsTransferred = await prisma.$transaction(async (tx) => {
+    await tx.lead.update({ where: { id: lead.id }, data: allowed });
+    if (!transferring) return 0;
+    const moved = await tx.conversation.updateMany({
+      where: { tenantId: session.tenantId, leadId: lead.id, provider: 'meta' },
+      data: { assignedTo: allowed.assignedTo },
+    });
+    return moved.count;
+  });
   await logAudit({
     tenantId: session.tenantId, userId: session.userId,
     entityType: 'lead', entityId: lead.id, action: 'lead.updated',
-    metadata: { changes: Object.keys(allowed), assignedTo: allowed.assignedTo, message: Object.prototype.hasOwnProperty.call(allowed, 'assignedTo') ? 'Responsável do lead atualizado manualmente.' : undefined },
+    metadata: { changes: Object.keys(allowed), assignedTo: allowed.assignedTo,
+      ...(transferring ? { previousAssignedTo: lead.assignedTo, conversationsTransferred } : {}), message: Object.prototype.hasOwnProperty.call(allowed, 'assignedTo') ? 'Responsável do lead atualizado manualmente.' : undefined },
   });
   return NextResponse.json({ ok: true });
 });

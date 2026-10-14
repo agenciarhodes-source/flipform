@@ -193,11 +193,47 @@ export async function assignInboxConversation(input: {
       data: { assignedTo: normalizedUserId },
     });
 
+    // An explicit transfer by a manager: when the conversation belongs to a lead and the new owner
+    // is an attendant, the lead and its other conversations go along, so ownership stays in one place.
+    // A lead can only be owned by an attendant, so handing a conversation to a manager leaves the lead as is.
+    let leadTransferred = false;
+    if (conversation.leadId && (!assignee || assignee.role === 'agent')) {
+      const lead = await tx.lead.findFirst({
+        where: { id: conversation.leadId, tenantId: input.session.tenantId },
+        select: { id: true, assignedTo: true },
+      });
+      if (lead && lead.assignedTo !== normalizedUserId) {
+        await tx.lead.update({ where: { id: lead.id }, data: { assignedTo: normalizedUserId } });
+        await tx.conversation.updateMany({
+          where: { tenantId: input.session.tenantId, leadId: lead.id, provider: 'meta' },
+          data: { assignedTo: normalizedUserId },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: input.session.tenantId,
+            userId: input.session.userId,
+            entityType: 'lead',
+            entityId: lead.id,
+            action: 'lead.updated',
+            metadata: {
+              changes: ['assignedTo'],
+              assignedTo: normalizedUserId,
+              previousAssignedTo: lead.assignedTo,
+              message: 'Responsável do lead transferido pela Inbox junto com a conversa.',
+              conversationId: conversation.id,
+            },
+          },
+        });
+        leadTransferred = true;
+      }
+    }
+
     return {
       conversationId: conversation.id,
       previousAssignedTo: conversation.assignedTo,
       assignedTo: normalizedUserId,
       assignee,
+      leadTransferred,
     };
   });
 }

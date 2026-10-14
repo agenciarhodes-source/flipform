@@ -80,7 +80,7 @@ export const PERMISSIONS = {
   FORMS_CREATE: ['owner', 'admin'],
   FORMS_EDIT: ['owner', 'admin'],
   LEAD_ASSIGNMENT_ROTATION_VIEW: ['owner', 'admin', 'manager'],
-  LEAD_ASSIGNMENT_ROTATION_MANAGE: ['owner', 'admin'],
+  LEAD_ASSIGNMENT_ROTATION_MANAGE: ['owner', 'admin', 'manager'],
   FORMS_DELETE: ['owner'],
   PIPELINES_VIEW: ['owner', 'admin', 'manager', 'agent', 'viewer'],
   PIPELINES_CREATE: ['owner', 'admin'],

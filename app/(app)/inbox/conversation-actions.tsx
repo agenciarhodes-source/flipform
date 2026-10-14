@@ -290,7 +290,7 @@ export function ConversationActions({
                     <option key={candidate.id} value={candidate.id}>{candidate.name} — {candidate.role}</option>
                   ))}
                 </select>
-                <div className="mt-1 text-[11px] text-muted-foreground">Isso não altera o responsável do Lead no Kanban.</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">Ao escolher um atendente, o lead e o histórico da conversa vão junto para ele.</div>
               </div>
             )}
 
