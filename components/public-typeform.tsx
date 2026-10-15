@@ -260,7 +260,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
           </div>
           <div className="text-xs text-muted-foreground mt-4">Pergunta {step + 1} de {fields.length}</div>
           {isLast ? (
-            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{contactConsentNotice(form.tenantName)}</p>
+            <p className="mt-3 text-[11px] leading-snug text-muted-foreground/80">{contactConsentNotice(form.tenantName)}</p>
           ) : null}
         </div>
       </div>
