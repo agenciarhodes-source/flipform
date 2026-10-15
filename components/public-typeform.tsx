@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import { WHATSAPP_CONSENT_VALUE, whatsappConsentText } from '@/lib/whatsapp-consent';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -239,7 +240,7 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
             </div>
           </div>
 
-          <FieldRenderer field={current} value={answers[current.id]} onChange={setVal} primaryColor={form.primaryColor} onEnter={next} />
+          <FieldRenderer field={current} value={answers[current.id]} onChange={setVal} primaryColor={form.primaryColor} onEnter={next} companyName={form.tenantName} />
 
           {error && <div className="text-sm text-red-600 mt-2">{error}</div>}
 
@@ -264,13 +265,28 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
   );
 }
 
-function FieldRenderer({ field, value, onChange, primaryColor, onEnter }: { field: PublicField; value: any; onChange: (v: any) => void; primaryColor: string; onEnter: () => void }) {
+function FieldRenderer({ field, value, onChange, primaryColor, onEnter, companyName }: { field: PublicField; value: any; onChange: (v: any) => void; primaryColor: string; onEnter: () => void; companyName?: string }) {
   const handleKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onEnter(); } };
   const baseStyle = { borderColor: primaryColor };
 
   switch (field.fieldType) {
     case 'city_state':
       return <CityStateField value={value} onChange={onChange} />;
+    case 'whatsapp_consent': {
+      // A box the person ticks; it is never ticked for them.
+      const checked = value === WHATSAPP_CONSENT_VALUE;
+      return (
+        <button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(checked ? null : WHATSAPP_CONSENT_VALUE)}
+          className="flex w-full items-start gap-3 rounded-md border-2 p-3 text-left transition"
+          style={{ borderColor: checked ? primaryColor : '#E2E8F0' }}>
+          <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 text-xs text-white"
+            style={{ borderColor: checked ? primaryColor : '#CBD5E1', backgroundColor: checked ? primaryColor : 'transparent' }}>
+            {checked ? '✓' : ''}
+          </span>
+          <span>{whatsappConsentText(companyName)}</span>
+        </button>
+      );
+    }
     case 'long_text':
       return <Textarea value={value || ''} placeholder={field.placeholder || ''} onChange={(e) => onChange(e.target.value)} rows={4} className="text-base" />;
     case 'single_select':

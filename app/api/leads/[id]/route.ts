@@ -103,6 +103,12 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
       intelligence: flipAiLiveIntelligence,
     }).catch(() => null),
   ]);
+  // When the person authorized contact on WhatsApp in the form, if they did.
+  const whatsappConsentAt = await prisma.leadAnswer.findFirst({
+    where: { leadId: lead.id, field: { fieldType: 'whatsapp_consent' } },
+    orderBy: { createdAt: 'asc' },
+    select: { createdAt: true, answer: true },
+  }).then((row) => (row && row.answer === 'Autorizado' ? row.createdAt.toISOString() : null)).catch(() => null);
   // Which attendant talked to this lead: the equivalent of the form name for a chat lead.
   const flipAiAgentName = await prisma.flipAiConversationState.findFirst({
     where: { tenantId: session.tenantId, conversation: { leadId: lead.id } },
@@ -124,7 +130,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     }
     : null;
 
-  return NextResponse.json({ lead: { ...lead, flipAiAgentName,
+  return NextResponse.json({ lead: { ...lead, flipAiAgentName, whatsappConsentAt,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiConversation,

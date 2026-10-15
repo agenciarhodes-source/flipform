@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { normalizeWhatsappConsent, WHATSAPP_CONSENT_FIELD_TYPE } from '@/lib/whatsapp-consent';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
@@ -89,7 +90,8 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         return {
           fieldId: f.id,
           label: f.label, // sempre derivamos do servidor
-          value: a.value,
+          // A autorização de WhatsApp só vale quando a pessoa marcou a caixa.
+          value: f.fieldType === WHATSAPP_CONSENT_FIELD_TYPE ? normalizeWhatsappConsent(a.value) : a.value,
           fieldType: f.fieldType,
         };
       });

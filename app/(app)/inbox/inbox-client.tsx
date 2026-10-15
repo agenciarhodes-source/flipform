@@ -205,6 +205,7 @@ export function InboxClient({
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [templateKey, setTemplateKey] = useState('');
   const [templatesFor, setTemplatesFor] = useState<string | null>(null);
+  const [templateConsent, setTemplateConsent] = useState<'granted' | 'not_recorded' | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const requestedConversationIdRef = useRef<string | null>(null);
@@ -233,6 +234,7 @@ export function InboxClient({
           return;
         }
         const loaded: SendableTemplate[] = Array.isArray(data.templates) ? data.templates : [];
+        setTemplateConsent(data.consent === 'granted' ? 'granted' : 'not_recorded');
         setTemplates(loaded);
         setTemplatesError(null);
         if (loaded[0]) setTemplateKey(`${loaded[0].name}:${loaded[0].language}`);
@@ -681,6 +683,11 @@ export function InboxClient({
                           {chosenTemplate && (
                             <p className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm">{chosenTemplate.preview || chosenTemplate.body}</p>
                           )}
+                          {templateConsent === 'granted' ? (
+                            <p className="text-xs text-emerald-700">Este lead autorizou contato pelo WhatsApp no formulário.</p>
+                          ) : templateConsent === 'not_recorded' ? (
+                            <p className="text-xs text-amber-800">Não há autorização de WhatsApp registrada para este contato. Envie só se ele pediu para ser atendido por aqui.</p>
+                          ) : null}
                           <Button type="button" onClick={() => void sendTemplate()} disabled={sending || !chosenTemplate}>
                             {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Enviar modelo
