@@ -537,7 +537,7 @@ export function FormBuilder({ formId }: { formId?: string }) {
                 <div className="space-y-3">
                   <div><Label>Pergunta</Label><Input value={selected.label} onChange={(e) => updateField(selectedIdx!, { label: e.target.value })} /></div>
                   <div><Label>Tipo de campo</Label>
-                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v, ...(v === 'whatsapp_consent' ? { label: 'Autorização de contato pelo WhatsApp', isRequired: true } : {}), placeholder: selected.placeholder || defaultPlaceholderFor(v), ...ensureChoiceDefaults(v, selected) })}>
+                    <Select value={selected.fieldType} onValueChange={(v) => updateField(selectedIdx!, { fieldType: v, ...(v === 'whatsapp_consent' ? { label: 'Autorização de contato pelo WhatsApp', isRequired: false } : {}), placeholder: selected.placeholder || defaultPlaceholderFor(v), ...ensureChoiceDefaults(v, selected) })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>{FIELD_TYPES.map((t) => <SelectItem key={t.v} value={t.v}>{t.l}</SelectItem>)}</SelectContent>
                     </Select>

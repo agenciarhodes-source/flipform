@@ -25,4 +25,6 @@ def test_the_server_records_only_an_explicit_authorization_and_shows_it():
     assert submit.index("normalizeWhatsappConsent(a.value)") < submit.index("const missingRequired")
     assert "whatsappConsentAt," in read("app/api/leads/[id]/route.ts")
     assert "Autorizou contato em" in read("components/lead-detail-modal.tsx")
-    assert "Não há autorização de WhatsApp registrada para este contato." in read("app/(app)/inbox/inbox-client.tsx")
+    assert "Este contato não marcou a autorização de WhatsApp no formulário." in read("app/(app)/inbox/inbox-client.tsx")
+    # Optional by default: the company decides per form whether to require it.
+    assert "isRequired: false } : {})" in read("components/form-builder.tsx")

@@ -686,7 +686,7 @@ export function InboxClient({
                           {templateConsent === 'granted' ? (
                             <p className="text-xs text-emerald-700">Este lead autorizou contato pelo WhatsApp no formulário.</p>
                           ) : templateConsent === 'not_recorded' ? (
-                            <p className="text-xs text-amber-800">Não há autorização de WhatsApp registrada para este contato. Envie só se ele pediu para ser atendido por aqui.</p>
+                            <p className="text-xs text-amber-800">Este contato não marcou a autorização de WhatsApp no formulário.</p>
                           ) : null}
                           <Button type="button" onClick={() => void sendTemplate()} disabled={sending || !chosenTemplate}>
                             {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
