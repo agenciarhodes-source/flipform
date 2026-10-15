@@ -51,6 +51,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
           phone: true,
           email: true,
           assignedTo: true,
+          pipelineId: true,
         },
       },
       assignee: {

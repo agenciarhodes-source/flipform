@@ -15,6 +15,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConversationActions } from './conversation-actions';
+import { LeadDetailModal } from '@/components/lead-detail-modal';
+import { toast } from 'sonner';
 import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
 
 interface InboxIdentity {
@@ -32,6 +34,7 @@ interface InboxLead {
   phone: string | null;
   email: string | null;
   assignedTo: string | null;
+  pipelineId?: string;
 }
 
 interface InboxAssignee {
@@ -196,6 +199,9 @@ export function InboxClient({
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [search, setSearch] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const [leadModal, setLeadModal] = useState<{ leadId: string; stages: any[] } | null>(null);
+  const [openingLead, setOpeningLead] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string; unread: boolean } | null>(null);
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
@@ -269,6 +275,64 @@ export function InboxClient({
       return haystack.includes(term);
     });
   }, [conversations, search, onlyUnread]);
+
+  // Opens the card of the lead linked to the conversation; a conversation without a lead is
+  // matched by phone first, so the attendant reaches the lead in one click.
+  async function openLead(conversation: InboxConversation) {
+    if (openingLead) return;
+    setOpeningLead(true);
+    try {
+      let leadId = conversation.lead?.id || null;
+      let pipelineId = conversation.lead?.pipelineId || null;
+      if (!leadId) {
+        const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversation.id)}/match-lead`, { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Nenhum lead vinculado a esta conversa.');
+        leadId = data.leadId;
+        pipelineId = data.pipelineId || null;
+        void loadConversations(true);
+      }
+      const pipelines = await fetch('/api/pipelines', { cache: 'no-store' }).then((r) => r.json()).catch(() => ({ pipelines: [] }));
+      const pipeline = (pipelines.pipelines || []).find((item: any) => item.id === pipelineId) || pipelines.pipelines?.[0];
+      if (leadId) setLeadModal({ leadId, stages: pipeline?.stages || [] });
+    } catch (openError) {
+      toast.info(openError instanceof Error ? openError.message : 'Não foi possível abrir o lead.');
+    } finally {
+      setOpeningLead(false);
+    }
+  }
+
+  async function markUnread(conversationId: string) {
+    setContextMenu(null);
+    const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversationId)}/unread`, { method: 'POST' }).catch(() => null);
+    if (!response?.ok) {
+      toast.error('Não foi possível marcar como não lida.');
+      return;
+    }
+    // Leaving the conversation keeps it unread: an open conversation is marked read again.
+    if (selectedIdRef.current === conversationId) selectConversation(null);
+    setConversations((current) => current.map((conversation) => (
+      conversation.id === conversationId ? { ...conversation, unreadCount: Math.max(1, conversation.unreadCount) } : conversation
+    )));
+  }
+
+  async function markReadFromMenu(conversationId: string) {
+    setContextMenu(null);
+    await markRead(conversationId);
+  }
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const close = () => setContextMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', close);
+    };
+  }, [contextMenu]);
 
   function selectConversation(conversationId: string | null) {
     selectedIdRef.current = conversationId;
@@ -528,6 +592,10 @@ export function InboxClient({
                     key={conversation.id}
                     type="button"
                     onClick={() => selectConversation(conversation.id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setContextMenu({ x: event.clientX, y: event.clientY, conversationId: conversation.id, unread: conversation.unreadCount > 0 });
+                    }}
                     className={`flex w-full gap-3 border-b px-4 py-3 text-left transition-colors hover:bg-muted/60 ${active ? 'bg-brand-50/70' : ''}`}
                   >
                     <div className="mt-0.5"><ContactAvatar conversation={conversation} /></div>
@@ -576,14 +644,19 @@ export function InboxClient({
                 <Button variant="ghost" size="icon" className="md:hidden" onClick={() => selectConversation(null)} aria-label="Voltar para conversas">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <ContactAvatar conversation={selected} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold">{contactName(selected)}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {selected.externalContactIdentity.phone || selected.externalContactIdentity.username || selected.externalContactIdentity.externalUserId}
-                    {selected.lead ? ` • Lead: ${selected.lead.name}` : ' • Sem lead vinculado'}
+                <button type="button" onClick={() => void openLead(selected)} disabled={openingLead}
+                  title={selected.lead ? 'Abrir a ficha do lead' : 'Procurar o lead deste telefone'}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left hover:bg-muted/60">
+                  <ContactAvatar conversation={selected} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{contactName(selected)}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {selected.externalContactIdentity.phone || selected.externalContactIdentity.username || selected.externalContactIdentity.externalUserId}
+                      {selected.lead ? ` • Lead: ${selected.lead.name}` : ' • Sem lead vinculado'}
+                      <span className="text-brand-700">{openingLead ? ' • abrindo...' : selected.lead ? ' • ver lead' : ' • procurar lead'}</span>
+                    </div>
                   </div>
-                </div>
+                </button>
                 <div className="hidden text-right text-xs text-muted-foreground sm:block">
                   <div className="capitalize">{selected.status}</div>
                   {selected.assignee?.name && <div className="max-w-40 truncate">{selected.assignee.name}</div>}
@@ -739,6 +812,19 @@ export function InboxClient({
           )}
         </section>
       </div>
+      {contextMenu && (
+        <div role="menu" className="fixed z-50 min-w-48 rounded-md border bg-popover p-1 text-sm shadow-md"
+          style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+          {contextMenu.unread ? (
+            <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left hover:bg-muted" onClick={() => void markReadFromMenu(contextMenu.conversationId)}>Marcar como lida</button>
+          ) : (
+            <button type="button" role="menuitem" className="block w-full rounded px-3 py-2 text-left hover:bg-muted" onClick={() => void markUnread(contextMenu.conversationId)}>Marcar como não lida</button>
+          )}
+        </div>
+      )}
+      {leadModal && (
+        <LeadDetailModal leadId={leadModal.leadId} stages={leadModal.stages} onClose={() => setLeadModal(null)} onChange={() => void loadConversations(true)} />
+      )}
     </div>
   );
 }
