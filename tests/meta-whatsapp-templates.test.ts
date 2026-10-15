@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createWhatsAppMessageTemplate,
+  fillTemplateVariables,
   listWhatsAppMessageTemplates,
+  templateBodyVariables,
 } from '../lib/meta/whatsapp-templates';
 
 process.env.JWT_SECRET_CURRENT = 'meta-whatsapp-templates-test-secret';
@@ -100,7 +102,7 @@ test('creates a text template at the WABA endpoint and never sends credentials i
   }
 });
 
-test('rejects variable placeholders before any request is sent', async () => {
+test('rejects variables that break Meta rules before any request is sent', async () => {
   const previousFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -121,8 +123,18 @@ test('rejects variable placeholders before any request is sent', async () => {
           body: 'Olá, {{1}}',
         },
       }),
-      /variables are not supported/i,
+      /cannot start or end/i,
     );
+    for (const body of ['Olá {{2}}, tudo bem?', 'Olá {{1}}, sua vez {{4}} agora.', 'Oi {{1}} {{2}} tudo certo.', 'Olá {{ nome }}, tudo bem?']) {
+      await assert.rejects(createWhatsAppMessageTemplate({
+        accessToken: 'runtime-token', appSecret: 'app-secret', wabaId: '987654',
+        template: { name: 'confirmacao_atendimento', language: 'pt_BR', category: 'UTILITY', body },
+      }));
+    }
+    await assert.rejects(createWhatsAppMessageTemplate({
+      accessToken: 'runtime-token', appSecret: 'app-secret', wabaId: '987654',
+      template: { name: 'confirmacao_atendimento', language: 'pt_BR', category: 'UTILITY', header: 'Olá {{1}}', body: 'Confirmado.' },
+    }), /only supported in the body/i);
     assert.equal(calls, 0);
   } finally {
     globalThis.fetch = previousFetch;
@@ -156,4 +168,45 @@ test('preserves Meta provider status and code without leaking token data', async
   } finally {
     globalThis.fetch = previousFetch;
   }
+});
+
+test('a template with variables is sent to Meta with the examples it requires', async () => {
+  const previousFetch = globalThis.fetch;
+  let sent: any = null;
+  globalThis.fetch = async (_input, init) => {
+    sent = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ id: 'tpl-vars', status: 'PENDING', category: 'UTILITY' }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  try {
+    await createWhatsAppMessageTemplate({
+      accessToken: 'runtime-token',
+      appSecret: 'app-secret',
+      wabaId: '987654',
+      companyName: 'Junqueira Advogados',
+      template: {
+        name: 'confirmacao_solicitacao',
+        language: 'pt_BR',
+        category: 'UTILITY',
+        body: 'Olá, {{1}}! Confirmamos sua solicitação enviada em {{2}} para a {{3}}. Responda para continuar.',
+      },
+    });
+    assert.deepEqual(sent.components, [{
+      type: 'BODY',
+      text: 'Olá, {{1}}! Confirmamos sua solicitação enviada em {{2}} para a {{3}}. Responda para continuar.',
+      example: { body_text: [['Maria', '15/10/2026', 'Junqueira Advogados']] },
+    }]);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('the variables are filled with the values of the conversation', () => {
+  assert.equal(
+    fillTemplateVariables('Olá, {{1}}! Recebemos em {{2}}.', ['Ana', '14/10/2026']),
+    'Olá, Ana! Recebemos em 14/10/2026.',
+  );
+  assert.deepEqual(templateBodyVariables('Sem variáveis.'), []);
+  assert.deepEqual(templateBodyVariables('Olá {{1}}, em {{2}} pela {{3}}. Responda.'), [1, 2, 3]);
 });

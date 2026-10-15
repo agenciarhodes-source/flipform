@@ -1,4 +1,5 @@
 import 'server-only';
+import { WHATSAPP_TEMPLATE_VARIABLES } from './whatsapp-template-variables';
 
 import { createAppSecretProof, META_PLATFORM_GRAPH_API_VERSION } from './oauth';
 
@@ -84,6 +85,38 @@ async function metaJson(url: URL, operation: string, input: {
   return data;
 }
 
+/**
+ * Three variables with a fixed meaning, filled in by FlipForm when the template is sent. A message
+ * that names the person and the date of their own request is what Meta treats as utility.
+ */
+export { WHATSAPP_TEMPLATE_VARIABLES };
+
+const VARIABLE = /\{\{\s*(\d+)\s*\}\}/g;
+
+/** The variables a body uses, checked against Meta's rules. Throws when a rule is broken. */
+export function templateBodyVariables(body: string): number[] {
+  const text = body.trim();
+  const used = Array.from(text.matchAll(VARIABLE), (match) => Number(match[1]));
+  if (text.replace(VARIABLE, '').includes('{{') || text.replace(VARIABLE, '').includes('}}')) {
+    throw new Error('WhatsApp template variables are malformed');
+  }
+  if (!used.length) return [];
+  const distinct = Array.from(new Set(used)).sort((a, b) => a - b);
+  if (distinct.length > WHATSAPP_TEMPLATE_VARIABLES.length || distinct.some((value, index) => value !== index + 1)) {
+    throw new Error('WhatsApp template variables must be {{1}} to {{3}} in sequence');
+  }
+  if (/^\{\{\s*\d+\s*\}\}/.test(text) || /\{\{\s*\d+\s*\}\}$/.test(text)) {
+    throw new Error('WhatsApp template body cannot start or end with a variable');
+  }
+  if (/\}\}\s*\{\{/.test(text)) throw new Error('WhatsApp template variables cannot be next to each other');
+  return distinct;
+}
+
+/** The text a person receives, with each variable replaced by its value. */
+export function fillTemplateVariables(body: string, values: string[]) {
+  return body.replace(VARIABLE, (whole, index) => values[Number(index) - 1] ?? whole);
+}
+
 function validateCreateInput(input: WhatsAppTemplateCreateInput) {
   if (!/^[a-z0-9_]{1,512}$/.test(input.name)) {
     throw new Error('WhatsApp template name must use lowercase letters, numbers and underscores only');
@@ -100,15 +133,13 @@ function validateCreateInput(input: WhatsAppTemplateCreateInput) {
   if (!body || body.length > 1024) throw new Error('WhatsApp template body is invalid');
   if (header.length > 60 || footer.length > 60) throw new Error('WhatsApp template header or footer is too long');
 
-  // The first App Review version intentionally creates deterministic text-only
-  // templates without variables. Meta requires example values for variable
-  // templates, so accepting placeholders without their examples would create a
-  // fragile approval path. Variable support can be added later as a separate UX.
-  if ([header, body, footer].some(text => text.includes('{{') || text.includes('}}'))) {
-    throw new Error('WhatsApp template variables are not supported in this creator yet');
+  // Variables only in the body, where FlipForm fills them; header and footer stay fixed.
+  if ([header, footer].some(text => text.includes('{{') || text.includes('}}'))) {
+    throw new Error('WhatsApp template variables are only supported in the body');
   }
+  const variables = templateBodyVariables(body);
 
-  return { header, body, footer };
+  return { header, body, footer, variables };
 }
 
 function normalizeTemplate(raw: any): WhatsAppTemplateSummary | null {
@@ -157,15 +188,23 @@ export async function createWhatsAppMessageTemplate(input: {
   appSecret: string;
   wabaId: string;
   template: WhatsAppTemplateCreateInput;
+  /** Used as the example of {{3}}, which Meta requires to review a template with variables. */
+  companyName?: string;
 }) {
   if (!/^\d+$/.test(input.wabaId)) throw new Error('Meta WhatsApp template WABA id is invalid');
   const normalized = validateCreateInput(input.template);
 
-  const components: Array<Record<string, string>> = [];
+  const components: Array<Record<string, unknown>> = [];
   if (normalized.header) {
     components.push({ type: 'HEADER', format: 'TEXT', text: normalized.header });
   }
-  components.push({ type: 'BODY', text: normalized.body });
+  if (normalized.variables.length) {
+    const examples = normalized.variables.map((index) => (index === 3 && input.companyName?.trim())
+      || WHATSAPP_TEMPLATE_VARIABLES[index - 1].example);
+    components.push({ type: 'BODY', text: normalized.body, example: { body_text: [examples] } });
+  } else {
+    components.push({ type: 'BODY', text: normalized.body });
+  }
   if (normalized.footer) components.push({ type: 'FOOTER', text: normalized.footer });
 
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/message_templates`);
@@ -198,23 +237,33 @@ export type WhatsAppSendableTemplate = {
   language: string;
   category: string | null;
   body: string;
+  /** How many of the fixed variables ({{1}} to {{3}}) the body uses. */
+  variables: number;
 };
 
 /**
- * A template can be sent with one click only when Meta approved it and it needs nothing filled
- * in: text only, no variables. Anything else is left out instead of being sent incomplete.
+ * A template can be sent with one click when Meta approved it and FlipForm can fill everything it
+ * needs: text only, and variables only the fixed ones in the body. Anything else is left out
+ * instead of being sent incomplete.
  */
 export function toSendableWhatsAppTemplate(raw: any): WhatsAppSendableTemplate | null {
   const name = asString(raw?.name);
   const language = asString(raw?.language);
   if (!name || !language || asString(raw?.status)?.toUpperCase() !== 'APPROVED') return null;
   const components: any[] = Array.isArray(raw?.components) ? raw.components : [];
-  if (JSON.stringify(components).includes('{{')) return null;
+  const fixedParts = components.filter(component => asString(component?.type)?.toUpperCase() !== 'BODY');
+  if (JSON.stringify(fixedParts).includes('{{')) return null;
   const header = components.find(component => asString(component?.type)?.toUpperCase() === 'HEADER');
   if (header && asString(header?.format)?.toUpperCase() !== 'TEXT') return null;
   const body = asString(components.find(component => asString(component?.type)?.toUpperCase() === 'BODY')?.text);
   if (!body) return null;
-  return { name, language, category: asString(raw?.category)?.toUpperCase() || null, body };
+  let variables: number[];
+  try {
+    variables = templateBodyVariables(body);
+  } catch {
+    return null;
+  }
+  return { name, language, category: asString(raw?.category)?.toUpperCase() || null, body, variables: variables.length };
 }
 
 export async function listSendableWhatsAppTemplates(input: {

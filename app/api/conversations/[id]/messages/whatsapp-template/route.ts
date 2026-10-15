@@ -4,6 +4,8 @@ import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { enqueueAndDispatchWhatsAppTextMessage, WhatsAppOutboundError } from '@/lib/meta/whatsapp-outbound';
 import { loadSendableWhatsAppTemplates, WhatsAppSendableTemplatesError } from '@/lib/meta/whatsapp-sendable-templates';
+import { fillTemplateVariables } from '@/lib/meta/whatsapp-templates';
+import { resolveWhatsAppTemplateValues } from '@/lib/meta/whatsapp-template-values';
 
 const bodySchema = z.object({
   templateName: z.string().trim().min(1).max(512).regex(/^[a-z0-9_]+$/),
@@ -31,13 +33,18 @@ export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextReq
       return NextResponse.json({ error: 'Este modelo não está aprovado pela Meta ou exige campos que ainda não são suportados.' }, { status: 409 });
     }
 
+    // The variables are filled by the server from the conversation's lead and the company.
+    const values = template.variables ? await resolveWhatsAppTemplateValues(session.tenantId, ctx.params.id) : [];
+    if (!values) return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
+    const parameters = values.slice(0, template.variables);
+
     const result = await enqueueAndDispatchWhatsAppTextMessage({
       tenantId: session.tenantId,
       conversationId: ctx.params.id,
       requestedByUserId: session.userId,
-      text: template.body,
+      text: fillTemplateVariables(template.body, parameters),
       idempotencyKey: parsed.data.idempotencyKey,
-      template: { name: template.name, language: template.language },
+      template: { name: template.name, language: template.language, ...(parameters.length ? { parameters } : {}) },
     });
     if (result.status === 'failed') {
       return NextResponse.json({ error: 'A Meta recusou o envio do modelo ou a conexão do WhatsApp não está disponível.', result }, { status: 502 });

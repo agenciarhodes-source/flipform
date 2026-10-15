@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { WHATSAPP_TEMPLATE_VARIABLES } from '@/lib/meta/whatsapp-template-variables';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -123,8 +124,8 @@ export function WhatsAppTemplatesCard() {
       toast.error('Escreva o texto principal do modelo.');
       return;
     }
-    if ([header, body, footer].some(text => text.includes('{{') || text.includes('}}'))) {
-      toast.error('Nesta primeira versão, crie o modelo sem variáveis como {{1}}.');
+    if ([header, footer].some(text => text.includes('{{') || text.includes('}}'))) {
+      toast.error('Use variáveis apenas na mensagem, não no cabeçalho ou no rodapé.');
       return;
     }
 
@@ -204,7 +205,7 @@ export function WhatsAppTemplatesCard() {
         <div className="border-t pt-5">
           <div className="mb-4">
             <h3 className="font-semibold">Criar novo modelo</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Para o App Review, esta primeira versão cria modelos de texto sem variáveis. O modelo é enviado diretamente à Meta e não é copiado para o banco do FlipForm.</p>
+            <p className="mt-1 text-xs text-muted-foreground">O modelo é enviado diretamente à Meta e não é copiado para o banco do FlipForm. Para a Meta aceitar como Utilidade, cite dados da pessoa e do pedido dela usando as variáveis abaixo, que o FlipForm preenche sozinho no envio.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -236,6 +237,16 @@ export function WhatsAppTemplatesCard() {
               <span className="font-medium">Mensagem</span>
               <textarea value={body} onChange={event => setBody(event.target.value.slice(0, 1024))} maxLength={1024} rows={5} placeholder="Escreva a mensagem que será enviada para análise da Meta." className="w-full rounded border px-3 py-2 outline-none focus:ring-1 focus:ring-emerald-600" />
               <span className="block text-right text-xs text-muted-foreground">{body.length}/1024</span>
+              <span className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                Inserir variável:
+                {WHATSAPP_TEMPLATE_VARIABLES.map(variable => (
+                  <button key={variable.index} type="button" className="rounded-full border px-2 py-0.5 hover:bg-muted"
+                    onClick={() => setBody(current => `${current}${current && !current.endsWith(' ') ? ' ' : ''}{{${variable.index}}}`.slice(0, 1024))}>
+                    {`{{${variable.index}}}`} {variable.label}
+                  </button>
+                ))}
+              </span>
+              <span className="block text-xs text-muted-foreground">A mensagem não pode começar nem terminar com uma variável. Exemplo: Olá, {'{{1}}'}! Confirmamos sua solicitação enviada em {'{{2}}'}.</span>
             </label>
             <label className="space-y-1 text-sm md:col-span-2">
               <span className="font-medium">Rodapé <span className="font-normal text-muted-foreground">(opcional)</span></span>

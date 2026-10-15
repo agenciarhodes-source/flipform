@@ -10,6 +10,7 @@ import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import {
   createWhatsAppMessageTemplate,
   listWhatsAppMessageTemplates,
+  templateBodyVariables,
   WHATSAPP_TEMPLATE_CATEGORIES,
   WHATSAPP_TEMPLATE_LANGUAGES,
 } from '@/lib/meta/whatsapp-templates';
@@ -21,8 +22,21 @@ const CreateTemplateSchema = z.object({
   header: z.string().trim().max(60).optional().default(''),
   body: z.string().trim().min(1).max(1024),
   footer: z.string().trim().max(60).optional().default(''),
-}).strict().refine(value => ![value.header, value.body, value.footer].some(text => text.includes('{{') || text.includes('}}')), {
-  message: 'Nesta versão, crie um modelo sem variáveis como {{1}}.',
+}).strict().superRefine((value, ctx) => {
+  if ([value.header, value.footer].some(text => text.includes('{{') || text.includes('}}'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Use variáveis apenas na mensagem, não no cabeçalho ou no rodapé.' });
+    return;
+  }
+  try {
+    templateBodyVariables(value.body);
+  } catch (error) {
+    const message = error instanceof Error && /start or end/.test(error.message)
+      ? 'A mensagem não pode começar nem terminar com uma variável.'
+      : error instanceof Error && /next to each other/.test(error.message)
+        ? 'Separe as variáveis com texto entre elas.'
+        : 'Use apenas {{1}} (nome do lead), {{2}} (data do cadastro) e {{3}} (nome da empresa), em ordem.';
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  }
 });
 
 class WhatsAppTemplateContextError extends Error {
@@ -145,11 +159,13 @@ export const POST = withPermission('INTEGRATIONS_MANAGE', async (req: NextReques
 
   try {
     const context = await getTenantTemplateContext(session.tenantId);
+    const tenant = await prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { name: true } });
     const template = await createWhatsAppMessageTemplate({
       accessToken: context.accessToken,
       appSecret: context.appSecret,
       wabaId: context.wabaId,
       template: parsed.data,
+      companyName: tenant?.name,
     });
 
     // The template itself lives at Meta. We intentionally do not duplicate its
