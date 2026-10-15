@@ -347,6 +347,10 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <h3 className="font-heading text-sm font-semibold">Informações do lead</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><div className="text-muted-foreground">Origem</div><div className="font-medium">{formatLeadSource(lead.source)}</div></div>
+              <div>
+                <div className="text-muted-foreground">WhatsApp</div>
+                <div className="font-medium">{lead.whatsappConsentAt ? `Autorizou contato em ${formatDateTime(lead.whatsappConsentAt)}` : 'Autorização não registrada'}</div>
+              </div>
               {(lead.flipAiAgentName || lead.form?.name) && (
                 <div>
                   <div className="text-muted-foreground">{lead.flipAiAgentName ? 'Atendente de IA' : 'Formul\u00e1rio'}</div>

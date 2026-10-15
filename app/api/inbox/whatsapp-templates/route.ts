@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
+import { prisma } from '@/lib/prisma';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { loadSendableWhatsAppTemplates, WhatsAppSendableTemplatesError } from '@/lib/meta/whatsapp-sendable-templates';
 import { fillTemplateVariables } from '@/lib/meta/whatsapp-templates';
@@ -21,7 +22,14 @@ export const GET = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequ
     const conversationId = req.nextUrl.searchParams.get('conversationId')?.trim() || '';
     const accessible = conversationId ? await findAccessibleInboxConversation(session, conversationId) : null;
     const values = accessible ? await resolveWhatsAppTemplateValues(session.tenantId, accessible.id) : null;
+    const consent = accessible?.lead
+      ? await prisma.auditLog.findFirst({
+        where: { tenantId: session.tenantId, entityType: 'lead', entityId: accessible.lead.id, action: 'lead.contact_consent_recorded' },
+        select: { createdAt: true },
+      }).then((row) => (row ? 'granted' : 'not_recorded')).catch(() => 'not_recorded')
+      : 'not_recorded';
     return NextResponse.json({
+      consent,
       templates: templates.map((template) => ({
         ...template,
         preview: values ? fillTemplateVariables(template.body, values.slice(0, template.variables)) : template.body,

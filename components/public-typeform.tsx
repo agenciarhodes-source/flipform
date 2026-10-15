@@ -1,5 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
+import { contactConsentNotice } from '@/lib/whatsapp-consent';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -258,6 +259,9 @@ export function PublicTypeform({ form, onSubmit, previewMode }: Props) {
             </Button>
           </div>
           <div className="text-xs text-muted-foreground mt-4">Pergunta {step + 1} de {fields.length}</div>
+          {isLast ? (
+            <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{contactConsentNotice(form.tenantName)}</p>
+          ) : null}
         </div>
       </div>
     </div>
