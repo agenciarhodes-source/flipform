@@ -141,6 +141,7 @@ def test_dashboard_supports_up_to_eight_personalized_metrics_and_print_export():
     assert 'max={8}' in page
     assert 'Métricas da minha visão' in page
     assert 'Imprimir / Salvar PDF' in page
-    assert 'window.print()' in page
+    # The button opens the designed A4 report, which then opens the print dialog.
+    assert 'onClick={openPrintReport}' in page
     assert 'Escolha até {max} blocos' in picker
     assert 'Restaurar padrão' in picker

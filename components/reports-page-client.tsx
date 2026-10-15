@@ -10,7 +10,7 @@ import { StatCard } from '@/components/stat-card';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import {
   Users, Trophy, TrendingUp, AlertCircle, Clock, Target, FileSpreadsheet, Filter, Loader2, Inbox,
-  ListChecks, AlertTriangle, CheckCircle2,
+  ListChecks, AlertTriangle, CheckCircle2, Printer
 } from 'lucide-react';
 import { formatLeadSource } from '@/lib/leads';
 
@@ -159,12 +159,18 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
           <h1 className="font-heading text-2xl lg:text-3xl font-bold">Relatórios</h1>
           <p className="text-muted-foreground text-sm">Análise de performance comercial e operacional.</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+        <Button variant="outline" disabled={loading} title="Abrir o relatório diagramado para imprimir ou salvar em PDF."
+          onClick={() => window.open(`/report/reports?${qs}`, '_blank', 'noopener')}>
+          <Printer className="w-4 h-4 mr-2" />Imprimir / PDF
+        </Button>
         {canExport && (
           <Button onClick={downloadExcel} disabled={exporting || loading} data-testid="export-excel-btn" title="Baixar relatório formatado em XLSX.">
             {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileSpreadsheet className="w-4 h-4 mr-2" />}
             Exportar Excel
           </Button>
         )}
+        </div>
       </div>
 
       {/* Filtros */}
