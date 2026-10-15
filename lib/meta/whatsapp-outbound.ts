@@ -59,7 +59,7 @@ type OutboxMetadata = {
   template?: WhatsAppOutboundTemplate;
 };
 
-export type WhatsAppOutboundTemplate = { name: string; language: string };
+export type WhatsAppOutboundTemplate = { name: string; language: string; parameters?: string[] };
 
 function normalizeOutboundTemplate(template: WhatsAppOutboundTemplate | undefined) {
   if (!template) return undefined;
@@ -68,7 +68,11 @@ function normalizeOutboundTemplate(template: WhatsAppOutboundTemplate | undefine
   if (!/^[a-z0-9_]{1,512}$/.test(name) || !/^[a-z]{2,3}(_[A-Z]{2})?$/.test(language)) {
     throw new WhatsAppOutboundError('INVALID_REQUEST', 'WhatsApp template is invalid');
   }
-  return { name, language };
+  const parameters = template.parameters || [];
+  if (parameters.length > 3 || parameters.some(value => typeof value !== 'string' || !value.trim() || value.length > 200 || /[\r\n\t]/.test(value))) {
+    throw new WhatsAppOutboundError('INVALID_REQUEST', 'WhatsApp template parameters are invalid');
+  }
+  return parameters.length ? { name, language, parameters } : { name, language };
 }
 
 function sha256(value: string) {
@@ -212,7 +216,7 @@ async function enqueueWhatsAppTextMessage(input: {
   const connection = await resolveConnectedWhatsAppConnection(tenantId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
   const fingerprint = requestFingerprint(conversationId,
-    template ? `template\u0000${template.name}\u0000${template.language}` : text);
+    template ? `template\u0000${template.name}\u0000${template.language}\u0000${(template.parameters || []).join('\u0001')}` : text);
   const idempotencyKeyHash = sha256(idempotencyKey);
 
   const existing = await findExistingOutboxMessage(tenantId, externalMessageId);
@@ -502,8 +506,10 @@ async function sendMetaWhatsAppText(input: {
   accessToken: string;
 }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`);
+  const parameters = input.template?.parameters || [];
   const content = input.template
-    ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language } } }
+    ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language },
+      ...(parameters.length ? { components: [{ type: 'body', parameters: parameters.map(value => ({ type: 'text', text: value })) }] } : {}) } }
     : { type: 'text', text: { preview_url: false, body: input.text } };
   let response: Response;
   try {

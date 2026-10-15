@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { loadSendableWhatsAppTemplates, WhatsAppSendableTemplatesError } from '@/lib/meta/whatsapp-sendable-templates';
+import { fillTemplateVariables } from '@/lib/meta/whatsapp-templates';
+import { resolveWhatsAppTemplateValues } from '@/lib/meta/whatsapp-template-values';
+import { findAccessibleInboxConversation } from '@/lib/inbox/access';
 
 // The approved templates an attendant can send from the Inbox to start a conversation.
 export const GET = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session) => {
@@ -13,7 +16,17 @@ export const GET = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequ
   if (!rl.allowed) return rateLimitResponse(rl);
 
   try {
-    return NextResponse.json({ templates: await loadSendableWhatsAppTemplates(session.tenantId) });
+    const templates = await loadSendableWhatsAppTemplates(session.tenantId);
+    // With a conversation, each template comes with the exact text this person would receive.
+    const conversationId = req.nextUrl.searchParams.get('conversationId')?.trim() || '';
+    const accessible = conversationId ? await findAccessibleInboxConversation(session, conversationId) : null;
+    const values = accessible ? await resolveWhatsAppTemplateValues(session.tenantId, accessible.id) : null;
+    return NextResponse.json({
+      templates: templates.map((template) => ({
+        ...template,
+        preview: values ? fillTemplateVariables(template.body, values.slice(0, template.variables)) : template.body,
+      })),
+    });
   } catch (error) {
     if (error instanceof WhatsAppSendableTemplatesError && error.code === 'NOT_CONNECTED') {
       return NextResponse.json({ error: 'WhatsApp não conectado para esta empresa.' }, { status: 409 });

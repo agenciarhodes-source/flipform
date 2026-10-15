@@ -154,6 +154,8 @@ interface SendableTemplate {
   language: string;
   category: string | null;
   body: string;
+  /** The text this person would receive, with the variables filled in. */
+  preview?: string;
 }
 
 const WHATSAPP_SERVICE_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -202,6 +204,7 @@ export function InboxClient({
   const [templates, setTemplates] = useState<SendableTemplate[] | null>(null);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [templateKey, setTemplateKey] = useState('');
+  const [templatesFor, setTemplatesFor] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const requestedConversationIdRef = useRef<string | null>(null);
@@ -213,11 +216,15 @@ export function InboxClient({
   const chosenTemplate = templates?.find((template) => `${template.name}:${template.language}` === templateKey) || null;
 
   useEffect(() => {
-    if (!needsTemplate || templates !== null) return;
+    if (!needsTemplate || !selected || templatesFor === selected.id) return;
+    const conversationId = selected.id;
+    setTemplatesFor(conversationId);
+    setTemplates(null);
     let cancelled = false;
     (async () => {
       try {
-        const response = await fetch('/api/inbox/whatsapp-templates', { cache: 'no-store' });
+        // The previews are filled in for this conversation: name, date of the lead and company.
+        const response = await fetch(`/api/inbox/whatsapp-templates?conversationId=${encodeURIComponent(conversationId)}`, { cache: 'no-store' });
         const data = await response.json().catch(() => ({}));
         if (cancelled) return;
         if (!response.ok) {
@@ -237,7 +244,7 @@ export function InboxClient({
       }
     })();
     return () => { cancelled = true; };
-  }, [needsTemplate, templates]);
+  }, [needsTemplate, selected, templatesFor]);
 
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -672,7 +679,7 @@ export function InboxClient({
                             ))}
                           </select>
                           {chosenTemplate && (
-                            <p className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm">{chosenTemplate.body}</p>
+                            <p className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm">{chosenTemplate.preview || chosenTemplate.body}</p>
                           )}
                           <Button type="button" onClick={() => void sendTemplate()} disabled={sending || !chosenTemplate}>
                             {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

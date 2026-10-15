@@ -28,7 +28,7 @@ def test_idempotency_is_tenant_scoped_and_payload_bound():
     src = read(OUTBOUND)
     assert "sha256(`${tenantId}\\u0000${idempotencyKey}`)" in src
     assert "requestFingerprint(conversationId," in src
-    assert "template ? `template\\u0000${template.name}\\u0000${template.language}` : text);" in src
+    assert "template ? `template\\u0000${template.name}\\u0000${template.language}\\u0000${(template.parameters || []).join('\\u0001')}` : text);" in src
     assert "IDEMPOTENCY_CONFLICT" in src
     assert "externalMessageId" in src
     assert "direction: 'outbound'" in src
