@@ -1,16 +1,12 @@
 /**
- * The person's own authorization, given in the form, for the company to contact them on WhatsApp.
- * Meta requires it before a business writes first; it names the channel and the company.
+ * Sending a form is the person's authorization for the company to contact them on WhatsApp about
+ * that request. Meta accepts any clear opt-in that names the channel and the company; the notice
+ * below the form says both, and each submission is recorded with the exact text shown.
  */
-export const WHATSAPP_CONSENT_FIELD_TYPE = 'whatsapp_consent';
-export const WHATSAPP_CONSENT_VALUE = 'Autorizado';
+export const CONTACT_CONSENT_ACTION = 'lead.contact_consent_recorded';
+export const CONTACT_CONSENT_NOTICE_VERSION = '2026-10-15';
 
-export function whatsappConsentText(companyName?: string | null) {
+export function contactConsentNotice(companyName?: string | null) {
   const company = companyName?.trim() || 'a empresa';
-  return `Autorizo ${company} a entrar em contato comigo pelo WhatsApp sobre esta solicitação.`;
-}
-
-/** Only an explicit "checked" counts; anything else is no authorization. */
-export function normalizeWhatsappConsent(value: unknown) {
-  return value === true || value === WHATSAPP_CONSENT_VALUE ? WHATSAPP_CONSENT_VALUE : null;
+  return `Ao enviar, você autoriza ${company} a entrar em contato com você pelo WhatsApp sobre esta solicitação. Seus dados não são compartilhados com terceiros.`;
 }

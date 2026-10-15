@@ -23,8 +23,8 @@ export const GET = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequ
     const accessible = conversationId ? await findAccessibleInboxConversation(session, conversationId) : null;
     const values = accessible ? await resolveWhatsAppTemplateValues(session.tenantId, accessible.id) : null;
     const consent = accessible?.lead
-      ? await prisma.leadAnswer.findFirst({
-        where: { leadId: accessible.lead.id, field: { fieldType: 'whatsapp_consent' }, answer: { equals: 'Autorizado' } },
+      ? await prisma.auditLog.findFirst({
+        where: { tenantId: session.tenantId, entityType: 'lead', entityId: accessible.lead.id, action: 'lead.contact_consent_recorded' },
         select: { createdAt: true },
       }).then((row) => (row ? 'granted' : 'not_recorded')).catch(() => 'not_recorded')
       : 'not_recorded';

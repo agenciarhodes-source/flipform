@@ -684,9 +684,9 @@ export function InboxClient({
                             <p className="whitespace-pre-wrap rounded-md border bg-background px-3 py-2 text-sm">{chosenTemplate.preview || chosenTemplate.body}</p>
                           )}
                           {templateConsent === 'granted' ? (
-                            <p className="text-xs text-emerald-700">Este lead autorizou contato pelo WhatsApp no formulário.</p>
+                            <p className="text-xs text-emerald-700">Este lead autorizou contato pelo WhatsApp ao enviar o formulário.</p>
                           ) : templateConsent === 'not_recorded' ? (
-                            <p className="text-xs text-amber-800">Este contato não marcou a autorização de WhatsApp no formulário.</p>
+                            <p className="text-xs text-amber-800">Não há autorização de WhatsApp registrada para este contato (ele não veio de formulário).</p>
                           ) : null}
                           <Button type="button" onClick={() => void sendTemplate()} disabled={sending || !chosenTemplate}>
                             {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

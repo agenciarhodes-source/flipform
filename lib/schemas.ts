@@ -32,7 +32,6 @@ export const fieldTypeEnum = z.enum([
   'single_select',
   'multi_select',
   'checkbox',
-  'whatsapp_consent',
   'dropdown',
   'rating',
   'file',

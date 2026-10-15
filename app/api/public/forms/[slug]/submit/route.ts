@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { normalizeWhatsappConsent, WHATSAPP_CONSENT_FIELD_TYPE } from '@/lib/whatsapp-consent';
+import { CONTACT_CONSENT_ACTION, CONTACT_CONSENT_NOTICE_VERSION, contactConsentNotice } from '@/lib/whatsapp-consent';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
@@ -57,7 +57,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         fields: { orderBy: { orderIndex: 'asc' } },
         pipeline: { select: { id: true, isArchived: true } },
         initialStage: { select: { id: true, isArchived: true, name: true } },
-        tenant: { select: { id: true, status: true } },
+        tenant: { select: { id: true, status: true, name: true } },
       },
     });
     if (!form) {
@@ -90,8 +90,7 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
         return {
           fieldId: f.id,
           label: f.label, // sempre derivamos do servidor
-          // A autorização de WhatsApp só vale quando a pessoa marcou a caixa.
-          value: f.fieldType === WHATSAPP_CONSENT_FIELD_TYPE ? normalizeWhatsappConsent(a.value) : a.value,
+          value: a.value,
           fieldType: f.fieldType,
         };
       });
@@ -320,6 +319,17 @@ export async function POST(req: Request, ctx: { params: { slug: string } }) {
       tenantId: form.tenantId, userId: null,
       entityType: 'form', entityId: form.id, action: 'form.submitted',
       metadata: { leadId: lead.id, source: 'public_form', leadSource, slug, leadCreated, repeatedSubmission: !leadCreated },
+    });
+    // Sending the form is the authorization to be contacted on WhatsApp, with the notice shown below it.
+    await logAudit({
+      tenantId: form.tenantId, userId: null,
+      entityType: 'lead', entityId: lead.id, action: CONTACT_CONSENT_ACTION,
+      metadata: {
+        formId: form.id,
+        channel: 'whatsapp',
+        notice: contactConsentNotice(form.tenant.name),
+        noticeVersion: CONTACT_CONSENT_NOTICE_VERSION,
+      },
     });
     if (leadCreated) {
       await logAudit({
