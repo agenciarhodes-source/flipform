@@ -20,3 +20,9 @@ def test_message_notifications_follow_inbox_visibility_and_open_the_conversation
     shell = read("components/app-shell.tsx")
     assert "<MessageNotificationCenter tenantId={session.tenantId} userId={session.userId} />" in shell
     assert "tests/notification-message-feed.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_inbox_can_show_only_unread_conversations():
+    inbox = read("app/(app)/inbox/inbox-client.tsx")
+    assert "const scoped = onlyUnread ? conversations.filter((conversation) => conversation.unreadCount > 0) : conversations;" in inbox
+    assert "Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}" in inbox

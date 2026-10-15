@@ -195,6 +195,7 @@ export function InboxClient({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [search, setSearch] = useState('');
+  const [onlyUnread, setOnlyUnread] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
@@ -248,10 +249,12 @@ export function InboxClient({
     return () => { cancelled = true; };
   }, [needsTemplate, selected, templatesFor]);
 
+  const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
-    if (!term) return conversations;
-    return conversations.filter((conversation) => {
+    const scoped = onlyUnread ? conversations.filter((conversation) => conversation.unreadCount > 0) : conversations;
+    if (!term) return scoped;
+    return scoped.filter((conversation) => {
       const haystack = [
         contactName(conversation),
         conversation.externalContactIdentity.phone,
@@ -265,7 +268,7 @@ export function InboxClient({
         .toLocaleLowerCase('pt-BR');
       return haystack.includes(term);
     });
-  }, [conversations, search]);
+  }, [conversations, search, onlyUnread]);
 
   function selectConversation(conversationId: string | null) {
     selectedIdRef.current = conversationId;
@@ -499,6 +502,12 @@ export function InboxClient({
                 className="pl-9"
               />
             </div>
+            <div className="mt-2 flex gap-2" role="group" aria-label="Filtrar conversas">
+              <Button type="button" size="sm" variant={onlyUnread ? 'outline' : 'default'} onClick={() => setOnlyUnread(false)}>Todas</Button>
+              <Button type="button" size="sm" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread(true)}>
+                Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}
+              </Button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -507,8 +516,8 @@ export function InboxClient({
             ) : filteredConversations.length === 0 ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <MessageSquareText className="h-9 w-9 opacity-40" />
-                <div className="text-sm font-medium text-foreground">Nenhuma conversa encontrada</div>
-                <div className="max-w-56 text-xs">As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.</div>
+                <div className="text-sm font-medium text-foreground">{onlyUnread && !search.trim() ? 'Nenhuma conversa não lida' : 'Nenhuma conversa encontrada'}</div>
+                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : 'As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.'}</div>
               </div>
             ) : (
               filteredConversations.map((conversation) => {
