@@ -261,6 +261,7 @@ export function InboxClient({
   const endRef = useRef<HTMLDivElement | null>(null);
   const selectedIdRef = useRef<string | null>(null);
   const requestedConversationIdRef = useRef<string | null>(null);
+  const templatesRequestRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
   const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp : false;
@@ -271,15 +272,18 @@ export function InboxClient({
   useEffect(() => {
     if (!needsTemplate || !selected || templatesFor === selected.id) return;
     const conversationId = selected.id;
+    // Only the latest request counts. This is not tied to the effect's cleanup: the effect runs
+    // again right away because templatesFor changes, and that used to discard the answer.
+    templatesRequestRef.current = conversationId;
     setTemplatesFor(conversationId);
     setTemplates(null);
-    let cancelled = false;
+    setTemplatesError(null);
     (async () => {
       try {
         // The previews are filled in for this conversation: name, date of the lead and company.
         const response = await fetch(`/api/inbox/whatsapp-templates?conversationId=${encodeURIComponent(conversationId)}`, { cache: 'no-store' });
         const data = await response.json().catch(() => ({}));
-        if (cancelled) return;
+        if (templatesRequestRef.current !== conversationId) return;
         if (!response.ok) {
           setTemplatesError(data.error || 'Não foi possível carregar os modelos do WhatsApp.');
           setTemplates([]);
@@ -291,13 +295,12 @@ export function InboxClient({
         setTemplatesError(null);
         if (loaded[0]) setTemplateKey(`${loaded[0].name}:${loaded[0].language}`);
       } catch {
-        if (!cancelled) {
+        if (templatesRequestRef.current === conversationId) {
           setTemplatesError('Não foi possível carregar os modelos do WhatsApp.');
           setTemplates([]);
         }
       }
     })();
-    return () => { cancelled = true; };
   }, [needsTemplate, selected, templatesFor]);
 
   const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
@@ -400,9 +403,12 @@ export function InboxClient({
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
       let next = all.filter((conversation) => conversation.channel === 'whatsapp');
       const requestedId = requestedConversationIdRef.current;
+      // A conversation just started from a lead has no message yet, so it is not among the most
+      // recent ones; keep the open one on the list instead of jumping to another conversation.
+      const keepId = requestedId || selectedIdRef.current;
 
-      if (requestedId && !next.some((conversation) => conversation.id === requestedId)) {
-        const directResponse = await fetch(`/api/inbox/conversations/${encodeURIComponent(requestedId)}/messages`, { cache: 'no-store' });
+      if (keepId && !next.some((conversation) => conversation.id === keepId)) {
+        const directResponse = await fetch(`/api/inbox/conversations/${encodeURIComponent(keepId)}/messages`, { cache: 'no-store' });
         if (directResponse.ok) {
           const directData = await directResponse.json();
           const directConversation = directData.conversation as Omit<InboxConversation, 'messages'> | undefined;
@@ -469,6 +475,8 @@ export function InboxClient({
     setConversations((current) => current.map((conversation) => (
       conversation.id === conversationId ? { ...conversation, unreadCount: 0 } : conversation
     )));
+    // The message icon in the top bar updates right away.
+    window.dispatchEvent(new Event('flipform:inbox-read'));
   }
 
   useEffect(() => {

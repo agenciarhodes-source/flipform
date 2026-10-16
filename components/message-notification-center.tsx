@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { MessageNotification, MessageNotificationCursor } from '@/lib/notifications/message-feed';
+import type {
+  MessageNotification, MessageNotificationCursor, UnreadConversationNotification,
+} from '@/lib/notifications/message-feed';
 
 const POLL_MS = 10_000;
-const MAX_KEPT = 30;
 
 function read<T>(key: string, fallback: T): T {
   try {
@@ -25,12 +26,16 @@ function store(key: string, value: unknown) {
   try { window.localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
 
-function when(value: string) {
-  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
-  if (minutes < 1) return 'agora';
-  if (minutes < 60) return `há ${minutes} min`;
+/** "há 3 h · 14:05", or with the day when it was not today: "há 2 d · 14/10 09:30". */
+function when(value: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `há ${hours} h` : `há ${Math.floor(hours / 24)} d`;
+  const ago = minutes < 1 ? 'agora' : minutes < 60 ? `há ${minutes} min` : hours < 24 ? `há ${hours} h` : `há ${Math.floor(hours / 24)} d`;
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const today = date.toDateString() === new Date().toDateString();
+  return `${ago} · ${today ? time : `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${time}`}`;
 }
 
 function playChime() {
@@ -52,27 +57,28 @@ function playChime() {
   }
 }
 
-/** Tells the attendant about new customer messages; a click opens that conversation in the Inbox. */
+/**
+ * The unread conversations of the Inbox, one per customer with how many messages are waiting.
+ * The number stays until each conversation is opened; new messages also ring and show a notice.
+ */
 export function MessageNotificationCenter({ tenantId, userId }: { tenantId: string; userId: string }) {
-  const keys = useMemo(() => ({
-    cursor: `flipform:message-notifications:cursor:${tenantId}:${userId}`,
-    items: `flipform:message-notifications:items:${tenantId}:${userId}`,
-    seen: `flipform:message-notifications:seen:${tenantId}:${userId}`,
-  }), [tenantId, userId]);
-  const [items, setItems] = useState<MessageNotification[]>([]);
-  const [seen, setSeen] = useState<string[]>([]);
+  const cursorKey = useMemo(() => `flipform:message-notifications:cursor:${tenantId}:${userId}`, [tenantId, userId]);
+  const [unread, setUnread] = useState<{ total: number; items: UnreadConversationNotification[] }>({ total: 0, items: [] });
   const cursorRef = useRef<MessageNotificationCursor | null>(null);
   const busyRef = useRef(false);
-  const itemsRef = useRef<MessageNotification[]>([]);
 
-  const open = useCallback((item: MessageNotification) => {
-    setSeen((current) => {
-      const next = Array.from(new Set([...current, item.id])).slice(-200);
-      store(keys.seen, next);
-      return next;
-    });
-    window.location.assign(item.href);
-  }, [keys.seen]);
+  const go = useCallback((href: string) => { window.location.assign(href); }, []);
+
+  const refreshUnread = useCallback(async () => {
+    try {
+      const response = await fetch('/api/notifications/unread-conversations', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json() as { total: number; items: UnreadConversationNotification[] };
+      setUnread({ total: data.total || 0, items: Array.isArray(data.items) ? data.items : [] });
+    } catch {
+      // Keeps the last list when the network fails.
+    }
+  }, []);
 
   const announce = useCallback((fresh: MessageNotification[]) => {
     const params = new URLSearchParams(window.location.search);
@@ -86,18 +92,18 @@ export function MessageNotificationCenter({ tenantId, userId }: { tenantId: stri
       toast(`Nova mensagem de ${item.contact}`, {
         description: item.preview,
         duration: 10_000,
-        action: { label: 'Abrir', onClick: () => open(item) },
+        action: { label: 'Abrir', onClick: () => go(item.href) },
       });
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
         try {
           const notification = new Notification(`Nova mensagem de ${item.contact}`, { body: item.preview, tag: `conversation-${item.conversationId}` });
-          notification.onclick = () => { window.focus(); open(item); };
+          notification.onclick = () => { window.focus(); go(item.href); };
         } catch {
           // The toast is enough when the browser refuses page notifications.
         }
       }
     }
-  }, [open]);
+  }, [go]);
 
   const poll = useCallback(async () => {
     if (busyRef.current) return;
@@ -110,77 +116,73 @@ export function MessageNotificationCenter({ tenantId, userId }: { tenantId: stri
         if (cursor.id) params.set('afterId', cursor.id);
       }
       const response = await fetch(`/api/notifications/messages${params.size ? `?${params.toString()}` : ''}`, { cache: 'no-store' });
-      if (!response.ok) return;
-      const feed = await response.json() as { items: MessageNotification[]; cursor: MessageNotificationCursor };
-      cursorRef.current = feed.cursor;
-      store(keys.cursor, feed.cursor);
-      const known = new Set(itemsRef.current.map((item) => item.id));
-      const fresh = feed.items.filter((item) => !known.has(item.id));
-      if (fresh.length) {
-        const next = [...itemsRef.current, ...fresh].slice(-MAX_KEPT);
-        itemsRef.current = next;
-        setItems(next);
-        store(keys.items, next);
-        announce(fresh);
+      if (response.ok) {
+        const feed = await response.json() as { items: MessageNotification[]; cursor: MessageNotificationCursor };
+        cursorRef.current = feed.cursor;
+        store(cursorKey, feed.cursor);
+        if (feed.items.length) announce(feed.items);
       }
+      await refreshUnread();
     } catch {
       // Notifications are a helper and never affect the conversations themselves.
     } finally {
       busyRef.current = false;
     }
-  }, [announce, keys.cursor, keys.items]);
+  }, [announce, cursorKey, refreshUnread]);
 
   useEffect(() => {
-    cursorRef.current = read<MessageNotificationCursor | null>(keys.cursor, null);
-    itemsRef.current = read<MessageNotification[]>(keys.items, []);
-    setItems(itemsRef.current);
-    setSeen(read<string[]>(keys.seen, []));
+    cursorRef.current = read<MessageNotificationCursor | null>(cursorKey, null);
     void poll();
     const timer = window.setInterval(() => void poll(), POLL_MS);
     const onFocus = () => void poll();
+    const onRead = () => void refreshUnread();
     window.addEventListener('focus', onFocus);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', onFocus); };
-  }, [keys, poll]);
+    window.addEventListener('flipform:inbox-read', onRead);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('flipform:inbox-read', onRead);
+    };
+  }, [cursorKey, poll, refreshUnread]);
 
-  const unread = items.filter((item) => !seen.includes(item.id));
-  const markAllSeen = () => {
-    if (!unread.length) return;
-    const next = Array.from(new Set([...seen, ...unread.map((item) => item.id)])).slice(-200);
-    setSeen(next);
-    store(keys.seen, next);
-  };
-  const recent = [...items].reverse();
+  const { total, items } = unread;
 
   return (
-    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) markAllSeen(); }}>
+    <DropdownMenu onOpenChange={(isOpen) => { if (isOpen) void refreshUnread(); }}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label={unread.length ? `${unread.length} mensagem(ns) nova(s)` : 'Mensagens'}>
+        <Button variant="ghost" size="icon" className="relative" aria-label={total ? `${total} conversa(s) não lida(s)` : 'Mensagens'}>
           <MessageCircle className="h-5 w-5" />
-          {unread.length > 0 && (
+          {total > 0 && (
             <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-emerald-600 px-1 text-[10px] font-semibold leading-[18px] text-white">
-              {unread.length > 9 ? '9+' : unread.length}
+              {total > 99 ? '99+' : total}
             </span>
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[340px] max-w-[calc(100vw-24px)] p-0">
+      <DropdownMenuContent align="end" className="w-[360px] max-w-[calc(100vw-24px)] p-0">
         <div className="p-3">
-          <DropdownMenuLabel className="p-0">Mensagens recebidas</DropdownMenuLabel>
+          <DropdownMenuLabel className="p-0">Conversas não lidas{total ? ` (${total})` : ''}</DropdownMenuLabel>
           <p className="text-xs text-muted-foreground">Clique para abrir a conversa na Inbox.</p>
         </div>
         <DropdownMenuSeparator className="m-0" />
-        {recent.length === 0 ? (
-          <p className="p-4 text-center text-sm text-muted-foreground">Nenhuma mensagem nova por enquanto.</p>
+        {items.length === 0 ? (
+          <p className="p-4 text-center text-sm text-muted-foreground">Nenhuma conversa não lida.</p>
         ) : (
-          <ul className="max-h-80 overflow-y-auto">
-            {recent.map((item) => (
-              <li key={item.id}>
-                <button type="button" onClick={() => open(item)} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">
+          <ul className="max-h-96 overflow-y-auto">
+            {items.map((item) => (
+              <li key={item.conversationId}>
+                <button type="button" onClick={() => go(item.href)} className="block w-full px-3 py-2 text-left text-sm hover:bg-muted">
                   <span className="flex items-center justify-between gap-2">
                     <span className="truncate font-medium">{item.contact}</span>
-                    <span className="shrink-0 text-[11px] text-muted-foreground">{when(item.createdAt)}</span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">{when(item.lastAt)}</span>
                   </span>
-                  <span className="block truncate text-xs text-muted-foreground">{item.preview}</span>
+                  <span className="mt-0.5 flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{item.preview}</span>
+                    <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[10px] font-semibold text-white"
+                      title={`${item.unreadCount} mensagem(ns) não lida(s)`}>
+                      {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                    </span>
+                  </span>
                 </button>
               </li>
             ))}

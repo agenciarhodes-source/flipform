@@ -11,6 +11,16 @@ export type MessageNotification = {
 
 export type MessageNotificationCursor = { createdAt: string; id: string | null };
 
+/** A conversation with messages nobody opened yet: one entry per customer, however many messages. */
+export type UnreadConversationNotification = {
+  conversationId: string;
+  contact: string;
+  preview: string;
+  unreadCount: number;
+  lastAt: string | null;
+  href: string;
+};
+
 export function messagePreview(type: string, text: string | null) {
   const clean = (text || '').replace(/\s+/g, ' ').trim();
   if (clean) return clean.length > 90 ? `${clean.slice(0, 87)}...` : clean;
