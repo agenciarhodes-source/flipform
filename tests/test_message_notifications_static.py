@@ -24,5 +24,5 @@ def test_message_notifications_follow_inbox_visibility_and_open_the_conversation
 
 def test_inbox_can_show_only_unread_conversations():
     inbox = read("app/(app)/inbox/inbox-client.tsx")
-    assert "const scoped = onlyUnread ? conversations.filter((conversation) => conversation.unreadCount > 0) : conversations;" in inbox
+    assert "(!onlyUnread || conversation.unreadCount > 0)" in inbox
     assert "Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}" in inbox

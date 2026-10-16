@@ -243,6 +243,7 @@ export function InboxClient({
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [search, setSearch] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const [onlyLeads, setOnlyLeads] = useState(false);
   const [leadModal, setLeadModal] = useState<{ leadId: string; stages: any[] } | null>(null);
   const [openingLead, setOpeningLead] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string; unread: boolean } | null>(null);
@@ -300,9 +301,11 @@ export function InboxClient({
   }, [needsTemplate, selected, templatesFor]);
 
   const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
+  const leadTotal = conversations.filter((conversation) => conversation.lead).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
-    const scoped = onlyUnread ? conversations.filter((conversation) => conversation.unreadCount > 0) : conversations;
+    // Unread and "with lead" combine: unread conversations of leads only.
+    const scoped = conversations.filter((conversation) => (!onlyUnread || conversation.unreadCount > 0) && (!onlyLeads || conversation.lead));
     if (!term) return scoped;
     return scoped.filter((conversation) => {
       const haystack = [
@@ -318,7 +321,7 @@ export function InboxClient({
         .toLocaleLowerCase('pt-BR');
       return haystack.includes(term);
     });
-  }, [conversations, search, onlyUnread]);
+  }, [conversations, search, onlyUnread, onlyLeads]);
 
   // Opens the card of the lead linked to the conversation; a conversation without a lead is
   // matched by phone first, so the attendant reaches the lead in one click.
@@ -611,9 +614,13 @@ export function InboxClient({
               />
             </div>
             <div className="mt-2 flex gap-2" role="group" aria-label="Filtrar conversas">
-              <Button type="button" size="sm" variant={onlyUnread ? 'outline' : 'default'} onClick={() => setOnlyUnread(false)}>Todas</Button>
-              <Button type="button" size="sm" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread(true)}>
+              <Button type="button" size="sm" variant={onlyUnread || onlyLeads ? 'outline' : 'default'} onClick={() => { setOnlyUnread(false); setOnlyLeads(false); }}>Todas</Button>
+              <Button type="button" size="sm" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread((value) => !value)}>
                 Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}
+              </Button>
+              <Button type="button" size="sm" variant={onlyLeads ? 'default' : 'outline'} onClick={() => setOnlyLeads((value) => !value)}
+                title="Só conversas de contatos que são leads no sistema">
+                Com lead{leadTotal ? ` (${leadTotal})` : ''}
               </Button>
             </div>
           </div>
@@ -625,7 +632,7 @@ export function InboxClient({
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <MessageSquareText className="h-9 w-9 opacity-40" />
                 <div className="text-sm font-medium text-foreground">{onlyUnread && !search.trim() ? 'Nenhuma conversa não lida' : 'Nenhuma conversa encontrada'}</div>
-                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : 'As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.'}</div>
+                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : onlyLeads ? 'Nenhuma conversa com lead vinculado neste filtro.' : 'As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.'}</div>
               </div>
             ) : (
               filteredConversations.map((conversation) => {
@@ -661,6 +668,11 @@ export function InboxClient({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        {conversation.lead ? (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800" title={`Lead: ${conversation.lead.name}`}>Lead</span>
+                        ) : (
+                          <span className="rounded bg-muted px-1.5 py-0.5">Sem lead</span>
+                        )}
                         <span>WhatsApp</span>
                         {conversation.assignee?.name && <><span>•</span><span className="truncate">{conversation.assignee.name}</span></>}
                         {conversation.status === 'resolved' && <><span>•</span><span>resolvida</span></>}
