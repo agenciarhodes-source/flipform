@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
+import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
@@ -135,7 +136,19 @@ async function assertRequesterCanSend(input: {
       user: { select: { name: true } },
     },
   });
-  if (!membership || !can(membership.role, 'LEADS_CONTACT_WHATSAPP')) {
+  // Someone who opens this company through its business group has no membership of their own
+  // in it; their role there comes from the group, exactly as when they switched into it.
+  let role = membership?.role || null;
+  let senderName = membership?.user.name || null;
+  if (!membership) {
+    const state = await getBusinessGroupAccessesForUser(prisma, input.userId);
+    const access = state.accesses.find((group) => group.tenants.some((tenant) => tenant.id === input.tenantId));
+    if (access) {
+      role = mapBusinessGroupRoleToTenantRole(access.role);
+      senderName = (await prisma.user.findUnique({ where: { id: input.userId }, select: { name: true } }))?.name || null;
+    }
+  }
+  if (!role || !can(role, 'LEADS_CONTACT_WHATSAPP')) {
     throw new WhatsAppOutboundError('FORBIDDEN', 'User cannot send WhatsApp messages');
   }
 
@@ -153,7 +166,7 @@ async function assertRequesterCanSend(input: {
   });
   if (!conversation) throw new WhatsAppOutboundError('NOT_FOUND', 'Conversation not found');
 
-  if (membership.role === 'agent') {
+  if (role === 'agent') {
     const ownsConversation = conversation.assignedTo === input.userId;
     const ownsLead = conversation.lead?.assignedTo === input.userId;
     if (!ownsConversation && !ownsLead) {
@@ -165,7 +178,7 @@ async function assertRequesterCanSend(input: {
     conversation,
     sender: {
       id: input.userId,
-      name: membership.user.name,
+      name: senderName || '',
     },
   };
 }
