@@ -170,6 +170,50 @@ function isServiceWindowOpen(lastInboundAt: string | null) {
   return Number.isFinite(last) && Date.now() - last < WHATSAPP_SERVICE_WINDOW_MS;
 }
 
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  image: 'Foto', audio: 'Mensagem de voz', video: 'Vídeo', document: 'Documento', sticker: 'Figurinha',
+  interactive: 'Resposta de botão', unknown: 'Mensagem em formato não suportado pela API (enquete, contato, localização ou similar)',
+};
+
+function messageMediaId(message: { metadata: unknown }) {
+  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as Record<string, unknown> : {};
+  return typeof metadata.mediaId === 'string' ? metadata.mediaId : null;
+}
+
+/** Shows the photo, audio, video or document of a message, read from Meta when the bubble appears. */
+function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (!messageMediaId(message)) return null;
+  const metadata = message.metadata as Record<string, unknown>;
+  const src = `/api/inbox/messages/${encodeURIComponent(message.id)}/media`;
+  const fileName = typeof metadata.mediaFileName === 'string' ? metadata.mediaFileName : 'Documento';
+  if (failed) {
+    return <p className="mb-1 text-xs italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Arquivo'} indisponível (a Meta guarda os arquivos por 30 dias).</p>;
+  }
+  if (message.type === 'image' || message.type === 'sticker') {
+    return (
+      <a href={src} target="_blank" rel="noreferrer" className="mb-1 block">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={message.type === 'sticker' ? 'Figurinha' : 'Foto enviada'} loading="lazy" onError={() => setFailed(true)}
+          className={`${message.type === 'sticker' ? 'h-28 w-28 object-contain' : 'max-h-72 w-auto max-w-full rounded-lg object-cover'}`} />
+      </a>
+    );
+  }
+  if (message.type === 'audio') {
+    return <audio controls preload="none" src={src} onError={() => setFailed(true)} className="mb-1 h-10 w-64 max-w-full" />;
+  }
+  if (message.type === 'video') {
+    return <video controls preload="none" src={src} onError={() => setFailed(true)} className="mb-1 max-h-72 max-w-full rounded-lg" />;
+  }
+  return (
+    <a href={`${src}?download=1`} className={`mb-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
+      <span aria-hidden="true">📄</span>
+      <span className="min-w-0 flex-1 truncate">{fileName}</span>
+      <span className="shrink-0 text-xs underline">Baixar</span>
+    </a>
+  );
+}
+
 function createIdempotencyKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -694,11 +738,12 @@ export function InboxClient({
                                 )}
                               </div>
                             )}
+                            <MessageMedia message={message} outbound={outbound} />
                             {message.text ? (
                               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
-                            ) : (
-                              <p className="text-sm italic opacity-75">Mensagem do tipo {message.type}</p>
-                            )}
+                            ) : !messageMediaId(message) ? (
+                              <p className="text-sm italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Mensagem sem texto'}</p>
+                            ) : null}
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outbound ? 'text-white/75' : 'text-muted-foreground'}`}>
                               <span>{formatMessageDate(message.providerTimestamp || message.createdAt)}</span>
                               {outbound && <MessageStatus status={message.status} />}

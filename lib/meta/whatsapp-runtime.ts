@@ -81,6 +81,8 @@ function normalizedMessageMetadata(input: { entryId: string | null; phoneNumberI
     ...(typeof message?.type === 'string' ? { providerType: message.type } : {}),
     ...(typeof message?.context?.id === 'string' ? { contextMessageId: message.context.id } : {}),
     ...(typeof media?.id === 'string' ? { mediaId: media.id } : {}),
+    ...(typeof media?.mime_type === 'string' ? { mediaMimeType: media.mime_type } : {}),
+    ...(typeof media?.filename === 'string' ? { mediaFileName: media.filename.slice(0, 200) } : {}),
     ...(typeof message?.interactive?.button_reply?.id === 'string' ? { interactiveReplyId: message.interactive.button_reply.id } : {}),
     ...(typeof message?.interactive?.list_reply?.id === 'string' ? { interactiveReplyId: message.interactive.list_reply.id } : {}),
   };
