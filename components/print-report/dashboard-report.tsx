@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   BarList, DailyColumns, formatHours, formatInt, formatMoneyCents, formatPercent, KpiGrid,
-  ReportDocument, ReportSection, ReportTable,
+  FunnelDrawing, ReportDocument, ReportSection, ReportTable,
 } from './report-kit';
 
 const PERIOD_LABELS: Record<string, string> = { today: 'Hoje', '7d': 'Últimos 7 dias', '30d': 'Últimos 30 dias', custom: 'Personalizado' };
@@ -76,14 +76,15 @@ export function DashboardReport({ tenantName, tenantLogoUrl }: { tenantName: str
         <DailyColumns days={(data?.leadsByDay || []).map((day: any) => ({ label: day.label, value: day.real || 0 }))} />
       </ReportSection>
 
-      <div className="grid grid-cols-2 gap-6">
-        <ReportSection title="Funil por etapa" description={funnelStages.length ? 'Leads em cada etapa do pipeline.' : 'Escolha um pipeline no Dashboard para ver as etapas.'}>
-          <BarList rows={funnelStages.map((stage: any) => ({ label: stage.name, value: stage.count || 0, color: stage.color || undefined }))} />
+      {funnelStages.length ? (
+        <ReportSection title="Funil do pipeline" description="Leads em cada etapa, na ordem do pipeline selecionado.">
+          <FunnelDrawing stages={funnelStages.map((stage: any) => ({ name: stage.name, count: stage.count || 0, color: stage.color || undefined }))} />
         </ReportSection>
-        <ReportSection title="Origem dos leads">
-          <BarList rows={(data?.sources || []).slice(0, 8).map((source: any) => ({ label: source.source, value: source.count || 0 }))} />
-        </ReportSection>
-      </div>
+      ) : null}
+
+      <ReportSection title="Origem dos leads">
+        <BarList rows={(data?.sources || []).slice(0, 8).map((source: any) => ({ label: source.source, value: source.count || 0 }))} />
+      </ReportSection>
 
       <ReportSection title="Financeiro do período" description="Vendas registradas no FlipForm.">
         <KpiGrid items={[
