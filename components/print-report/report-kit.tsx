@@ -152,6 +152,48 @@ export function BarList({ rows, emptyText = 'Sem dados no período.' }: { rows: 
   );
 }
 
+/**
+ * The pipeline drawn as a funnel: one band per stage, in pipeline order, narrowing to the bottom.
+ * The shape is fixed so it always reads as a funnel; each band carries its stage's real count.
+ */
+export function FunnelDrawing({ stages }: { stages: Array<{ name: string; count: number; color?: string }> }) {
+  if (!stages.length) return <p className="text-xs text-slate-500">Escolha um pipeline no Dashboard para ver as etapas.</p>;
+  const total = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const width = 680;
+  const funnelWidth = 380;
+  const center = funnelWidth / 2;
+  const bandHeight = 38;
+  const gap = 4;
+  const topWidth = funnelWidth;
+  const bottomWidth = 110;
+  const widthAt = (index: number) => topWidth - ((topWidth - bottomWidth) * index) / stages.length;
+  const height = stages.length * (bandHeight + gap);
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label="Funil por etapa">
+      {stages.map((stage, index) => {
+        const y = index * (bandHeight + gap);
+        const top = widthAt(index) / 2;
+        const bottom = widthAt(index + 1) / 2;
+        const color = stage.color || REPORT_COLORS[index % REPORT_COLORS.length];
+        const middle = y + bandHeight / 2;
+        return (
+          <g key={`${stage.name}-${index}`}>
+            <polygon points={`${center - top},${y} ${center + top},${y} ${center + bottom},${y + bandHeight} ${center - bottom},${y + bandHeight}`} fill={color} />
+            <text x={center} y={middle + 6} textAnchor="middle" fontSize="17" fontWeight="700" fill="#fff"
+              stroke="rgba(15,23,42,0.35)" strokeWidth="3" paintOrder="stroke">{formatInt(stage.count)}</text>
+            <line x1={center + (top + bottom) / 2 + 6} y1={middle} x2={funnelWidth + 24} y2={middle} stroke="#CBD5E1" strokeDasharray="3 3" />
+            <circle cx={funnelWidth + 30} cy={middle} r="5" fill={color} />
+            <text x={funnelWidth + 42} y={middle - 2} fontSize="13" fontWeight="600" fill="#1E293B">{stage.name.length > 30 ? `${stage.name.slice(0, 29)}…` : stage.name}</text>
+            <text x={funnelWidth + 42} y={middle + 13} fontSize="11" fill="#64748B">
+              {formatInt(stage.count)} {stage.count === 1 ? 'lead' : 'leads'} · {formatPercent(total ? (stage.count / total) * 100 : 0)} do total
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 /** Daily columns drawn in SVG, so they print exactly as shown. */
 export function DailyColumns({ days }: { days: Array<{ label: string; value: number; secondary?: number }> }) {
   if (!days.length) return <p className="text-xs text-slate-500">Sem dados no período.</p>;
