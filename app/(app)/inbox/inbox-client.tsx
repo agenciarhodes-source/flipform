@@ -129,6 +129,16 @@ function outboundSenderLabel(message: InboxMessageSummary) {
   return message.sentByUser?.name || 'WhatsApp da empresa';
 }
 
+/** "há 3 h (16/10, 18:13)": how long ago the customer last wrote, and when. */
+function lastCustomerMessageLabel(value: string) {
+  const date = new Date(value);
+  const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const ago = minutes < 1 ? 'agora' : minutes < 60 ? `há ${minutes} min` : hours < 24 ? `há ${hours} h` : `há ${Math.floor(hours / 24)} d`;
+  const when = date.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return `${ago} (${when})`;
+}
+
 function formatListDate(value: string | null | undefined) {
   if (!value) return '';
   const date = new Date(value);
@@ -718,6 +728,11 @@ export function InboxClient({
                       {selected.externalContactIdentity.phone || selected.externalContactIdentity.username || selected.externalContactIdentity.externalUserId}
                       {selected.lead ? ` • Lead: ${selected.lead.name}` : ' • Sem lead vinculado'}
                       <span className="text-brand-700">{openingLead ? ' • abrindo...' : selected.lead ? ' • ver lead' : ' • procurar lead'}</span>
+                    </div>
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {selected.lastInboundAt
+                        ? `Última mensagem do cliente ${lastCustomerMessageLabel(selected.lastInboundAt)}`
+                        : 'O cliente ainda não enviou mensagem'}
                     </div>
                   </div>
                 </button>

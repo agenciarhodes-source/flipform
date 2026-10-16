@@ -25,3 +25,8 @@ def test_templates_load_and_a_new_conversation_stays_open():
     inbox = read("app/(app)/inbox/inbox-client.tsx")
     assert "if (templatesRequestRef.current !== conversationId) return;" in inbox
     assert "const keepId = requestedId || selectedIdRef.current;" in inbox
+
+
+def test_conversation_header_says_when_the_customer_last_wrote():
+    inbox = read("app/(app)/inbox/inbox-client.tsx")
+    assert "`Última mensagem do cliente ${lastCustomerMessageLabel(selected.lastInboundAt)}`" in inbox
