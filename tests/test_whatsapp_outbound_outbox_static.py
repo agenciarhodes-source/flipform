@@ -103,8 +103,8 @@ def test_send_endpoint_accepts_only_text_and_idempotency_key():
 def test_agent_scope_is_enforced_again_in_service():
     src = read(OUTBOUND)
     assert "tenantUser.findFirst" in src
-    assert "can(membership.role, 'LEADS_CONTACT_WHATSAPP')" in src
-    assert "membership.role === 'agent'" in src
+    assert "can(role, 'LEADS_CONTACT_WHATSAPP')" in src
+    assert "role === 'agent'" in src
     assert "conversation.assignedTo === input.userId" in src
     assert "conversation.lead?.assignedTo === input.userId" in src
 
