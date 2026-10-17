@@ -201,11 +201,8 @@ export const POST = withPermission('INTEGRATIONS_MANAGE', async (req: NextReques
   }
 });
 
-// Deleting is permanent at Meta, so only the owner of the company can do it.
+// Deleting is permanent at Meta: owners and admins only (INTEGRATIONS_MANAGE), after confirming.
 export const DELETE = withPermission('INTEGRATIONS_MANAGE', async (req: NextRequest, session) => {
-  if (session.role !== 'owner') {
-    return NextResponse.json({ error: 'Apenas o dono da empresa pode excluir modelos do WhatsApp.' }, { status: 403 });
-  }
   const rl = rateLimit({
     key: `whatsapp-templates-delete:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
