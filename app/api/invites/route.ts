@@ -5,6 +5,7 @@ import { canManageRole, ROLE_LABELS_PT_BR } from '@/lib/rbac';
 import { logAudit, randomToken } from '@/lib/audit';
 import { inviteCreateSchema } from '@/lib/schemas-users';
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
+import { countPlanSeatUsers } from '@/lib/business-group-memberships';
 
 export const GET = withPermission('USERS_VIEW', async (_req, session) => {
   const invites = await prisma.invite.findMany({
@@ -38,7 +39,8 @@ export const POST = withPermission('USERS_INVITE', async (req, session) => {
     // limite de plano (usuários ativos + convites pendentes)
     const [tenant, activeUsers, pendingInvites] = await Promise.all([
       prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { plan: { select: { maxUsers: true } } } }),
-      prisma.tenantUser.count({ where: { tenantId: session.tenantId, status: 'active' } }),
+      // Gestores created by a business group do not take a seat of the plan.
+      countPlanSeatUsers(session.tenantId),
       prisma.invite.count({ where: { tenantId: session.tenantId, status: 'pending' } }),
     ]);
     const maxUsers = tenant?.plan?.maxUsers ?? 0;

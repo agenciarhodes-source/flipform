@@ -9,6 +9,7 @@ import {
   BusinessGroupError,
 } from '@/lib/business-groups';
 import { logPlatformAudit } from '@/lib/platform-audit';
+import { syncBusinessGroupMemberships } from '@/lib/business-group-memberships';
 
 const memberSchema = z.object({
   userId: z.string().uuid().optional(),
@@ -87,7 +88,20 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
       });
     }
 
-    return NextResponse.json({ ok: true });
+    // Group owners and admins get their own Gestor user in each company of the group.
+    const memberships = await syncBusinessGroupMemberships(prisma, { groupId: ctx.params.id, actorUserId: session.userId });
+    if (memberships.granted || memberships.revoked) {
+      await safeAudit({
+        tenantId: null,
+        userId: session.userId,
+        entityType: 'business_group',
+        entityId: ctx.params.id,
+        action: 'business_group.memberships_synced',
+        metadata: memberships,
+      });
+    }
+
+    return NextResponse.json({ ok: true, memberships });
   } catch (error) {
     return errorResponse(error);
   }

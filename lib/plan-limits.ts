@@ -1,11 +1,12 @@
 import { prisma } from './prisma';
+import { countPlanSeatUsers } from './business-group-memberships';
 
 export async function validateTenantWithinPlanLimits(tenantId: string, targetPlan: { maxUsers: number; maxForms: number; maxPipelines: number; maxLeadsPerMonth: number }) {
   const monthStart = new Date();
   monthStart.setDate(1); monthStart.setHours(0,0,0,0);
 
   const [users, forms, pipelines, leads] = await Promise.all([
-    prisma.tenantUser.count({ where: { tenantId, status: 'active' } }),
+    countPlanSeatUsers(tenantId),
     prisma.form.count({ where: { tenantId, isActive: true } }),
     prisma.pipeline.count({ where: { tenantId, isArchived: false } }),
     prisma.lead.count({ where: { tenantId, createdAt: { gte: monthStart } } }),
