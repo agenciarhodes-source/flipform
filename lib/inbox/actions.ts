@@ -2,7 +2,7 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { getInboxConversationWhere, type InboxSessionScope } from '@/lib/inbox/access';
+import { getInboxConversationWhere, withInboxScope, type InboxSessionScope } from '@/lib/inbox/access';
 
 export type InboxActionErrorCode =
   | 'NOT_FOUND'
@@ -65,7 +65,7 @@ async function findScopedConversation(
   const conversation = await tx.conversation.findFirst({
     where: {
       id: conversationId,
-      ...getInboxConversationWhere(session),
+      ...getInboxConversationWhere(await withInboxScope(session)),
     },
     select: {
       id: true,

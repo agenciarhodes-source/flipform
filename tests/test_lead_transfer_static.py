@@ -37,7 +37,7 @@ def test_portfolio_transfer_is_manager_only_moves_open_leads_with_conversations_
 
 def test_unanswered_alert_is_read_only_and_scoped_like_the_inbox():
     route = read("app/api/inbox/unanswered/route.ts")
-    assert "...getInboxConversationWhere(session)," in route
+    assert "...getInboxConversationWhere(await withInboxScope(session))," in route
     assert "withPermission('INBOX_VIEW'" in route
     for write in (".update(", ".create(", ".delete(", "updateMany", "createMany"):
         assert write not in route

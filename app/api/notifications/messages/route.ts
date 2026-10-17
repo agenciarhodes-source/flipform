@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { getInboxConversationWhere } from '@/lib/inbox/access';
+import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { messagePreview, type MessageNotification } from '@/lib/notifications/message-feed';
 
 const MAX_ITEMS = 30;
@@ -27,7 +27,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
       provider: 'meta',
       channel: { in: ['whatsapp', 'instagram'] },
       direction: 'inbound',
-      conversation: getInboxConversationWhere(session),
+      conversation: getInboxConversationWhere(await withInboxScope(session)),
       ...(afterId
         ? { OR: [{ createdAt: { gt: after } }, { createdAt: after, id: { gt: afterId } }] }
         : { createdAt: { gt: after } }),

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { getInboxConversationWhere } from '@/lib/inbox/access';
+import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { messagePreview, type UnreadConversationNotification } from '@/lib/notifications/message-feed';
 
 const MAX_ITEMS = 50;
@@ -12,7 +12,7 @@ const MAX_ITEMS = 50;
  */
 export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, session) => {
   const where = {
-    ...getInboxConversationWhere(session),
+    ...getInboxConversationWhere(await withInboxScope(session)),
     provider: 'meta',
     channel: { in: ['whatsapp', 'instagram'] },
     unreadCount: { gt: 0 },

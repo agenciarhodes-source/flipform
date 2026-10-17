@@ -26,6 +26,9 @@ export function IntegrationsClient() {
   const [showMetaToken, setShowMetaToken] = useState(false);
   const [whatsappAgentSignature, setWhatsappAgentSignature] = useState<any>({ mode: 'disabled', schemaReady: true });
   const [savingWhatsappAgentSignature, setSavingWhatsappAgentSignature] = useState(false);
+  const [attendants, setAttendants] = useState<any[]>([]);
+  const [unassignedViewers, setUnassignedViewers] = useState<string[]>([]);
+  const [savingUnassignedViewers, setSavingUnassignedViewers] = useState(false);
   const [form, setForm] = useState<any>({ provider: 'meta', eventName: 'Lead', enabled: true, currency: 'BRL' });
 
   function cleanSecretValue(value: string) {
@@ -66,6 +69,8 @@ export function IntegrationsClient() {
       setLogs(l.logs || []);
       setMetaConnection(m);
       if (w?.settings) setWhatsappAgentSignature(w.settings);
+      setAttendants(Array.isArray(w?.attendants) ? w.attendants : []);
+      setUnassignedViewers(Array.isArray(w?.settings?.unassignedViewerUserIds) ? w.settings.unassignedViewerUserIds : []);
       const firstPipeline = e.pipelines?.[0];
       const firstStage = firstPipeline?.stages?.[0];
       setForm((prev: any) => ({ ...prev, pipelineId: prev.pipelineId || firstPipeline?.id || '', stageId: prev.stageId || firstStage?.id || '' }));
@@ -134,6 +139,25 @@ export function IntegrationsClient() {
       toast.error(error.message || 'Erro ao salvar integrações.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function saveUnassignedViewers() {
+    setSavingUnassignedViewers(true);
+    try {
+      const response = await fetch('/api/inbox/whatsapp-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unassignedViewerUserIds: unassignedViewers }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível salvar quem vê as conversas sem responsável.');
+      setUnassignedViewers(data.settings?.unassignedViewerUserIds || []);
+      toast.success('Atendentes que veem conversas sem responsável atualizados.');
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível salvar quem vê as conversas sem responsável.');
+    } finally {
+      setSavingUnassignedViewers(false);
     }
   }
 
@@ -346,6 +370,43 @@ export function IntegrationsClient() {
         disabled={!whatsappAgentSignature.schemaReady || savingWhatsappAgentSignature}
       >
         {savingWhatsappAgentSignature ? 'Salvando...' : 'Salvar identificação'}
+      </button>
+    </div>
+
+    <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
+      <div>
+        <h2 className="font-semibold text-lg">Conversas sem responsável no WhatsApp</h2>
+        <p className="text-sm text-muted-foreground">
+          Escolha quais atendentes também veem as conversas que ainda não são de ninguém: números novos que não viraram lead, contatos antigos que voltaram a escrever e mensagens que não vieram de campanha. Ao responder ou clicar em Assumir, a conversa passa a ser dela.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">Cada atendente continua vendo só os próprios leads e conversas. Gestores, administradores e o dono já veem todas.</p>
+      </div>
+      {attendants.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhum atendente ativo cadastrado nesta empresa.</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {attendants.map((attendant: any) => (
+            <label key={attendant.id} className="flex items-center gap-2 rounded-md border p-2 text-sm">
+              <input
+                type="checkbox"
+                checked={unassignedViewers.includes(attendant.id)}
+                onChange={(event) => setUnassignedViewers((current) => event.target.checked
+                  ? Array.from(new Set([...current, attendant.id]))
+                  : current.filter((id) => id !== attendant.id))}
+              />
+              <span className="min-w-0 flex-1 truncate">{attendant.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{attendant.email}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        className="px-4 py-2 rounded bg-blue-600 text-white text-sm disabled:opacity-60"
+        onClick={saveUnassignedViewers}
+        disabled={savingUnassignedViewers || attendants.length === 0}
+      >
+        {savingUnassignedViewers ? 'Salvando...' : 'Salvar atendentes'}
       </button>
     </div>
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { getInboxConversationWhere } from '@/lib/inbox/access';
+import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { isWaitingForAnswer, UNANSWERED_AFTER_MINUTES, UNANSWERED_LOOKBACK_HOURS } from '@/lib/inbox/unanswered';
 
 /**
@@ -12,7 +12,7 @@ export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, sessio
   const now = new Date();
   const candidates = await prisma.conversation.findMany({
     where: {
-      ...getInboxConversationWhere(session),
+      ...getInboxConversationWhere(await withInboxScope(session)),
       provider: 'meta',
       channel: { in: ['whatsapp', 'instagram'] },
       status: { not: 'resolved' },

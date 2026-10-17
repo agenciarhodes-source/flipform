@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { getInboxConversationWhere } from '@/lib/inbox/access';
+import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 
 const ALLOWED_STATUS = new Set(['open', 'pending', 'resolved']);
 const ALLOWED_CHANNEL = new Set(['whatsapp', 'instagram']);
@@ -18,7 +18,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   const rawChannel = url.searchParams.get('channel')?.trim() || '';
 
   const where = {
-    ...getInboxConversationWhere(session),
+    ...getInboxConversationWhere(await withInboxScope(session)),
     provider: 'meta',
     channel: ALLOWED_CHANNEL.has(rawChannel)
       ? rawChannel
@@ -51,6 +51,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
           phone: true,
           email: true,
           assignedTo: true,
+          assignedUser: { select: { id: true, name: true } },
           pipelineId: true,
         },
       },

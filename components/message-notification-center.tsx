@@ -86,7 +86,8 @@ export function MessageNotificationCenter({ tenantId, userId }: { tenantId: stri
     const toAnnounce = fresh.filter((item) => item.conversationId !== viewing);
     if (!toAnnounce.length) return;
     playChime();
-    // One notice per conversation, with the latest message of each.
+    // One notice per conversation, with the latest message of each. Messages are announced only
+    // inside the system; the browser (Chrome) notification is kept for new leads alone.
     const latest = new Map(toAnnounce.map((item) => [item.conversationId, item]));
     for (const item of Array.from(latest.values()).slice(-3)) {
       toast(`Nova mensagem de ${item.contact}`, {
@@ -94,14 +95,6 @@ export function MessageNotificationCenter({ tenantId, userId }: { tenantId: stri
         duration: 10_000,
         action: { label: 'Abrir', onClick: () => go(item.href) },
       });
-      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-        try {
-          const notification = new Notification(`Nova mensagem de ${item.contact}`, { body: item.preview, tag: `conversation-${item.conversationId}` });
-          notification.onclick = () => { window.focus(); go(item.href); };
-        } catch {
-          // The toast is enough when the browser refuses page notifications.
-        }
-      }
     }
   }, [go]);
 

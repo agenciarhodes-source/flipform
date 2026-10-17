@@ -4,6 +4,8 @@ import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
+import { claimInboxConversation } from '@/lib/inbox/ownership';
+import { seesUnassignedConversations } from '@/lib/inbox/unassigned-viewers';
 import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
@@ -169,8 +171,13 @@ async function assertRequesterCanSend(input: {
   if (role === 'agent') {
     const ownsConversation = conversation.assignedTo === input.userId;
     const ownsLead = conversation.lead?.assignedTo === input.userId;
+    // A chosen attendant who answers a conversation nobody has takes it.
     if (!ownsConversation && !ownsLead) {
-      throw new WhatsAppOutboundError('FORBIDDEN', 'Agent cannot send in this conversation');
+      const mayClaim = await seesUnassignedConversations({ tenantId: input.tenantId, userId: input.userId, role });
+      const claim = mayClaim
+        ? await claimInboxConversation({ tenantId: input.tenantId, userId: input.userId, conversationId: conversation.id })
+        : 'taken';
+      if (claim === 'taken') throw new WhatsAppOutboundError('FORBIDDEN', 'Agent cannot send in this conversation');
     }
   }
 

@@ -31,7 +31,7 @@ def test_inbox_access_scope_is_tenant_safe_and_agents_are_assignment_scoped():
     assert "lead: { is: { assignedTo: session.userId } }" in src
     assert "findAccessibleInboxConversation" in src
     assert "id," in src
-    assert "...getInboxConversationWhere(session)" in src
+    assert "...getInboxConversationWhere(await withInboxScope(session))" in src
 
 
 def test_inbox_read_routes_use_server_session_permissions_and_effective_time():
@@ -40,7 +40,7 @@ def test_inbox_read_routes_use_server_session_permissions_and_effective_time():
     mark_read = read('app/api/inbox/conversations/[id]/read/route.ts')
 
     assert "withPermission('INBOX_VIEW'" in conversations
-    assert "getInboxConversationWhere(session)" in conversations
+    assert "getInboxConversationWhere(await withInboxScope(session))" in conversations
     assert "take: 100" in conversations
     assert "lastMessageAt: { sort: 'desc', nulls: 'last' }" in conversations
     assert "COALESCE(provider_timestamp, created_at) DESC" in conversations
