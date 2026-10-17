@@ -36,3 +36,10 @@ def test_integrations_lets_the_company_choose_the_attendants():
     inbox = read("app/(app)/inbox/inbox-client.tsx")
     assert "<OwnerBadge owner={conversationOwner(conversation, currentUserId)} />" in inbox
     assert "{claiming ? 'Assumindo...' : 'Assumir'}" in inbox
+
+
+def test_new_messages_are_announced_only_inside_the_system():
+    center = read("components/message-notification-center.tsx")
+    assert "new Notification(" not in center
+    assert "toast(`Nova mensagem de ${item.contact}`" in center
+    assert "showNotification" in read("public/lead-notification-sw.js")  # new leads still reach Chrome
