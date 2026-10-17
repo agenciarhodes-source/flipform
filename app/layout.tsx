@@ -15,7 +15,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR">
       <body>
         {children}
-        <Toaster richColors position="top-right" />
+        {/* Below the 64px top bar, so its buttons stay visible and clickable while a notice shows. */}
+        <Toaster richColors position="top-right" offset={{ top: 80, right: 16 }} mobileOffset={{ top: 72 }} />
       </body>
     </html>
   );
