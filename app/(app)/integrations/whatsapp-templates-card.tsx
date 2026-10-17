@@ -114,6 +114,35 @@ export function WhatsAppTemplatesCard() {
     rejected: templates.filter(item => item.status === 'REJECTED').length,
   }), [templates]);
 
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  async function deleteTemplate(template: Template) {
+    if (!template.id) return;
+    const confirmed = window.confirm(
+      `Excluir o modelo "${template.name}" (${template.language || 'sem idioma'}) na Meta?\n\n`
+      + 'A exclusão é definitiva. A Meta não deixa usar o mesmo nome de novo por 30 dias. '
+      + 'Mensagens já enviadas não são afetadas.',
+    );
+    if (!confirmed) return;
+    const key = `${template.name}:${template.language || ''}`;
+    setDeletingKey(key);
+    try {
+      const response = await fetch('/api/integrations/whatsapp/templates', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: template.id, name: template.name }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível excluir o modelo.');
+      setTemplates(current => current.filter(item => `${item.name}:${item.language || ''}` !== key));
+      toast.success(`Modelo ${template.name} excluído.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível excluir o modelo.');
+    } finally {
+      setDeletingKey(null);
+    }
+  }
+
   async function createTemplate() {
     const cleanName = name.trim().toLowerCase();
     if (!/^[a-z0-9_]+$/.test(cleanName)) {
@@ -197,7 +226,15 @@ export function WhatsAppTemplatesCard() {
               <p className="font-medium text-sm">{template.name}</p>
               <p className="mt-1 text-xs text-muted-foreground">{template.category || 'Sem categoria'} · {template.language || 'Idioma não informado'}</p>
             </div>
-            <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusClasses(template.status)}`}>{statusLabel(template.status)}</span>
+            <div className="flex items-center gap-2">
+              <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusClasses(template.status)}`}>{statusLabel(template.status)}</span>
+              {template.id && (
+                <button type="button" className="rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                  disabled={deletingKey !== null} onClick={() => void deleteTemplate(template)}>
+                  {deletingKey === `${template.name}:${template.language || ''}` ? 'Excluindo...' : 'Excluir'}
+                </button>
+              )}
+            </div>
           </div>)}
           {nextCursor && <button type="button" className="rounded border px-3 py-2 text-sm disabled:opacity-60" disabled={loadingMore} onClick={() => void load({ append: true, cursor: nextCursor })}>{loadingMore ? 'Carregando...' : 'Carregar mais'}</button>}
         </div>

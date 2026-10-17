@@ -9,6 +9,7 @@ import { validateWhatsAppSystemUserToken } from '@/lib/meta/whatsapp';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import {
   createWhatsAppMessageTemplate,
+  deleteWhatsAppMessageTemplate,
   listWhatsAppMessageTemplates,
   templateBodyVariables,
   WHATSAPP_TEMPLATE_CATEGORIES,
@@ -38,6 +39,11 @@ const CreateTemplateSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, message });
   }
 });
+
+const DeleteTemplateSchema = z.object({
+  id: z.string().trim().regex(/^\d{1,32}$/),
+  name: z.string().trim().min(1).max(512).regex(/^[a-z0-9_]+$/),
+}).strict();
 
 class WhatsAppTemplateContextError extends Error {
   constructor(message: string, readonly status: number) {
@@ -190,6 +196,49 @@ export const POST = withPermission('INTEGRATIONS_MANAGE', async (req: NextReques
     }
 
     return NextResponse.json({ template }, { status: 201 });
+  } catch (error) {
+    return safeProviderError(error);
+  }
+});
+
+// Deleting is permanent at Meta, so only the owner of the company can do it.
+export const DELETE = withPermission('INTEGRATIONS_MANAGE', async (req: NextRequest, session) => {
+  if (session.role !== 'owner') {
+    return NextResponse.json({ error: 'Apenas o dono da empresa pode excluir modelos do WhatsApp.' }, { status: 403 });
+  }
+  const rl = rateLimit({
+    key: `whatsapp-templates-delete:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
+    limit: 10,
+    windowMs: 10 * 60_000,
+  });
+  if (!rl.allowed) return rateLimitResponse(rl);
+
+  const parsed = DeleteTemplateSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Modelo inválido.' }, { status: 400 });
+
+  try {
+    const context = await getTenantTemplateContext(session.tenantId);
+    const result = await deleteWhatsAppMessageTemplate({
+      accessToken: context.accessToken,
+      appSecret: context.appSecret,
+      wabaId: context.wabaId,
+      id: parsed.data.id,
+      name: parsed.data.name,
+    });
+    if (!result.deleted) return NextResponse.json({ error: 'A Meta não confirmou a exclusão do modelo.' }, { status: 502 });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId: session.tenantId,
+        userId: session.userId,
+        entityType: 'whatsapp_message_template',
+        entityId: parsed.data.id,
+        action: 'WHATSAPP_TEMPLATE_DELETED',
+        metadata: { name: parsed.data.name },
+      },
+    }).catch(() => undefined);
+
+    return NextResponse.json({ ok: true });
   } catch (error) {
     return safeProviderError(error);
   }

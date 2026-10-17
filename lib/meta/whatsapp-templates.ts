@@ -42,7 +42,7 @@ function asString(value: unknown): string | null {
 
 async function metaJson(url: URL, operation: string, input: {
   accessToken: string;
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
 }) {
   let response: Response;
@@ -181,6 +181,31 @@ export async function listWhatsAppMessageTemplates(input: {
     : null;
 
   return { templates, nextCursor };
+}
+
+/**
+ * Deletes one template at Meta: the name and its id, so only that language goes. Meta does not
+ * let the same name be used again for 30 days, and messages already sent are not affected.
+ */
+export async function deleteWhatsAppMessageTemplate(input: {
+  accessToken: string;
+  appSecret: string;
+  wabaId: string;
+  id: string;
+  name: string;
+}) {
+  if (!/^\d+$/.test(input.wabaId)) throw new Error('Meta WhatsApp template WABA id is invalid');
+  if (!/^\d+$/.test(input.id) || !/^[a-z0-9_]+$/.test(input.name)) throw new Error('Meta WhatsApp template is invalid');
+
+  const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}/message_templates`);
+  url.search = new URLSearchParams({
+    hsm_id: input.id,
+    name: input.name,
+    appsecret_proof: createAppSecretProof(input.accessToken, input.appSecret),
+  }).toString();
+
+  const data = await metaJson(url, 'delete_message_template', { accessToken: input.accessToken, method: 'DELETE' });
+  return { deleted: data?.success === true };
 }
 
 export async function createWhatsAppMessageTemplate(input: {
