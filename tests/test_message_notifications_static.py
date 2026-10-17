@@ -10,7 +10,7 @@ def read(path):
 def test_message_notifications_follow_inbox_visibility_and_open_the_conversation():
     route = read("app/api/notifications/messages/route.ts")
     assert "withPermission('INBOX_VIEW'" in route
-    assert "conversation: getInboxConversationWhere(session)," in route
+    assert "conversation: getInboxConversationWhere(await withInboxScope(session))," in route
     assert "direction: 'inbound'," in route
     assert "href: `/inbox?conversationId=${encodeURIComponent(message.conversationId)}`," in route
     for write in (".update(", ".create(", ".delete(", "updateMany"):

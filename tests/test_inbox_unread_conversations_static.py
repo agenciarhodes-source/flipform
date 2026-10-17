@@ -10,7 +10,7 @@ def read(path):
 def test_message_icon_counts_unread_conversations_until_each_is_opened():
     route = read("app/api/notifications/unread-conversations/route.ts")
     assert "withPermission('INBOX_VIEW'" in route
-    assert "...getInboxConversationWhere(session)," in route
+    assert "...getInboxConversationWhere(await withInboxScope(session))," in route
     assert "unreadCount: { gt: 0 }," in route
     for write in (".create(", ".update(", ".delete("):
         assert write not in route

@@ -861,6 +861,8 @@ model TenantWhatsAppSettings {
   id                 String   @id @default(cuid())
   tenantId           String   @unique @map("tenant_id")
   agentSignatureMode String   @default("disabled") @map("agent_signature_mode")
+  /// Attendants who also see the conversations nobody has yet (new numbers, returning contacts).
+  unassignedViewerUserIds String[] @default([]) @map("unassigned_viewer_user_ids")
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 

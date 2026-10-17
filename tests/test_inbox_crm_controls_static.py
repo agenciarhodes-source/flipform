@@ -11,7 +11,7 @@ def test_inbox_crm_actions_are_tenant_scoped_and_locked():
     source = read("lib/inbox/actions.ts")
     assert "tenant_id = ${tenantId}" in source
     assert source.count("FOR UPDATE") >= 2
-    assert "getInboxConversationWhere(session)" in source
+    assert "getInboxConversationWhere(await withInboxScope(session))" in source
     assert "tenantId: input.session.tenantId" in source
 
 

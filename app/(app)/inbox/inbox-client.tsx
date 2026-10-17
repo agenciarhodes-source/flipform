@@ -34,6 +34,7 @@ interface InboxLead {
   phone: string | null;
   email: string | null;
   assignedTo: string | null;
+  assignedUser?: { id: string; name: string } | null;
   pipelineId?: string;
 }
 
@@ -224,6 +225,23 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   );
 }
 
+type ConversationOwner = { kind: 'mine' | 'other' | 'none'; name?: string };
+
+/** Whose the conversation is: the person it was given to, or the one who has its lead. */
+function conversationOwner(conversation: InboxConversation, userId: string): ConversationOwner {
+  const leadOwner = conversation.lead?.assignedTo || null;
+  if (conversation.assignedTo === userId || leadOwner === userId) return { kind: 'mine' };
+  if (conversation.assignedTo) return { kind: 'other', name: conversation.assignee?.name };
+  if (leadOwner) return { kind: 'other', name: conversation.lead?.assignedUser?.name };
+  return { kind: 'none' };
+}
+
+function OwnerBadge({ owner }: { owner: ConversationOwner }) {
+  if (owner.kind === 'mine') return <span className="rounded bg-emerald-600 px-1.5 py-0.5 font-semibold text-white">Sua</span>;
+  if (owner.kind === 'none') return <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">Sem responsável</span>;
+  return <span className="max-w-28 truncate rounded bg-slate-200 px-1.5 py-0.5 font-medium text-slate-700">Com {owner.name || 'outra pessoa'}</span>;
+}
+
 function createIdempotencyKey() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -243,10 +261,12 @@ export function InboxClient({
   canManage,
   canAssign,
   canSendWhatsApp,
+  currentUserId,
 }: {
   canManage: boolean;
   canAssign: boolean;
   canSendWhatsApp: boolean;
+  currentUserId: string;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -254,6 +274,8 @@ export function InboxClient({
   const [search, setSearch] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [onlyLeads, setOnlyLeads] = useState(false);
+  const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [leadModal, setLeadModal] = useState<{ leadId: string; stages: any[] } | null>(null);
   const [openingLead, setOpeningLead] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string; unread: boolean } | null>(null);
@@ -314,11 +336,13 @@ export function InboxClient({
   }, [needsTemplate, selected, templatesFor]);
 
   const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
+  const unassignedTotal = conversations.filter((conversation) => conversationOwner(conversation, currentUserId).kind === 'none').length;
   const leadTotal = conversations.filter((conversation) => conversation.lead).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
     // Unread and "with lead" combine: unread conversations of leads only.
-    const scoped = conversations.filter((conversation) => (!onlyUnread || conversation.unreadCount > 0) && (!onlyLeads || conversation.lead));
+    const scoped = conversations.filter((conversation) => (!onlyUnread || conversation.unreadCount > 0) && (!onlyLeads || conversation.lead)
+      && (!onlyUnassigned || conversationOwner(conversation, currentUserId).kind === 'none'));
     if (!term) return scoped;
     return scoped.filter((conversation) => {
       const haystack = [
@@ -334,7 +358,7 @@ export function InboxClient({
         .toLocaleLowerCase('pt-BR');
       return haystack.includes(term);
     });
-  }, [conversations, search, onlyUnread, onlyLeads]);
+  }, [conversations, search, onlyUnread, onlyLeads, onlyUnassigned, currentUserId]);
 
   // Opens the card of the lead linked to the conversation; a conversation without a lead is
   // matched by phone first, so the attendant reaches the lead in one click.
@@ -473,6 +497,19 @@ export function InboxClient({
       }
     } finally {
       if (!silent && selectedIdRef.current === conversationId) setLoadingMessages(false);
+    }
+  }
+
+  async function claim(conversationId: string) {
+    setClaiming(true);
+    try {
+      const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversationId)}/claim`, { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) toast.error(data.error || 'Não foi possível assumir a conversa.');
+      else toast.success('Conversa assumida. Agora ela é sua.');
+      await loadConversations(true);
+    } finally {
+      setClaiming(false);
     }
   }
 
@@ -632,7 +669,7 @@ export function InboxClient({
               />
             </div>
             <div className="mt-2 flex gap-2" role="group" aria-label="Filtrar conversas">
-              <Button type="button" size="sm" variant={onlyUnread || onlyLeads ? 'outline' : 'default'} onClick={() => { setOnlyUnread(false); setOnlyLeads(false); }}>Todas</Button>
+              <Button type="button" size="sm" variant={onlyUnread || onlyLeads || onlyUnassigned ? 'outline' : 'default'} onClick={() => { setOnlyUnread(false); setOnlyLeads(false); setOnlyUnassigned(false); }}>Todas</Button>
               <Button type="button" size="sm" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread((value) => !value)}>
                 Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}
               </Button>
@@ -640,6 +677,11 @@ export function InboxClient({
                 title="Só conversas de contatos que são leads no sistema">
                 Com lead{leadTotal ? ` (${leadTotal})` : ''}
               </Button>
+              {unassignedTotal > 0 || onlyUnassigned ? (
+                <Button type="button" size="sm" variant={onlyUnassigned ? 'default' : 'outline'} onClick={() => setOnlyUnassigned((value) => !value)}>
+                  Sem responsável ({unassignedTotal})
+                </Button>
+              ) : null}
             </div>
           </div>
 
@@ -686,6 +728,7 @@ export function InboxClient({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <OwnerBadge owner={conversationOwner(conversation, currentUserId)} />
                         {conversation.lead ? (
                           <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800" title={`Lead: ${conversation.lead.name}`}>Lead</span>
                         ) : (
@@ -736,6 +779,11 @@ export function InboxClient({
                     </div>
                   </div>
                 </button>
+                {conversationOwner(selected, currentUserId).kind === 'none' && canManage ? (
+                  <Button type="button" size="sm" onClick={() => void claim(selected.id)} disabled={claiming}>
+                    {claiming ? 'Assumindo...' : 'Assumir'}
+                  </Button>
+                ) : null}
                 <div className="hidden text-right text-xs text-muted-foreground sm:block">
                   <div className="capitalize">{selected.status}</div>
                   {selected.assignee?.name && <div className="max-w-40 truncate">{selected.assignee.name}</div>}
