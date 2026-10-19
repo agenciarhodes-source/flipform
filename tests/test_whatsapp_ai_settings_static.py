@@ -15,6 +15,8 @@ def test_whatsapp_ai_settings_table_is_additive_and_starts_switched_off():
     for forbidden in ("DROP ", "ALTER TABLE", "DELETE ", "UPDATE "):
         assert forbidden not in statements
     assert "model TenantWhatsAppAiSettings {" in read("prisma/schema.prisma")
+    # The Flip AI tables have an audited structure; this table must not add links to them.
+    assert "flip_ai_" not in migration.split("CREATE INDEX")[0].split("CONSTRAINT", 1)[1]
 
 
 def test_only_owners_and_admins_with_flip_ai_configure_it_for_their_own_numbers():

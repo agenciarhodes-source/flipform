@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS "tenant_whatsapp_ai_settings" (
   CONSTRAINT "tenant_whatsapp_ai_settings_schedule_mode_check" CHECK ("schedule_mode" IN ('always', 'outside_hours', 'no_reply')),
   CONSTRAINT "tenant_whatsapp_ai_settings_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT "tenant_whatsapp_ai_settings_connection_id_fkey" FOREIGN KEY ("connection_id") REFERENCES "tenant_whatsapp_connections"("id") ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT "tenant_whatsapp_ai_settings_agent_id_fkey" FOREIGN KEY ("agent_id") REFERENCES "flip_ai_agents"("id") ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT "tenant_whatsapp_ai_settings_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE
 );
 CREATE INDEX IF NOT EXISTS "tenant_whatsapp_ai_settings_tenant_id_idx" ON "tenant_whatsapp_ai_settings"("tenant_id");

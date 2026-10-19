@@ -1142,7 +1142,6 @@ model FlipAiAgent {
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
-  whatsappAiSettings TenantWhatsAppAiSettings[]
   @@map("flip_ai_agents")
 }
 
@@ -1673,6 +1672,8 @@ model TenantWhatsAppAiSettings {
   tenantId         String   @map("tenant_id")
   connectionId     String   @unique @map("connection_id")
   enabled          Boolean  @default(false)
+  /// Flip AI agent that answers. No database link to flip_ai_agents, whose structure is audited;
+  /// the code checks the agent is published and belongs to the company.
   agentId          String?  @map("agent_id")
   /// always | outside_hours | no_reply
   scheduleMode     String   @default("always") @map("schedule_mode")
@@ -1685,7 +1686,6 @@ model TenantWhatsAppAiSettings {
 
   tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   connection TenantWhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
-  agent      FlipAiAgent?             @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@map("tenant_whatsapp_ai_settings")
