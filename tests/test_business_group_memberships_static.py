@@ -9,7 +9,7 @@ def read(path):
 
 def test_group_owners_and_admins_get_a_gestor_user_in_each_company():
     lib = read("lib/business-group-memberships.ts")
-    assert "role IN ('owner', 'admin')" in lib
+    assert "role IN ('owner', 'admin', 'manager')" in lib
     assert "role: 'manager', status: 'active'" in lib
     # Only users the group created are turned on or off by it.
     assert "if (!fromGroup) continue;" in lib

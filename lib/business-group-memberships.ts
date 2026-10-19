@@ -5,13 +5,13 @@ import { prisma } from '@/lib/prisma';
 import { getBusinessGroupAccessesForUser } from '@/lib/business-groups';
 
 /**
- * Owners and admins of a business group also get their own user in each company of the group,
+ * Owners, admins and Gestores of a business group also get their own user in each company of the group,
  * as Gestor. The audit entry written when that user is created is what marks it as coming from
  * the group: it does not take a seat of the company's plan and it is turned off by the group.
  */
 export const GROUP_MEMBERSHIP_GRANTED = 'business_group.membership_granted';
 export const GROUP_MEMBERSHIP_REVOKED = 'business_group.membership_revoked';
-const GROUP_MANAGER_ROLES = ['owner', 'admin'];
+const GROUP_MANAGER_ROLES = ['owner', 'admin', 'manager'];
 
 async function isGroupManagerOfTenant(db: PrismaClient, userId: string, tenantId: string) {
   const state = await getBusinessGroupAccessesForUser(db, userId);
@@ -24,7 +24,7 @@ export async function syncBusinessGroupMemberships(db: PrismaClient, input: { gr
   const [managers, tenants] = await Promise.all([
     db.$queryRaw<Array<{ user_id: string }>>(Prisma.sql`
       SELECT user_id FROM business_group_users
-      WHERE group_id = ${input.groupId} AND status = 'active' AND role IN ('owner', 'admin')
+      WHERE group_id = ${input.groupId} AND status = 'active' AND role IN ('owner', 'admin', 'manager')
     `),
     db.$queryRaw<Array<{ tenant_id: string }>>(Prisma.sql`
       SELECT tenant_id FROM business_group_tenants WHERE group_id = ${input.groupId}

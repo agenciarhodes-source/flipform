@@ -14,7 +14,7 @@ import { syncBusinessGroupMemberships } from '@/lib/business-group-memberships';
 const memberSchema = z.object({
   userId: z.string().uuid().optional(),
   email: z.string().trim().email().optional(),
-  role: z.enum(['owner', 'admin', 'viewer']),
+  role: z.enum(['owner', 'admin', 'manager', 'viewer']),
   status: z.enum(['active', 'revoked']).default('active'),
 }).refine((value) => Boolean(value.userId || value.email), {
   message: 'Selecione um acesso cadastrado.',
