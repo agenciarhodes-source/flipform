@@ -58,6 +58,9 @@ interface InboxMessageSummary {
 
 interface InboxConversation {
   id: string;
+  aiPausedAt?: string | null;
+  aiPausedByName?: string | null;
+  aiPauseReason?: string | null;
   provider: string;
   channel: string;
   status: string;
@@ -225,6 +228,56 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   );
 }
 
+/** Whether the AI is paused in a conversation now, counting the automatic return set for the number. */
+function aiPaused(conversation: InboxConversation, resumeAfterHours: number | null) {
+  if (!conversation.aiPausedAt) return false;
+  if (!resumeAfterHours) return true;
+  return Date.now() - new Date(conversation.aiPausedAt).getTime() < resumeAfterHours * 3_600_000;
+}
+
+const AI_PAUSE_REASON_LABELS: Record<string, string> = {
+  manual: 'assumida',
+  human_reply_system: 'respondida pela equipe no FlipForm',
+  human_reply_phone: 'respondida pelo celular',
+};
+
+function AiStatus({ conversation, resumeAfterHours, canManage, busy, onChange }: {
+  conversation: InboxConversation;
+  resumeAfterHours: number | null;
+  canManage: boolean;
+  busy: boolean;
+  onChange: (action: 'pause' | 'resume') => void;
+}) {
+  const paused = aiPaused(conversation, resumeAfterHours);
+  if (!paused) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="hidden rounded-full bg-violet-100 px-2 py-1 text-xs font-medium text-violet-800 sm:inline">🟢 IA atendendo</span>
+        {canManage ? (
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onChange('pause')}>
+            {busy ? 'Pausando...' : 'Pausar IA e assumir'}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  const when = conversation.aiPausedAt ? new Date(conversation.aiPausedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+  const how = AI_PAUSE_REASON_LABELS[conversation.aiPauseReason || ''] || 'pausada';
+  const who = conversation.aiPausedByName ? ` por ${conversation.aiPausedByName}` : '';
+  return (
+    <div className="flex items-center gap-2">
+      <span className="hidden max-w-56 truncate rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 sm:inline" title={`IA pausada: conversa ${how}${who} em ${when}`}>
+        ⏸️ IA pausada · {how}{who} · {when}
+      </span>
+      {canManage ? (
+        <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onChange('resume')}>
+          {busy ? 'Devolvendo...' : 'Devolver para a IA'}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 type ConversationOwner = { kind: 'mine' | 'other' | 'none'; name?: string };
 
 /** Whose the conversation is: the person it was given to, or the one who has its lead. */
@@ -276,6 +329,8 @@ export function InboxClient({
   const [onlyLeads, setOnlyLeads] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [whatsappAi, setWhatsappAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
+  const [changingAi, setChangingAi] = useState(false);
   const [leadModal, setLeadModal] = useState<{ leadId: string; stages: any[] } | null>(null);
   const [openingLead, setOpeningLead] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; conversationId: string; unread: boolean } | null>(null);
@@ -436,6 +491,7 @@ export function InboxClient({
       const data = await response.json();
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
       let next = all.filter((conversation) => conversation.channel === 'whatsapp');
+      if (data.whatsappAi && typeof data.whatsappAi.enabled === 'boolean') setWhatsappAi(data.whatsappAi);
       const requestedId = requestedConversationIdRef.current;
       // A conversation just started from a lead has no message yet, so it is not among the most
       // recent ones; keep the open one on the list instead of jumping to another conversation.
@@ -497,6 +553,23 @@ export function InboxClient({
       }
     } finally {
       if (!silent && selectedIdRef.current === conversationId) setLoadingMessages(false);
+    }
+  }
+
+  async function changeAi(conversationId: string, action: 'pause' | 'resume') {
+    setChangingAi(true);
+    try {
+      const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversationId)}/ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) toast.error(data.error || 'Não foi possível alterar o atendimento da IA.');
+      else toast.success(action === 'pause' ? 'IA pausada. A conversa está com a equipe.' : 'Conversa devolvida para a IA.');
+      await loadConversations(true);
+    } finally {
+      setChangingAi(false);
     }
   }
 
@@ -728,6 +801,9 @@ export function InboxClient({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        {whatsappAi.enabled && !aiPaused(conversation, whatsappAi.resumeAfterHours) ? (
+                          <span className="rounded bg-violet-100 px-1.5 py-0.5 font-semibold text-violet-800" title="A IA está atendendo esta conversa">IA</span>
+                        ) : null}
                         <OwnerBadge owner={conversationOwner(conversation, currentUserId)} />
                         {conversation.lead ? (
                           <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-semibold text-emerald-800" title={`Lead: ${conversation.lead.name}`}>Lead</span>
@@ -779,6 +855,10 @@ export function InboxClient({
                     </div>
                   </div>
                 </button>
+                {whatsappAi.enabled && selected.channel === 'whatsapp' ? (
+                  <AiStatus conversation={selected} resumeAfterHours={whatsappAi.resumeAfterHours} canManage={canManage}
+                    busy={changingAi} onChange={(action) => void changeAi(selected.id, action)} />
+                ) : null}
                 {conversationOwner(selected, currentUserId).kind === 'none' && canManage ? (
                   <Button type="button" size="sm" onClick={() => void claim(selected.id)} disabled={claiming}>
                     {claiming ? 'Assumindo...' : 'Assumir'}

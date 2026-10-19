@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
+import { isWhatsAppAiEnabledForTenant } from '@/lib/whatsapp-ai/pause';
 
 const ALLOWED_STATUS = new Set(['open', 'pending', 'resolved']);
 const ALLOWED_CHANNEL = new Set(['whatsapp', 'instagram']);
@@ -61,8 +62,9 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
     },
   });
 
+  const whatsappAi = await isWhatsAppAiEnabledForTenant(session.tenantId);
   if (baseConversations.length === 0) {
-    return NextResponse.json({ conversations: [] });
+    return NextResponse.json({ conversations: [], whatsappAi });
   }
 
   const conversationIds = baseConversations.map((conversation) => conversation.id);
@@ -132,14 +134,22 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   const messageById = new Map(latestMessagesWithSender.map((message) => [message.id, message]));
   const latestMessageIdByConversation = new Map(latestRows.map((row) => [row.conversation_id, row.id]));
 
+  // Who paused the AI, by name, for the conversations where a person did it.
+  const pauserIds = [...new Set(baseConversations.map((conversation) => conversation.aiPausedBy).filter((id): id is string => Boolean(id)))];
+  const pausers = pauserIds.length
+    ? await prisma.user.findMany({ where: { id: { in: pauserIds } }, select: { id: true, name: true } })
+    : [];
+  const pauserName = new Map(pausers.map((user) => [user.id, user.name]));
+
   const conversations = baseConversations.map((conversation) => {
     const messageId = latestMessageIdByConversation.get(conversation.id);
     const message = messageId ? messageById.get(messageId) : undefined;
     return {
       ...conversation,
+      aiPausedByName: conversation.aiPausedBy ? pauserName.get(conversation.aiPausedBy) || null : null,
       messages: message ? [message] : [],
     };
   });
 
-  return NextResponse.json({ conversations });
+  return NextResponse.json({ conversations, whatsappAi });
 });

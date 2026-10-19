@@ -1,4 +1,5 @@
 import 'server-only';
+import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -417,7 +418,16 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             }),
           });
           if (persisted.duplicate) result.duplicateMessageEchoes += 1;
-          else result.messageEchoesCreated += 1;
+          else {
+            result.messageEchoesCreated += 1;
+            // Someone answered from the WhatsApp Business app on the phone: the AI steps back.
+            await pauseConversationAi({
+              tenantId: connection.tenantId,
+              conversationId: ensured.conversation.id,
+              userId: null,
+              reason: 'human_reply_phone',
+            }).catch(() => undefined);
+          }
         }
         continue;
       }

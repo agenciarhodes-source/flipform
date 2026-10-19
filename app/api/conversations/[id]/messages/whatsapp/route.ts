@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
+import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { enqueueAndDispatchWhatsAppTextMessage, WhatsAppOutboundError } from '@/lib/meta/whatsapp-outbound';
 
@@ -31,6 +32,10 @@ export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextReq
       idempotencyKey: parsed.data.idempotencyKey,
     });
 
+    // A person of the team answered: the AI steps back in this conversation.
+    if (result.status !== 'failed') {
+      await pauseConversationAi({ tenantId: session.tenantId, conversationId: ctx.params.id, userId: session.userId, reason: 'human_reply_system' }).catch(() => undefined);
+    }
     if (result.status === 'failed') {
       return NextResponse.json({
         error: 'A Meta recusou o envio ou a conexão do WhatsApp não está disponível.',
