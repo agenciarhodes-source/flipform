@@ -14,6 +14,7 @@ type Settings = {
   businessHours: { days: number[]; start: string; end: string };
   noReplyMinutes: number;
   dailyCreditLimit: number | null;
+  resumeAfterHours: number | null;
   updatedAt: string | null;
 };
 type NumberRow = { connectionId: string; phone: string | null; name: string | null; settings: Settings };
@@ -56,6 +57,7 @@ export function WhatsAppAiSettingsManager({ initialWorkspace }: { initialWorkspa
 function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspace['agents']; onSaved: (next: Workspace) => void }) {
   const [form, setForm] = useState<Settings>(row.settings);
   const [limitText, setLimitText] = useState(row.settings.dailyCreditLimit ? String(row.settings.dailyCreditLimit) : '');
+  const [resumeText, setResumeText] = useState(row.settings.resumeAfterHours ? String(row.settings.resumeAfterHours) : '');
   const [saving, setSaving] = useState(false);
   const update = (patch: Partial<Settings>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -63,6 +65,11 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
     const limit = limitText.trim() ? Number(limitText.trim()) : null;
     if (limit !== null && (!Number.isInteger(limit) || limit < 1)) {
       toast.error('O limite diário deve ser um número inteiro de créditos, ou fique vazio para sem limite.');
+      return;
+    }
+    const resume = resumeText.trim() ? Number(resumeText.trim()) : null;
+    if (resume !== null && (!Number.isInteger(resume) || resume < 1 || resume > 720)) {
+      toast.error('As horas para devolver à IA devem ser um número inteiro entre 1 e 720, ou fique vazio.');
       return;
     }
     setSaving(true);
@@ -78,6 +85,7 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           businessHours: form.businessHours,
           noReplyMinutes: form.noReplyMinutes,
           dailyCreditLimit: limit,
+          resumeAfterHours: resume,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -169,6 +177,15 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
         <input type="number" min={1} className="w-48 rounded border p-2 text-sm" placeholder="Sem limite" value={limitText}
           onChange={(event) => setLimitText(event.target.value)} />
         <span className="block text-xs text-muted-foreground">Ao atingir o limite, a IA para até o dia seguinte e o atendimento volta para a equipe.</span>
+      </label>
+
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Devolver para a IA depois de (horas sem resposta da equipe)</span>
+        <input type="number" min={1} max={720} className="w-48 rounded border p-2 text-sm" placeholder="Nunca" value={resumeText}
+          onChange={(event) => setResumeText(event.target.value)} />
+        <span className="block text-xs text-muted-foreground">
+          Quando alguém da equipe responde ou clica em “Pausar IA”, a IA para naquela conversa. Vazio: ela só volta quando alguém clicar em “Devolver para a IA”.
+        </span>
       </label>
 
       <div className="flex items-center justify-between gap-3">

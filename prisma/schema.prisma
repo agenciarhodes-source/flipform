@@ -966,6 +966,11 @@ model Conversation {
   lastOutboundAt            DateTime? @map("last_outbound_at")
   unreadCount               Int       @default(0) @map("unread_count")
   resolvedAt                DateTime? @map("resolved_at")
+  /// When the WhatsApp AI was paused here (empty = the AI may answer), by whom and why.
+  aiPausedAt                DateTime? @map("ai_paused_at")
+  aiPausedBy                String?   @map("ai_paused_by")
+  /// manual | human_reply_system | human_reply_phone
+  aiPauseReason             String?   @map("ai_pause_reason")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
@@ -1680,6 +1685,8 @@ model TenantWhatsAppAiSettings {
   businessHours    Json?    @map("business_hours")
   noReplyMinutes   Int      @default(10) @map("no_reply_minutes")
   dailyCreditLimit Int?     @map("daily_credit_limit")
+  /// Hands a paused conversation back to the AI after these hours without a team reply; empty = never.
+  resumeAfterHours Int?     @map("resume_after_hours")
   updatedBy        String?  @map("updated_by")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")

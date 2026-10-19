@@ -34,6 +34,7 @@ export const whatsappAiSettingsInputSchema = z.object({
   businessHours: businessHoursSchema,
   noReplyMinutes: z.number().int().min(1).max(1440),
   dailyCreditLimit: z.number().int().min(1).max(10_000_000).nullable(),
+  resumeAfterHours: z.number().int().min(1).max(720).nullable().optional().default(null),
 }).strict();
 export type WhatsAppAiSettingsInput = z.infer<typeof whatsappAiSettingsInputSchema>;
 
@@ -62,7 +63,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
         aiSettings: {
           select: {
             enabled: true, agentId: true, scheduleMode: true, businessHours: true,
-            noReplyMinutes: true, dailyCreditLimit: true, updatedAt: true,
+            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, updatedAt: true,
           },
         },
       },
@@ -89,6 +90,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
           businessHours: parseBusinessHours(settings?.businessHours ?? null),
           noReplyMinutes: settings?.noReplyMinutes ?? 10,
           dailyCreditLimit: settings?.dailyCreditLimit ?? null,
+          resumeAfterHours: settings?.resumeAfterHours ?? null,
           updatedAt: settings?.updatedAt?.toISOString() ?? null,
         },
       };
@@ -126,6 +128,7 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
     businessHours: input.businessHours as Prisma.InputJsonValue,
     noReplyMinutes: input.noReplyMinutes,
     dailyCreditLimit: input.dailyCreditLimit,
+    resumeAfterHours: input.resumeAfterHours,
     updatedBy: access.userId,
   };
   const saved = await prisma.tenantWhatsAppAiSettings.upsert({
