@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
-export type BusinessGroupRole = 'owner' | 'admin' | 'viewer';
+export type BusinessGroupRole = 'owner' | 'admin' | 'manager' | 'viewer';
 
 export type BusinessGroupTenant = {
   id: string;
@@ -112,12 +112,14 @@ function isMissingBusinessGroupTable(error: any): boolean {
 }
 
 function isBusinessGroupRole(value: string): value is BusinessGroupRole {
-  return ['owner', 'admin', 'viewer'].includes(value);
+  return ['owner', 'admin', 'manager', 'viewer'].includes(value);
 }
 
-export function mapBusinessGroupRoleToTenantRole(role: BusinessGroupRole): 'owner' | 'admin' | 'viewer' {
+/** Inside each company of the group: the group's Gestor is a Gestor, who sees every attendant. */
+export function mapBusinessGroupRoleToTenantRole(role: BusinessGroupRole): 'owner' | 'admin' | 'manager' | 'viewer' {
   if (role === 'owner') return 'owner';
   if (role === 'admin') return 'admin';
+  if (role === 'manager') return 'manager';
   return 'viewer';
 }
 

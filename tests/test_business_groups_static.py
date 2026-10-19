@@ -122,7 +122,7 @@ def test_platform_admin_selects_registered_access_by_user_id():
     assert 'upsertBusinessGroupMember' in update
 
 
-def test_group_admin_remains_group_wide_admin_not_store_manager():
+def test_group_roles_include_gestor_and_admin_stays_group_wide():
     helper = read('lib/business-groups.ts')
     update = read('app/api/admin/business-groups/[id]/route.ts')
     page = read('app/admin/(secure)/groups/page.tsx')

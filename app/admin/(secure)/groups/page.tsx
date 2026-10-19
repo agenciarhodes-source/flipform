@@ -7,10 +7,11 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 
-const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const;
+const GROUP_ROLES = ['owner', 'admin', 'manager', 'viewer'] as const;
 const GROUP_ROLE_LABELS: Record<string, string> = {
   owner: 'Dono do grupo',
   admin: 'Administrador do grupo',
+  manager: 'Gestor do grupo',
   viewer: 'Visualizador do grupo',
 };
 
@@ -207,7 +208,7 @@ export default function BusinessGroupsAdminPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-2"><Building2 className="w-6 h-6" /><h1 className="text-2xl font-semibold">Grupos empresariais</h1></div>
-          <p className="text-sm text-muted-foreground mt-1">Dono e Administrador coordenam o grupo inteiro. Gestores de loja devem ser configurados dentro da empresa correspondente, com papel Gestor.</p>
+          <p className="text-sm text-muted-foreground mt-1">Dono e Administrador coordenam o grupo inteiro. O Gestor do grupo entra em cada empresa do grupo como Gestor e vê todos os atendentes dela.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={load} disabled={loading}><RefreshCcw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />Atualizar</Button>
