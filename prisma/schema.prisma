@@ -145,6 +145,7 @@ model Tenant {
   flipAiExternalSearchCaches FlipAiExternalSearchCache[]
   googleConversionMappings GoogleConversionMapping[]
   googleConversionEvents GoogleConversionEvent[]
+  whatsappAiSettings TenantWhatsAppAiSettings[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -895,6 +896,7 @@ model TenantWhatsAppConnection {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  aiSettings TenantWhatsAppAiSettings?
   @@map("tenant_whatsapp_connections")
 }
 
@@ -1140,6 +1142,7 @@ model FlipAiAgent {
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
+  whatsappAiSettings TenantWhatsAppAiSettings[]
   @@map("flip_ai_agents")
 }
 
@@ -1662,4 +1665,28 @@ model ChatAttachment {
   @@index([tenantId, sessionRef, createdAt])
   @@index([status, expiresAt])
   @@map("chat_attachments")
+}
+
+/// How the Flip AI answers on each connected WhatsApp number (Atendimento WhatsApp).
+model TenantWhatsAppAiSettings {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  connectionId     String   @unique @map("connection_id")
+  enabled          Boolean  @default(false)
+  agentId          String?  @map("agent_id")
+  /// always | outside_hours | no_reply
+  scheduleMode     String   @default("always") @map("schedule_mode")
+  businessHours    Json?    @map("business_hours")
+  noReplyMinutes   Int      @default(10) @map("no_reply_minutes")
+  dailyCreditLimit Int?     @map("daily_credit_limit")
+  updatedBy        String?  @map("updated_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection TenantWhatsAppConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  agent      FlipAiAgent?             @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("tenant_whatsapp_ai_settings")
 }
