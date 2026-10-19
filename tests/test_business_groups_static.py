@@ -126,12 +126,12 @@ def test_group_roles_include_gestor_and_admin_stays_group_wide():
     helper = read('lib/business-groups.ts')
     update = read('app/api/admin/business-groups/[id]/route.ts')
     page = read('app/admin/(secure)/groups/page.tsx')
-    assert "export type BusinessGroupRole = 'owner' | 'admin' | 'viewer'" in helper
-    assert "role: z.enum(['owner', 'admin', 'viewer'])" in update
+    assert "export type BusinessGroupRole = 'owner' | 'admin' | 'manager' | 'viewer'" in helper
+    assert "role: z.enum(['owner', 'admin', 'manager', 'viewer'])" in update
     assert "if (role === 'admin') return 'admin';" in helper
     assert "admin: 'Administrador do grupo'" in page
-    assert "const GROUP_ROLES = ['owner', 'admin', 'viewer'] as const" in page
-    assert 'Gestores de loja devem ser configurados dentro da empresa correspondente' in page
+    assert "const GROUP_ROLES = ['owner', 'admin', 'manager', 'viewer'] as const" in page
+    assert 'O Gestor do grupo entra em cada empresa do grupo como Gestor' in page
 
 
 def test_platform_admin_can_edit_existing_group_member_level_inline():
