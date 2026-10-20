@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
 import { DailyBriefingCard } from './daily-briefing';
@@ -27,6 +27,7 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
   const [board, setBoard] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [person, setPerson] = useState<string>('all');
+  const [openKind, setOpenKind] = useState<FlipAlertKind | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -89,6 +90,21 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
         </div>
       )}
 
+      {groups.length > 0 && (
+        <div>
+          <h2 className="mb-2 font-semibold">Pendências</h2>
+          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            {groups.map((group) => (
+              <button key={group.kind} type="button" onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}
+                className={`rounded-lg border bg-white p-3 text-left shadow-sm transition hover:bg-slate-50 ${openKind === group.kind ? 'border-brand-600 ring-1 ring-brand-600' : ''}`}>
+                <p className="text-2xl font-semibold">{group.items.length}</p>
+                <p className="text-xs text-muted-foreground">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {groups.length === 0 ? (
         <div className="rounded-xl border border-dashed p-8 text-center">
           <p className="text-lg font-medium">Tudo em dia 🎉</p>
@@ -96,11 +112,15 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
         </div>
       ) : groups.map((group) => (
         <article key={group.kind} className="rounded-xl border bg-white shadow-sm">
-          <div className="border-b px-4 py-3">
-            <h2 className="font-semibold">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label} ({group.items.length})</h2>
-            <p className="text-xs text-muted-foreground">{KIND_LABELS[group.kind].hint}</p>
-          </div>
-          <ul className="divide-y">
+          <button type="button" className="flex w-full items-start gap-2 px-4 py-3 text-left" aria-expanded={openKind === group.kind}
+            onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}>
+            {openKind === group.kind ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
+            <span>
+              <span className="block font-semibold">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label} ({group.items.length})</span>
+              <span className="block text-xs text-muted-foreground">{KIND_LABELS[group.kind].hint}</span>
+            </span>
+          </button>
+          {openKind === group.kind && <ul className="divide-y border-t">
             {group.items.map((alert) => (
               <li key={alert.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                 <div className="min-w-0">
@@ -112,7 +132,7 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
                 <Link href={alert.href} className="shrink-0 text-sm font-medium text-brand-700 underline">Abrir</Link>
               </li>
             ))}
-          </ul>
+          </ul>}
         </article>
       ))}
     </section>
