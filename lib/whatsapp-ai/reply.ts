@@ -129,7 +129,7 @@ export async function replyToWhatsAppConversation(input: {
     prisma.message.findFirst({
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound' },
       orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      select: { providerTimestamp: true, createdAt: true },
+      select: { id: true, providerTimestamp: true, createdAt: true },
     }),
   ]);
   if (!latestInbound || latestInbound.id !== input.inboundMessageId) return { replied: false, reason: 'newer_message' };
@@ -342,11 +342,13 @@ export async function replyToWhatsAppConversation(input: {
     const reply = toWhatsAppText(parsed.reply);
     if (!reply) throw new OpenAiResponseError('definitive', 'WHATSAPP_AI_EMPTY_REPLY');
 
-    // A person may have answered while the AI was thinking: then the AI stays quiet.
+    // A person may have answered while the AI was thinking: then the AI stays quiet. Compared by the
+    // moment each message was stored, and never counting the last answer that was already there.
     const answeredMeanwhile = await prisma.message.findFirst({
       where: {
         tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound',
-        createdAt: { gt: outboundAt || new Date(0) },
+        createdAt: { gt: latestOutbound?.createdAt || new Date(0) },
+        ...(latestOutbound ? { id: { not: latestOutbound.id } } : {}),
       },
       select: { id: true },
     });

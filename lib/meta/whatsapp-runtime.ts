@@ -1,4 +1,5 @@
 import 'server-only';
+import { parseWhatsAppFailure } from '@/lib/meta/whatsapp-failure-reasons';
 import { parseMetaPricing } from '@/lib/costs/pricing';
 import { isOptOutMessage } from '@/lib/post-sale/rules';
 import { recordContactOptOut } from '@/lib/post-sale/runner';
@@ -550,6 +551,19 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           continue;
         }
         const providerTimestamp = parseProviderTimestamp(status.timestamp);
+        // Why Meta did not deliver it, when the status is "failed": kept with the message for the Inbox.
+        const failure = status.status === 'failed' ? parseWhatsAppFailure(status?.errors) : null;
+        if (failure) {
+          await prisma.$executeRaw(Prisma.sql`
+            UPDATE messages
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+              providerErrorCode: failure.code, providerErrorTitle: failure.title, providerErrorDetail: failure.detail,
+            })}::jsonb
+            WHERE tenant_id = ${connection.tenantId}
+              AND provider = 'meta' AND channel = 'whatsapp'
+              AND (external_message_id = ${status.id} OR metadata->>'providerMessageId' = ${status.id})
+          `).catch(() => undefined);
+        }
         // Whether Meta billed this message, and the category: kept once, for the cost panel.
         const pricing = parseMetaPricing(status?.pricing);
         if (pricing) {
