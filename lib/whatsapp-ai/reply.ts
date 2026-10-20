@@ -27,6 +27,7 @@ import { FLIP_AI_VOICE_TRANSCRIPTION_OPERATION, resolveTranscriptionUsage } from
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
+import { showWhatsAppTyping } from '@/lib/meta/whatsapp-typing';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
@@ -79,16 +80,24 @@ const MEDIA_NOTES: Record<string, string> = {
   sticker: '[O cliente enviou uma figurinha.]',
 };
 
-function whatsappInstructions(input: { agentName: string; companyName: string; firstReply: boolean; askPreferredName: boolean }) {
+/** How the AI introduces itself: the company's own text, or "assistente de <empresa>". */
+export function whatsappIntroduction(introduction: string | null | undefined, companyName: string) {
+  const text = (introduction || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  return text || `assistente de ${companyName}`;
+}
+
+function whatsappInstructions(input: { agentName: string; companyName: string; introduction: string; firstReply: boolean; askPreferredName: boolean }) {
   return [
     `CANAL WHATSAPP: você está respondendo pelo WhatsApp oficial de ${input.companyName}.`,
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
     'sem títulos nem listas longas. Para destacar algo, use *texto* (um asterisco de cada lado).',
     'O telefone do cliente já é conhecido, porque ele está falando por este WhatsApp: nunca peça o número de telefone.',
+    `APRESENTAÇÃO NO WHATSAPP: neste canal você não usa o nome ${input.agentName} nem nenhum nome próprio; você é a ${input.introduction}.`,
     input.firstReply
-      ? `Esta é a sua primeira resposta nesta conversa: apresente-se como ${input.agentName}, assistente virtual de ${input.companyName}.`
-      : `Você é ${input.agentName}, assistente virtual de ${input.companyName}. Não se apresente de novo.`,
-    'Nunca diga que é uma pessoa. Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
+      ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
+      : 'Não se apresente de novo.',
+    'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
+    'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
     ...(input.askPreferredName
       ? ['Num momento natural da conversa, se ainda não souber, pergunte como a pessoa prefere ser chamada e registre esse nome em identity.name.']
       : []),
@@ -124,7 +133,7 @@ export async function replyToWhatsAppConversation(input: {
     prisma.message.findFirst({
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'inbound' },
       orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      select: { id: true, providerTimestamp: true, createdAt: true, metadata: true },
+      select: { id: true, externalMessageId: true, providerTimestamp: true, createdAt: true, metadata: true },
     }),
     prisma.message.findFirst({
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound' },
@@ -180,6 +189,12 @@ export async function replyToWhatsAppConversation(input: {
     await assertFlipAiConversationRuntimeReady({ tenantId: input.tenantId });
   } catch {
     return { replied: false, reason: 'runtime_unavailable' };
+  }
+
+  // "digitando…" for the customer while the answer is prepared (also marks the message as read).
+  const typingToken = await mediaAccessToken(connection.accessTokenEncrypted).catch(() => null);
+  if (typingToken && typeof phoneNumberId === 'string') {
+    void showWhatsAppTyping({ phoneNumberId, accessToken: typingToken, messageId: latestInbound.externalMessageId });
   }
 
   // Everything the customer sent since the last answer is read together, as one turn.
@@ -320,6 +335,7 @@ export async function replyToWhatsAppConversation(input: {
       instructions: `${context.instructions}\n\n${whatsappInstructions({
         agentName: runtime.name,
         companyName: conversation.tenant.name,
+        introduction: whatsappIntroduction(settings.introduction, conversation.tenant.name),
         firstReply: aiRepliesSoFar === 0,
         askPreferredName: isWhatsAppAiLeadTenant(input.tenantId),
       })}${documents ? `\n\n${documents.text}` : ''}`,

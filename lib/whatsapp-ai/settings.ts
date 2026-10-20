@@ -38,6 +38,7 @@ export const whatsappAiSettingsInputSchema = z.object({
   testPhoneNumbers: z.array(z.string().trim().regex(/^\+?[\d\s()-]{10,20}$/, 'Número de teste inválido.')).max(20).optional().default([]),
   liveEnabled: z.boolean().optional().default(false),
   stageMode: z.enum(['suggest', 'auto']).optional().default('suggest'),
+  introduction: z.string().trim().max(120).nullable().optional().default(null),
 }).strict();
 export type WhatsAppAiSettingsInput = z.infer<typeof whatsappAiSettingsInputSchema>;
 
@@ -66,7 +67,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
         aiSettings: {
           select: {
             enabled: true, agentId: true, scheduleMode: true, businessHours: true,
-            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, testPhoneNumbers: true, liveEnabled: true, stageMode: true, updatedAt: true,
+            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, testPhoneNumbers: true, liveEnabled: true, stageMode: true, introduction: true, updatedAt: true,
           },
         },
       },
@@ -97,6 +98,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
           testPhoneNumbers: settings?.testPhoneNumbers ?? [],
           liveEnabled: settings?.liveEnabled ?? false,
           stageMode: (settings?.stageMode === 'auto' ? 'auto' : 'suggest') as 'auto' | 'suggest',
+          introduction: settings?.introduction ?? null,
           updatedAt: settings?.updatedAt?.toISOString() ?? null,
         },
       };
@@ -138,6 +140,7 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
     testPhoneNumbers: Array.from(new Set(input.testPhoneNumbers.map((number) => number.replace(/\D/g, '')))),
     liveEnabled: input.liveEnabled,
     stageMode: input.stageMode,
+    introduction: input.introduction?.replace(/\s+/g, ' ').trim() || null,
     updatedBy: access.userId,
   };
   const saved = await prisma.tenantWhatsAppAiSettings.upsert({
