@@ -57,13 +57,14 @@ def test_enqueue_only_queues_and_never_sends_or_mutates_the_crm():
     assert outbox.count('tenantId: input.tenantId') >= 4
 
 
-def test_only_the_manual_kanban_move_queues_google_events():
+# The manual Kanban move and, in the WhatsApp AI pilot, the lead the AI qualifies (authorized on 2026-10-21).
+def test_only_the_kanban_move_and_the_whatsapp_ai_lead_queue_google_events():
     callers = []
     for folder in ['app', 'lib']:
         for path in (ROOT / folder).rglob('*.ts*'):
             if 'enqueueGoogleConversionEvents(' in path.read_text(encoding='utf-8'):
                 callers.append(path.relative_to(ROOT).as_posix())
-    assert sorted(callers) == [MOVE, OUTBOX]
+    assert sorted(callers) == sorted([MOVE, OUTBOX, 'lib/whatsapp-ai/lead.ts'])
 
 
 def test_integration_suite_runs_in_ci():

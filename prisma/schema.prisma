@@ -971,6 +971,8 @@ model Conversation {
   aiPausedBy                String?   @map("ai_paused_by")
   /// manual | human_reply_system | human_reply_phone
   aiPauseReason             String?   @map("ai_pause_reason")
+  /// Click-to-WhatsApp ad the conversation came from (ctwa_clid, ad id, headline), set once.
+  adReferral                Json?     @map("ad_referral")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 

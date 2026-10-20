@@ -1,4 +1,5 @@
 import 'server-only';
+import { parseWhatsAppReferral } from '@/lib/whatsapp-ai/lead';
 import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
@@ -507,6 +508,14 @@ export async function processWhatsAppCloudWebhook(payload: any) {
         if (persisted.duplicate) result.duplicateMessages += 1;
         else {
           result.messagesCreated += 1;
+          // The first message after a click-to-WhatsApp ad carries the ad; it is kept once.
+          const referral = parseWhatsAppReferral(message?.referral);
+          if (referral) {
+            await prisma.conversation.updateMany({
+              where: { id: persisted.conversation.id, tenantId: connection.tenantId, adReferral: { equals: Prisma.DbNull } },
+              data: { adReferral: referral as unknown as Prisma.InputJsonValue },
+            }).catch(() => undefined);
+          }
           if (automationQueued) result.automationsQueued += 1;
           if (await hasWhatsAppAiOn(connection.id)) {
             result.aiCandidates.push({

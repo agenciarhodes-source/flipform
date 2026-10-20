@@ -29,6 +29,7 @@ import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-setti
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
+import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
 import { decideWhatsAppAiAnswer, toWhatsAppText, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -76,7 +77,7 @@ const MEDIA_NOTES: Record<string, string> = {
   sticker: '[O cliente enviou uma figurinha.]',
 };
 
-function whatsappInstructions(input: { agentName: string; companyName: string; firstReply: boolean }) {
+function whatsappInstructions(input: { agentName: string; companyName: string; firstReply: boolean; askPreferredName: boolean }) {
   return [
     `CANAL WHATSAPP: você está respondendo pelo WhatsApp oficial de ${input.companyName}.`,
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
@@ -86,6 +87,9 @@ function whatsappInstructions(input: { agentName: string; companyName: string; f
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se como ${input.agentName}, assistente virtual de ${input.companyName}.`
       : `Você é ${input.agentName}, assistente virtual de ${input.companyName}. Não se apresente de novo.`,
     'Nunca diga que é uma pessoa. Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
+    ...(input.askPreferredName
+      ? ['Num momento natural da conversa, se ainda não souber, pergunte como a pessoa prefere ser chamada e registre esse nome em identity.name.']
+      : []),
   ].join('\n');
 }
 
@@ -137,7 +141,7 @@ export async function replyToWhatsAppConversation(input: {
   const connection = typeof phoneNumberId === 'string'
     ? await prisma.tenantWhatsAppConnection.findFirst({
       where: { tenantId: input.tenantId, phoneNumberId, status: 'connected' },
-      select: { id: true, accessTokenEncrypted: true, aiSettings: true },
+      select: { id: true, wabaId: true, accessTokenEncrypted: true, aiSettings: true },
     })
     : null;
   const settings = connection?.aiSettings;
@@ -300,6 +304,7 @@ export async function replyToWhatsAppConversation(input: {
         agentName: runtime.name,
         companyName: conversation.tenant.name,
         firstReply: aiRepliesSoFar === 0,
+        askPreferredName: isWhatsAppAiLeadTenant(input.tenantId),
       })}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
@@ -359,6 +364,15 @@ export async function replyToWhatsAppConversation(input: {
       context.actionPermission,
       { recordOutbound: false },
     );
+    // A qualified conversation becomes a lead and Meta and Google Ads are told once (pilot only).
+    await handleWhatsAppAiQualification({
+      tenantId: input.tenantId,
+      conversationId: conversation.id,
+      runtime,
+      classification: parsed.qualification?.classification,
+      preferredName: parsed.identity?.name,
+      whatsappBusinessAccountId: connection.wabaId,
+    }).catch((error) => console.error('WhatsApp AI lead failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     return { replied: true, reason: 'sent' };
   } catch (error) {
     const failure = error instanceof OpenAiResponseError || error instanceof FlipAiConversationRuntimeError

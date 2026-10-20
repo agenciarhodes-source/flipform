@@ -61,6 +61,9 @@ export type MetaSubmissionAttribution = {
   clientIpAddress?: string | null;
   clientUserAgent?: string | null;
   landingPage?: string | null;
+  /** WhatsApp conversation started by a click-to-WhatsApp ad. */
+  ctwaClid?: string | null;
+  whatsappBusinessAccountId?: string | null;
 };
 
 export type TrackingDispatchContext = {
@@ -70,7 +73,7 @@ export type TrackingDispatchContext = {
   fromStageId?: string | null;
   toStageId?: string | null;
   triggeredById?: string | null;
-  source: 'public_form' | 'flip_ai' | 'kanban' | 'purchase' | 'test';
+  source: 'public_form' | 'flip_ai' | 'whatsapp_ai' | 'kanban' | 'purchase' | 'test';
   lead?: { email?: string | null; phone?: string | null; name?: string | null } | null;
   /** Server-owned ID shared only by the browser/server versions of a public Lead event. */
   metaLeadEventId?: string | null;
@@ -102,7 +105,7 @@ export function resolveTrackingEventId(
     mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
     && !mapping.customEventName
-    && (context.source === 'public_form' || context.source === 'flip_ai')
+    && (context.source === 'public_form' || context.source === 'flip_ai' || context.source === 'whatsapp_ai')
     && context.metaLeadEventId
   ) {
     return context.metaLeadEventId;
@@ -126,7 +129,7 @@ export function shouldApplyStageDuplicateGuard(
   const isPublicMetaLeadSubmission = mapping.provider === 'meta'
     && mapping.eventName === 'Lead'
     && !mapping.customEventName
-    && (context.source === 'public_form' || context.source === 'flip_ai')
+    && (context.source === 'public_form' || context.source === 'flip_ai' || context.source === 'whatsapp_ai')
     && Boolean(context.metaLeadEventId);
   const isFlipAiQualifiedLead = mapping.provider === 'meta'
     && mapping.eventName === 'QualifiedLead'
@@ -234,7 +237,8 @@ export function buildCustomData(mapping: any, source: TrackingDispatchContext['s
   const data: Record<string, unknown> = {
     content_name: mapping.customEventName || mapping.eventName,
     content_category: source === 'public_form' ? 'form_submission'
-      : source === 'flip_ai' ? 'flip_ai_conversation' : source === 'purchase' ? 'purchase' : 'kanban',
+      : source === 'flip_ai' ? 'flip_ai_conversation' : source === 'whatsapp_ai' ? 'whatsapp_ai_conversation'
+        : source === 'purchase' ? 'purchase' : 'kanban',
     currency: mapping.currency || 'BRL',
   };
   if (value !== undefined) data.value = value;
@@ -329,7 +333,10 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         accessToken: metaRuntime.accessToken,
         eventName,
         eventId,
-        actionSource: context.source === 'public_form' || context.source === 'flip_ai' ? 'website' : 'system_generated',
+        actionSource: context.source === 'whatsapp_ai'
+          ? (context.metaAttribution?.ctwaClid ? 'business_messaging' : 'system_generated')
+          : context.source === 'public_form' || context.source === 'flip_ai' ? 'website' : 'system_generated',
+        messagingChannel: context.source === 'whatsapp_ai' && context.metaAttribution?.ctwaClid ? 'whatsapp' : undefined,
         testEventCode: metaRuntime.testEventCode,
         eventSourceUrl: context.source === 'public_form' || context.source === 'flip_ai' ? metaLeadData.landingPage : undefined,
         user: metaLeadData.user,
@@ -386,6 +393,10 @@ function applySubmissionMetaAttribution(data: MetaLeadUserData, attribution?: Me
   if (attribution.fbp) user.fbp = attribution.fbp;
   if (attribution.clientIpAddress) user.clientIpAddress = attribution.clientIpAddress;
   if (attribution.clientUserAgent) user.clientUserAgent = attribution.clientUserAgent;
+  if (attribution.ctwaClid) {
+    user.ctwaClid = attribution.ctwaClid;
+    user.whatsappBusinessAccountId = attribution.whatsappBusinessAccountId || null;
+  }
   return {
     user,
     landingPage: attribution.landingPage || data.landingPage,
