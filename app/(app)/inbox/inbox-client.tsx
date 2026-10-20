@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { whatsappFailureText } from '@/lib/meta/whatsapp-failure-reasons';
 import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import {
   AlertCircle,
@@ -308,6 +309,14 @@ function createIdempotencyKey() {
     return crypto.randomUUID();
   }
   return `inbox-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Why Meta did not deliver the message, in plain Portuguese. */
+function failureReason(metadata: unknown) {
+  const value = metadata && typeof metadata === 'object' ? metadata as Record<string, unknown> : {};
+  const code = typeof value.providerErrorCode === 'string' ? value.providerErrorCode : null;
+  const title = typeof value.providerErrorTitle === 'string' ? value.providerErrorTitle : null;
+  return whatsappFailureText(code, title);
 }
 
 function MessageStatus({ status }: { status: string }) {
@@ -922,6 +931,9 @@ export function InboxClient({
                               <span>{formatMessageDate(message.providerTimestamp || message.createdAt)}</span>
                               {outbound && <MessageStatus status={message.status} />}
                             </div>
+                            {outbound && message.status === 'failed' && (
+                              <p className="mt-1 rounded bg-red-900/30 px-2 py-1 text-[11px] text-white">⚠️ {failureReason(message.metadata)}</p>
+                            )}
                           </div>
                         </div>
                       );
