@@ -17,3 +17,12 @@ def test_flip_suggestions_only_act_when_someone_applies():
     migration = read("prisma/migrations/20261023120000_flip_suggestions/migration.sql")
     assert "DROP" not in migration
     assert "tests/flip-suggestion-rules.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_suggestions_show_the_lead_and_can_be_decided_by_kind():
+    panel = read("components/flip/suggestions-panel.tsx")
+    assert "{item.leadName || KIND[item.kind].label}" in panel
+    assert "window.confirm(question)" in panel
+    bulk = read("lib/flip/suggestions.ts")
+    assert "export async function decideFlipSuggestionsOfKind(" in bulk
+    assert "await applyFlipSuggestion(session, item.id)" in bulk  # each one checked as if clicked alone

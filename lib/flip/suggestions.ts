@@ -150,7 +150,7 @@ export async function refreshFlipSuggestions(session: Session, now = new Date())
 
 export async function listFlipSuggestions(session: Session) {
   const managers = can(session.role, 'LEADS_EDIT_ALL');
-  return prisma.flipSuggestion.findMany({
+  const rows = await prisma.flipSuggestion.findMany({
     where: {
       tenantId: session.tenantId,
       status: 'pending',
@@ -158,8 +158,29 @@ export async function listFlipSuggestions(session: Session) {
     },
     orderBy: { createdAt: 'asc' },
     take: 50,
-    select: { id: true, kind: true, reason: true, leadId: true, createdAt: true },
+    select: { id: true, kind: true, reason: true, leadId: true, payload: true, createdAt: true, lead: { select: { name: true } } },
   });
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    reason: row.reason,
+    leadId: row.leadId,
+    leadName: row.lead?.name || null,
+    createdAt: row.createdAt,
+  }));
+}
+
+/** Aplicar or Dispensar every pending suggestion of one kind this person can act on (up to 50). */
+export async function decideFlipSuggestionsOfKind(session: Session, kind: SuggestionKind, action: 'apply' | 'dismiss') {
+  const visible = (await listFlipSuggestions(session)).filter((item) => item.kind === kind);
+  let done = 0;
+  for (const item of visible) {
+    const ok = action === 'apply'
+      ? (await applyFlipSuggestion(session, item.id).catch(() => ({ ok: false }))).ok
+      : await dismissFlipSuggestion(session, item.id).catch(() => false);
+    if (ok) done += 1;
+  }
+  return { total: visible.length, done };
 }
 
 async function transferLeads(input: { tenantId: string; leadIds: string[]; fromUserId: string; toUserId: string; actorUserId: string; message: string }) {

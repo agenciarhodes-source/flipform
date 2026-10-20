@@ -27,6 +27,13 @@ export function brasiliaDayAndHour(now: Date) {
   return { day, hour };
 }
 
+/** The first name to greet, or empty when the profile name looks like an e-mail or a system login. */
+export function greetingName(name: string | null | undefined) {
+  const first = (name || '').trim().split(/\s+/)[0] || '';
+  if (!first || /[@._\d]/.test(first) || first.length > 20) return '';
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
 function plural(count: number, one: string, many: string) {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -57,7 +64,7 @@ export function briefingInstructions(facts: BriefingFacts) {
   return [
     'Você é o Flip, o gestor comercial dentro do FlipForm. Escreva o resumo do dia para a pessoa abaixo.',
     facts.seesTeam ? 'Ela é gestora e vê a equipe toda.' : 'Ela é atendente e vê só o que é dela.',
-    `Comece com "Bom dia, ${facts.firstName}!" e escreva de 3 a 6 linhas curtas, em português do Brasil, tom direto e encorajador.`,
+    `Comece com "Bom dia${facts.firstName ? `, ${facts.firstName}` : ''}!" e escreva de 3 a 6 linhas curtas, em português do Brasil, tom direto e encorajador.`,
     'Use somente os números dados. Não invente dados, nomes nem porcentagens. Termine dizendo por onde começar.',
     'Sem títulos, sem markdown, sem emojis em excesso (no máximo um).',
   ].join('\n');
