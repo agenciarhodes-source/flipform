@@ -87,6 +87,27 @@ export function decideWhatsAppAiAnswer(input: {
   return { answer: true };
 }
 
+/**
+ * On WhatsApp there is no panel showing the links of external sources, so the "[Fonte externa N]"
+ * marks are taken out of the text and the pages actually cited go at the end (at most two).
+ */
+export function withWhatsAppSourceLinks(text: string, sources: Array<{ url: string }>) {
+  const cited: number[] = [];
+  const clean = text
+    .replace(/\s*\[\s*fontes?\s+externas?\s*([^\]]*)\]/gi, (_mark, inside: string) => {
+      for (const digits of inside.match(/\d+/g) || []) cited.push(Number(digits));
+      return '';
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+  const urls = [...new Set(cited)]
+    .map((number) => sources[number - 1]?.url)
+    .filter((url): url is string => typeof url === 'string' && url.startsWith('https://'))
+    .slice(0, 2);
+  return urls.length ? `${clean}\n\nFonte: ${urls.join('\n')}` : clean;
+}
+
 /** WhatsApp marks bold with one asterisk; models often write Markdown with two. */
 export function toWhatsAppText(text: string) {
   return text
