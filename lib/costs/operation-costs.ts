@@ -3,7 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { FLIP_AI_NANO_USD_PER_CREDIT } from '@/lib/flip-ai/usage-billing';
-import { monthRange, parseMetaPricing, usdToBrlRate, whatsappMessageCostUsd } from './pricing';
+import { monthRange, parseMetaPricing, whatsappMessageCostUsd } from './pricing';
 
 const AI_OPERATION_LABELS: Record<string, string> = {
   chat_response: 'Respostas da IA',
@@ -12,11 +12,11 @@ const AI_OPERATION_LABELS: Record<string, string> = {
   stage_suggestion: 'Análises de etapa',
 };
 
-function creditsToBrl(credits: number, rate: number) {
-  return (credits * FLIP_AI_NANO_USD_PER_CREDIT / 1e9) * rate;
+function creditsToUsd(credits: number) {
+  return credits * FLIP_AI_NANO_USD_PER_CREDIT / 1e9;
 }
 
-async function aiCosts(tenantId: string, start: Date, end: Date, rate: number) {
+async function aiCosts(tenantId: string, start: Date, end: Date) {
   const rows = await prisma.$queryRaw<Array<{ operation: string; channel: string | null; day: string; credits: bigint | number; events: bigint | number }>>(Prisma.sql`
     SELECT event.operation AS operation,
       event.metadata->>'channel' AS channel,
@@ -34,17 +34,17 @@ async function aiCosts(tenantId: string, start: Date, end: Date, rate: number) {
     operation: row.operation,
     channel: row.channel === 'whatsapp' ? 'whatsapp' : 'web',
     day: row.day,
-    brl: creditsToBrl(Number(row.credits), rate),
+    usd: creditsToUsd(Number(row.credits)),
     events: Number(row.events),
   }));
 }
 
-async function whatsappCosts(tenantId: string, start: Date, end: Date, rate: number) {
+async function whatsappCosts(tenantId: string, start: Date, end: Date) {
   const messages = await prisma.message.findMany({
     where: { tenantId, provider: 'meta', channel: 'whatsapp', direction: 'outbound', createdAt: { gte: start, lt: end } },
     select: { metadata: true, createdAt: true },
   });
-  const byCategory = new Map<string, { count: number; brl: number }>();
+  const byCategory = new Map<string, { count: number; usd: number }>();
   const byDay = new Map<string, number>();
   let free = 0;
   let unknown = 0;
@@ -60,25 +60,24 @@ async function whatsappCosts(tenantId: string, start: Date, end: Date, rate: num
       free += 1;
       continue;
     }
-    const cost = whatsappMessageCostUsd(pricing) * rate;
+    const cost = whatsappMessageCostUsd(pricing);
     const key = pricing.category || 'outra';
-    const current = byCategory.get(key) || { count: 0, brl: 0 };
-    byCategory.set(key, { count: current.count + 1, brl: current.brl + cost });
+    const current = byCategory.get(key) || { count: 0, usd: 0 };
+    byCategory.set(key, { count: current.count + 1, usd: current.usd + cost });
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(message.createdAt);
     byDay.set(day, (byDay.get(day) || 0) + cost);
   }
-  return { byCategory, byDay, free, unknown, total: [...byCategory.values()].reduce((sum, item) => sum + item.brl, 0) };
+  return { byCategory, byDay, free, unknown, total: [...byCategory.values()].reduce((sum, item) => sum + item.usd, 0) };
 }
 
 /** The cost panel of a company for one month: AI and WhatsApp, per result and per day. */
 export async function operationCosts(tenantId: string, month: string) {
-  const rate = usdToBrlRate();
   const range = monthRange(month);
   const [ai, previousAi, whatsapp, previousWhatsapp, conversations, qualified, closed] = await Promise.all([
-    aiCosts(tenantId, range.start, range.end, rate),
-    aiCosts(tenantId, range.previousStart, range.start, rate),
-    whatsappCosts(tenantId, range.start, range.end, rate),
-    whatsappCosts(tenantId, range.previousStart, range.start, rate),
+    aiCosts(tenantId, range.start, range.end),
+    aiCosts(tenantId, range.previousStart, range.start),
+    whatsappCosts(tenantId, range.start, range.end),
+    whatsappCosts(tenantId, range.previousStart, range.start),
     prisma.flipAiUsageEvent.findMany({
       where: { tenantId, operation: 'chat_response', createdAt: { gte: range.start, lt: range.end }, conversationId: { not: null } },
       select: { conversationId: true },
@@ -92,30 +91,29 @@ export async function operationCosts(tenantId: string, month: string) {
     }).then((rows) => new Set(rows.filter((row) => row.toStageId === row.lead.stageId).map((row) => row.leadId)).size),
   ]);
 
-  const aiTotal = ai.reduce((sum, row) => sum + row.brl, 0);
-  const aiByOperation = new Map<string, { label: string; events: number; brl: number }>();
+  const aiTotal = ai.reduce((sum, row) => sum + row.usd, 0);
+  const aiByOperation = new Map<string, { label: string; events: number; usd: number }>();
   for (const row of ai) {
     const key = row.operation;
-    const current = aiByOperation.get(key) || { label: AI_OPERATION_LABELS[key] || key, events: 0, brl: 0 };
-    aiByOperation.set(key, { ...current, events: current.events + row.events, brl: current.brl + row.brl });
+    const current = aiByOperation.get(key) || { label: AI_OPERATION_LABELS[key] || key, events: 0, usd: 0 };
+    aiByOperation.set(key, { ...current, events: current.events + row.events, usd: current.usd + row.usd });
   }
   const days = new Map<string, { ai: number; whatsapp: number }>();
-  for (const row of ai) days.set(row.day, { ai: (days.get(row.day)?.ai || 0) + row.brl, whatsapp: days.get(row.day)?.whatsapp || 0 });
+  for (const row of ai) days.set(row.day, { ai: (days.get(row.day)?.ai || 0) + row.usd, whatsapp: days.get(row.day)?.whatsapp || 0 });
   for (const [day, value] of whatsapp.byDay) days.set(day, { ai: days.get(day)?.ai || 0, whatsapp: value });
 
   const total = aiTotal + whatsapp.total;
-  const previousTotal = previousAi.reduce((sum, row) => sum + row.brl, 0) + previousWhatsapp.total;
+  const previousTotal = previousAi.reduce((sum, row) => sum + row.usd, 0) + previousWhatsapp.total;
   const per = (count: number) => (count > 0 ? total / count : null);
   return {
     month: range.label,
-    rate,
     total,
     previousTotal,
     ai: {
       total: aiTotal,
-      whatsappChannel: ai.filter((row) => row.channel === 'whatsapp').reduce((sum, row) => sum + row.brl, 0),
-      siteChannel: ai.filter((row) => row.channel === 'web').reduce((sum, row) => sum + row.brl, 0),
-      byOperation: [...aiByOperation.values()].sort((a, b) => b.brl - a.brl),
+      whatsappChannel: ai.filter((row) => row.channel === 'whatsapp').reduce((sum, row) => sum + row.usd, 0),
+      siteChannel: ai.filter((row) => row.channel === 'web').reduce((sum, row) => sum + row.usd, 0),
+      byOperation: [...aiByOperation.values()].sort((a, b) => b.usd - a.usd),
     },
     whatsapp: {
       total: whatsapp.total,

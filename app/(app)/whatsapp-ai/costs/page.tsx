@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { operationCosts } from '@/lib/costs/operation-costs';
-import { brl, WHATSAPP_PRICES_SNAPSHOT } from '@/lib/costs/pricing';
+import { usd, WHATSAPP_PRICES_SNAPSHOT } from '@/lib/costs/pricing';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +37,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
         <div>
           <Link href="/whatsapp-ai" className="text-sm text-brand-700 underline">← Atendimento WhatsApp</Link>
           <h1 className="text-2xl font-semibold">Custos da operação</h1>
-          <p className="text-sm text-muted-foreground">IA e WhatsApp, em reais. Estimativa para acompanhar; a fatura oficial é a da Meta e a da carteira de créditos.</p>
+          <p className="text-sm text-muted-foreground">IA e WhatsApp, em dólares (US$), como a Meta e o provedor de IA cobram. Estimativa para acompanhar; a fatura oficial é a da Meta e a da carteira de créditos.</p>
         </div>
         <form className="flex items-center gap-2" method="get">
           <select name="month" defaultValue={month} className="rounded border bg-white p-2 text-sm">
@@ -50,19 +50,19 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs uppercase text-muted-foreground">Total do mês</p>
-          <p className="text-2xl font-semibold">{brl(costs.total)}</p>
+          <p className="text-2xl font-semibold">{usd(costs.total)}</p>
           <p className="text-xs text-muted-foreground">
-            {change === null ? 'Sem gasto no mês anterior' : `${change >= 0 ? '+' : ''}${change.toFixed(0)}% em relação ao mês anterior (${brl(costs.previousTotal)})`}
+            {change === null ? 'Sem gasto no mês anterior' : `${change >= 0 ? '+' : ''}${change.toFixed(0)}% em relação ao mês anterior (${usd(costs.previousTotal)})`}
           </p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs uppercase text-muted-foreground">IA</p>
-          <p className="text-2xl font-semibold">{brl(costs.ai.total)}</p>
-          <p className="text-xs text-muted-foreground">WhatsApp {brl(costs.ai.whatsappChannel)} · chat do site {brl(costs.ai.siteChannel)}</p>
+          <p className="text-2xl font-semibold">{usd(costs.ai.total)}</p>
+          <p className="text-xs text-muted-foreground">WhatsApp {usd(costs.ai.whatsappChannel)} · chat do site {usd(costs.ai.siteChannel)}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs uppercase text-muted-foreground">WhatsApp (Meta)</p>
-          <p className="text-2xl font-semibold">{brl(costs.whatsapp.total)}</p>
+          <p className="text-2xl font-semibold">{usd(costs.whatsapp.total)}</p>
           <p className="text-xs text-muted-foreground">{costs.whatsapp.free} mensagens grátis (dentro da janela)</p>
         </div>
       </div>
@@ -75,7 +75,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
         ].map((item) => (
           <div key={item.label} className="rounded-xl border bg-white p-4 shadow-sm">
             <p className="text-xs uppercase text-muted-foreground">{item.label}</p>
-            <p className="text-xl font-semibold">{item.value === null ? '—' : brl(item.value)}</p>
+            <p className="text-xl font-semibold">{item.value === null ? '—' : usd(item.value)}</p>
             <p className="text-xs text-muted-foreground">{item.count}</p>
           </div>
         ))}
@@ -87,7 +87,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
           {costs.ai.byOperation.length === 0 ? <p className="text-sm text-muted-foreground">Sem uso de IA no mês.</p> : (
             <ul className="space-y-1 text-sm">
               {costs.ai.byOperation.map((item) => (
-                <li key={item.label} className="flex justify-between gap-2"><span>{item.label} ({item.events})</span><span className="font-medium">{brl(item.brl)}</span></li>
+                <li key={item.label} className="flex justify-between gap-2"><span>{item.label} ({item.events})</span><span className="font-medium">{usd(item.usd)}</span></li>
               ))}
             </ul>
           )}
@@ -97,7 +97,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
           {costs.whatsapp.byCategory.length === 0 ? <p className="text-sm text-muted-foreground">Nenhuma mensagem cobrada no mês.</p> : (
             <ul className="space-y-1 text-sm">
               {costs.whatsapp.byCategory.map((item) => (
-                <li key={item.category} className="flex justify-between gap-2"><span>{CATEGORY_LABELS[item.category] || item.category} ({item.count})</span><span className="font-medium">{brl(item.brl)}</span></li>
+                <li key={item.category} className="flex justify-between gap-2"><span>{CATEGORY_LABELS[item.category] || item.category} ({item.count})</span><span className="font-medium">{usd(item.usd)}</span></li>
               ))}
             </ul>
           )}
@@ -115,10 +115,10 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
               <li key={day.day} className="flex items-center gap-2 text-xs">
                 <span className="w-12 shrink-0 text-muted-foreground">{day.day.slice(8, 10)}/{day.day.slice(5, 7)}</span>
                 <span className="flex h-3 flex-1 overflow-hidden rounded bg-slate-100">
-                  <span className="bg-violet-500" style={{ width: `${(day.ai / maxDay) * 100}%` }} title={`IA ${brl(day.ai)}`} />
-                  <span className="bg-emerald-500" style={{ width: `${(day.whatsapp / maxDay) * 100}%` }} title={`WhatsApp ${brl(day.whatsapp)}`} />
+                  <span className="bg-violet-500" style={{ width: `${(day.ai / maxDay) * 100}%` }} title={`IA ${usd(day.ai)}`} />
+                  <span className="bg-emerald-500" style={{ width: `${(day.whatsapp / maxDay) * 100}%` }} title={`WhatsApp ${usd(day.whatsapp)}`} />
                 </span>
-                <span className="w-20 shrink-0 text-right">{brl(day.ai + day.whatsapp)}</span>
+                <span className="w-20 shrink-0 text-right">{usd(day.ai + day.whatsapp)}</span>
               </li>
             ))}
           </ul>
@@ -129,7 +129,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Cotação usada: R$ {costs.rate.toFixed(2).replace('.', ',')} por dólar. Preços do WhatsApp no Brasil de {WHATSAPP_PRICES_SNAPSHOT.split('-').reverse().join('/')}: Marketing US$ 0,0625 e Utilidade US$ 0,0068 por mensagem cobrada.
+        Preços do WhatsApp no Brasil de {WHATSAPP_PRICES_SNAPSHOT.split('-').reverse().join('/')}: Marketing US$ 0,0625 e Utilidade US$ 0,0068 por mensagem cobrada.
       </p>
     </section>
   );

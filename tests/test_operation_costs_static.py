@@ -15,7 +15,7 @@ def test_cost_panel_reads_meta_pricing_and_the_wallet_only():
     assert "ledger.entry_type = 'debit'" in costs
     for write_call in (".create(", ".update(", ".delete("):
         assert write_call not in costs
-    assert "return Number.isFinite(value) && value > 0 ? value : 5.6;" in read("lib/costs/pricing.ts")
+    assert "usdToBrlRate" not in read("lib/costs/pricing.ts")  # kept in dollars
     page = read("app/(app)/whatsapp-ai/costs/page.tsx")
     assert "can(session.role, 'FLIP_AI_MANAGE')" in page
     assert "tests/operation-costs-pricing.test.ts" in read(".github/workflows/ci.yml")
