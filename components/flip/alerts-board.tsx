@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
 import { DailyBriefingCard } from './daily-briefing';
 import { FlipSuggestionsPanel } from './suggestions-panel';
+import { AskFlip } from './ask-flip';
 
 type Board = { seesTeam: boolean; alerts: FlipAlert[]; total: number; generatedAt: string };
 
@@ -73,6 +74,8 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
       <DailyBriefingCard />
 
       <FlipSuggestionsPanel onApplied={() => void reload()} />
+
+      <AskFlip />
 
       {board.seesTeam && people.length > 0 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por pessoa">
