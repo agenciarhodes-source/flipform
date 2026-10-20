@@ -8,8 +8,8 @@ export const MANUAL_MOVE_COOLDOWN_HOURS = 24;
 export const STAGE_CRITERION_EXAMPLES: Array<{ match: RegExp; criterion: string }> = [
   { match: /j[aá]\s*(é|e)\s*cliente/i, criterion: 'A pessoa diz que já tem processo ou que já é cliente do escritório.' },
   { match: /aguardando\s*doc/i, criterion: 'A IA pediu os documentos e a pessoa ainda não mandou nenhum.' },
-  { match: /doc\w*\s*incomplet/i, criterion: 'A pessoa mandou só parte dos documentos pedidos.' },
-  { match: /doc\w*\s*enviad/i, criterion: 'A pessoa mandou todos os documentos pedidos.' },
+  { match: /doc\S*\s+incomplet/i, criterion: 'A pessoa mandou só parte dos documentos pedidos.' },
+  { match: /doc\S*\s+enviad/i, criterion: 'A pessoa mandou todos os documentos pedidos.' },
   { match: /fechad|assinad|protocol/i, criterion: 'A pessoa enviou a assinatura ou a procuração assinada.' },
 ];
 

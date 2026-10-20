@@ -34,5 +34,6 @@ test('a resposta da IA só vale para uma etapa oferecida e com motivo', () => {
 test('exemplos de critério pelo nome da etapa', () => {
   assert.match(exampleCriterionFor('Já é Cliente'), /já é cliente/);
   assert.match(exampleCriterionFor('Documentação incompleta'), /parte dos documentos/);
+  assert.match(exampleCriterionFor('Documentação enviada'), /todos os documentos/);
   assert.equal(exampleCriterionFor('Em andamento'), '');
 });
