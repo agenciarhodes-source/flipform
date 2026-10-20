@@ -96,7 +96,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
           resumeAfterHours: settings?.resumeAfterHours ?? null,
           testPhoneNumbers: settings?.testPhoneNumbers ?? [],
           liveEnabled: settings?.liveEnabled ?? false,
-          stageMode: settings?.stageMode === 'auto' ? 'auto' : 'suggest',
+          stageMode: (settings?.stageMode === 'auto' ? 'auto' : 'suggest') as 'auto' | 'suggest',
           updatedAt: settings?.updatedAt?.toISOString() ?? null,
         },
       };
