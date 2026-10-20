@@ -171,8 +171,9 @@ export async function listFlipSuggestions(session: Session) {
 }
 
 /** Aplicar or Dispensar every pending suggestion of one kind this person can act on (up to 50). */
-export async function decideFlipSuggestionsOfKind(session: Session, kind: SuggestionKind, action: 'apply' | 'dismiss') {
-  const visible = (await listFlipSuggestions(session)).filter((item) => item.kind === kind);
+export async function decideFlipSuggestionsOfKind(session: Session, kind: SuggestionKind, action: 'apply' | 'dismiss', ids?: string[]) {
+  const only = ids?.length ? new Set(ids) : null;
+  const visible = (await listFlipSuggestions(session)).filter((item) => item.kind === kind && (!only || only.has(item.id)));
   let done = 0;
   for (const item of visible) {
     const ok = action === 'apply'
