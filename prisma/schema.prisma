@@ -1845,3 +1845,20 @@ model ContactOptOut {
   @@unique([tenantId, phone])
   @@map("contact_opt_outs")
 }
+
+/// The Flip's summary of the day for one person, made once a day.
+model FlipDailyBriefing {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  userId      String    @map("user_id")
+  /// YYYY-MM-DD in Brasília
+  day         String
+  text        String
+  /// ai | plain
+  generatedBy String    @default("ai") @map("generated_by")
+  seenAt      DateTime? @map("seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([tenantId, userId, day])
+  @@map("flip_daily_briefings")
+}

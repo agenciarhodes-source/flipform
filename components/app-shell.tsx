@@ -40,6 +40,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { FlipNavBadge } from "@/components/flip/alerts-board";
+import { DailyBriefingPopup } from "@/components/flip/daily-briefing";
 import type { SessionPayload } from "@/lib/auth";
 import { LeadNotificationCenter } from "@/components/lead-notification-center";
 import { UnansweredConversationsAlert } from "@/components/unanswered-conversations-alert";
@@ -302,6 +303,7 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             {!inGroupView && <MessageNotificationCenter tenantId={session.tenantId} userId={session.userId} />}
+            {!inGroupView && session.tenantId && <DailyBriefingPopup />}
             {!inGroupView && <TaskReminderAlert />}
             {!inGroupView && <UnansweredConversationsAlert />}
             {!inGroupView && <LeadNotificationCenter tenantId={session.tenantId} userId={session.userId} />}
