@@ -146,6 +146,8 @@ model Tenant {
   googleConversionMappings GoogleConversionMapping[]
   googleConversionEvents GoogleConversionEvent[]
   whatsappAiSettings TenantWhatsAppAiSettings[]
+  pipelineStageAiRules PipelineStageAiRule[]
+  leadStageSuggestions LeadStageSuggestion[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -263,6 +265,8 @@ model PipelineStage {
   fromHistory    LeadStageHistory[] @relation("FromStage")
   toHistory      LeadStageHistory[] @relation("ToStage")
   flipAiAgents    FlipAiAgent[]
+  aiRule          PipelineStageAiRule?
+  stageSuggestions LeadStageSuggestion[]
 
   @@map("pipeline_stages")
 }
@@ -357,6 +361,7 @@ model Lead {
   assignedUser User?              @relation("AssignedLeads", fields: [assignedTo], references: [id])
   answers      LeadAnswer[]
   history      LeadStageHistory[]
+  stageSuggestions LeadStageSuggestion[]
   notes        Note[]
   tasks        Task[]
   purchases    LeadPurchase[]
@@ -1693,6 +1698,8 @@ model TenantWhatsAppAiSettings {
   testPhoneNumbers String[] @default([]) @map("test_phone_numbers")
   /// Releases the AI to every customer of the number.
   liveEnabled      Boolean  @default(false) @map("live_enabled")
+  /// suggest: the AI leaves stage suggestions for the team; auto: the AI moves the lead.
+  stageMode        String   @default("suggest") @map("stage_mode")
   updatedBy        String?  @map("updated_by")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
@@ -1702,4 +1709,45 @@ model TenantWhatsAppAiSettings {
 
   @@index([tenantId])
   @@map("tenant_whatsapp_ai_settings")
+}
+
+/// When the Flip AI should move a lead to this stage, written by the company in Portuguese.
+model PipelineStageAiRule {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  stageId   String   @unique @map("stage_id")
+  criterion String
+  enabled   Boolean  @default(true)
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stage  PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+
+  @@map("pipeline_stage_ai_rules")
+}
+
+/// A stage the Flip AI suggested for a lead (or applied, in automatic mode), with the reason.
+model LeadStageSuggestion {
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  leadId         String    @map("lead_id")
+  conversationId String?   @map("conversation_id")
+  fromStageId    String?   @map("from_stage_id")
+  toStageId      String    @map("to_stage_id")
+  reason         String
+  /// pending | approved | rejected | auto_applied | expired
+  status         String    @default("pending")
+  decidedBy      String?   @map("decided_by")
+  decidedAt      DateTime? @map("decided_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lead    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  toStage PipelineStage @relation(fields: [toStageId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([leadId, status])
+  @@map("lead_stage_suggestions")
 }

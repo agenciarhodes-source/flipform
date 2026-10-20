@@ -17,6 +17,7 @@ type Settings = {
   resumeAfterHours: number | null;
   testPhoneNumbers: string[];
   liveEnabled: boolean;
+  stageMode: 'suggest' | 'auto';
   updatedAt: string | null;
 };
 type NumberRow = { connectionId: string; phone: string | null; name: string | null; settings: Settings };
@@ -91,6 +92,7 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           resumeAfterHours: resume,
           testPhoneNumbers: testNumbersText.split(/[\n,;]+/).map((number) => number.trim()).filter(Boolean),
           liveEnabled: form.liveEnabled,
+          stageMode: form.stageMode,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -199,6 +201,16 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           </span>
         </label>
       </div>
+
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Etapas do funil</span>
+        <select className="w-full rounded border bg-white p-2 text-sm" value={form.stageMode}
+          onChange={(event) => update({ stageMode: event.target.value === 'auto' ? 'auto' : 'suggest' })}>
+          <option value="suggest">A IA sugere e a equipe aprova — recomendado</option>
+          <option value="auto">A IA move o lead sozinha</option>
+        </select>
+        <span className="block text-xs text-muted-foreground">Usa os critérios de “Etapas automáticas”, abaixo. Tudo fica no histórico do lead.</span>
+      </label>
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Devolver para a IA depois de (horas sem resposta da equipe)</span>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import {
   AlertCircle,
   ArrowLeft,
@@ -885,6 +886,9 @@ export function InboxClient({
                 />
               </header>
 
+              {selected.lead ? (
+                <div className="border-b px-3 py-2 md:px-5"><StageSuggestionBanner key={selected.lead.id} leadId={selected.lead.id} /></div>
+              ) : null}
               <div className="flex-1 overflow-y-auto bg-muted/20 px-3 py-4 md:px-6">
                 {loadingMessages && messages.length === 0 ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">Carregando mensagens...</div>

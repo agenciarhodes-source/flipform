@@ -19,6 +19,7 @@ export type FlipAlertKind =
   | 'hot_lead_without_task'
   | 'stale_lead'
   | 'new_lead_without_contact'
+  | 'stage_suggestion'
   | 'overloaded_attendant';
 
 export type FlipAlert = {
@@ -37,6 +38,7 @@ export const FLIP_ALERT_ORDER: FlipAlertKind[] = [
   'overdue_task',
   'hot_lead_without_task',
   'new_lead_without_contact',
+  'stage_suggestion',
   'stale_lead',
   'overloaded_attendant',
 ];
