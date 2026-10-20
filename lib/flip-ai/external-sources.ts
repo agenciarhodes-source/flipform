@@ -112,3 +112,17 @@ export async function updateExternalSource(session: SessionPayload, agentId: str
     return view(source);
   });
 }
+
+/** Removes a site the agent may consult. The agent stops using it on the next answer. */
+export async function deleteExternalSource(session: SessionPayload, agentId: string, sourceId: string) {
+  return prisma.$transaction(async (db) => {
+    const { tenantId, userId } = await requireFlipAiAccess(db, session);
+    await ensureSchema(db); await requireOwnedAgent(db, tenantId, agentId);
+    const source = await db.flipAiExternalSource.findFirst({ where: { id: sourceId, tenantId, agentId }, select: { id: true, domain: true } });
+    if (!source) throw new FlipAiError('EXTERNAL_SOURCE_NOT_FOUND', 404, 'Fonte externa não encontrada.');
+    await db.flipAiExternalSource.deleteMany({ where: { id: source.id, tenantId, agentId } });
+    await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_external_source', entityId: source.id,
+      action: 'deleted', metadata: { agentId, domain: source.domain } } });
+    return { id: source.id };
+  });
+}
