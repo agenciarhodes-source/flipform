@@ -35,6 +35,8 @@ export const whatsappAiSettingsInputSchema = z.object({
   noReplyMinutes: z.number().int().min(1).max(1440),
   dailyCreditLimit: z.number().int().min(1).max(10_000_000).nullable(),
   resumeAfterHours: z.number().int().min(1).max(720).nullable().optional().default(null),
+  testPhoneNumbers: z.array(z.string().trim().regex(/^\+?[\d\s()-]{10,20}$/, 'Número de teste inválido.')).max(20).optional().default([]),
+  liveEnabled: z.boolean().optional().default(false),
 }).strict();
 export type WhatsAppAiSettingsInput = z.infer<typeof whatsappAiSettingsInputSchema>;
 
@@ -63,7 +65,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
         aiSettings: {
           select: {
             enabled: true, agentId: true, scheduleMode: true, businessHours: true,
-            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, updatedAt: true,
+            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, testPhoneNumbers: true, liveEnabled: true, updatedAt: true,
           },
         },
       },
@@ -91,6 +93,8 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
           noReplyMinutes: settings?.noReplyMinutes ?? 10,
           dailyCreditLimit: settings?.dailyCreditLimit ?? null,
           resumeAfterHours: settings?.resumeAfterHours ?? null,
+          testPhoneNumbers: settings?.testPhoneNumbers ?? [],
+          liveEnabled: settings?.liveEnabled ?? false,
           updatedAt: settings?.updatedAt?.toISOString() ?? null,
         },
       };
@@ -129,6 +133,8 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
     noReplyMinutes: input.noReplyMinutes,
     dailyCreditLimit: input.dailyCreditLimit,
     resumeAfterHours: input.resumeAfterHours,
+    testPhoneNumbers: Array.from(new Set(input.testPhoneNumbers.map((number) => number.replace(/\D/g, '')))),
+    liveEnabled: input.liveEnabled,
     updatedBy: access.userId,
   };
   const saved = await prisma.tenantWhatsAppAiSettings.upsert({
@@ -150,10 +156,12 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
         before: before ? {
           enabled: before.enabled, agentId: before.agentId, scheduleMode: before.scheduleMode,
           noReplyMinutes: before.noReplyMinutes, dailyCreditLimit: before.dailyCreditLimit,
+          liveEnabled: before.liveEnabled, testNumbers: before.testPhoneNumbers.length,
         } : null,
         after: {
           enabled: saved.enabled, agentId: saved.agentId, scheduleMode: saved.scheduleMode,
           noReplyMinutes: saved.noReplyMinutes, dailyCreditLimit: saved.dailyCreditLimit,
+          liveEnabled: saved.liveEnabled, testNumbers: saved.testPhoneNumbers.length,
         },
       },
     },

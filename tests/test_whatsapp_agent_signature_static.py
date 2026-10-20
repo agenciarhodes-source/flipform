@@ -26,7 +26,7 @@ def test_public_signature_does_not_expose_internal_role_to_customer():
     assert "Administrador" not in helper
     assert "Gestor" not in helper
     assert "agentSignature" in outbound
-    assert "sentByUserId: requestedByUserId" in outbound
+    assert "sentByUserId: aiSender ? null : requestedByUserId" in outbound
 
 
 def test_outbound_keeps_internal_text_and_only_transforms_provider_payload():

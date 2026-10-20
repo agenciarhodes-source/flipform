@@ -15,6 +15,8 @@ type Settings = {
   noReplyMinutes: number;
   dailyCreditLimit: number | null;
   resumeAfterHours: number | null;
+  testPhoneNumbers: string[];
+  liveEnabled: boolean;
   updatedAt: string | null;
 };
 type NumberRow = { connectionId: string; phone: string | null; name: string | null; settings: Settings };
@@ -40,7 +42,7 @@ export function WhatsAppAiSettingsManager({ initialWorkspace }: { initialWorkspa
         </p>
       </header>
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-        As configurações já ficam salvas, mas a IA começará a responder no WhatsApp quando o atendimento automático for liberado. Até lá, nada muda no atendimento.
+        Com a IA ligada, ela responde primeiro só aos números de teste. Para atender todos os clientes, ligue “Liberar a IA para todos os clientes” no número. Quando alguém da equipe responde, a IA para naquela conversa.
       </div>
 
       {workspace.numbers.length === 0 ? (
@@ -58,6 +60,7 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
   const [form, setForm] = useState<Settings>(row.settings);
   const [limitText, setLimitText] = useState(row.settings.dailyCreditLimit ? String(row.settings.dailyCreditLimit) : '');
   const [resumeText, setResumeText] = useState(row.settings.resumeAfterHours ? String(row.settings.resumeAfterHours) : '');
+  const [testNumbersText, setTestNumbersText] = useState((row.settings.testPhoneNumbers || []).join('\n'));
   const [saving, setSaving] = useState(false);
   const update = (patch: Partial<Settings>) => setForm((current) => ({ ...current, ...patch }));
 
@@ -86,6 +89,8 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           noReplyMinutes: form.noReplyMinutes,
           dailyCreditLimit: limit,
           resumeAfterHours: resume,
+          testPhoneNumbers: testNumbersText.split(/[\n,;]+/).map((number) => number.trim()).filter(Boolean),
+          liveEnabled: form.liveEnabled,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -178,6 +183,22 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           onChange={(event) => setLimitText(event.target.value)} />
         <span className="block text-xs text-muted-foreground">Ao atingir o limite, a IA para até o dia seguinte e o atendimento volta para a equipe.</span>
       </label>
+
+      <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50 p-3">
+        <label className="block space-y-1.5">
+          <span className="text-sm font-medium">Números de teste</span>
+          <textarea rows={3} className="w-full rounded border bg-white p-2 text-sm" placeholder={'5586999999999\n5586988888888'}
+            value={testNumbersText} onChange={(event) => setTestNumbersText(event.target.value)} />
+          <span className="block text-xs text-muted-foreground">Um por linha, com DDD. Enquanto a IA não estiver liberada para todos, ela responde só a estes números.</span>
+        </label>
+        <label className="flex items-start gap-2 text-sm">
+          <Switch checked={form.liveEnabled} onCheckedChange={(checked) => update({ liveEnabled: checked })} aria-label="Liberar a IA para todos os clientes" />
+          <span>
+            <span className="font-medium">Liberar a IA para todos os clientes deste número</span>
+            <span className="block text-xs text-muted-foreground">Desligado: só os números de teste recebem respostas da IA. Ligue quando estiver satisfeito com os testes.</span>
+          </span>
+        </label>
+      </div>
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Devolver para a IA depois de (horas sem resposta da equipe)</span>

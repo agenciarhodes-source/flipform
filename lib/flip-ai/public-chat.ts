@@ -1346,6 +1346,8 @@ export async function completePublicChatTurn(
   previousAvailabilitySnapshot: FlipAiAvailabilitySnapshot | null = null,
   actionEligibility: FlipAiActionEligibility | null = null,
   actionPermission: FlipAiActionPermission | null = null,
+  /** WhatsApp replies are stored by the send itself; the web chat records its reply here. */
+  options: { recordOutbound?: boolean } = {},
 ) {
   const memorySnapshot = decision
     ? mergeConversationMemory({
@@ -1364,7 +1366,7 @@ export async function completePublicChatTurn(
     })
     : previousAvailabilitySnapshot;
 
-  await recordOutboundMessage({
+  if (options.recordOutbound !== false) await recordOutboundMessage({
     tenantId: turn.tenantId,
     conversationId: turn.conversationId,
     externalMessageId: turn.outboundExternalId,

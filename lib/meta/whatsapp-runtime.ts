@@ -349,6 +349,14 @@ export async function reconcileBufferedWhatsAppStatusesForMessage(input: {
   return reconciled;
 }
 
+async function hasWhatsAppAiOn(connectionId: string) {
+  const settings = await prisma.tenantWhatsAppAiSettings.findUnique({
+    where: { connectionId },
+    select: { enabled: true },
+  }).catch(() => null);
+  return Boolean(settings?.enabled);
+}
+
 export async function processWhatsAppCloudWebhook(payload: any) {
   const result = {
     messagesCreated: 0,
@@ -359,6 +367,8 @@ export async function processWhatsAppCloudWebhook(payload: any) {
     messageEchoesCreated: 0,
     duplicateMessageEchoes: 0,
     ignored: 0,
+    /** Conversations the Flip AI may answer after the quiet period (numbers with the AI on). */
+    aiCandidates: [] as Array<{ tenantId: string; conversationId: string; inboundMessageId: string }>,
   };
 
   if (!payload || payload.object !== 'whatsapp_business_account' || !Array.isArray(payload.entry)) {
@@ -498,6 +508,13 @@ export async function processWhatsAppCloudWebhook(payload: any) {
         else {
           result.messagesCreated += 1;
           if (automationQueued) result.automationsQueued += 1;
+          if (await hasWhatsAppAiOn(connection.id)) {
+            result.aiCandidates.push({
+              tenantId: connection.tenantId,
+              conversationId: persisted.conversation.id,
+              inboundMessageId: persisted.message.id,
+            });
+          }
         }
       }
 

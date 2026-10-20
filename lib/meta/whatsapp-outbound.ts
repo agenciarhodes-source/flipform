@@ -60,6 +60,9 @@ type OutboxMetadata = {
   agentSignatureSkippedReason?: 'message_limit';
   /** An approved template sent in place of free text, to reach someone outside the 24-hour window. */
   template?: WhatsAppOutboundTemplate;
+  /** Set when the Flip AI wrote this message, so the Inbox shows it apart from the team. */
+  aiAgentId?: string;
+  aiAgentName?: string;
 };
 
 export type WhatsAppOutboundTemplate = { name: string; language: string; parameters?: string[] };
@@ -190,6 +193,21 @@ async function assertRequesterCanSend(input: {
   };
 }
 
+/** The Flip AI answering on the company's WhatsApp: no person behind it, so no membership check. */
+export type WhatsAppAiSender = { agentId: string; agentName: string };
+
+async function loadConversationForAi(input: { tenantId: string; conversationId: string }) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, tenantId: input.tenantId, provider: 'meta', channel: 'whatsapp' },
+    include: {
+      externalContactIdentity: { select: { externalUserId: true } },
+      lead: { select: { assignedTo: true } },
+    },
+  });
+  if (!conversation) throw new WhatsAppOutboundError('NOT_FOUND', 'Conversation not found');
+  return conversation;
+}
+
 async function resolveConnectedWhatsAppConnection(tenantId: string) {
   const connection = await prisma.tenantWhatsAppConnection.findFirst({
     where: { tenantId, status: 'connected' },
@@ -219,6 +237,7 @@ async function enqueueWhatsAppTextMessage(input: {
   text: string;
   idempotencyKey: string;
   template?: WhatsAppOutboundTemplate;
+  aiSender?: WhatsAppAiSender;
 }) {
   const template = normalizeOutboundTemplate(input.template);
   const tenantId = input.tenantId.trim();
@@ -226,11 +245,14 @@ async function enqueueWhatsAppTextMessage(input: {
   const requestedByUserId = input.requestedByUserId.trim();
   const text = input.text.trim();
   const idempotencyKey = input.idempotencyKey.trim();
-  if (!tenantId || !conversationId || !requestedByUserId || !text || !idempotencyKey) {
+  const aiSender = input.aiSender || null;
+  if (!tenantId || !conversationId || (!requestedByUserId && !aiSender) || !text || !idempotencyKey) {
     throw new WhatsAppOutboundError('INVALID_REQUEST', 'Missing WhatsApp outbound fields');
   }
 
-  const authorization = await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
+  const authorization = aiSender
+    ? { conversation: await loadConversationForAi({ tenantId, conversationId }), sender: null }
+    : await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
   const conversation = authorization.conversation;
   const recipientWaId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
   const connection = await resolveConnectedWhatsAppConnection(tenantId);
@@ -266,13 +288,16 @@ async function enqueueWhatsAppTextMessage(input: {
       select: { sentByUserId: true },
     }),
   ]);
-  const signature = buildPublicAgentSignature({
-    mode: signatureSettings.mode,
-    senderUserId: authorization.sender.id,
-    senderName: authorization.sender.name,
-    previousOutboundSenderId: previousOutbound?.sentByUserId || null,
-    text,
-  });
+  // The AI never signs as an attendant: it introduces itself as the virtual assistant instead.
+  const signature = authorization.sender
+    ? buildPublicAgentSignature({
+      mode: signatureSettings.mode,
+      senderUserId: authorization.sender.id,
+      senderName: authorization.sender.name,
+      previousOutboundSenderId: previousOutbound?.sentByUserId || null,
+      text,
+    })
+    : { signature: null, skippedReason: null };
 
   const metadata: OutboxMetadata = {
     source: OUTBOX_SOURCE,
@@ -287,6 +312,7 @@ async function enqueueWhatsAppTextMessage(input: {
     ...(signature.signature && !template ? { agentSignature: signature.signature } : {}),
     ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
     ...(template ? { template } : {}),
+    ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
   };
 
   try {
@@ -301,7 +327,7 @@ async function enqueueWhatsAppTextMessage(input: {
         type: 'text',
         text,
         status: 'queued',
-        sentByUserId: requestedByUserId,
+        sentByUserId: aiSender ? null : requestedByUserId,
         metadata: toJson(metadata),
       },
     });
@@ -612,6 +638,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
   idempotencyKey: string;
   /** When set, this approved template is sent and `text` is only what the Inbox shows. */
   template?: WhatsAppOutboundTemplate;
+  /** When set, the Flip AI is the sender (requestedByUserId may be empty). */
+  aiSender?: WhatsAppAiSender;
 }): Promise<WhatsAppOutboundResult> {
   const queued = await enqueueWhatsAppTextMessage(input);
   const begun = await beginDispatch(input.tenantId, queued.message.id);

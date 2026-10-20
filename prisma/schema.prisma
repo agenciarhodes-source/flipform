@@ -1687,6 +1687,10 @@ model TenantWhatsAppAiSettings {
   dailyCreditLimit Int?     @map("daily_credit_limit")
   /// Hands a paused conversation back to the AI after these hours without a team reply; empty = never.
   resumeAfterHours Int?     @map("resume_after_hours")
+  /// While liveEnabled is off, the AI only answers these numbers (tests).
+  testPhoneNumbers String[] @default([]) @map("test_phone_numbers")
+  /// Releases the AI to every customer of the number.
+  liveEnabled      Boolean  @default(false) @map("live_enabled")
   updatedBy        String?  @map("updated_by")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")

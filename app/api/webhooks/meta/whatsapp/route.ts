@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { replyAfterQuietPeriod } from '@/lib/whatsapp-ai/reply';
 import { runAutomationWorker } from '@/lib/automation';
 import { getPlatformWhatsAppWebhookCredentials, getWhatsAppWebhookVerifyToken } from '@/lib/meta/whatsapp-runtime-credentials';
 import { processWhatsAppCloudWebhook, verifyWhatsAppWebhookChallenge, verifyWhatsAppWebhookSignature } from '@/lib/meta/whatsapp-runtime';
@@ -46,7 +47,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await processWhatsAppCloudWebhook(payload);
-    console.info('Meta WhatsApp webhook processed', result);
+    const { aiCandidates, ...counts } = result;
+    console.info('Meta WhatsApp webhook processed', { ...counts, aiCandidates: aiCandidates.length });
+
+    // The Flip AI answers after the customer stops typing; only the latest message of each
+    // conversation leads to a reply, and every check runs again at that moment.
+    const latestByConversation = new Map(aiCandidates.map((candidate) => [candidate.conversationId, candidate]));
+    for (const candidate of latestByConversation.values()) {
+      const work = replyAfterQuietPeriod(candidate)
+        .then((outcome) => console.info('WhatsApp AI reply', { conversationId: candidate.conversationId, ...outcome }))
+        .catch((error) => console.error('WhatsApp AI reply failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+      if (!scheduleAfterResponse(work)) await work;
+    }
 
     if (result.automationsQueued > 0) {
       const backgroundWork = runAutomationWorker()
