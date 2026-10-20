@@ -19,3 +19,12 @@ def test_daily_briefing_is_made_once_a_day_on_first_open_and_never_invents():
     migration = read("prisma/migrations/20261022150000_flip_daily_briefings/migration.sql")
     assert "DROP" not in migration
     assert "tests/flip-briefing-rules.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_owner_can_switch_the_summary_off_for_the_whole_company():
+    route = read("app/api/flip/briefing/route.ts")
+    assert "if (session.role !== 'owner') {" in route
+    assert "if (!(await isBriefingEnabledForCompany(session.tenantId))) return null;" in read("lib/flip/briefing.ts")
+    migration = read("prisma/migrations/20261022180000_tenant_flip_briefing_switch/migration.sql")
+    assert "DEFAULT true" in migration and "DROP" not in migration
+    assert "Desligar o resumo para a empresa toda" in read("components/flip/daily-briefing.tsx")

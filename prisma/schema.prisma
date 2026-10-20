@@ -94,6 +94,8 @@ model Tenant {
   internalNotes String?      @map("internal_notes")
   accountKind   String       @default("unclassified") @map("account_kind")
   lastLoginAt   DateTime?    @map("last_login_at")
+  /// The owner can switch off the Flip's daily summary for the whole company.
+  flipBriefingEnabled Boolean @default(true) @map("flip_briefing_enabled")
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
 
