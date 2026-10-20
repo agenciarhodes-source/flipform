@@ -1705,6 +1705,8 @@ model TenantWhatsAppAiSettings {
   liveEnabled      Boolean  @default(false) @map("live_enabled")
   /// suggest: the AI leaves stage suggestions for the team; auto: the AI moves the lead.
   stageMode        String   @default("suggest") @map("stage_mode")
+  /// How the AI introduces itself in its first reply, e.g. "assistente do Escritório X". Empty = "assistente de <empresa>".
+  introduction     String?  @map("introduction")
   updatedBy        String?  @map("updated_by")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")

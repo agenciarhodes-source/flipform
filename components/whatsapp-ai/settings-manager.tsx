@@ -18,6 +18,7 @@ type Settings = {
   testPhoneNumbers: string[];
   liveEnabled: boolean;
   stageMode: 'suggest' | 'auto';
+  introduction: string | null;
   updatedAt: string | null;
 };
 type NumberRow = { connectionId: string; phone: string | null; name: string | null; settings: Settings };
@@ -97,6 +98,7 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           testPhoneNumbers: testNumbersText.split(/[\n,;]+/).map((number) => number.trim()).filter(Boolean),
           liveEnabled: form.liveEnabled,
           stageMode: form.stageMode,
+          introduction: form.introduction?.trim() || null,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -205,6 +207,15 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           </span>
         </label>
       </div>
+
+      <label className="block space-y-1.5">
+        <span className="text-sm font-medium">Como a IA se apresenta</span>
+        <input type="text" maxLength={120} className="w-full rounded border p-2 text-sm" placeholder="assistente da empresa"
+          value={form.introduction || ''} onChange={(event) => update({ introduction: event.target.value })} />
+        <span className="block text-xs text-muted-foreground">
+          Usado na primeira resposta, por exemplo “assistente do Escritório Junqueira Advogados”. A IA não usa nome próprio e nunca diz que é uma pessoa. Vazio: “assistente de” + o nome da empresa.
+        </span>
+      </label>
 
       <label className="block space-y-1.5">
         <span className="text-sm font-medium">Etapas do funil</span>
