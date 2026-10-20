@@ -8,7 +8,9 @@ export type MetaCapiPayload = {
   accessToken: string;
   eventName: string;
   eventId: string;
-  actionSource?: 'website' | 'system_generated';
+  actionSource?: 'website' | 'system_generated' | 'business_messaging';
+  /** With business_messaging: the channel the conversation happened on. */
+  messagingChannel?: 'whatsapp';
   eventSourceUrl?: string | null;
   testEventCode?: string | null;
   user?: {
@@ -24,6 +26,9 @@ export type MetaCapiPayload = {
     fbp?: string | null;
     clientIpAddress?: string | null;
     clientUserAgent?: string | null;
+    /** Click-to-WhatsApp ad click and the WhatsApp account, sent as Meta asks (not hashed). */
+    ctwaClid?: string | null;
+    whatsappBusinessAccountId?: string | null;
   };
   customData?: Record<string, unknown>;
   /** Optional caller-owned deadline. Aborts the single request; it is never retried here. */
@@ -72,7 +77,7 @@ export function hashMetaValue(value: string): string {
 
 export type MetaHashedUserDataKey = 'em' | 'ph' | 'fn' | 'ln' | 'ct' | 'st' | 'country' | 'external_id';
 export type MetaUserData = Partial<Record<MetaHashedUserDataKey, string[]>> &
-  Partial<Record<'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent', string>>;
+  Partial<Record<'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent' | 'ctwa_clid' | 'whatsapp_business_account_id', string>>;
 
 function addHashed(data: MetaUserData, key: MetaHashedUserDataKey, value: string | null | undefined, normalizer = normalizeMetaText) {
   if (!value) return;
@@ -80,7 +85,7 @@ function addHashed(data: MetaUserData, key: MetaHashedUserDataKey, value: string
   if (normalized) data[key] = [hashMetaValue(normalized)];
 }
 
-function addPlain(data: MetaUserData, key: 'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent', value: string | null | undefined) {
+function addPlain(data: MetaUserData, key: 'fbc' | 'fbp' | 'client_ip_address' | 'client_user_agent' | 'ctwa_clid' | 'whatsapp_business_account_id', value: string | null | undefined) {
   const normalized = value?.trim();
   if (normalized) data[key] = normalized;
 }
@@ -99,6 +104,8 @@ export function buildUserData(user: MetaCapiPayload['user']): MetaUserData {
   addPlain(data, 'fbp', user?.fbp);
   addPlain(data, 'client_ip_address', user?.clientIpAddress);
   addPlain(data, 'client_user_agent', user?.clientUserAgent);
+  addPlain(data, 'ctwa_clid', user?.ctwaClid);
+  addPlain(data, 'whatsapp_business_account_id', user?.whatsappBusinessAccountId);
   return data;
 }
 
@@ -157,6 +164,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaC
         event_time: Math.floor(Date.now() / 1000),
         event_id: payload.eventId,
         action_source: payload.actionSource || 'system_generated',
+        messaging_channel: payload.actionSource === 'business_messaging' ? payload.messagingChannel || 'whatsapp' : undefined,
         event_source_url: payload.eventSourceUrl || undefined,
         user_data: buildUserData(payload.user),
         custom_data: payload.customData || undefined,
