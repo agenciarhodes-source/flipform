@@ -33,7 +33,7 @@ import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
-import { decideWhatsAppAiAnswer, toWhatsAppText, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -355,7 +355,7 @@ export async function replyToWhatsAppConversation(input: {
     const parsed = parsePublicChatDecision(raw.text);
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
     parsed.reply = enforceContactMoment(parsed.reply, context.contactMoment);
-    const reply = toWhatsAppText(parsed.reply);
+    const reply = withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources);
     if (!reply) throw new OpenAiResponseError('definitive', 'WHATSAPP_AI_EMPTY_REPLY');
 
     // A person may have answered while the AI was thinking: then the AI stays quiet. Compared by the
