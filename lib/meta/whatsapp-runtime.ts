@@ -370,6 +370,8 @@ export async function processWhatsAppCloudWebhook(payload: any) {
     ignored: 0,
     /** Conversations the Flip AI may answer after the quiet period (numbers with the AI on). */
     aiCandidates: [] as Array<{ tenantId: string; conversationId: string; inboundMessageId: string }>,
+    /** Photos, PDFs and voice messages to copy to the private storage for 7 days (numbers with the AI on). */
+    mediaToArchive: [] as Array<{ tenantId: string; connectionId: string; conversationId: string; messageId: string }>,
   };
 
   if (!payload || payload.object !== 'whatsapp_business_account' || !Array.isArray(payload.entry)) {
@@ -523,6 +525,14 @@ export async function processWhatsAppCloudWebhook(payload: any) {
               conversationId: persisted.conversation.id,
               inboundMessageId: persisted.message.id,
             });
+            if (['image', 'document', 'audio'].includes(persisted.message.type)) {
+              result.mediaToArchive.push({
+                tenantId: connection.tenantId,
+                connectionId: connection.id,
+                conversationId: persisted.conversation.id,
+                messageId: persisted.message.id,
+              });
+            }
           }
         }
       }

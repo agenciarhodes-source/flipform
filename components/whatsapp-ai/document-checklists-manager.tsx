@@ -48,8 +48,8 @@ export function DocumentChecklistsManager({ initial }: { initial: Array<Omit<Che
         <h2 className="text-lg font-semibold">Documentos</h2>
         <p className="text-sm text-muted-foreground">
           Os documentos que cada tipo de caso precisa. A IA descobre o caso pela conversa, pede os documentos, confere cada foto ou PDF
-          (qual documento é, se está legível e se cumpre a regra) e cobra o que falta. Os arquivos ficam só no WhatsApp (a Meta guarda por 30 dias);
-          o FlipForm guarda apenas o resultado da conferência.
+          (qual documento é, se está legível e se cumpre a regra) e cobra o que falta. Fotos, PDFs e áudios ficam guardados no FlipForm por 7 dias,
+          como os arquivos do chat, e aparecem na ficha do lead; depois disso são apagados automaticamente.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">Um documento por linha. Para uma regra, use “|”: <em>Comprovante de residência | dos últimos 3 meses</em>.</p>
       </div>

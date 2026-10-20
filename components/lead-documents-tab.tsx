@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 
 type CaseView = {
   name: string;
-  items: Array<{ label: string; rule: string; status: string; files: Array<{ messageId: string; status: string; note: string | null; createdAt: string }> }>;
+  items: Array<{ label: string; rule: string; status: string; files: Array<{ messageId: string; href: string; status: string; note: string | null; createdAt: string }> }>;
   others: Array<{ messageId: string; detectedType: string | null; status: string; createdAt: string }>;
 };
 
@@ -39,7 +39,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
                   <span className="font-medium">{item.label}</span>
                   <span className="text-xs text-muted-foreground">{LABEL[item.status] || item.status}{item.rule ? ` · ${item.rule}` : ''}</span>
                   {item.files.map((file, index) => (
-                    <a key={file.messageId} href={`/api/inbox/messages/${encodeURIComponent(file.messageId)}/media`} target="_blank" rel="noreferrer"
+                    <a key={file.messageId} href={file.href} target="_blank" rel="noreferrer"
                       className="text-xs text-brand-700 underline" title={file.note || undefined}>
                       arquivo {index + 1}{file.status !== 'received' ? ` (${LABEL[file.status] || file.status})` : ''}
                     </a>
@@ -55,7 +55,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
           </div>
         );
       })}
-      <p className="text-xs text-muted-foreground">Os arquivos ficam disponíveis enquanto a Meta os guardar (30 dias). Baixe pelo Inbox o que precisar manter.</p>
+      <p className="text-xs text-muted-foreground">O FlipForm guarda uma cópia dos arquivos por 7 dias (aparecem também em Flip AI › Arquivos). Depois disso, o arquivo ainda abre pela Meta por até 30 dias. Baixe o que precisar manter.</p>
     </div>
   );
 }

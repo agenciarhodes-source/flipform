@@ -7,12 +7,15 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_documents_are_read_not_stored():
+def test_documents_check_keeps_only_the_result_and_files_get_the_chat_7_day_copy():
     documents = read("lib/whatsapp-ai/documents.ts")
     assert "Only the result is stored; the file stays at Meta." in documents
     assert "Não transcreva dados pessoais do documento na resposta." in documents
-    for forbidden in ("putObject", "uploadAttachment", "storage"):
-        assert forbidden not in documents
+    archive = read("lib/whatsapp-ai/media-archive.ts")
+    assert "FLIP_AI_ATTACHMENT_RETENTION_DAYS * 86_400_000" in archive  # same 7 days as the chat
+    assert "prisma.chatAttachment.create({" in archive
+    assert "createAttachmentUploadUrl(storage.config" in archive
+    assert "archiveWhatsAppMedia(media)" in read("app/api/webhooks/meta/whatsapp/route.ts")
     migration = read("prisma/migrations/20261021180000_whatsapp_ai_documents/migration.sql")
     assert "DROP" not in migration and "flip_ai_" not in migration
 

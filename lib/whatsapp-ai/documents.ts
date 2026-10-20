@@ -216,7 +216,7 @@ export async function leadDocumentsView(tenantId: string, leadId: string) {
   const conversations = await prisma.conversation.findMany({ where: { tenantId, leadId }, select: { id: true } });
   const ids = conversations.map((conversation) => conversation.id);
   if (!ids.length) return { cases: [] };
-  const [checklists, cases, documents] = await Promise.all([
+  const [checklists, cases, documents, copies] = await Promise.all([
     loadChecklists(tenantId),
     prisma.conversationDocumentCase.findMany({ where: { tenantId, conversationId: { in: ids } }, select: { conversationId: true, checklistId: true } }),
     prisma.leadDocument.findMany({
@@ -224,7 +224,15 @@ export async function leadDocumentsView(tenantId: string, leadId: string) {
       orderBy: { createdAt: 'asc' },
       select: { id: true, conversationId: true, messageId: true, checklistId: true, itemKey: true, detectedType: true, status: true, note: true, createdAt: true },
     }),
+    prisma.chatAttachment.findMany({
+      where: { tenantId, conversationId: { in: ids }, status: 'ready', expiresAt: { gt: new Date() }, clientMessageId: { not: null } },
+      select: { id: true, clientMessageId: true },
+    }).catch(() => []),
   ]);
+  const copyOf = new Map(copies.map((copy) => [copy.clientMessageId, copy.id]));
+  const fileHref = (messageId: string) => (copyOf.get(messageId)
+    ? `/api/leads/${encodeURIComponent(leadId)}/attachments/${encodeURIComponent(copyOf.get(messageId)!)}`
+    : `/api/inbox/messages/${encodeURIComponent(messageId)}/media`);
   return {
     cases: cases.flatMap((entry) => {
       const checklist = checklists.find((list) => list.id === entry.checklistId);
@@ -238,7 +246,7 @@ export async function leadDocumentsView(tenantId: string, leadId: string) {
           rule: item.rule,
           status: item.status,
           files: ofCase.filter((document) => document.itemKey === item.key).map((document) => ({
-            messageId: document.messageId, status: document.status, note: document.note, createdAt: document.createdAt.toISOString(),
+            messageId: document.messageId, href: fileHref(document.messageId), status: document.status, note: document.note, createdAt: document.createdAt.toISOString(),
           })),
         })),
         others: ofCase.filter((document) => !document.itemKey).map((document) => ({
