@@ -37,7 +37,9 @@ import {
   Network,
   Building2,
   MessageCircle,
+  Sparkles,
 } from "lucide-react";
+import { FlipNavBadge } from "@/components/flip/alerts-board";
 import type { SessionPayload } from "@/lib/auth";
 import { LeadNotificationCenter } from "@/components/lead-notification-center";
 import { UnansweredConversationsAlert } from "@/components/unanswered-conversations-alert";
@@ -53,6 +55,7 @@ type NavItem = {
 };
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/flip", label: "Flip", icon: Sparkles, permission: "LEADS_VIEW" },
   { href: "/team", label: "Visão da equipe", icon: Network, permission: "DASHBOARD_VIEW", show: (role) => ['owner', 'admin', 'manager'].includes(role) },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
   { href: "/leads", label: "Leads", icon: Users },
@@ -238,6 +241,7 @@ export function AppShell({
               >
                 <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
                 {item.label}
+                {item.href === "/flip" && <FlipNavBadge />}
               </Link>
             );
           })}
