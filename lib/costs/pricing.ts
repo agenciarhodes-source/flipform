@@ -12,12 +12,6 @@ export const WHATSAPP_USD_PER_MESSAGE_BR: Record<string, number> = {
   service: 0,
 };
 
-/** Reais per dollar for the panel; COST_USD_BRL overrides it. */
-export function usdToBrlRate(env: NodeJS.ProcessEnv = process.env) {
-  const value = Number(env.COST_USD_BRL);
-  return Number.isFinite(value) && value > 0 ? value : 5.6;
-}
-
 /** What Meta says about one message: whether it was billed, and the category. */
 export type MetaPricing = { billable: boolean; category: string | null; pricingModel: string | null };
 
@@ -50,6 +44,9 @@ export function monthRange(month: string) {
   return { start, end, previousStart, label };
 }
 
-export function brl(value: number) {
-  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Costs are kept in dollars, as Meta and the AI provider charge them. Small values keep 4 decimals. */
+export function usd(value: number) {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: Math.abs(value) < 1 && value !== 0 ? 4 : 2,
+  });
 }
