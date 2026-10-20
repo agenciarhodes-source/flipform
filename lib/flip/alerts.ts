@@ -193,6 +193,28 @@ export async function computeFlipAlerts(session: Scope, now = new Date()) {
     });
   }
 
+  // Managers also see the AI conversations the Flip rated badly.
+  if (seesTeam) {
+    const badReviews = await prisma.flipAiConversationReview.findMany({
+      where: { tenantId: session.tenantId, status: 'new', score: { lte: 2 } },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_PER_KIND,
+      select: { id: true, score: true, summary: true, createdAt: true, conversation: { select: { lead: { select: { name: true } }, externalContactIdentity: { select: { displayName: true, phone: true } } } } },
+    }).catch(() => []);
+    for (const review of badReviews) {
+      alerts.push({
+        kind: 'ai_review_problem',
+        id: `ai-review:${review.id}`,
+        title: review.conversation.lead?.name || review.conversation.externalContactIdentity.displayName || review.conversation.externalContactIdentity.phone || 'Conversa da IA',
+        detail: `Nota ${review.score}: ${review.summary}`,
+        href: '/whatsapp-ai/review',
+        ownerId: null,
+        ownerName: null,
+        since: review.createdAt.toISOString(),
+      });
+    }
+  }
+
   // Managers also see attendants carrying much more than the rest of the team.
   if (seesTeam) {
     const attendants = users.filter((member) => member.role === 'agent' && member.status === 'active');
