@@ -148,6 +148,7 @@ model Tenant {
   whatsappAiSettings TenantWhatsAppAiSettings[]
   pipelineStageAiRules PipelineStageAiRule[]
   leadStageSuggestions LeadStageSuggestion[]
+  documentChecklists   DocumentChecklist[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -1750,4 +1751,49 @@ model LeadStageSuggestion {
   @@index([tenantId, status])
   @@index([leadId, status])
   @@map("lead_stage_suggestions")
+}
+
+/// The documents each type of case needs, as each company works (items: key, label, rule).
+model DocumentChecklist {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  items     Json     @default("[]")
+  enabled   Boolean  @default(true)
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("document_checklists")
+}
+
+/// The check of one file a customer sent on WhatsApp. Only the result: the file stays at Meta.
+model LeadDocument {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  leadId         String?  @map("lead_id")
+  messageId      String   @unique @map("message_id")
+  checklistId    String?  @map("checklist_id")
+  itemKey        String?  @map("item_key")
+  detectedType   String?  @map("detected_type")
+  /// received | unreadable | problem | unrecognized
+  status         String
+  note           String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, conversationId])
+  @@map("lead_documents")
+}
+
+/// Which document list (type of case) a conversation follows.
+model ConversationDocumentCase {
+  conversationId String   @id @map("conversation_id")
+  tenantId       String   @map("tenant_id")
+  checklistId    String   @map("checklist_id")
+  decidedAt      DateTime @default(now()) @map("decided_at")
+
+  @@map("conversation_document_cases")
 }

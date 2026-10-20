@@ -31,6 +31,7 @@ import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbo
 import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
 import { suggestStageFromConversation } from './stage-suggestions';
+import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, toWhatsAppText, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -214,6 +215,20 @@ export async function replyToWhatsAppConversation(input: {
       } else {
         extraUserNotes.push('[O cliente enviou um áudio que não pôde ser ouvido. Peça, com gentileza, que escreva a mensagem.]');
       }
+    } else if (message.type === 'image' || message.type === 'document') {
+      // Checked against the company's document lists; only the result is kept.
+      const token = await mediaAccessToken(connection.accessTokenEncrypted);
+      const checked = token
+        ? await readWhatsAppDocument({
+          tenantId: input.tenantId,
+          agentId: runtime.id,
+          conversationId: conversation.id,
+          connectionId: connection.id,
+          accessToken: token,
+          message,
+        }).catch(() => null)
+        : null;
+      extraUserNotes.push(documentNote(checked, MEDIA_NOTES[message.type]));
     } else if (MEDIA_NOTES[message.type]) {
       extraUserNotes.push(MEDIA_NOTES[message.type]);
     }
@@ -299,6 +314,7 @@ export async function replyToWhatsAppConversation(input: {
       select: { metadata: true },
     });
     const aiRepliesSoFar = recentOutbound.filter((message) => typeof metadataOf(message.metadata).aiAgentId === 'string').length;
+    const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
     context = {
       ...context,
       instructions: `${context.instructions}\n\n${whatsappInstructions({
@@ -306,7 +322,7 @@ export async function replyToWhatsAppConversation(input: {
         companyName: conversation.tenant.name,
         firstReply: aiRepliesSoFar === 0,
         askPreferredName: isWhatsAppAiLeadTenant(input.tenantId),
-      })}`,
+      })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
         : context.messages,

@@ -8,6 +8,9 @@ import { getWhatsAppAiWorkspace } from '@/lib/whatsapp-ai/settings';
 import { WhatsAppAiSettingsManager } from '@/components/whatsapp-ai/settings-manager';
 import { StageRulesManager } from '@/components/whatsapp-ai/stage-rules-manager';
 import { listStageRulePipelines } from '@/lib/whatsapp-ai/stage-rules-server';
+import { DocumentChecklistsManager } from '@/components/whatsapp-ai/document-checklists-manager';
+import { prisma } from '@/lib/prisma';
+import { checklistItemsToText, type ChecklistItem } from '@/lib/whatsapp-ai/document-rules';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +21,21 @@ export default async function WhatsAppAiPage() {
   try {
     const workspace = await getWhatsAppAiWorkspace(session);
     const pipelines = await listStageRulePipelines(session.tenantId);
+    const checklists = (await prisma.documentChecklist.findMany({
+      where: { tenantId: session.tenantId },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, name: true, items: true, enabled: true },
+    })).map((row) => ({
+      id: row.id, name: row.name, enabled: row.enabled,
+      itemsText: checklistItemsToText((Array.isArray(row.items) ? row.items : []) as unknown as ChecklistItem[]),
+    }));
     return (
       <>
         <WhatsAppAiSettingsManager initialWorkspace={workspace} />
-        <div className="mx-auto max-w-4xl px-4 pb-6 md:px-6"><StageRulesManager initialPipelines={pipelines} /></div>
+        <div className="mx-auto max-w-4xl space-y-5 px-4 pb-6 md:px-6">
+          <StageRulesManager initialPipelines={pipelines} />
+          <DocumentChecklistsManager initial={checklists} />
+        </div>
       </>
     );
   } catch (error) {

@@ -7,6 +7,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { moveLeadToStage } from '@/lib/leads/move-stage';
 import { acceptedSuggestion, candidateStages, type StageCandidate } from './stage-rules';
+import { conversationDocumentContext } from './documents';
 
 const CLASSIFIER_FORMAT: OpenAiJsonSchemaFormat = {
   type: 'json_schema',
@@ -91,10 +92,12 @@ export async function suggestStageFromConversation(input: {
     return body ? `${who}: ${body.slice(0, 600)}` : '';
   }).filter(Boolean).join('\n');
   if (!transcript) return { kind: 'no_messages' as const };
+  const documents = await conversationDocumentContext(input.tenantId, input.conversationId).catch(() => null);
+  const conversationText = documents?.checklist ? `${transcript}\n\n${documents.text}` : transcript;
 
   const model = (await getActiveFlipAiTextModel()).model;
   const result = await streamOpenAiText(
-    { instructions: classifierInstructions(candidates, lead.stage.name), messages: [{ role: 'user', content: transcript }] },
+    { instructions: classifierInstructions(candidates, lead.stage.name), messages: [{ role: 'user', content: conversationText }] },
     () => undefined,
     { model, textFormat: CLASSIFIER_FORMAT, timeoutMs: 20_000, maxOutputTokens: 300, safetyIdentifier: input.conversationId },
   );
