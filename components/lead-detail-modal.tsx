@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { LeadDocumentsTab } from '@/components/lead-documents-tab';
 import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -339,6 +340,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             {(lead.flipAiHumanHandoff || lead.flipAiLiveIntelligence || lead.flipAiQualifications?.length > 0 || lead.flipAiConversation?.messages?.length > 0 || lead.chatAttachments?.length > 0) && (
               <TabsTrigger value="flip-ai"><Sparkles className="mr-1 h-3.5 w-3.5" />Flip AI</TabsTrigger>
             )}
+            <TabsTrigger value="documents">Documentos</TabsTrigger>
             <TabsTrigger value="history">Histórico</TabsTrigger>
             <TabsTrigger value="notes">Notas ({lead.notes.length})</TabsTrigger>
             <TabsTrigger value="tasks">Tarefas ({lead.tasks?.filter((t: any) => t.status === 'pending').length || 0})</TabsTrigger>
@@ -828,6 +830,10 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                 </div>
               </section>
             )}
+          </TabsContent>
+
+          <TabsContent value="documents" className="pb-6">
+            <LeadDocumentsTab leadId={leadId} />
           </TabsContent>
 
           <TabsContent value="history" className="pb-6 space-y-2">

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { replyAfterQuietPeriod } from '@/lib/whatsapp-ai/reply';
+import { archiveWhatsAppMedia } from '@/lib/whatsapp-ai/media-archive';
 import { runAutomationWorker } from '@/lib/automation';
 import { getPlatformWhatsAppWebhookCredentials, getWhatsAppWebhookVerifyToken } from '@/lib/meta/whatsapp-runtime-credentials';
 import { processWhatsAppCloudWebhook, verifyWhatsAppWebhookChallenge, verifyWhatsAppWebhookSignature } from '@/lib/meta/whatsapp-runtime';
@@ -47,8 +48,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await processWhatsAppCloudWebhook(payload);
-    const { aiCandidates, ...counts } = result;
-    console.info('Meta WhatsApp webhook processed', { ...counts, aiCandidates: aiCandidates.length });
+    const { aiCandidates, mediaToArchive, ...counts } = result;
+    console.info('Meta WhatsApp webhook processed', { ...counts, aiCandidates: aiCandidates.length, mediaToArchive: mediaToArchive.length });
+
+    // A 7-day copy of the files in the private storage, shown on the lead card like the chat files.
+    for (const media of mediaToArchive) {
+      const work = archiveWhatsAppMedia(media)
+        .catch((error) => console.error('WhatsApp media archive failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+      if (!scheduleAfterResponse(work)) await work;
+    }
 
     // The Flip AI answers after the customer stops typing; only the latest message of each
     // conversation leads to a reply, and every check runs again at that moment.
