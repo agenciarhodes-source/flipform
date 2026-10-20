@@ -1912,5 +1912,5 @@ model FlipAiConversationReview {
 
   @@unique([conversationId, lastMessageId])
   @@index([tenantId, status, score])
-  @@map("flip_ai_conversation_reviews")
+  @@map("whatsapp_ai_conversation_reviews")
 }
