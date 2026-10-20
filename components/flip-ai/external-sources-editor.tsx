@@ -5,6 +5,7 @@ import { Globe2, LoaderCircle, Power, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AgentDraft, FlipAiExternalSource } from '@/lib/flip-ai/policy';
+import { domainFromPastedLink } from '@/lib/flip-ai/external-source-input';
 
 export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; onClose: () => void }) {
   const [sources, setSources] = useState<FlipAiExternalSource[]>([]);
@@ -31,7 +32,9 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
   async function create(event: FormEvent) {
     event.preventDefault();
     if (inFlight.current) return;
-    const input = { label: label.trim(), domain: domain.trim() };
+    const cleanDomain = domainFromPastedLink(domain);
+    if (cleanDomain !== domain) setDomain(cleanDomain);
+    const input = { label: label.trim(), domain: cleanDomain };
     const key = JSON.stringify(input);
     const attempt = createAttempt.current?.key === key
       ? createAttempt.current : { key, requestId: crypto.randomUUID() };
@@ -84,7 +87,7 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
   return <section className="rounded-lg border bg-card p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-lg font-medium"><Globe2 className="h-5 w-5" />Fontes externas de {agent.name}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Autorize somente sites confiáveis. Informe apenas o domínio, sem https:// ou caminho.</p></div>
+        <p className="mt-1 text-sm text-muted-foreground">Autorize somente sites confiáveis. Informe o domínio (ex.: www.gov.br). Se colar um link completo, ele é ajustado sozinho. O domínio libera o site inteiro.</p></div>
       <Button variant="outline" onClick={onClose} disabled={busy}>Fechar</Button>
     </div>
     <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -94,7 +97,8 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
       <label className="text-sm">Nome da fonte<Input className="mt-1" value={label} onChange={(event) => setLabel(event.target.value)}
         required minLength={2} maxLength={80} placeholder="Site oficial" disabled={busy} /></label>
       <label className="text-sm">Domínio<Input className="mt-1" value={domain} onChange={(event) => setDomain(event.target.value)}
-        required minLength={3} maxLength={253} placeholder="empresa.com.br" disabled={busy} /></label>
+        onBlur={() => setDomain((current) => domainFromPastedLink(current))}
+        required minLength={3} maxLength={253} placeholder="www.gov.br" disabled={busy} /></label>
       <Button type="submit" className="self-end" disabled={busy}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : 'Autorizar'}</Button>
     </form>
     <p role="status" aria-live="polite" className="mt-3 text-sm">{message}</p>
