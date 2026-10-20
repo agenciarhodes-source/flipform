@@ -64,7 +64,8 @@ def test_only_the_kanban_move_and_the_whatsapp_ai_lead_queue_google_events():
         for path in (ROOT / folder).rglob('*.ts*'):
             if 'enqueueGoogleConversionEvents(' in path.read_text(encoding='utf-8'):
                 callers.append(path.relative_to(ROOT).as_posix())
-    assert sorted(callers) == sorted([MOVE, OUTBOX, 'lib/whatsapp-ai/lead.ts'])
+    # lib/leads/move-stage.ts: a Flip AI stage suggestion approved by a person (or applied in automatic mode).
+    assert sorted(callers) == sorted([MOVE, OUTBOX, 'lib/whatsapp-ai/lead.ts', 'lib/leads/move-stage.ts'])
 
 
 def test_integration_suite_runs_in_ci():

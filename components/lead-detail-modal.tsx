@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -328,6 +329,8 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             {lead.canDelete && <Button variant="ghost" size="icon" onClick={deleteLead} title="Excluir lead"><Trash2 className="w-4 h-4 text-destructive" /></Button>}
           </div>
         </DialogHeader>
+
+        <div className="px-6 pt-3"><StageSuggestionBanner leadId={leadId} onDecided={() => { load(); onChange(); }} /></div>
 
         <Tabs defaultValue="info" className="px-6">
           <TabsList className="my-4 h-auto flex-wrap">

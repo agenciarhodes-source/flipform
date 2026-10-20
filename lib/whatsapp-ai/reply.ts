@@ -30,6 +30,7 @@ import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
+import { suggestStageFromConversation } from './stage-suggestions';
 import { decideWhatsAppAiAnswer, toWhatsAppText, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -373,6 +374,13 @@ export async function replyToWhatsAppConversation(input: {
       preferredName: parsed.identity?.name,
       whatsappBusinessAccountId: connection.wabaId,
     }).catch((error) => console.error('WhatsApp AI lead failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    // With a lead, the conversation may show it is time for the next stage of the funnel.
+    await suggestStageFromConversation({
+      tenantId: input.tenantId,
+      conversationId: conversation.id,
+      agentId: runtime.id,
+      mode: settings.stageMode,
+    }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     return { replied: true, reason: 'sent' };
   } catch (error) {
     const failure = error instanceof OpenAiResponseError || error instanceof FlipAiConversationRuntimeError

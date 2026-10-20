@@ -13,6 +13,7 @@ const KIND_LABELS: Record<FlipAlertKind, { icon: string; label: string; hint: st
   overdue_task: { icon: '⏰', label: 'Retornos atrasados', hint: 'Tarefas com a data vencida e não concluídas.' },
   hot_lead_without_task: { icon: '🔥', label: 'Leads quentes sem próximo passo', hint: 'Leads quentes sem nenhuma tarefa marcada.' },
   new_lead_without_contact: { icon: '📥', label: 'Leads novos sem contato', hint: 'Chegaram há mais de 2 horas e ninguém mandou mensagem.' },
+  stage_suggestion: { icon: '✨', label: 'Sugestões de etapa da IA', hint: 'A IA sugere mover estes leads; abra o lead para aprovar ou recusar.' },
   stale_lead: { icon: '🧊', label: 'Leads parados', hint: 'Mais de 3 dias na mesma etapa.' },
   overloaded_attendant: { icon: '⚖️', label: 'Atendentes sobrecarregadas', hint: 'Bem acima da média de leads em aberto da equipe.' },
 };

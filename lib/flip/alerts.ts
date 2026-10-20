@@ -173,6 +173,26 @@ export async function computeFlipAlerts(session: Scope, now = new Date()) {
     });
   }
 
+  // Stage suggestions of the Flip AI waiting for someone to approve or turn down.
+  const suggestions = await prisma.leadStageSuggestion.findMany({
+    where: { tenantId: session.tenantId, status: 'pending', ...(seesTeam ? {} : { lead: { assignedTo: session.userId } }) },
+    orderBy: { createdAt: 'asc' },
+    take: MAX_PER_KIND,
+    select: { id: true, reason: true, createdAt: true, toStage: { select: { name: true } }, lead: { select: { id: true, name: true, assignedTo: true } } },
+  }).catch(() => []);
+  for (const suggestion of suggestions) {
+    alerts.push({
+      kind: 'stage_suggestion',
+      id: `suggestion:${suggestion.id}`,
+      title: suggestion.lead.name,
+      detail: `A IA sugere mover para "${suggestion.toStage.name}": ${suggestion.reason}`,
+      href: `/leads?leadId=${encodeURIComponent(suggestion.lead.id)}`,
+      ownerId: suggestion.lead.assignedTo,
+      ownerName: suggestion.lead.assignedTo ? nameOf.get(suggestion.lead.assignedTo) || null : null,
+      since: suggestion.createdAt.toISOString(),
+    });
+  }
+
   // Managers also see attendants carrying much more than the rest of the team.
   if (seesTeam) {
     const attendants = users.filter((member) => member.role === 'agent' && member.status === 'active');
