@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { brasiliaDayAndHour, plainBriefing, type BriefingFacts } from '../lib/flip/briefing-rules';
+import { brasiliaDayAndHour, greetingName, plainBriefing, type BriefingFacts } from '../lib/flip/briefing-rules';
 
 const facts: BriefingFacts = {
   seesTeam: true,
@@ -28,4 +28,13 @@ test('atendente sem pendências não vê a distribuição da equipe', () => {
 test('o dia e a hora são os de Brasília', () => {
   assert.deepEqual(brasiliaDayAndHour(new Date('2026-10-21T02:30:00Z')), { day: '2026-10-20', hour: 23 });
   assert.deepEqual(brasiliaDayAndHour(new Date('2026-10-21T10:00:00Z')), { day: '2026-10-21', hour: 7 });
+});
+
+test('saudação só com nome de verdade', () => {
+  assert.equal(greetingName('Mônica Souza'), 'Mônica');
+  assert.equal(greetingName('marketing.junqueiraadvogados'), '');
+  assert.equal(greetingName('joao@empresa.com'), '');
+  assert.equal(greetingName('user_123'), '');
+  assert.equal(greetingName('clarice'), 'Clarice');
+  assert.equal(greetingName(''), '');
 });

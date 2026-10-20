@@ -8,7 +8,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { computeFlipAlerts } from './alerts';
-import { BRIEFING_FROM_HOUR, brasiliaDayAndHour, briefingInstructions, plainBriefing, type BriefingFacts } from './briefing-rules';
+import { BRIEFING_FROM_HOUR, brasiliaDayAndHour, briefingInstructions, greetingName, plainBriefing, type BriefingFacts } from './briefing-rules';
 
 type Session = { tenantId: string; userId: string; role: string; name?: string };
 const DAY = 86_400_000;
@@ -31,7 +31,7 @@ async function collectFacts(session: Session, now: Date): Promise<BriefingFacts>
   ]);
   const count = (kind: string) => board.alerts.filter((alert) => alert.kind === kind).length;
   const first = board.alerts.find((alert) => alert.kind !== 'overloaded_attendant') || null;
-  const name = (session.name || '').trim().split(/\s+/)[0] || 'tudo bem';
+  const name = greetingName(session.name);
   return {
     seesTeam,
     firstName: name,
