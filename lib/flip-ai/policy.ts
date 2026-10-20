@@ -71,16 +71,20 @@ export const externalSourceCreateSchema = z.object({
   requestId: z.string().uuid(),
   label: z.string().trim().min(2).max(80),
   domain: z.string().trim().min(3).max(253),
+  pathPrefix: z.string().max(4_000).nullable().optional(),
 }).strict();
 export const externalSourceUpdateSchema = z.object({
   label: z.string().trim().min(2).max(80),
   status: z.enum(['active', 'inactive']),
   version: z.number().int().positive(),
+  pathPrefix: z.string().max(4_000).nullable().optional(),
 }).strict();
 export type FlipAiExternalSource = {
   id: string;
   label: string;
   domain: string;
+  /** Allowed page paths, one per line; null = the whole site. */
+  pathPrefix: string | null;
   status: 'active' | 'inactive';
   version: number;
   updatedAt: string;

@@ -1492,6 +1492,8 @@ model FlipAiExternalSource {
   agentId   String   @map("agent_id")
   label     String
   domain    String
+  /// Page paths the source is limited to, one per line (e.g. "/inss/pt-br"). Empty = the whole site.
+  pathPrefix String? @map("path_prefix")
   status    String   @default("active")
   version   Int      @default(1)
   createdAt DateTime @default(now()) @map("created_at")

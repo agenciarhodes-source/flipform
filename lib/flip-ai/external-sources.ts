@@ -7,6 +7,16 @@ import { prisma } from '@/lib/prisma';
 import type { SessionPayload } from '@/lib/auth';
 import { FlipAiError, requireFlipAiAccess, type FlipAiDb } from './access';
 import { externalSourceCreateSchema, externalSourceUpdateSchema, type FlipAiExternalSource } from './policy';
+import { ExternalSourcePathError, normalizeExternalSourcePaths } from './external-source-paths';
+
+function cleanPaths(raw: string | null | undefined, domain: string) {
+  try {
+    return normalizeExternalSourcePaths(raw, domain);
+  } catch (error) {
+    if (error instanceof ExternalSourcePathError) throw new FlipAiError('INVALID_EXTERNAL_SOURCE_PATH', 400, error.message);
+    throw error;
+  }
+}
 
 const BLOCKED_SUFFIXES = ['.local', '.localhost', '.internal', '.invalid', '.example', '.test'];
 const COUNTRY_SECOND_LEVEL = new Set(['ac', 'co', 'com', 'edu', 'gov', 'mil', 'net', 'org']);
@@ -39,7 +49,7 @@ async function requireOwnedAgent(db: FlipAiDb, tenantId: string, agentId: string
   const agent = await db.flipAiAgent.findFirst({ where: { id: agentId, tenantId, status: { in: ['draft', 'published'] } }, select: { id: true } });
   if (!agent) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
 }
-function view(source: { id: string; label: string; domain: string; status: string; version: number; updatedAt: Date }): FlipAiExternalSource {
+function view(source: { id: string; label: string; domain: string; pathPrefix: string | null; status: string; version: number; updatedAt: Date }): FlipAiExternalSource {
   if (source.status !== 'active' && source.status !== 'inactive') {
     throw new FlipAiError('EXTERNAL_SOURCE_STATE_INVALID', 500, 'A fonte possui um estado inválido.');
   }
@@ -52,7 +62,7 @@ export async function listExternalSources(session: SessionPayload, agentId: stri
     await ensureSchema(db); await requireOwnedAgent(db, tenantId, agentId);
     return (await db.flipAiExternalSource.findMany({
       where: { tenantId, agentId }, orderBy: [{ status: 'asc' }, { label: 'asc' }, { id: 'asc' }],
-      select: { id: true, label: true, domain: true, status: true, version: true, updatedAt: true },
+      select: { id: true, label: true, domain: true, pathPrefix: true, status: true, version: true, updatedAt: true },
     })).map(view);
   });
 }
@@ -60,25 +70,27 @@ export async function listExternalSources(session: SessionPayload, agentId: stri
 export async function createExternalSource(session: SessionPayload, agentId: string, raw: unknown) {
   const parsed = externalSourceCreateSchema.safeParse(raw);
   if (!parsed.success) throw new FlipAiError('INVALID_EXTERNAL_SOURCE', 400, 'Revise a fonte externa.');
-  const input = { ...parsed.data, domain: normalizeExternalSourceDomain(parsed.data.domain) };
+  const domain = normalizeExternalSourceDomain(parsed.data.domain);
+  const input = { ...parsed.data, domain, pathPrefix: cleanPaths(parsed.data.pathPrefix, domain) };
   try {
     return await prisma.$transaction(async (db) => {
       const { tenantId, userId } = await requireFlipAiAccess(db, session);
       await ensureSchema(db); await requireOwnedAgent(db, tenantId, agentId);
       const existing = await db.flipAiExternalSource.findUnique({ where: { id: input.requestId },
-        select: { id: true, tenantId: true, agentId: true, label: true, domain: true, status: true, version: true, updatedAt: true } });
+        select: { id: true, tenantId: true, agentId: true, label: true, domain: true, pathPrefix: true, status: true, version: true, updatedAt: true } });
       if (existing) {
-        if (existing.tenantId !== tenantId || existing.agentId !== agentId || existing.label !== input.label || existing.domain !== input.domain) {
+        if (existing.tenantId !== tenantId || existing.agentId !== agentId || existing.label !== input.label || existing.domain !== input.domain
+          || (existing.pathPrefix || null) !== input.pathPrefix) {
           throw new FlipAiError('REQUEST_CONFLICT', 409, 'Esta solicitação já foi usada em outro contexto.');
         }
         return view(existing);
       }
       const source = await db.flipAiExternalSource.create({
-        data: { id: input.requestId, tenantId, agentId, label: input.label, domain: input.domain },
-        select: { id: true, label: true, domain: true, status: true, version: true, updatedAt: true },
+        data: { id: input.requestId, tenantId, agentId, label: input.label, domain: input.domain, pathPrefix: input.pathPrefix },
+        select: { id: true, label: true, domain: true, pathPrefix: true, status: true, version: true, updatedAt: true },
       });
       await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_external_source', entityId: source.id,
-        action: 'created', metadata: { agentId, domain: input.domain } } });
+        action: 'created', metadata: { agentId, domain: input.domain, pathPrefix: input.pathPrefix } } });
       return view(source);
     });
   } catch (error) {
@@ -96,9 +108,12 @@ export async function updateExternalSource(session: SessionPayload, agentId: str
   return prisma.$transaction(async (db) => {
     const { tenantId, userId } = await requireFlipAiAccess(db, session);
     await ensureSchema(db); await requireOwnedAgent(db, tenantId, agentId);
+    const current = await db.flipAiExternalSource.findFirst({ where: { id: sourceId, tenantId, agentId }, select: { domain: true } });
+    if (!current) throw new FlipAiError('EXTERNAL_SOURCE_NOT_FOUND', 404, 'Fonte externa não encontrada.');
+    const pathPrefix = parsed.data.pathPrefix === undefined ? undefined : cleanPaths(parsed.data.pathPrefix, current.domain);
     const changed = await db.flipAiExternalSource.updateMany({
       where: { id: sourceId, tenantId, agentId, version: parsed.data.version },
-      data: { label: parsed.data.label, status: parsed.data.status, version: { increment: 1 } },
+      data: { label: parsed.data.label, status: parsed.data.status, ...(pathPrefix !== undefined ? { pathPrefix } : {}), version: { increment: 1 } },
     });
     if (changed.count !== 1) {
       const exists = await db.flipAiExternalSource.count({ where: { id: sourceId, tenantId, agentId } });
@@ -106,9 +121,9 @@ export async function updateExternalSource(session: SessionPayload, agentId: str
       throw new FlipAiError('VERSION_CONFLICT', 409, 'Esta fonte mudou em outra sessão. Atualize a lista antes de editar.');
     }
     const source = await db.flipAiExternalSource.findFirstOrThrow({ where: { id: sourceId, tenantId, agentId },
-      select: { id: true, label: true, domain: true, status: true, version: true, updatedAt: true } });
+      select: { id: true, label: true, domain: true, pathPrefix: true, status: true, version: true, updatedAt: true } });
     await db.auditLog.create({ data: { tenantId, userId, entityType: 'flip_ai_external_source', entityId: source.id,
-      action: parsed.data.status === 'active' ? 'activated' : 'deactivated', metadata: { agentId, domain: source.domain } } });
+      action: parsed.data.status === 'active' ? 'activated' : 'deactivated', metadata: { agentId, domain: source.domain, pathPrefix: source.pathPrefix } } });
     return view(source);
   });
 }
