@@ -132,7 +132,8 @@ function senderRoleLabel(role?: string | null) {
 /** "Helena · Flip AI" for replies the AI wrote on WhatsApp. */
 function aiSenderLabel(metadata: unknown) {
   const value = metadata && typeof metadata === 'object' ? metadata as Record<string, unknown> : {};
-  return typeof value.aiAgentName === 'string' ? `${value.aiAgentName} · Flip AI` : null;
+  if (typeof value.aiAgentName === 'string') return `${value.aiAgentName} · Flip AI`;
+  return typeof value.systemSenderLabel === 'string' ? value.systemSenderLabel : null;
 }
 
 function outboundSenderLabel(message: InboxMessageSummary) {

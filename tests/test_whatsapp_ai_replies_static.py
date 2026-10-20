@@ -25,7 +25,7 @@ def test_the_ai_answers_only_when_every_check_passes():
 
 def test_ai_replies_are_sent_as_the_ai_and_stored_once():
     outbound = read("lib/meta/whatsapp-outbound.ts")
-    assert "sentByUserId: aiSender ? null : requestedByUserId," in outbound
+    assert "sentByUserId: aiSender || systemSender ? null : requestedByUserId," in outbound
     assert "...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {})," in outbound
     chat = read("lib/flip-ai/public-chat.ts")
     assert "if (options.recordOutbound !== false) await recordOutboundMessage({" in chat
