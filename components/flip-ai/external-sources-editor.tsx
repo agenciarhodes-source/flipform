@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Globe2, LoaderCircle, Power } from 'lucide-react';
+import { Globe2, LoaderCircle, Power, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AgentDraft, FlipAiExternalSource } from '@/lib/flip-ai/policy';
@@ -67,6 +67,20 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
     finally { inFlight.current = false; setBusy(false); }
   }
 
+  async function remove(source: FlipAiExternalSource) {
+    if (inFlight.current) return;
+    if (!window.confirm(`Excluir a fonte "${source.label}" (${source.domain})? O atendente deixa de consultar este site.`)) return;
+    inFlight.current = true; setBusy(true); setMessage('');
+    try {
+      const response = await fetch(`/api/flip-ai/agents/${agent.id}/external-sources/${source.id}`, { method: 'DELETE' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível excluir a fonte.');
+      setSources((current) => current.filter((item) => item.id !== source.id));
+      setMessage('Fonte excluída.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão. Atualize a lista para conferir o estado.'); }
+    finally { inFlight.current = false; setBusy(false); }
+  }
+
   return <section className="rounded-lg border bg-card p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 className="flex items-center gap-2 text-lg font-medium"><Globe2 className="h-5 w-5" />Fontes externas de {agent.name}</h2>
@@ -74,7 +88,7 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
       <Button variant="outline" onClick={onClose} disabled={busy}>Fechar</Button>
     </div>
     <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-      Cadastrar um domínio não ativa busca na internet. A execução será conectada em uma etapa posterior, com cache, limites e registro das fontes.
+      O atendente consulta estes sites só quando a base de conhecimento não tem uma boa resposta ou quando o cliente pergunta algo atual. Cada consulta custa mais créditos que uma resposta comum.
     </div>
     <form onSubmit={create} className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
       <label className="text-sm">Nome da fonte<Input className="mt-1" value={label} onChange={(event) => setLabel(event.target.value)}
@@ -87,9 +101,14 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
     <ul className="mt-4 space-y-2">
       {sources.map((source) => <li key={source.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
         <div className="min-w-0"><p className="font-medium">{source.label}</p><p className="break-all text-xs text-muted-foreground">{source.domain}</p></div>
-        <Button type="button" variant="outline" disabled={busy} onClick={() => void toggle(source)}>
-          <Power className="mr-2 h-4 w-4" />{source.status === 'active' ? 'Desativar' : 'Ativar'}
-        </Button>
+        <span className="flex gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void toggle(source)}>
+            <Power className="mr-2 h-4 w-4" />{source.status === 'active' ? 'Desativar' : 'Ativar'}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void remove(source)} aria-label={`Excluir ${source.label}`}>
+            <Trash2 className="mr-2 h-4 w-4" />Excluir
+          </Button>
+        </span>
       </li>)}
       {!busy && !sources.length ? <li className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Nenhuma fonte externa autorizada.</li> : null}
     </ul>
