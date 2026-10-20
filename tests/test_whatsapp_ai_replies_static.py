@@ -40,3 +40,8 @@ def test_test_numbers_first_and_release_switch():
     webhook = read("app/api/webhooks/meta/whatsapp/route.ts")
     assert "replyAfterQuietPeriod(candidate)" in webhook
     assert "isCronRequestAuthorized(req)" in read("app/api/internal/jobs/whatsapp-ai/route.ts")
+
+def test_team_answered_check_ignores_the_answer_that_was_already_there():
+    reply = read("lib/whatsapp-ai/reply.ts")
+    assert "createdAt: { gt: latestOutbound?.createdAt || new Date(0) }," in reply
+    assert "...(latestOutbound ? { id: { not: latestOutbound.id } } : {})," in reply
