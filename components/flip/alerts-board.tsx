@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
+import { DailyBriefingCard } from './daily-briefing';
 
 type Board = { seesTeam: boolean; alerts: FlipAlert[]; total: number; generatedAt: string };
 
@@ -67,6 +68,8 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
           <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
         </Button>
       </header>
+
+      <DailyBriefingCard />
 
       {board.seesTeam && people.length > 0 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por pessoa">
