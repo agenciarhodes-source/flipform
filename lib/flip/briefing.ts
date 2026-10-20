@@ -99,6 +99,7 @@ export async function getTodayBriefing(session: Session, now = new Date()) {
   }).catch(() => null);
   if (existing) return existing;
   if (hour < BRIEFING_FROM_HOUR) return null;
+  if (!(await isBriefingEnabledForCompany(session.tenantId))) return null;
 
   const facts = await collectFacts(session, now);
   const aiText = await writeWithAi(session, facts).catch(() => null);
@@ -118,6 +119,12 @@ export async function getTodayBriefing(session: Session, now = new Date()) {
       where: { tenantId_userId_day: { tenantId: session.tenantId, userId: session.userId, day } },
     }).catch(() => null);
   }
+}
+
+/** Whether the owner left the daily summary on for the company (on by default). */
+export async function isBriefingEnabledForCompany(tenantId: string) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { flipBriefingEnabled: true } }).catch(() => null);
+  return tenant?.flipBriefingEnabled ?? true;
 }
 
 export async function markBriefingSeen(session: Session, id: string) {
