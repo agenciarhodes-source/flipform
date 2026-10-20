@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { AutomaticMessagesSwitch } from '@/components/automatic-messages-switch';
 import { LeadDocumentsTab } from '@/components/lead-documents-tab';
 import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import { toast } from 'sonner';
@@ -331,7 +332,10 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </div>
         </DialogHeader>
 
-        <div className="px-6 pt-3"><StageSuggestionBanner leadId={leadId} onDecided={() => { load(); onChange(); }} /></div>
+        <div className="space-y-2 px-6 pt-3">
+          <StageSuggestionBanner leadId={leadId} onDecided={() => { load(); onChange(); }} />
+          <AutomaticMessagesSwitch leadId={leadId} />
+        </div>
 
         <Tabs defaultValue="info" className="px-6">
           <TabsList className="my-4 h-auto flex-wrap">

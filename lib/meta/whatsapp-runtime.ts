@@ -1,4 +1,6 @@
 import 'server-only';
+import { isOptOutMessage } from '@/lib/post-sale/rules';
+import { recordContactOptOut } from '@/lib/post-sale/runner';
 import { parseWhatsAppReferral } from '@/lib/whatsapp-ai/lead';
 import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 
@@ -510,6 +512,10 @@ export async function processWhatsAppCloudWebhook(payload: any) {
         if (persisted.duplicate) result.duplicateMessages += 1;
         else {
           result.messagesCreated += 1;
+          // "SAIR" (or similar): no more automatic messages from this company to this number.
+          if (isOptOutMessage(messageText)) {
+            await recordContactOptOut({ tenantId: connection.tenantId, phone: resolvedExternalUserId, source: 'keyword' }).catch(() => undefined);
+          }
           // The first message after a click-to-WhatsApp ad carries the ad; it is kept once.
           const referral = parseWhatsAppReferral(message?.referral);
           if (referral) {

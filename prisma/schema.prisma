@@ -1797,3 +1797,51 @@ model ConversationDocumentCase {
 
   @@map("conversation_document_cases")
 }
+
+/// After-sale messages of a company: progress updates and the Google review request.
+model PostSaleSettings {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique @map("tenant_id")
+  progressEnabled      Boolean  @default(false) @map("progress_enabled")
+  progressIntervalDays Int      @default(30) @map("progress_interval_days")
+  /// Approved template as "name:language".
+  progressTemplate     String?  @map("progress_template")
+  reviewEnabled        Boolean  @default(false) @map("review_enabled")
+  reviewAfterDays      Int      @default(15) @map("review_after_days")
+  reviewTemplate       String?  @map("review_template")
+  updatedBy            String?  @map("updated_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("post_sale_settings")
+}
+
+/// Each after-sale message, so it is never repeated and can be measured.
+model PostSaleSend {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  leadId    String   @map("lead_id")
+  /// progress | review
+  kind      String
+  messageId String?  @map("message_id")
+  /// sent | failed | skipped
+  status    String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, leadId, kind, createdAt])
+  @@map("post_sale_sends")
+}
+
+/// People who asked not to receive automatic messages from a company (by phone).
+model ContactOptOut {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  phone     String
+  /// keyword | team
+  source    String
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, phone])
+  @@map("contact_opt_outs")
+}

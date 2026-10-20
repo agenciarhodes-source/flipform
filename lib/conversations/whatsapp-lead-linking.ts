@@ -255,7 +255,8 @@ export const WHATSAPP_LEAD_CONVERSATION_STARTED_ACTION = 'WHATSAPP_CONVERSATION_
 export async function startWhatsAppConversationForLead(input: {
   tenantId: string;
   leadId: string;
-  userId: string;
+  /** Empty when the system starts it (after-sale messages). */
+  userId: string | null;
 }) {
   const existing = await findOrLinkWhatsAppConversationForLead({ tenantId: input.tenantId, leadId: input.leadId });
   if (existing.conversationId) return { conversationId: existing.conversationId, created: false, reason: existing.reason };
