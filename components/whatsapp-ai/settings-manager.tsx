@@ -38,6 +38,7 @@ export function WhatsAppAiSettingsManager({ initialWorkspace }: { initialWorkspa
     <section className="mx-auto max-w-4xl space-y-5 p-4 md:p-6">
       <header className="space-y-1">
         <h1 className="flex items-center gap-2 text-2xl font-semibold"><MessageCircle className="h-6 w-6 text-brand-600" aria-hidden="true" /> Atendimento WhatsApp</h1>
+        <a href="/whatsapp-ai/costs" className="inline-block text-sm font-medium text-brand-700 underline">Ver custos da operação →</a>
         <p className="text-sm text-muted-foreground">
           Defina, para cada número conectado, se o Flip AI faz o primeiro atendimento no WhatsApp, com qual agente e em que horário.
         </p>

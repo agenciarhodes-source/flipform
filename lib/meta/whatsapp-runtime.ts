@@ -1,4 +1,5 @@
 import 'server-only';
+import { parseMetaPricing } from '@/lib/costs/pricing';
 import { isOptOutMessage } from '@/lib/post-sale/rules';
 import { recordContactOptOut } from '@/lib/post-sale/runner';
 import { parseWhatsAppReferral } from '@/lib/whatsapp-ai/lead';
@@ -549,6 +550,20 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           continue;
         }
         const providerTimestamp = parseProviderTimestamp(status.timestamp);
+        // Whether Meta billed this message, and the category: kept once, for the cost panel.
+        const pricing = parseMetaPricing(status?.pricing);
+        if (pricing) {
+          await prisma.$executeRaw(Prisma.sql`
+            UPDATE messages
+            SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('metaPricing', ${JSON.stringify({
+              billable: pricing.billable, category: pricing.category, pricing_model: pricing.pricingModel,
+            })}::jsonb)
+            WHERE tenant_id = ${connection.tenantId}
+              AND provider = 'meta' AND channel = 'whatsapp'
+              AND (external_message_id = ${status.id} OR metadata->>'providerMessageId' = ${status.id})
+              AND (metadata IS NULL OR metadata->'metaPricing' IS NULL)
+          `).catch(() => undefined);
+        }
         let applied = await applyWhatsAppMessageStatus({
           tenantId: connection.tenantId,
           externalMessageId: status.id,
