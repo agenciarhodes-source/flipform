@@ -6,6 +6,7 @@ import { RefreshCw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
 import { DailyBriefingCard } from './daily-briefing';
+import { FlipSuggestionsPanel } from './suggestions-panel';
 
 type Board = { seesTeam: boolean; alerts: FlipAlert[]; total: number; generatedAt: string };
 
@@ -70,6 +71,8 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
       </header>
 
       <DailyBriefingCard />
+
+      <FlipSuggestionsPanel onApplied={() => void reload()} />
 
       {board.seesTeam && people.length > 0 && (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por pessoa">
