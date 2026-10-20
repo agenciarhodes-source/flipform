@@ -35,4 +35,4 @@ def test_menu_shows_atendimento_whatsapp_to_flip_ai_managers():
     shell = read("components/app-shell.tsx")
     assert '{ href: "/whatsapp-ai", label: "Atendimento WhatsApp", icon: MessageCircle, permission: "FLIP_AI_MANAGE" },' in shell
     ui = read("components/whatsapp-ai/settings-manager.tsx")
-    assert "a IA começará a responder no WhatsApp quando o atendimento automático for liberado" in ui
+    assert "ela responde primeiro só aos números de teste" in ui

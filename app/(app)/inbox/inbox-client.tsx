@@ -128,6 +128,12 @@ function senderRoleLabel(role?: string | null) {
   return null;
 }
 
+/** "Helena · Flip AI" for replies the AI wrote on WhatsApp. */
+function aiSenderLabel(metadata: unknown) {
+  const value = metadata && typeof metadata === 'object' ? metadata as Record<string, unknown> : {};
+  return typeof value.aiAgentName === 'string' ? `${value.aiAgentName} · Flip AI` : null;
+}
+
 function outboundSenderLabel(message: InboxMessageSummary) {
   if (message.direction !== 'outbound') return '';
   return message.sentByUser?.name || 'WhatsApp da empresa';
@@ -894,7 +900,7 @@ export function InboxClient({
                             {outbound && (
                               <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-white/90">
                                 <span className="max-w-44 truncate rounded-full bg-white/15 px-2 py-0.5 font-medium">
-                                  {message.sentByUser?.name || 'WhatsApp da empresa'}
+                                  {message.sentByUser?.name || aiSenderLabel(message.metadata) || 'WhatsApp da empresa'}
                                 </span>
                                 {senderRoleLabel(message.sentByUser?.role) && (
                                   <span className="opacity-80">• {senderRoleLabel(message.sentByUser?.role)}</span>
