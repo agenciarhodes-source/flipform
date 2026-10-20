@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Globe2, LoaderCircle, Power, Trash2 } from 'lucide-react';
+import { Globe2, LoaderCircle, Pencil, Power, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { AgentDraft, FlipAiExternalSource } from '@/lib/flip-ai/policy';
 import { domainFromPastedLink } from '@/lib/flip-ai/external-source-input';
+import { pathFromPastedLink, splitExternalSourcePaths } from '@/lib/flip-ai/external-source-paths';
 
 export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; onClose: () => void }) {
   const [sources, setSources] = useState<FlipAiExternalSource[]>([]);
   const [label, setLabel] = useState('');
   const [domain, setDomain] = useState('');
+  const [paths, setPaths] = useState('');
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState('');
   const inFlight = useRef(false);
@@ -33,8 +35,11 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
     event.preventDefault();
     if (inFlight.current) return;
     const cleanDomain = domainFromPastedLink(domain);
+    const pastedPath = pathFromPastedLink(domain);
+    const pathText = paths.trim() || pastedPath;
     if (cleanDomain !== domain) setDomain(cleanDomain);
-    const input = { label: label.trim(), domain: cleanDomain };
+    if (pathText !== paths) setPaths(pathText);
+    const input = { label: label.trim(), domain: cleanDomain, pathPrefix: pathText || null };
     const key = JSON.stringify(input);
     const attempt = createAttempt.current?.key === key
       ? createAttempt.current : { key, requestId: crypto.randomUUID() };
@@ -49,7 +54,7 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
       if (!response.ok) throw new Error(data.error || 'Não foi possível cadastrar a fonte.');
       setSources((current) => [...current.filter((item) => item.id !== data.source.id), data.source]);
       createAttempt.current = null;
-      setLabel(''); setDomain(''); setMessage('Domínio autorizado salvo.');
+      setLabel(''); setDomain(''); setPaths(''); setMessage('Fonte autorizada salva.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
@@ -66,6 +71,27 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
       if (!response.ok) throw new Error(data.error || 'Não foi possível alterar a fonte.');
       setSources((current) => current.map((item) => item.id === data.source.id ? data.source : item));
       setMessage(data.source.status === 'active' ? 'Fonte ativada.' : 'Fonte desativada.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão. Atualize a lista para conferir o estado.'); }
+    finally { inFlight.current = false; setBusy(false); }
+  }
+
+  async function editPaths(source: FlipAiExternalSource) {
+    if (inFlight.current) return;
+    const typed = window.prompt(
+      `Páginas de ${source.domain} que o atendente pode usar, separadas por vírgula (ex.: /inss/pt-br). Deixe vazio para o site inteiro.`,
+      splitExternalSourcePaths(source.pathPrefix).join(', '),
+    );
+    if (typed === null) return;
+    inFlight.current = true; setBusy(true); setMessage('');
+    try {
+      const response = await fetch(`/api/flip-ai/agents/${agent.id}/external-sources/${source.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: source.label, status: source.status, version: source.version, pathPrefix: typed.trim() || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível alterar as páginas.');
+      setSources((current) => current.map((item) => item.id === data.source.id ? data.source : item));
+      setMessage('Páginas atualizadas.');
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão. Atualize a lista para conferir o estado.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
@@ -97,17 +123,30 @@ export function ExternalSourcesEditor({ agent, onClose }: { agent: AgentDraft; o
       <label className="text-sm">Nome da fonte<Input className="mt-1" value={label} onChange={(event) => setLabel(event.target.value)}
         required minLength={2} maxLength={80} placeholder="Site oficial" disabled={busy} /></label>
       <label className="text-sm">Domínio<Input className="mt-1" value={domain} onChange={(event) => setDomain(event.target.value)}
-        onBlur={() => setDomain((current) => domainFromPastedLink(current))}
+        onBlur={() => {
+          const pastedPath = pathFromPastedLink(domain);
+          if (pastedPath && !paths.trim()) setPaths(pastedPath);
+          setDomain(domainFromPastedLink(domain));
+        }}
         required minLength={3} maxLength={253} placeholder="www.gov.br" disabled={busy} /></label>
+      <label className="text-sm sm:col-span-2">Limitar a estas páginas (opcional)<Input className="mt-1" value={paths} onChange={(event) => setPaths(event.target.value)}
+        maxLength={2000} placeholder="/inss/pt-br — vazio libera o site inteiro" disabled={busy} />
+        <span className="mt-1 block text-xs text-muted-foreground">Ao colar um link completo no domínio, a página entra aqui sozinha. Para mais de uma, separe por vírgula.</span></label>
       <Button type="submit" className="self-end" disabled={busy}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : 'Autorizar'}</Button>
     </form>
     <p role="status" aria-live="polite" className="mt-3 text-sm">{message}</p>
     <ul className="mt-4 space-y-2">
       {sources.map((source) => <li key={source.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
-        <div className="min-w-0"><p className="font-medium">{source.label}</p><p className="break-all text-xs text-muted-foreground">{source.domain}</p></div>
+        <div className="min-w-0"><p className="font-medium">{source.label}</p><p className="break-all text-xs text-muted-foreground">{source.domain}</p>
+          <p className="break-all text-xs text-muted-foreground">{source.pathPrefix
+            ? `Só as páginas: ${splitExternalSourcePaths(source.pathPrefix).map((path) => `${source.domain}${path}`).join(', ')}`
+            : 'Site inteiro'}</p></div>
         <span className="flex gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => void toggle(source)}>
             <Power className="mr-2 h-4 w-4" />{source.status === 'active' ? 'Desativar' : 'Ativar'}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void editPaths(source)} aria-label={`Editar páginas de ${source.label}`}>
+            <Pencil className="mr-2 h-4 w-4" />Páginas
           </Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => void remove(source)} aria-label={`Excluir ${source.label}`}>
             <Trash2 className="mr-2 h-4 w-4" />Excluir
