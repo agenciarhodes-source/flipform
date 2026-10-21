@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConversationActions } from './conversation-actions';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
+import { VoiceRecorder } from '@/components/inbox/voice-recorder';
 import { toast } from 'sonner';
 import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
 
@@ -693,6 +694,32 @@ export function InboxClient({
     }
   }
 
+  /** Sends a recorded voice note; returns whether it went out (to clear the recorder). */
+  async function sendAudio(audio: Blob) {
+    if (!selected || selected.channel !== 'whatsapp' || !canSendWhatsApp) return false;
+    const conversationId = selected.id;
+    setError(null);
+    setWarning(null);
+    try {
+      const form = new FormData();
+      form.append('audio', audio, 'audio');
+      form.append('idempotencyKey', createIdempotencyKey());
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp-audio`, { method: 'POST', body: form });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 202) throw new Error(data.error || 'Não foi possível enviar o áudio.');
+      if (response.status === 202 && selectedIdRef.current === conversationId) {
+        setWarning(data.warning || 'O status do envio ainda está sendo confirmado.');
+      }
+      await Promise.all([loadMessages(conversationId, true), loadConversations(true)]);
+      return true;
+    } catch (sendError) {
+      if (selectedIdRef.current === conversationId) {
+        setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar o áudio.');
+      }
+      return false;
+    }
+  }
+
   async function sendTemplate() {
     if (!selected || sending || !needsTemplate || !chosenTemplate) return;
     const conversationId = selected.id;
@@ -922,7 +949,7 @@ export function InboxClient({
                               </div>
                             )}
                             <MessageMedia message={message} outbound={outbound} />
-                            {message.text ? (
+                            {message.text && !(message.type === 'audio' && message.text === '🎤 Áudio') ? (
                               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
                             ) : !messageMediaId(message) ? (
                               <p className="text-sm italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Mensagem sem texto'}</p>
@@ -1025,6 +1052,7 @@ export function InboxClient({
                         className="min-h-[44px] max-h-36 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={sending}
                       />
+                      <VoiceRecorder disabled={sending || !canSendWhatsApp} onSend={sendAudio} />
                       <Button
                         type="button"
                         size="icon"
