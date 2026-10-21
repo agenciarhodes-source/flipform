@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { AlertTriangle, ArrowLeft, AudioLines, Bot, CalendarDays, CircleDollarSign } from 'lucide-react';
 import { getSession } from '@/lib/auth';
@@ -59,7 +60,7 @@ export default async function FlipAiUsagePage({
     ]);
     return <section className="mx-auto max-w-6xl space-y-6 p-4 lg:p-6">
       <header className="space-y-3">
-        <Link href="/flip-ai" className="inline-flex items-center gap-2 text-sm text-brand-600 hover:underline">
+        <Link href="/flip-ai" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />Voltar aos atendentes
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -272,7 +273,7 @@ export default async function FlipAiUsagePage({
     return <section className="mx-auto max-w-2xl space-y-4 p-6">
       <CircleDollarSign className="h-8 w-8 text-brand-600" aria-hidden="true" />
       <h1 className="text-2xl font-semibold">Consumo do Flip AI</h1><p>{error.message}</p>
-      <Link className="inline-block text-brand-600 underline" href="/flip-ai">Voltar aos atendentes</Link>
+      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="/flip-ai">Voltar aos atendentes</Link>
     </section>;
   }
 }

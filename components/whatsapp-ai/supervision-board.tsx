@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { REVIEW_ISSUES, type ReviewIssue } from '@/lib/whatsapp-ai/review-rules';
 
 type Review = {
@@ -60,7 +60,7 @@ export function SupervisionBoard({ initial, week, reviewedNow }: { initial: Revi
                 <span className="font-medium">{review.contact}</span>
                 <span className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                 <span className="ml-auto flex gap-2">
-                  <Link href={`/inbox?conversationId=${encodeURIComponent(review.conversationId)}`} className="text-sm text-brand-700 underline">Abrir conversa</Link>
+                  <Link href={`/inbox?conversationId=${encodeURIComponent(review.conversationId)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Abrir conversa</Link>
                   <Button type="button" size="sm" variant="outline" onClick={() => void resolve(review.id)}>Marcar como resolvido</Button>
                 </span>
               </div>

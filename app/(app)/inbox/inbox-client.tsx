@@ -233,7 +233,7 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
     <a href={`${src}?download=1`} className={`mb-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
       <span aria-hidden="true">📄</span>
       <span className="min-w-0 flex-1 truncate">{fileName}</span>
-      <span className="shrink-0 text-xs underline">Baixar</span>
+      <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium">Baixar</span>
     </a>
   );
 }

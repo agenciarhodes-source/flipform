@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
@@ -18,7 +19,7 @@ export default async function SupervisionPage() {
   return (
     <section className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
       <header>
-        <Link href="/whatsapp-ai" className="text-sm text-brand-700 underline">← Atendimento WhatsApp</Link>
+        <Link href="/whatsapp-ai" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mb-2' })}>← Atendimento WhatsApp</Link>
         <h1 className="text-2xl font-semibold">Supervisão da IA</h1>
         <p className="text-sm text-muted-foreground">
           O Flip revisa as conversas que a IA atendeu no WhatsApp e que pararam (sem mensagens há 2 h, assumidas pela equipe ou em que o cliente pediu para sair),

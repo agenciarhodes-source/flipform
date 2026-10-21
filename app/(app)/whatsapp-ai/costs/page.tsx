@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
@@ -35,7 +36,7 @@ export default async function CostsPage({ searchParams }: { searchParams: { mont
     <section className="mx-auto max-w-5xl space-y-5 p-4 md:p-6">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <Link href="/whatsapp-ai" className="text-sm text-brand-700 underline">← Atendimento WhatsApp</Link>
+          <Link href="/whatsapp-ai" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mb-2' })}>← Atendimento WhatsApp</Link>
           <h1 className="text-2xl font-semibold">Custos da operação</h1>
           <p className="text-sm text-muted-foreground">IA e WhatsApp, em dólares (US$), como a Meta e o provedor de IA cobram. Estimativa para acompanhar; a fatura oficial é a da Meta e a da carteira de créditos.</p>
         </div>

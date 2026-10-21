@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
 import { DailyBriefingCard } from './daily-briefing';
 import { FlipSuggestionsPanel } from './suggestions-panel';
@@ -129,7 +129,7 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
                     {alert.detail}{board.seesTeam && alert.ownerName && alert.kind !== 'overloaded_attendant' ? ` · ${alert.ownerName}` : ''}
                   </p>
                 </div>
-                <Link href={alert.href} className="shrink-0 text-sm font-medium text-brand-700 underline">Abrir</Link>
+                <Link href={alert.href} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'shrink-0' })}>Abrir</Link>
               </li>
             ))}
           </ul>}

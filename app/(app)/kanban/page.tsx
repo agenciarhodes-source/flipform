@@ -5,7 +5,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, u
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Phone, Mail, User as UserIcon, Flame, Snowflake, Thermometer, Workflow, ListChecks, AlertTriangle, CheckCircle2, Clock, ChevronLeft, ChevronRight, Plus, MessageCircle, CalendarDays } from 'lucide-react';
@@ -374,7 +374,8 @@ export default function KanbanPage() {
           <div className="rounded-md border border-dashed p-12 text-center max-w-md mx-auto">
             <Workflow className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <h3 className="font-heading font-semibold mb-1">Pipeline sem etapas ativas</h3>
-            <p className="text-sm text-muted-foreground mb-3">Configure as etapas em <Link href="/pipelines" className="text-primary underline">Pipelines</Link>.</p>
+            <p className="text-sm text-muted-foreground mb-3">Configure as etapas do funil para começar.</p>
+            <Link href="/pipelines" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Abrir Pipelines</Link>
           </div>
         ) : (
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={onDragStart} onDragEnd={onDragEnd}>
