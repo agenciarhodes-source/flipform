@@ -69,7 +69,8 @@ export function decideWhatsAppAiAnswer(input: {
   settings: WhatsAppAiRuleSettings;
   customerWaId: string;
   now: Date;
-  trigger: 'message' | 'no_reply_sweep';
+  /** handback: someone of the team handed the conversation to the AI (or asked it to answer) now. */
+  trigger: 'message' | 'no_reply_sweep' | 'handback';
 }): WhatsAppAiDecision {
   const { settings } = input;
   if (!settings.enabled) return { answer: false, reason: 'disabled' };
@@ -77,6 +78,8 @@ export function decideWhatsAppAiAnswer(input: {
   if (!settings.liveEnabled && !isTestPhoneNumber(settings.testPhoneNumbers, input.customerWaId)) {
     return { answer: false, reason: 'not_test_number' };
   }
+  // A person chose the AI for this conversation now, so the hours set for the number do not hold it back.
+  if (input.trigger === 'handback') return { answer: true };
   if (settings.scheduleMode === 'outside_hours' && settings.businessHours
     && isWithinBusinessHours(settings.businessHours, input.now)) {
     return { answer: false, reason: 'business_hours' };

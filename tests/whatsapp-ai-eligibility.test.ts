@@ -65,6 +65,17 @@ test('"quando ninguém responder" não responde na hora; só a varredura respond
   assert.deepEqual(decideWhatsAppAiAnswer({ settings, customerWaId: '1', now: mondayMorning, trigger: 'no_reply_sweep' }), { answer: true });
 });
 
+test('devolvida pela equipe, a IA responde em qualquer horário, mas respeita os números de teste', () => {
+  const hours = { ...base, liveEnabled: true, scheduleMode: 'outside_hours' };
+  assert.deepEqual(decideWhatsAppAiAnswer({ settings: hours, customerWaId: '1', now: mondayMorning, trigger: 'handback' }), { answer: true });
+  const noReply = { ...base, liveEnabled: true, scheduleMode: 'no_reply' };
+  assert.deepEqual(decideWhatsAppAiAnswer({ settings: noReply, customerWaId: '1', now: mondayMorning, trigger: 'handback' }), { answer: true });
+  assert.deepEqual(decideWhatsAppAiAnswer({ settings: base, customerWaId: '5586911112222', now: mondayMorning, trigger: 'handback' }),
+    { answer: false, reason: 'not_test_number' });
+  assert.deepEqual(decideWhatsAppAiAnswer({ settings: { ...base, enabled: false, liveEnabled: true }, customerWaId: '1', now: mondayMorning, trigger: 'handback' }),
+    { answer: false, reason: 'disabled' });
+});
+
 test('o texto sai no formato do WhatsApp', () => {
   assert.equal(toWhatsAppText('## Olá\n\nSeu **caso** tem solução.\n\n\n\nVamos?'), 'Olá\n\nSeu *caso* tem solução.\n\nVamos?');
 });

@@ -256,13 +256,21 @@ function AiStatus({ conversation, resumeAfterHours, canManage, busy, onChange }:
   resumeAfterHours: number | null;
   canManage: boolean;
   busy: boolean;
-  onChange: (action: 'pause' | 'resume') => void;
+  onChange: (action: 'pause' | 'resume' | 'answer') => void;
 }) {
   const paused = aiPaused(conversation, resumeAfterHours);
   if (!paused) {
+    // The customer wrote last and nobody answered (e.g. the AI was off when the message arrived).
+    const waiting = Boolean(conversation.lastInboundAt)
+      && (!conversation.lastOutboundAt || new Date(conversation.lastOutboundAt) < new Date(conversation.lastInboundAt!));
     return (
       <div className="flex items-center gap-2">
         <span className="hidden rounded-full bg-violet-100 px-2 py-1 text-xs font-medium text-violet-800 sm:inline">🟢 IA atendendo</span>
+        {canManage && waiting ? (
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onChange('answer')}>
+            {busy ? 'Enviando...' : 'Responder agora com a IA'}
+          </Button>
+        ) : null}
         {canManage ? (
           <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onChange('pause')}>
             {busy ? 'Pausando...' : 'Pausar IA e assumir'}
@@ -286,6 +294,16 @@ function AiStatus({ conversation, resumeAfterHours, canManage, busy, onChange }:
       ) : null}
     </div>
   );
+}
+
+function aiChangeMessage(action: 'pause' | 'resume' | 'answer', reply: unknown) {
+  if (action === 'pause') return 'IA pausada. A conversa está com a equipe.';
+  const start = action === 'resume' ? 'Conversa devolvida para a IA. ' : '';
+  if (reply === 'answering') return `${start}A IA vai responder a última mensagem do cliente em instantes.`;
+  if (reply === 'window_closed') {
+    return `${start}A última mensagem do cliente tem mais de 24 horas; o WhatsApp só permite responder com modelo aprovado. A IA responde quando o cliente escrever de novo.`;
+  }
+  return `${start}Não há mensagem pendente; a IA responde a próxima mensagem do cliente.`;
 }
 
 type ConversationOwner = { kind: 'mine' | 'other' | 'none'; name?: string };
@@ -574,7 +592,7 @@ export function InboxClient({
     }
   }
 
-  async function changeAi(conversationId: string, action: 'pause' | 'resume') {
+  async function changeAi(conversationId: string, action: 'pause' | 'resume' | 'answer') {
     setChangingAi(true);
     try {
       const response = await fetch(`/api/inbox/conversations/${encodeURIComponent(conversationId)}/ai`, {
@@ -584,7 +602,7 @@ export function InboxClient({
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) toast.error(data.error || 'Não foi possível alterar o atendimento da IA.');
-      else toast.success(action === 'pause' ? 'IA pausada. A conversa está com a equipe.' : 'Conversa devolvida para a IA.');
+      else toast.success(aiChangeMessage(action, data.reply));
       await loadConversations(true);
     } finally {
       setChangingAi(false);

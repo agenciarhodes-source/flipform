@@ -131,7 +131,7 @@ export async function replyToWhatsAppConversation(input: {
   conversationId: string;
   /** The message that started this run; a newer one takes over the reply. */
   inboundMessageId: string;
-  trigger: 'message' | 'no_reply_sweep';
+  trigger: 'message' | 'no_reply_sweep' | 'handback';
   now?: Date;
 }): Promise<WhatsAppAiOutcome> {
   const now = input.now || new Date();
@@ -268,6 +268,9 @@ export async function replyToWhatsAppConversation(input: {
     }
   }
   const turnText = (parts.join('\n') || extraUserNotes.join('\n') || 'Olá').slice(0, 2_000);
+  if (input.trigger === 'handback') {
+    extraUserNotes.push('[Nota interna, não mostre ao cliente: a equipe devolveu esta conversa para você. Responda o que o cliente perguntou ou pediu nas últimas mensagens e continue o atendimento de onde parou, sem repetir o que a equipe já disse.]');
+  }
 
   // A Flip AI conversation state binds the conversation to the agent answering it.
   const state = await prisma.flipAiConversationState.upsert({
@@ -484,6 +487,38 @@ async function transcribeWhatsAppVoiceNote(input: {
   } catch {
     return null;
   }
+}
+
+/**
+ * "Devolver para a IA" / "Responder agora com a IA": when the customer's last message is still
+ * unanswered, the AI answers it right away instead of waiting for a new message. Outside the 24-hour
+ * window WhatsApp only accepts approved templates, so nothing is sent then.
+ */
+export async function pendingWhatsAppReply(input: { tenantId: string; conversationId: string; now?: Date }) {
+  const now = input.now || new Date();
+  const [latestInbound, latestOutbound] = await Promise.all([
+    prisma.message.findFirst({
+      where: { tenantId: input.tenantId, conversationId: input.conversationId, direction: 'inbound' },
+      orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      select: { id: true, providerTimestamp: true, createdAt: true },
+    }),
+    prisma.message.findFirst({
+      where: { tenantId: input.tenantId, conversationId: input.conversationId, direction: 'outbound' },
+      orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+      select: { providerTimestamp: true, createdAt: true },
+    }),
+  ]);
+  if (!latestInbound) return { status: 'nothing_pending' as const };
+  const inboundAt = latestInbound.providerTimestamp || latestInbound.createdAt;
+  const outboundAt = latestOutbound ? latestOutbound.providerTimestamp || latestOutbound.createdAt : null;
+  if (outboundAt && outboundAt >= inboundAt) return { status: 'nothing_pending' as const };
+  if (now.getTime() - inboundAt.getTime() > 23 * 3_600_000) return { status: 'window_closed' as const };
+  return {
+    status: 'answering' as const,
+    run: () => replyToWhatsAppConversation({
+      tenantId: input.tenantId, conversationId: input.conversationId, inboundMessageId: latestInbound.id, trigger: 'handback',
+    }),
+  };
 }
 
 /** Waits for the customer to finish typing, then answers if this is still the latest message. */
