@@ -30,10 +30,10 @@ import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { showWhatsAppTyping } from '@/lib/meta/whatsapp-typing';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
-import { handleWhatsAppAiQualification, whatsappContactName } from './lead';
+import { handleWhatsAppAiQualification, isLeadNameConfirmed, whatsappContactName } from './lead';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
-import { decideWhatsAppAiAnswer, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -91,7 +91,7 @@ function whatsappInstructions(input: {
   companyName: string;
   introduction: string;
   firstReply: boolean;
-  /** The name the person already gave (the lead's name), when there is one. */
+  /** The name the person already confirmed, when there is one. */
   knownName: string | null;
   /** The name on the person's WhatsApp profile, to confirm. */
   profileName: string | null;
@@ -108,15 +108,16 @@ function whatsappInstructions(input: {
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
     'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
     input.knownName
-      ? `NOME: o cliente já se identificou como "${input.knownName}". Chame-o assim e NÃO pergunte o nome de novo.`
-      : input.profileName
-        ? `NOME: o perfil do WhatsApp mostra "${input.profileName}". Logo no começo da conversa, confirme como a pessoa prefere ser chamada (por exemplo: "Posso te chamar de ${input.profileName.split(' ')[0]}?") e registre o nome em identity.name assim que ela responder.`
-        : 'NOME: logo no começo da conversa, pergunte como a pessoa prefere ser chamada e registre o nome em identity.name assim que ela responder.',
+      ? `NOME: o cliente já disse que prefere ser chamado de "${input.knownName}". Chame-o assim e NÃO pergunte o nome de novo.`
+      : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
     'TRIAGEM: entenda o caso todo, lendo o histórico da conversa. Se a pessoa não se encaixar no benefício que procurou, não encerre:'
       + ' investigue com perguntas se ela pode ter direito a outro benefício ou tese do escritório (por exemplo, auxílio-doença, BPC,'
       + ' aposentadoria rural) e só então encaminhe.',
-    'QUALIFICAÇÃO: quando já houver informação suficiente para o advogado avaliar o caso, preencha a qualificação final.',
+    'QUALIFICAÇÃO: quando já houver informação suficiente para o advogado avaliar o caso, preencha a qualificação final.'
+      + ' SEMPRE que você disser que vai encaminhar o caso para a equipe, um atendente ou o advogado, preencha a qualificação final'
+      + ' NESSA MESMA resposta: "qualified" quando o caso tem sinais de direito e a pessoa quer seguir; "nurture" quando falta informação'
+      + ' ou decisão; "disqualified" só quando claramente não há tese do escritório para o caso.',
   ].join('\n');
 }
 
@@ -138,6 +139,7 @@ export async function replyToWhatsAppConversation(input: {
     where: { id: input.conversationId, tenantId: input.tenantId, provider: 'meta', channel: 'whatsapp' },
     select: {
       id: true, aiPausedAt: true,
+      leadId: true,
       externalContactIdentity: { select: { externalUserId: true, displayName: true } },
       lead: { select: { name: true } },
       tenant: { select: { name: true } },
@@ -343,9 +345,15 @@ export async function replyToWhatsAppConversation(input: {
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound', sentByUserId: null },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { metadata: true },
+      select: { metadata: true, text: true },
     });
     const aiRepliesSoFar = recentOutbound.filter((message) => typeof metadataOf(message.metadata).aiAgentId === 'string').length;
+    const profileName = whatsappContactName(conversation.externalContactIdentity.displayName);
+    const nameConfirmed = conversation.leadId
+      ? await isLeadNameConfirmed(input.tenantId, conversation.leadId, profileName)
+      : false;
+    // When the AI's last question was the name, the answer is read here too, not only by the model.
+    const nameInAnswer = nameFromReply(recentOutbound[0]?.text, turnText, profileName ? profileName.split(' ')[0] : null);
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
     context = {
       ...context,
@@ -354,8 +362,8 @@ export async function replyToWhatsAppConversation(input: {
         companyName: conversation.tenant.name,
         introduction: whatsappIntroduction(settings.introduction, conversation.tenant.name),
         firstReply: aiRepliesSoFar === 0,
-        knownName: whatsappContactName(conversation.lead?.name),
-        profileName: whatsappContactName(conversation.externalContactIdentity.displayName),
+        knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
+        profileName,
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
@@ -423,7 +431,7 @@ export async function replyToWhatsAppConversation(input: {
       conversationId: conversation.id,
       runtime,
       classification: parsed.qualification?.classification,
-      preferredName: parsed.identity?.name,
+      preferredName: parsed.identity?.name || nameInAnswer,
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,

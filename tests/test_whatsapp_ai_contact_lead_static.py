@@ -9,7 +9,8 @@ def read(path):
 
 def test_the_lead_opens_with_name_and_number_and_ad_events_wait_for_qualification():
     lead = read("lib/whatsapp-ai/lead.ts")
-    assert "if (!preferredName && !qualified) return { kind: 'not_identified' as const };" in lead
+    assert "if (!preferredName && !qualified && !engaged) return { kind: 'not_identified' as const };" in lead
+    assert "const engaged = inbound >= 2;" in lead
     assert "captureStage: 'contact'" in lead
     assert "if (qualified && leadId && await conversionPending(input.tenantId, leadId)) {" in lead
     # The conversion is recorded before it is sent, so it never repeats.
@@ -28,6 +29,9 @@ def test_whatsapp_verdict_is_recorded_without_a_second_meta_event():
 def test_the_ai_knows_the_name_and_never_asks_it_again():
     reply = read("lib/whatsapp-ai/reply.ts")
     assert "NÃO pergunte o nome de novo." in reply
-    assert "knownName: whatsappContactName(conversation.lead?.name)," in reply
-    assert "profileName: whatsappContactName(conversation.externalContactIdentity.displayName)," in reply
+    assert "Nunca deixe essa pergunta para o fim da conversa." in reply
+    assert "knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer," in reply
+    assert "preferredName: parsed.identity?.name || nameInAnswer," in reply
     assert "investigue com perguntas se ela pode ter direito a outro benefício" in reply
+    # Handing the case to the team always comes with the verdict, which sends the ad conversion.
+    assert "SEMPRE que você disser que vai encaminhar o caso para a equipe" in reply

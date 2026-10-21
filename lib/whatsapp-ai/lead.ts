@@ -127,10 +127,23 @@ async function sendWhatsAppLeadConversion(input: {
   }
 }
 
+/** Whether the person already said how they want to be called (the AI then stops asking). */
+export async function isLeadNameConfirmed(tenantId: string, leadId: string, profileName: string | null) {
+  const lead = await prisma.lead.findFirst({ where: { id: leadId, tenantId }, select: { name: true } });
+  if (!lead) return false;
+  // A name different from the WhatsApp profile was given by the person or written by the team.
+  if (!profileName || cleanName(lead.name) !== cleanName(profileName)) return true;
+  const marked = await prisma.auditLog.count({
+    where: { tenantId, entityType: 'lead', entityId: leadId, action: 'lead.whatsapp_ai_name_confirmed' },
+  });
+  return marked > 0;
+}
+
 /**
  * Called after each AI reply (pilot companies only):
- * 1. As soon as the person says how they want to be called, the conversation becomes a lead with that
- *    name and the WhatsApp number, at the first stage of the funnel. No ad event yet.
+ * 1. The conversation becomes a lead early, with the minimum: the person said how to be called, or
+ *    replied to the AI at least once (real interest). Name + WhatsApp number, first stage of the
+ *    funnel, no ad event yet. The qualification then evolves along the conversation.
  * 2. The AI's verdict is recorded like in the site chat (score, summary, lead temperature).
  * 3. When the conversation is qualified, one Lead event goes to Meta and Google Ads.
  * Later, the name the person prefers replaces the WhatsApp profile name while the team has not edited it.
@@ -146,6 +159,11 @@ export async function handleWhatsAppAiQualification(input: {
   model?: string;
   evidenceMessageIds?: string[];
 }) {
+  const inbound = await prisma.message.count({
+    where: { tenantId: input.tenantId, conversationId: input.conversationId, direction: 'inbound' },
+  });
+  // The person replied to the AI at least once: enough interest to work the lead.
+  const engaged = inbound >= 2;
   if (!isWhatsAppAiLeadTenant(input.tenantId)) return { kind: 'pilot_off' as const };
 
   const conversation = await prisma.conversation.findFirst({
@@ -167,6 +185,14 @@ export async function handleWhatsAppAiQualification(input: {
   let kind: string = 'already_lead';
   if (leadId) {
     // Only the name the AI gave from the WhatsApp profile is replaced; a name the team wrote stays.
+    if (preferredName) {
+      await prisma.auditLog.create({
+        data: {
+          tenantId: input.tenantId, userId: null, entityType: 'lead', entityId: leadId,
+          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id },
+        },
+      }).catch(() => undefined);
+    }
     if (preferredName && profileName && preferredName !== profileName) {
       const renamed = await prisma.lead.updateMany({
         where: { id: leadId, tenantId: input.tenantId, name: profileName },
@@ -182,8 +208,8 @@ export async function handleWhatsAppAiQualification(input: {
       }
     }
   } else {
-    // Name + WhatsApp number are enough to open the lead; a qualified conversation also opens it.
-    if (!preferredName && !qualified) return { kind: 'not_identified' as const };
+    // Minimum to open the lead: the name, a reply showing interest, or a qualified conversation.
+    if (!preferredName && !qualified && !engaged) return { kind: 'not_identified' as const };
     const outcome = await ensureLeadFromConversation({
       tenantId: input.tenantId,
       conversationId: input.conversationId,
@@ -209,6 +235,14 @@ export async function handleWhatsAppAiQualification(input: {
     // An existing lead with this phone is only linked: it is not a new lead, so no ad event ever goes out
     // (conversionPending only accepts leads this flow created).
     leadId = outcome.leadId;
+    if (preferredName) {
+      await prisma.auditLog.create({
+        data: {
+          tenantId: input.tenantId, userId: null, entityType: 'lead', entityId: leadId,
+          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id },
+        },
+      }).catch(() => undefined);
+    }
   }
 
   // The verdict is kept like in the site chat: score, summary and the lead temperature.

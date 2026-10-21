@@ -7,6 +7,7 @@ import {
   isWithinBusinessHours,
   toWhatsAppText,
   withWhatsAppSourceLinks,
+  nameFromReply,
   type WhatsAppAiRuleSettings,
 } from '../lib/whatsapp-ai/eligibility';
 
@@ -76,4 +77,20 @@ test('no WhatsApp, a marca de fonte externa vira o link no final', () => {
     'Texto fim.\n\nFonte: https://www.gov.br/inss/pt-br/a\nhttps://www.planalto.gov.br/b');
   assert.equal(withWhatsAppSourceLinks('Sem fonte.', sources), 'Sem fonte.');
   assert.equal(withWhatsAppSourceLinks('Fonte inexistente [Fonte externa 9].', sources), 'Fonte inexistente.');
+});
+
+test('o nome é lido da resposta quando a IA perguntou como chamar', () => {
+  const ask = 'Para identificar o atendimento, como você prefere ser chamado?';
+  assert.equal(nameFromReply(ask, 'Diego', null), 'Diego');
+  assert.equal(nameFromReply(ask, 'pode me chamar de maria das dores', null), 'Maria Das Dores');
+  assert.equal(nameFromReply(ask, 'me chamo João.', null), 'João');
+  assert.equal(nameFromReply(ask, 'sou Diego', null), 'Diego');
+  assert.equal(nameFromReply(ask, 'sou a Ana Paula', null), 'Ana Paula');
+  assert.equal(nameFromReply('Posso te chamar de Diego?', 'sim', 'Diego'), 'Diego');
+  assert.equal(nameFromReply('Posso te chamar de Diego?', 'pode', 'Diego'), 'Diego');
+  assert.equal(nameFromReply(ask, 'quero saber do meu benefício que foi negado ontem pelo inss', null), null);
+  assert.equal(nameFromReply(ask, '2000', null), null);
+  assert.equal(nameFromReply(ask, 'obrigado', null), null);
+  assert.equal(nameFromReply('Quantas pessoas moram na casa?', 'Diego', null), null);
+  assert.equal(nameFromReply(null, 'Diego', null), null);
 });

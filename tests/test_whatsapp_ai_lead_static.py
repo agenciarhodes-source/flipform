@@ -11,7 +11,7 @@ def test_a_pilot_conversation_becomes_a_lead_with_name_and_ad_events_go_once_at_
     lead = read("lib/whatsapp-ai/lead.ts")
     assert "if (!isWhatsAppAiLeadTenant(input.tenantId)) return { kind: 'pilot_off' as const };" in lead
     # C1: name + WhatsApp number open the lead; a qualified conversation also opens it.
-    assert "if (!preferredName && !qualified) return { kind: 'not_identified' as const };" in lead
+    assert "if (!preferredName && !qualified && !engaged) return { kind: 'not_identified' as const };" in lead
     assert "if (!('leadId' in outcome)) return { kind: outcome.kind };" in lead
     assert "metaLeadEventId: `whatsapp-ai-lead:${input.conversationId}`," in lead
     assert "enqueueGoogleConversionEvents({" in lead
