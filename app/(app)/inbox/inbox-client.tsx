@@ -131,10 +131,10 @@ function senderRoleLabel(role?: string | null) {
   return null;
 }
 
-/** "Helena · Flip AI" for replies the AI wrote on WhatsApp. */
+/** "Camila · Atendente" for replies the AI wrote on WhatsApp (the team sees the same name the customer does). */
 function aiSenderLabel(metadata: unknown) {
   const value = metadata && typeof metadata === 'object' ? metadata as Record<string, unknown> : {};
-  if (typeof value.aiAgentName === 'string') return `${value.aiAgentName} · Flip AI`;
+  if (typeof value.aiAgentName === 'string') return `${value.aiAgentName} · Atendente`;
   return typeof value.systemSenderLabel === 'string' ? value.systemSenderLabel : null;
 }
 
