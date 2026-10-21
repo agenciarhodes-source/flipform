@@ -109,6 +109,27 @@ export function withWhatsAppSourceLinks(text: string, sources: Array<{ url: stri
 }
 
 /** WhatsApp marks bold with one asterisk; models often write Markdown with two. */
+const NAME_PREFIXES = /^(?:(?:pode\s+)?me\s+chamar\s+de|me\s+chamo|meu\s+nome\s+(?:é|e)|(?:eu\s+)?sou(?:\s+(?:o|a))?|é|e)\s+/i;
+const YES = /^(?:sim|pode|pode\s+sim|pode\s+ser|claro|isso|ok|certo|com\s+certeza)\b/i;
+const NOT_A_NAME = /^(?:sim|não|nao|ok|obrigad[oa]|bom\s+dia|boa\s+tarde|boa\s+noite|oi|olá|ola)$/i;
+
+/**
+ * The name in the customer's answer, when the AI's last message asked how to call them.
+ * "Diego", "pode me chamar de Diego", or "sim" to "Posso te chamar de Diego?" (the profile name).
+ * Anything that does not look like a short name is ignored.
+ */
+export function nameFromReply(question: string | null | undefined, answer: string, profileFirstName: string | null) {
+  if (!question || !/cham(?:ad[oa]|ar)|seu nome|como (?:posso|devo)/i.test(question)) return null;
+  const text = answer.trim().replace(/[.!]+$/, '');
+  if (YES.test(text) && profileFirstName) {
+    const rest = text.replace(YES, '').replace(/^[,\s]+/, '');
+    if (!rest) return profileFirstName;
+  }
+  const name = text.replace(YES, '').replace(/^[,\s]+/, '').replace(NAME_PREFIXES, '').trim();
+  if (!/^\p{L}[\p{L}\p{M}' -]{1,40}$/u.test(name) || name.split(/\s+/).length > 4 || NOT_A_NAME.test(name)) return null;
+  return name.split(/\s+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
 export function toWhatsAppText(text: string) {
   return text
     .replace(/\*\*(.+?)\*\*/g, '*$1*')
