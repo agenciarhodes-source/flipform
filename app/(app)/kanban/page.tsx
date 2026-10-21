@@ -139,6 +139,9 @@ export default function KanbanPage() {
   const [taskInds, setTaskInds] = useState<Record<string, TaskIndicator>>({});
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<'7d' | '30d' | 'custom'>('30d');
+  // moved (default): arrived OR moved to the current stage in the period, so a lead that arrived
+  // last month and closed this month shows up · entered: arrived in the period · open: every open lead.
+  const [basis, setBasis] = useState<'moved' | 'entered' | 'open'>('moved');
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 29);
@@ -180,6 +183,7 @@ export default function KanbanPage() {
 
     if (!silent) setLoading(true);
     const params = new URLSearchParams({ pipelineId, period });
+    params.set('basis', basis);
     if (search) params.set('q', search);
     if (period === 'custom') {
       params.set('startDate', startDate);
@@ -196,7 +200,7 @@ export default function KanbanPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [pipelineId, period, search, startDate, endDate]);
+  }, [pipelineId, period, search, startDate, endDate, basis]);
 
   const openWhatsAppConversation = async (leadId: string) => {
     try {
@@ -323,7 +327,17 @@ export default function KanbanPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="flex items-center gap-2">
-            <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom')}>
+            <Select value={basis} onValueChange={(value) => setBasis(value as 'moved' | 'entered' | 'open')}>
+              <SelectTrigger className="w-[210px]" aria-label="Base do filtro do Kanban">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="moved">Movimentados no período</SelectItem>
+                <SelectItem value="entered">Chegaram no período</SelectItem>
+                <SelectItem value="open">Todos em aberto</SelectItem>
+              </SelectContent>
+            </Select>
+            {basis !== 'open' && <Select value={period} onValueChange={(value) => setPeriod(value as '7d' | '30d' | 'custom')}>
               <SelectTrigger className="w-[150px]" aria-label="Período do Kanban">
                 <div className="flex items-center gap-2"><CalendarDays className="w-4 h-4 text-muted-foreground" /><SelectValue /></div>
               </SelectTrigger>
@@ -332,8 +346,8 @@ export default function KanbanPage() {
                 <SelectItem value="30d">30 dias</SelectItem>
                 <SelectItem value="custom">Personalizado</SelectItem>
               </SelectContent>
-            </Select>
-            {period === 'custom' && (
+            </Select>}
+            {basis !== 'open' && period === 'custom' && (
               <div className="flex items-center gap-2">
                 <Input aria-label="Data inicial do Kanban" type="date" value={startDate} max={endDate} onChange={(event) => setStartDate(event.target.value)} className="w-[150px]" />
                 <span className="text-xs text-muted-foreground">até</span>
@@ -349,7 +363,9 @@ export default function KanbanPage() {
         </div>
       </div>
       <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground lg:px-6">
-        Filtro por data de entrada do lead no funil · {period === '7d' ? 'últimos 7 dias' : period === '30d' ? 'últimos 30 dias' : `${startDate || '—'} até ${endDate || '—'}`}
+        {basis === 'open'
+          ? 'Todos os leads em aberto, de qualquer data'
+          : <>{basis === 'moved' ? 'Leads que chegaram ou mudaram de etapa no período (a venda aparece no mês em que fechou)' : 'Filtro por data de entrada do lead no funil'} · {period === '7d' ? 'últimos 7 dias' : period === '30d' ? 'últimos 30 dias' : `${startDate || '—'} até ${endDate || '—'}`}</>}
       </div>
       <div className="w-full flex-1 min-h-0 overflow-hidden p-4 lg:p-6">
         {loading ? (
