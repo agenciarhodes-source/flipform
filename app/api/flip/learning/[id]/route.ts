@@ -5,10 +5,13 @@ import { decideLearning, LearningDecisionError } from '@/lib/flip/learning';
 import { FlipAiError } from '@/lib/flip-ai/access';
 
 const bodySchema = z.object({
-  action: z.enum(['approve', 'dismiss']),
+  action: z.enum(['approve', 'dismiss', 'remove']),
   title: z.string().max(120).optional(),
   content: z.string().max(1_000).optional(),
+  topic: z.string().max(60).optional(),
 }).strict();
+
+export const maxDuration = 60;
 
 export const POST = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, session, context: { params: { id: string } }) => {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));

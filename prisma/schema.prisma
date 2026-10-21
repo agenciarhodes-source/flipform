@@ -1925,8 +1925,12 @@ model AttendanceLearningSuggestion {
   tenantId          String    @map("tenant_id")
   /// Flip AI agent whose Markdown Mestre receives it. No database link to flip_ai_agents (audited).
   agentId           String    @map("agent_id")
-  /// phrase | objection | triage | explanation | closing | other
+  /// phrase | objection | triage | explanation | closing | avoid | other
   kind              String
+  /// human_success | human_failure | ai_review
+  origin            String    @default("human_success")
+  /// "Geral" or the service/thesis it applies to (e.g. "Salário-maternidade").
+  topic             String?
   title             String
   content           String
   example           String?
