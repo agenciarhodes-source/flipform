@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -160,6 +161,7 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
           <p className="text-muted-foreground text-sm">Análise de performance comercial e operacional.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+        <Link href="/reports/attendance" className={buttonVariants({ variant: 'outline' })}>Produtividade do atendimento</Link>
         <Button variant="outline" disabled={loading} title="Abrir o relatório diagramado para imprimir ou salvar em PDF."
           onClick={() => window.open(`/report/reports?${qs}`, '_blank', 'noopener')}>
           <Printer className="w-4 h-4 mr-2" />Imprimir / PDF

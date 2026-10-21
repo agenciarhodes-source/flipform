@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { isTestPhoneNumber } from './eligibility';
 
 /**
  * Human and AI never answer the same conversation at once. The AI is paused in a conversation
@@ -70,6 +71,20 @@ export function isConversationAiPaused(
   if (!conversation.aiPausedAt) return false;
   if (!resumeAfterHours) return true;
   return now.getTime() - conversation.aiPausedAt.getTime() < resumeAfterHours * 3_600_000;
+}
+
+/**
+ * Who the AI answers in this company: everyone, when a number with the AI on is released to all;
+ * otherwise only the test numbers. Used to show "IA atendendo" only where the AI really answers.
+ */
+export async function whatsAppAiAudience(tenantId: string) {
+  const numbers = await prisma.tenantWhatsAppAiSettings.findMany({
+    where: { tenantId, enabled: true, agentId: { not: null }, connection: { status: 'connected' } },
+    select: { liveEnabled: true, testPhoneNumbers: true },
+  }).catch(() => []);
+  const everyone = numbers.some((number) => number.liveEnabled);
+  const testNumbers = numbers.flatMap((number) => number.testPhoneNumbers);
+  return (waId: string | null | undefined) => everyone || (Boolean(waId) && isTestPhoneNumber(testNumbers, waId as string));
 }
 
 /** Whether any connected number of the company has the AI switched on. */
