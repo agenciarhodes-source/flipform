@@ -1,4 +1,5 @@
 import 'server-only';
+import { finalStageIdsForTenant } from '@/lib/period-activity';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -84,11 +85,11 @@ export async function operationCosts(tenantId: string, month: string) {
       distinct: ['conversationId'],
     }),
     prisma.auditLog.count({ where: { tenantId, action: 'lead.whatsapp_ai_created', createdAt: { gte: range.start, lt: range.end } } }),
-    // Closed in the month: won leads whose move into their current (final) stage happened in it.
-    prisma.leadStageHistory.findMany({
-      where: { createdAt: { gte: range.start, lt: range.end }, lead: { tenantId, status: 'won' } },
+    // Closed in the month: leads whose move into their current (final) stage happened in it.
+    finalStageIdsForTenant(prisma, tenantId).then((finalStageIds) => prisma.leadStageHistory.findMany({
+      where: { createdAt: { gte: range.start, lt: range.end }, lead: { tenantId, status: { not: 'lost' }, stageId: { in: finalStageIds } } },
       select: { leadId: true, toStageId: true, lead: { select: { stageId: true } } },
-    }).then((rows) => new Set(rows.filter((row) => row.toStageId === row.lead.stageId).map((row) => row.leadId)).size),
+    })).then((rows) => new Set(rows.filter((row) => row.toStageId === row.lead.stageId).map((row) => row.leadId)).size),
   ]);
 
   const aiTotal = ai.reduce((sum, row) => sum + row.usd, 0);

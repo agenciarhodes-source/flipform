@@ -21,7 +21,8 @@ def test_manual_lead_api_validates_tenant_pipeline_stage_and_form_null():
     assert 'tenantId: session.tenantId' in route
     assert 'formId: null' in route
     assert "source: parsed.data.source" in route
-    assert "status: 'open'" in route
+    # Open, except straight in the final stage of the funnel: then it is a sale.
+    assert "status: createdAsSale ? 'won' : 'open'," in route
     assert "pipeline: { tenantId: session.tenantId }" in route
     assert "Etapa inválida para o pipeline selecionado." in route
     assert 'findExistingLeadIdByContactInTenant' in route

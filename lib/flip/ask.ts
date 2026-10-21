@@ -8,6 +8,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { computeFlipAlerts } from './alerts';
+import { finalStageIdsForTenant } from '@/lib/period-activity';
 import { ASK_PLAN_FORMAT, askPlanSchema, matchName, percent, resolvePeriod, type AskPlan } from './ask-rules';
 
 type Session = { tenantId: string; userId: string; role: string };
@@ -89,9 +90,12 @@ export async function runAskQuery(session: Session, plan: AskPlan, now = new Dat
   };
   const created = { ...leadFilters, createdAt: { gte: period.start, lt: period.end } };
 
+  // A sale: the lead entered the final stage of its funnel in the period and is still there (not lost).
+  // Counted by the stage, not by the "won" status, which a lead created straight in the final stage lacked.
   const closedLeads = async (where: Prisma.LeadWhereInput) => {
+    const finalStageIds = await finalStageIdsForTenant(prisma, session.tenantId);
     const rows = await prisma.leadStageHistory.findMany({
-      where: { createdAt: { gte: period.start, lt: period.end }, lead: { ...where, status: 'won' } },
+      where: { createdAt: { gte: period.start, lt: period.end }, lead: { ...where, status: { not: 'lost' }, stageId: { in: finalStageIds } } },
       select: { leadId: true, toStageId: true, lead: { select: { stageId: true, assignedTo: true } } },
     });
     const won = rows.filter((row) => row.toStageId === row.lead.stageId);
