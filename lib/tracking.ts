@@ -497,9 +497,8 @@ export async function dispatchFormSubmissionTracking(context: TrackingDispatchCo
   if (metaRuntime.pixelEnabled || metaRuntime.capiEnabled) {
     syntheticMappings.push({ provider: 'meta', eventName: 'Lead', customEventName: null, pipelineId: context.pipelineId, stageId: context.toStageId, currency: 'BRL' });
   }
-  if (settings?.googleAdsEnabled) {
-    syntheticMappings.push({ provider: 'google_ads', eventName: 'Lead', customEventName: null, conversionLabel: settings.googleAdsLabel, pipelineId: context.pipelineId, stageId: context.toStageId, currency: 'BRL' });
-  }
+  // Google Ads conversions are sent only by the Funil Google (offline conversions). The legacy
+  // server-side Google Ads "Lead" never had a transport and only produced not_dispatched lines.
 
   const all = [...syntheticMappings, ...mappings];
   const deduped = all.filter((mapping, index) => {
