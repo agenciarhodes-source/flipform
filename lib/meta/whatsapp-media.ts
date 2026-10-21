@@ -48,3 +48,35 @@ export async function downloadWhatsAppMedia(input: { mediaId: string; accessToke
     mimeType: typeof info.mime_type === 'string' ? info.mime_type : file.headers.get('content-type') || 'application/octet-stream',
   };
 }
+
+/** Uploads a file to Meta for the connected number and returns its media id (used to send it). */
+export async function uploadWhatsAppMedia(input: {
+  phoneNumberId: string;
+  accessToken: string;
+  bytes: Uint8Array;
+  mimeType: string;
+  fileName: string;
+}) {
+  if (!/^\d{1,64}$/.test(input.phoneNumberId)) throw new WhatsAppMediaError('UNAVAILABLE');
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', input.mimeType);
+  const buffer = input.bytes.buffer.slice(input.bytes.byteOffset, input.bytes.byteOffset + input.bytes.byteLength) as ArrayBuffer;
+  form.append('file', new Blob([buffer], { type: input.mimeType }), input.fileName);
+  let data: any = null;
+  try {
+    const response = await fetch(`https://graph.facebook.com/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${input.accessToken}` },
+      body: form,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(25_000),
+    });
+    data = await response.json().catch(() => null);
+    if (!response.ok || typeof data?.id !== 'string') throw new WhatsAppMediaError('UNAVAILABLE');
+  } catch (error) {
+    if (error instanceof WhatsAppMediaError) throw error;
+    throw new WhatsAppMediaError('UNAVAILABLE');
+  }
+  return data.id as string;
+}

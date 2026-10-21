@@ -11,6 +11,7 @@ import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
+import { uploadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
 import {
   buildPublicAgentSignature,
@@ -64,7 +65,15 @@ type OutboxMetadata = {
   aiAgentId?: string;
   aiAgentName?: string;
   systemSenderLabel?: string;
+  /** A voice note recorded in the Inbox: the file already uploaded to Meta. */
+  mediaId?: string;
+  mediaMimeType?: string;
+  audioVoice?: boolean;
 };
+
+/** What the Inbox shows for a voice note sent by the team. */
+export const OUTBOUND_AUDIO_TEXT = '🎤 Áudio';
+export type WhatsAppOutboundAudio = { mediaId: string; mimeType: string; voice: boolean; contentHash: string };
 
 export type WhatsAppOutboundTemplate = { name: string; language: string; parameters?: string[] };
 
@@ -242,8 +251,10 @@ async function enqueueWhatsAppTextMessage(input: {
   template?: WhatsAppOutboundTemplate;
   aiSender?: WhatsAppAiSender;
   systemSender?: WhatsAppSystemSender;
+  audio?: WhatsAppOutboundAudio;
 }) {
   const template = normalizeOutboundTemplate(input.template);
+  const audio = input.audio || null;
   const tenantId = input.tenantId.trim();
   const conversationId = input.conversationId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
@@ -262,8 +273,10 @@ async function enqueueWhatsAppTextMessage(input: {
   const recipientWaId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
   const connection = await resolveConnectedWhatsAppConnection(tenantId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
-  const fingerprint = requestFingerprint(conversationId,
+  const textFingerprint = requestFingerprint(conversationId,
     template ? `template\u0000${template.name}\u0000${template.language}\u0000${(template.parameters || []).join('\u0001')}` : text);
+  // A voice note is bound to its audio content, so a retry with another recording is a conflict.
+  const fingerprint = audio ? sha256(`${textFingerprint}\u0000audio\u0000${audio.contentHash}`) : textFingerprint;
   const idempotencyKeyHash = sha256(idempotencyKey);
 
   const existing = await findExistingOutboxMessage(tenantId, externalMessageId);
@@ -294,7 +307,8 @@ async function enqueueWhatsAppTextMessage(input: {
     }),
   ]);
   // The AI never signs as an attendant: it introduces itself as the virtual assistant instead.
-  const signature = authorization.sender
+  // A voice note has no caption, so it carries no signature either.
+  const signature = authorization.sender && !audio
     ? buildPublicAgentSignature({
       mode: signatureSettings.mode,
       senderUserId: authorization.sender.id,
@@ -316,6 +330,7 @@ async function enqueueWhatsAppTextMessage(input: {
     // A template is sent exactly as Meta approved it, so it never carries the attendant's signature.
     ...(signature.signature && !template ? { agentSignature: signature.signature } : {}),
     ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
+    ...(audio ? { mediaId: audio.mediaId, mediaMimeType: audio.mimeType, audioVoice: audio.voice } : {}),
     ...(template ? { template } : {}),
     ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
     ...(systemSender ? { systemSenderLabel: systemSender.label.slice(0, 60) } : {}),
@@ -330,7 +345,7 @@ async function enqueueWhatsAppTextMessage(input: {
         channel: 'whatsapp',
         externalMessageId,
         direction: 'outbound',
-        type: 'text',
+        type: audio ? 'audio' : 'text',
         text,
         status: 'queued',
         sentByUserId: aiSender || systemSender ? null : requestedByUserId,
@@ -555,6 +570,7 @@ async function sendMetaWhatsAppText(input: {
   recipientWaId: string;
   text: string;
   template?: WhatsAppOutboundTemplate;
+  audio?: { id: string; voice: boolean };
   accessToken: string;
 }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`);
@@ -562,7 +578,9 @@ async function sendMetaWhatsAppText(input: {
   const content = input.template
     ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language },
       ...(parameters.length ? { components: [{ type: 'body', parameters: parameters.map(value => ({ type: 'text', text: value })) }] } : {}) } }
-    : { type: 'text', text: { preview_url: false, body: input.text } };
+    : input.audio
+      ? { type: 'audio', audio: { id: input.audio.id, ...(input.audio.voice ? { voice: true } : {}) } }
+      : { type: 'text', text: { preview_url: false, body: input.text } };
   let response: Response;
   try {
     response = await fetch(url, {
@@ -648,6 +666,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
   aiSender?: WhatsAppAiSender;
   /** When set, the system itself is the sender, e.g. after-sale messages. */
   systemSender?: WhatsAppSystemSender;
+  /** When set, a voice note already uploaded to Meta is sent; `text` is only what the Inbox shows. */
+  audio?: WhatsAppOutboundAudio;
 }): Promise<WhatsAppOutboundResult> {
   const queued = await enqueueWhatsAppTextMessage(input);
   const begun = await beginDispatch(input.tenantId, queued.message.id);
@@ -711,6 +731,7 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     recipientWaId: begun.metadata.recipientWaId,
     text: providerText,
     template: begun.metadata.template,
+    audio: begun.metadata.mediaId ? { id: begun.metadata.mediaId, voice: Boolean(begun.metadata.audioVoice) } : undefined,
     accessToken,
   });
   if (provider.kind === 'unknown') {
@@ -756,4 +777,49 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     providerMessageId: provider.providerMessageId,
     idempotent: !queued.created,
   };
+}
+
+/**
+ * A voice note recorded by a person of the team: the file goes to Meta first, then the message is
+ * queued and sent like a text (same permissions, same idempotency, same status updates).
+ */
+export async function enqueueAndDispatchWhatsAppAudioMessage(input: {
+  tenantId: string;
+  conversationId: string;
+  requestedByUserId: string;
+  idempotencyKey: string;
+  audio: { bytes: Uint8Array; mimeType: string; voice: boolean; extension: string };
+}): Promise<WhatsAppOutboundResult> {
+  const tenantId = input.tenantId.trim();
+  await assertRequesterCanSend({ tenantId, userId: input.requestedByUserId.trim(), conversationId: input.conversationId.trim() });
+  const contentHash = createHash('sha256').update(input.audio.bytes).digest('hex');
+  const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
+  let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
+  if (!mediaId) {
+    const connection = await prisma.tenantWhatsAppConnection.findFirst({
+      where: { tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'desc' },
+      select: { phoneNumberId: true, accessTokenEncrypted: true },
+    });
+    if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
+    const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
+    const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
+    const accessToken = ownToken || credentials?.systemUserAccessToken;
+    if (!accessToken) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp credentials missing');
+    mediaId = await uploadWhatsAppMedia({
+      phoneNumberId: connection.phoneNumberId,
+      accessToken,
+      bytes: input.audio.bytes,
+      mimeType: input.audio.mimeType,
+      fileName: `audio-${Date.now()}.${input.audio.extension}`,
+    });
+  }
+  return enqueueAndDispatchWhatsAppTextMessage({
+    tenantId,
+    conversationId: input.conversationId,
+    requestedByUserId: input.requestedByUserId,
+    text: OUTBOUND_AUDIO_TEXT,
+    idempotencyKey: input.idempotencyKey,
+    audio: { mediaId, mimeType: input.audio.mimeType, voice: input.audio.voice, contentHash },
+  });
 }
