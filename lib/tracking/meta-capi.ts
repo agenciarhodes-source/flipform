@@ -13,6 +13,8 @@ export type MetaCapiPayload = {
   messagingChannel?: 'whatsapp';
   eventSourceUrl?: string | null;
   testEventCode?: string | null;
+  /** When the event really happened (a resend keeps the original time). Defaults to now. */
+  eventTime?: Date | null;
   user?: {
     email?: string | null;
     phone?: string | null;
@@ -161,7 +163,7 @@ export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaC
     data: [
       {
         event_name: payload.eventName,
-        event_time: Math.floor(Date.now() / 1000),
+        event_time: Math.floor((payload.eventTime ? payload.eventTime.getTime() : Date.now()) / 1000),
         event_id: payload.eventId,
         action_source: payload.actionSource || 'system_generated',
         messaging_channel: payload.actionSource === 'business_messaging' ? payload.messagingChannel || 'whatsapp' : undefined,

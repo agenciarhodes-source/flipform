@@ -6,6 +6,8 @@ import { sendMetaCapiEvent } from './tracking/meta-capi';
 import { getMetaLeadUserData, type MetaLeadUserData } from './tracking/meta-lead-user-data';
 import { resolveMetaRuntimeConfig, type MetaRuntimeConfig } from './meta/runtime';
 
+import { canReplayMetaEvent, META_REPLAY_MAX_AGE_MS } from './tracking/replay-rules';
+
 export const trackingProviders = ['meta', 'gtm', 'ga4', 'google_ads'] as const;
 export const funnelEventNames = ['Lead', 'CompleteRegistration', 'Contact', 'QualifiedLead', 'InitiateCheckout', 'Purchase', 'CustomEvent'] as const;
 
@@ -87,6 +89,8 @@ export type TrackingDispatchContext = {
   metaRequestTimeoutMs?: number;
   /** Explicit commercial purchase. Purchase tracking never invents revenue from a stage move. */
   purchase?: TrackingPurchaseContext | null;
+  /** When the event really happened; a resend keeps the original time. Defaults to now. */
+  eventTime?: Date | null;
 };
 
 export function resolveTrackingEventId(
@@ -342,6 +346,7 @@ async function dispatchMapping(mapping: any, settings: any, metaRuntime: MetaRun
         user: metaLeadData.user,
         customData: buildCustomData(mapping, context.source),
         timeoutMs: context.metaRequestTimeoutMs,
+        eventTime: context.eventTime || null,
       });
       if (!result.ok) throw new Error(result.reason || 'Falha ao enviar evento Meta');
       await logTrackingEvent({ ...base, status: 'sent' });
@@ -505,6 +510,76 @@ export async function dispatchFormSubmissionTracking(context: TrackingDispatchCo
   const results = [];
   for (const mapping of deduped) results.push(await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData));
   return results;
+}
+
+/**
+ * Resends the Meta events that failed in the last days (for example, while the token was missing),
+ * with their original time. Each event is resent at most once; one already delivered later is skipped.
+ */
+export async function replayFailedMetaEvents(tenantId: string, now = new Date()) {
+  const settings = await getTrackingConfig(tenantId);
+  const metaRuntime = await resolveMetaRuntimeConfig({ tenantId, legacySettings: settings });
+  const summary = { found: 0, sent: 0, failed: 0, skipped: 0, tooOld: 0, blocked: false };
+  if (!metaRuntime.capiEnabled || !metaRuntime.pixelId || !metaRuntime.accessToken) return { ...summary, blocked: true };
+
+  const failed = await prisma.trackingEventLog.findMany({
+    where: {
+      tenantId, provider: 'meta', status: 'failed', leadId: { not: null },
+      createdAt: { gte: new Date(now.getTime() - META_REPLAY_MAX_AGE_MS) },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: 300,
+  });
+  summary.found = failed.length;
+  const seen = new Set<string>();
+  for (const log of failed) {
+    const key = `${log.leadId}:${log.eventName}:${log.toStageId}:${log.source}`;
+    if (seen.has(key)) { summary.skipped += 1; continue; }
+    seen.add(key);
+    if (!canReplayMetaEvent(log, now)) { summary.tooOld += 1; continue; }
+    const delivered = await prisma.trackingEventLog.findFirst({
+      where: { tenantId, provider: 'meta', leadId: log.leadId, eventName: log.eventName, toStageId: log.toStageId, status: 'sent' },
+      select: { id: true },
+    });
+    const lead = await prisma.lead.findFirst({ where: { id: log.leadId!, tenantId }, select: { name: true, email: true, phone: true, pipelineId: true } });
+    if (delivered || !lead) { summary.skipped += 1; continue; }
+
+    const configured = log.toStageId ? await prisma.kanbanStageTrackingEvent.findFirst({
+      where: {
+        tenantId, stageId: log.toStageId, provider: 'meta', enabled: true,
+        OR: [{ customEventName: log.eventName }, { eventName: log.eventName, customEventName: null }],
+      },
+    }) : null;
+    const mapping = configured || {
+      provider: 'meta', eventName: log.eventName, customEventName: null,
+      pipelineId: log.pipelineId || lead.pipelineId, stageId: log.toStageId, currency: 'BRL',
+    };
+    const context: TrackingDispatchContext = {
+      tenantId,
+      leadId: log.leadId,
+      pipelineId: log.pipelineId || lead.pipelineId,
+      fromStageId: log.fromStageId,
+      toStageId: log.toStageId,
+      triggeredById: log.triggeredById,
+      source: log.source === 'public_form' ? 'public_form' : 'kanban',
+      lead: { name: lead.name, email: lead.email, phone: lead.phone },
+      // The form Lead keeps its event_id, so Meta merges it with the browser copy.
+      metaLeadEventId: log.source === 'public_form' ? log.eventId : null,
+      eventTime: log.createdAt,
+      metaRequestTimeoutMs: 8_000,
+    };
+    const metaLeadData = await resolveMetaLeadData(context, [mapping]);
+    const result = await dispatchMapping(mapping, settings, metaRuntime, context, metaLeadData);
+    if (result.status === 'sent') {
+      summary.sent += 1;
+      // A stage event gets a new event_id; the old failed line is closed so it is not counted again.
+      if (result.eventId !== log.eventId) {
+        await prisma.trackingEventLog.update({ where: { id: log.id }, data: { status: 'replayed', reason: `Reenviado em ${now.toISOString()}` } });
+      }
+    } else if (result.status === 'failed') summary.failed += 1;
+    else summary.skipped += 1;
+  }
+  return summary;
 }
 
 export function toPrismaDecimal(value?: number | null) {

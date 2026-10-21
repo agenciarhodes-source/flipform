@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import { MetaDeliveryHealth } from '@/components/integrations/meta-delivery-health';
 import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 import { getFinalTrackingLogs } from '@/lib/tracking/logs';
@@ -233,6 +234,7 @@ export function IntegrationsClient() {
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="rounded-xl border bg-white p-5 space-y-4 shadow-sm">
         <div><h2 className="font-semibold text-lg">Meta</h2><p className="text-sm text-muted-foreground">Integração universal do FlipForm</p></div>
+        <MetaDeliveryHealth />
         <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3"><span className="text-sm font-medium">Estado da autorização</span><span className="rounded-full border bg-white px-2 py-1 text-xs">{{ authorized: 'Autorizado', expired: 'Expirado', error: 'Erro', revoked: 'Não conectado' }[metaConnection.status as string] || 'Não conectado'}</span></div>
           {metaConnection.status === 'authorized' && <>
