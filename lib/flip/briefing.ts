@@ -8,6 +8,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { computeFlipAlerts } from './alerts';
+import { finalStageIdsForTenant } from '@/lib/period-activity';
 import { BRIEFING_FROM_HOUR, brasiliaDayAndHour, briefingInstructions, greetingName, plainBriefing, type BriefingFacts } from './briefing-rules';
 
 type Session = { tenantId: string; userId: string; role: string; name?: string };
@@ -20,12 +21,14 @@ async function collectFacts(session: Session, now: Date): Promise<BriefingFacts>
   const todayStart = new Date(`${day}T00:00:00-03:00`);
   const yesterdayStart = new Date(todayStart.getTime() - DAY);
 
+  const finalStageIds = await finalStageIdsForTenant(prisma, session.tenantId);
   const [board, newLeads, aiLeads, closedRows] = await Promise.all([
     computeFlipAlerts(session, now),
     prisma.lead.count({ where: { tenantId: session.tenantId, ...own, createdAt: { gte: yesterdayStart, lt: todayStart } } }),
     prisma.auditLog.count({ where: { tenantId: session.tenantId, action: 'lead.whatsapp_ai_created', createdAt: { gte: yesterdayStart, lt: todayStart } } }),
     prisma.leadStageHistory.findMany({
-      where: { createdAt: { gte: yesterdayStart, lt: todayStart }, lead: { tenantId: session.tenantId, status: 'won', ...own } },
+      // Sales by the stage: the lead entered the final stage yesterday and is still there.
+      where: { createdAt: { gte: yesterdayStart, lt: todayStart }, lead: { tenantId: session.tenantId, status: { not: 'lost' }, stageId: { in: finalStageIds }, ...own } },
       select: { leadId: true, toStageId: true, lead: { select: { stageId: true } } },
     }),
   ]);

@@ -72,3 +72,23 @@ export async function closedInPeriod(db: Db, input: {
   for (const entry of entries) if (!closedAt.has(entry.leadId)) closedAt.set(entry.leadId, entry.enteredAt);
   return closedAt;
 }
+
+/**
+ * The final stage of every active funnel of the company. A lead in it is a sale, whatever its status
+ * says (a lead created straight in the final stage used to stay "open").
+ */
+export async function finalStageIdsForTenant(db: Db, tenantId: string) {
+  const stages = await db.pipelineStage.findMany({
+    where: { isArchived: false, pipeline: { tenantId, isArchived: false } },
+    orderBy: [{ pipelineId: 'asc' }, { orderIndex: 'desc' }],
+    select: { id: true, pipelineId: true },
+  });
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const stage of stages) {
+    if (seen.has(stage.pipelineId)) continue;
+    seen.add(stage.pipelineId);
+    ids.push(stage.id);
+  }
+  return ids;
+}

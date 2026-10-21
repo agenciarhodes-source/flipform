@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { buildReportContext, validateFiltersBelongToTenant } from '@/lib/reports-helpers';
+import { closedInPeriod, finalStageIdsForTenant } from '@/lib/period-activity';
 
 export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -28,11 +29,14 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
     : [];
 
   // total + ganhos por form
-  const wonByForm = await prisma.lead.groupBy({
-    by: ['formId'],
-    where: { ...ctx.leadsWhere, status: 'won' },
-    _count: { _all: true },
+  // Sales of the period per form, by the day the lead reached the final stage.
+  const { enteredAt: _arrival, ...scope } = ctx.leadsWhere;
+  const closedAt = await closedInPeriod(prisma, {
+    leadWhere: scope, finalStageIds: await finalStageIdsForTenant(prisma, ctx.tenantId), start: ctx.from, end: ctx.to,
   });
+  const wonByForm = closedAt.size
+    ? await prisma.lead.groupBy({ by: ['formId'], where: { id: { in: Array.from(closedAt.keys()) } }, _count: { _all: true } })
+    : [];
   const wonMap = new Map((wonByForm as GroupRow[]).map((g) => [g.formId, g._count._all]));
 
   const data = typedGrouped.map((g) => {

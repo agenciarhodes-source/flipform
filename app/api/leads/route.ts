@@ -128,6 +128,14 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     if (parsed.data.city && !state) return NextResponse.json({ error: 'Selecione um estado para a cidade informada.' }, { status: 400 });
     if (parsed.data.city && !city) return NextResponse.json({ error: 'Cidade inválida para o estado selecionado.' }, { status: 400 });
 
+    // A lead created straight in the final stage of its funnel is a sale, like one moved there.
+    const finalStage = await prisma.pipelineStage.findFirst({
+      where: { pipelineId: parsed.data.pipelineId, isArchived: false, pipeline: { tenantId: session.tenantId } },
+      orderBy: { orderIndex: 'desc' },
+      select: { id: true },
+    });
+    const createdAsSale = finalStage?.id === parsed.data.stageId;
+
     const leadResult = await prisma.$transaction(async (tx) => {
       const existingLeadId = await findExistingLeadIdByContactInTenant({
         tx,
@@ -155,8 +163,8 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
           pipelineId: parsed.data.pipelineId,
           stageId: parsed.data.stageId,
           assignedTo: session.role === 'agent' ? session.userId : (parsed.data.assignedTo || null),
-          temperature: parsed.data.temperature as any,
-          status: 'open',
+          temperature: (createdAsSale ? 'hot' : parsed.data.temperature) as any,
+          status: createdAsSale ? 'won' : 'open',
           state,
           city,
           saleValueCents: parsed.data.saleValueCents ?? null,
