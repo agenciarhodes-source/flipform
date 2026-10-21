@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
-import { isWhatsAppAiEnabledForTenant } from '@/lib/whatsapp-ai/pause';
+import { isWhatsAppAiEnabledForTenant, whatsAppAiAudience } from '@/lib/whatsapp-ai/pause';
 
 const ALLOWED_STATUS = new Set(['open', 'pending', 'resolved']);
 const ALLOWED_CHANNEL = new Set(['whatsapp', 'instagram']);
@@ -140,6 +140,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
     ? await prisma.user.findMany({ where: { id: { in: pauserIds } }, select: { id: true, name: true } })
     : [];
   const pauserName = new Map(pausers.map((user) => [user.id, user.name]));
+  const aiAnswers = whatsappAi.enabled ? await whatsAppAiAudience(session.tenantId) : () => false;
 
   const conversations = baseConversations.map((conversation) => {
     const messageId = latestMessageIdByConversation.get(conversation.id);
@@ -147,6 +148,8 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
     return {
       ...conversation,
       aiPausedByName: conversation.aiPausedBy ? pauserName.get(conversation.aiPausedBy) || null : null,
+      // False when the AI is off for this contact (only test numbers, or switched off): the team attends.
+      aiActive: conversation.channel === 'whatsapp' && aiAnswers(conversation.externalContactIdentity.externalUserId),
       messages: message ? [message] : [],
     };
   });

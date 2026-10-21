@@ -64,6 +64,8 @@ interface InboxConversation {
   aiPausedAt?: string | null;
   aiPausedByName?: string | null;
   aiPauseReason?: string | null;
+  /** Whether the AI answers this contact at all (it may be on only for test numbers). */
+  aiActive?: boolean;
   provider: string;
   channel: string;
   status: string;
@@ -432,7 +434,7 @@ export function InboxClient({
   const leadTotal = conversations.filter((conversation) => conversation.lead).length;
   // With the AI: WhatsApp conversations where the AI is on and not paused by the team.
   const withAi = (conversation: InboxConversation) => whatsappAi.enabled && conversation.channel === 'whatsapp'
-    && !aiPaused(conversation, whatsappAi.resumeAfterHours);
+    && conversation.aiActive !== false && !aiPaused(conversation, whatsappAi.resumeAfterHours);
   const aiTotal = conversations.filter(withAi).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -877,7 +879,7 @@ export function InboxClient({
                         )}
                       </div>
                       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                        {whatsappAi.enabled && !aiPaused(conversation, whatsappAi.resumeAfterHours) ? (
+                        {withAi(conversation) ? (
                           <span className="rounded bg-violet-100 px-1.5 py-0.5 font-semibold text-violet-800" title="A IA está atendendo esta conversa">IA</span>
                         ) : null}
                         <OwnerBadge owner={conversationOwner(conversation, currentUserId)} />
@@ -931,7 +933,13 @@ export function InboxClient({
                     </div>
                   </div>
                 </button>
-                {whatsappAi.enabled && selected.channel === 'whatsapp' ? (
+                {whatsappAi.enabled && selected.channel === 'whatsapp' && selected.aiActive === false ? (
+                  <span className="hidden rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 sm:inline"
+                    title="A IA não atende este contato (está desligada para ele ou só atende os números de teste). A conversa é da equipe.">
+                    👤 Atendimento humano
+                  </span>
+                ) : null}
+                {whatsappAi.enabled && selected.channel === 'whatsapp' && selected.aiActive !== false ? (
                   <AiStatus conversation={selected} resumeAfterHours={whatsappAi.resumeAfterHours} canManage={canManage}
                     busy={changingAi} onChange={(action) => void changeAi(selected.id, action)} />
                 ) : null}
