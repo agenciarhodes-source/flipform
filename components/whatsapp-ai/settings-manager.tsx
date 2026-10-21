@@ -42,6 +42,7 @@ export function WhatsAppAiSettingsManager({ initialWorkspace }: { initialWorkspa
         <span className="flex flex-wrap gap-4">
           <a href="/whatsapp-ai/costs" className="inline-block text-sm font-medium text-brand-700 underline">Ver custos da operação →</a>
           <a href="/whatsapp-ai/review" className="inline-block text-sm font-medium text-brand-700 underline">Supervisão da IA →</a>
+          <a href="/whatsapp-ai/learning" className="inline-block text-sm font-medium text-brand-700 underline">Aprendizado do atendimento →</a>
         </span>
         <p className="text-sm text-muted-foreground">
           Defina, para cada número conectado, se o Flip AI faz o primeiro atendimento no WhatsApp, com qual agente e em que horário.

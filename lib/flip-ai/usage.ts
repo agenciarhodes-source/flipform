@@ -124,6 +124,7 @@ const OPERATION_LABELS: Record<string, string> = {
   chat_retrieval: 'Busca na base',
   chat_response: 'Conversa por texto',
   web_search: 'Busca externa',
+  attendance_learning: 'Aprendizado do atendimento',
   realtime_session: 'Sessão de voz emitida',
   conversation_decision: 'Classificação JEV',
   voice_transcription: 'Áudio recebido',
