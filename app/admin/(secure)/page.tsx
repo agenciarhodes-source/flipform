@@ -2,6 +2,7 @@ import type React from 'react';
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Building2, Users, FileText, TrendingUp, AlertTriangle, ShieldOff, Clock, Loader2, ArrowRight } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/status-badge';
@@ -31,13 +32,13 @@ export default function AdminOverviewPage() {
             <div className="text-sm text-muted-foreground">MRR estimado</div>
             <div className="font-heading text-3xl font-bold">R$ {Number(data.mrr).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
           </div>
-          <Link href="/admin/billing" className="text-sm text-primary hover:underline inline-flex items-center gap-1">Billing & Planos <ArrowRight className="w-3 h-3" /></Link>
+          <Link href="/admin/billing" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Billing & Planos <ArrowRight className="w-3 h-3" /></Link>
         </div>
       </Card>
       <Card className="p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-heading font-semibold">Clientes recentes</h2>
-          <Link href="/admin/tenants" className="text-sm text-primary hover:underline inline-flex items-center gap-1">Ver todos <ArrowRight className="w-3 h-3" /></Link>
+          <Link href="/admin/tenants" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Ver todos <ArrowRight className="w-3 h-3" /></Link>
         </div>
         <table className="w-full text-sm">
           <thead><tr className="border-b text-xs text-muted-foreground uppercase"><th className="text-left py-2">Nome</th><th className="text-left py-2">Slug</th><th className="text-left py-2">Status</th><th className="text-left py-2">Plano</th><th className="text-left py-2">Criado em</th></tr></thead>

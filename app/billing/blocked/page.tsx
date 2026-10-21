@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buttonVariants } from '@/components/ui/button';
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { LogoutButton } from "@/components/logout-button";
@@ -50,7 +51,7 @@ export default async function BillingBlockedPage() {
           )}
           <LogoutButton
             redirectTo="/login"
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
             Sair da conta
           </LogoutButton>

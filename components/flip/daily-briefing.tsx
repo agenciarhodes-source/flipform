@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 
 type Briefing = { id: string; day: string; text: string; seenAt: string | null };
 const MUTE_KEY = 'flipform:flip-briefing:popup-off';
@@ -95,12 +95,12 @@ export function DailyBriefingCard() {
         <p className="flex items-center gap-1.5 font-semibold text-violet-900"><Sparkles className="h-4 w-4" aria-hidden="true" /> Resumo de hoje</p>
         <span className="flex flex-wrap items-center gap-3">
           {company.enabled && (
-            <button type="button" className="text-xs text-violet-800 underline" onClick={toggle}>
+            <button type="button" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'border-violet-200 text-violet-900' })} onClick={toggle}>
               {muted ? 'Mostrar o resumo ao abrir o FlipForm' : 'Não mostrar ao abrir o FlipForm'}
             </button>
           )}
           {company.canManage && (
-            <button type="button" className="text-xs font-medium text-violet-900 underline" disabled={savingCompany} onClick={() => void toggleCompany()}>
+            <button type="button" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'border-violet-200 text-violet-900' })} disabled={savingCompany} onClick={() => void toggleCompany()}>
               {company.enabled ? 'Desligar o resumo para a empresa toda' : 'Ligar o resumo para a empresa toda'}
             </button>
           )}

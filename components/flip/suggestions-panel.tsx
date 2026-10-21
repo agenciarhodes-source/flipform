@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 
 type Kind = 'create_task' | 'transfer_lead' | 'rebalance';
 type Suggestion = { id: string; kind: Kind; reason: string; leadId: string | null; leadName: string | null };
@@ -119,7 +119,7 @@ export function FlipSuggestionsPanel({ onApplied }: { onApplied?: () => void }) 
                       <p className="text-sm font-medium">{item.leadName || BLOCKS[block.key].label}</p>
                       <p className="text-xs text-muted-foreground">{item.reason}</p>
                     </div>
-                    {item.leadId && <Link href={`/leads?leadId=${encodeURIComponent(item.leadId)}`} className="text-xs text-brand-700 underline">Ver lead</Link>}
+                    {item.leadId && <Link href={`/leads?leadId=${encodeURIComponent(item.leadId)}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>Ver lead</Link>}
                     <Button type="button" size="sm" disabled={busy !== null} onClick={() => void decide(item.id, 'apply')}>Aplicar</Button>
                     <Button type="button" size="sm" variant="outline" disabled={busy !== null} onClick={() => void decide(item.id, 'dismiss')}>Dispensar</Button>
                   </li>

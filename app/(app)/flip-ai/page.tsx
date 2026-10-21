@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { Bot } from 'lucide-react';
 import { getSession } from '@/lib/auth';
@@ -18,7 +19,7 @@ export default async function FlipAiPage() {
       <Bot className="h-8 w-8 text-brand-600" aria-hidden="true" />
       <h1 className="text-2xl font-semibold">Flip AI</h1>
       <p>{error.message}</p>
-      <Link className="inline-block text-brand-600 underline" href="/dashboard">Voltar ao Dashboard</Link>
+      <Link className={buttonVariants({ variant: 'outline', size: 'sm' })} href="/dashboard">Voltar ao Dashboard</Link>
     </section>;
   }
 }

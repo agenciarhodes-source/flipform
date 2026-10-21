@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { buttonVariants } from '@/components/ui/button';
 import { toast } from 'sonner';
 
 type Stage = { id: string; name: string; orderIndex: number };
@@ -304,11 +305,11 @@ export function GoogleFunnelCard() {
                           <td className="p-2">{describeValue(mapping)}</td>
                           <td className="p-2">{TRIGGER_LABELS[mapping.triggerRule] || mapping.triggerRule}</td>
                           <td className="p-2">{mapping.enabled ? 'Ativa' : 'Inativa'}</td>
-                          <td className="space-x-2 p-2">
-                            <button type="button" className="underline disabled:opacity-60" disabled={busyId === mapping.id} onClick={() => void toggleMapping(mapping)}>
+                          <td className="space-x-2 whitespace-nowrap p-2">
+                            <button type="button" className={buttonVariants({ variant: 'outline', size: 'sm' })} disabled={busyId === mapping.id} onClick={() => void toggleMapping(mapping)}>
                               {mapping.enabled ? 'Desativar' : 'Ativar'}
                             </button>
-                            <button type="button" className="text-red-600 underline disabled:opacity-60" disabled={busyId === mapping.id} onClick={() => void removeMapping(mapping)}>
+                            <button type="button" className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-red-600 hover:text-red-700' })} disabled={busyId === mapping.id} onClick={() => void removeMapping(mapping)}>
                               Remover
                             </button>
                           </td>
@@ -332,7 +333,7 @@ export function GoogleFunnelCard() {
             <div className="rounded-lg border p-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-medium">Últimos eventos do Google Ads</h3>
-                <button type="button" className="text-sm underline" onClick={() => void load()}>Atualizar</button>
+                <button type="button" className={buttonVariants({ variant: 'outline', size: 'sm' })} onClick={() => void load()}>Atualizar</button>
               </div>
               {recentEvents.length === 0 ? (
                 <p className="mt-2 text-sm text-muted-foreground">Nenhum evento registrado ainda.</p>

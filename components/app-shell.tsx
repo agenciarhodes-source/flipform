@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { can, ROLE_LABELS_PT_BR, type PermissionKey, type RoleName } from "@/lib/rbac";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -375,7 +375,7 @@ export function AppShell({
                 href={tenant.paymentUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium underline underline-offset-2"
+                className={buttonVariants({ variant: "outline", size: "sm" })}
               >
                 Pagar agora
               </Link>

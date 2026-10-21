@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { buttonVariants } from '@/components/ui/button';
 
 type CaseView = {
   name: string;
@@ -40,7 +41,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
                   <span className="text-xs text-muted-foreground">{LABEL[item.status] || item.status}{item.rule ? ` · ${item.rule}` : ''}</span>
                   {item.files.map((file, index) => (
                     <a key={file.messageId} href={file.href} target="_blank" rel="noreferrer"
-                      className="text-xs text-brand-700 underline" title={file.note || undefined}>
+                      className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-7 px-2' })} title={file.note || undefined}>
                       arquivo {index + 1}{file.status !== 'received' ? ` (${LABEL[file.status] || file.status})` : ''}
                     </a>
                   ))}
