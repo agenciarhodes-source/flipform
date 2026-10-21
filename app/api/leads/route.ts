@@ -26,6 +26,12 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   const period = searchParams.get('period');
   const startDate = searchParams.get('startDate');
   const endDate = searchParams.get('endDate');
+  // entered: arrived in the period (default, as before) · moved: arrived OR moved to its current
+  // stage in the period · open: every open lead, whatever the date.
+  const basis = searchParams.get('basis') || 'entered';
+  if (!['entered', 'moved', 'open'].includes(basis)) {
+    return NextResponse.json({ error: 'Base do filtro inválida.' }, { status: 400 });
+  }
 
   const where: any = { tenantId: session.tenantId, ...getLeadScopeForRole(session) };
   if (period) {
@@ -57,6 +63,25 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
       { phone: { contains: search } },
     ];
   }
+  if (basis === 'open') {
+    delete where.enteredAt;
+    where.status = 'open';
+  }
+  // Moved: a lead that arrived months ago and moved to its current stage (for example, closed)
+  // inside the period shows up, in that stage.
+  let movedPairs: Set<string> | null = null;
+  const range = where.enteredAt as { gte: Date; lte: Date } | undefined;
+  if (basis === 'moved' && range) {
+    const { enteredAt: _arrival, ...scope } = where;
+    const moves = await prisma.leadStageHistory.findMany({
+      where: { createdAt: { gte: range.gte, lte: range.lte }, lead: scope },
+      select: { leadId: true, toStageId: true },
+      take: 20_000,
+    });
+    movedPairs = new Set(moves.map((move) => `${move.leadId}:${move.toStageId}`));
+    delete where.enteredAt;
+    where.AND = [...(where.AND || []), { OR: [{ enteredAt: range }, { id: { in: Array.from(new Set(moves.map((move) => move.leadId))) } }] }];
+  }
 
   const leads = await prisma.lead.findMany({
     where,
@@ -67,6 +92,11 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
     },
     orderBy: { createdAt: 'desc' },
   });
+  if (movedPairs && range) {
+    const pairs = movedPairs;
+    const inRange = (date: Date) => date >= range.gte && date <= range.lte;
+    return NextResponse.json({ leads: leads.filter((lead) => inRange(lead.enteredAt) || pairs.has(`${lead.id}:${lead.stageId}`)) });
+  }
   return NextResponse.json({ leads });
 });
 
