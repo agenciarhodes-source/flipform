@@ -7,15 +7,16 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_only_a_qualified_conversation_of_a_pilot_company_becomes_a_lead_once():
+def test_a_pilot_conversation_becomes_a_lead_with_name_and_ad_events_go_once_at_qualification():
     lead = read("lib/whatsapp-ai/lead.ts")
     assert "if (!isWhatsAppAiLeadTenant(input.tenantId)) return { kind: 'pilot_off' as const };" in lead
-    assert "if (input.classification !== 'qualified') return { kind: 'not_qualified' as const };" in lead
-    assert "if (outcome.kind !== 'created') return { kind: outcome.kind };" in lead
+    # C1: name + WhatsApp number open the lead; a qualified conversation also opens it.
+    assert "if (!preferredName && !qualified) return { kind: 'not_identified' as const };" in lead
+    assert "if (!('leadId' in outcome)) return { kind: outcome.kind };" in lead
     assert "metaLeadEventId: `whatsapp-ai-lead:${input.conversationId}`," in lead
     assert "enqueueGoogleConversionEvents({" in lead
     # The preferred name only replaces the WhatsApp profile name, never what the team wrote.
-    assert "where: { id: conversation.leadId, tenantId: input.tenantId, name: profileName }," in lead
+    assert "where: { id: leadId, tenantId: input.tenantId, name: profileName }," in lead
 
 
 def test_meta_gets_the_ad_click_of_click_to_whatsapp_conversations():
