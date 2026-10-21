@@ -158,13 +158,3 @@ export async function listRecentGoogleConversionEvents(tenantId: string, limit =
     },
   });
 }
-
-/** The latest Google Funnel conversions of a company, for the integrations log list. */
-export function listRecentGoogleConversions(tenantId: string, take = 20) {
-  return prisma.googleConversionEvent.findMany({
-    where: { tenantId },
-    orderBy: { createdAt: 'desc' },
-    take,
-    select: { id: true, leadId: true, conversionCategory: true, state: true, lastErrorCode: true, createdAt: true },
-  });
-}
