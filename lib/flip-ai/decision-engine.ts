@@ -110,12 +110,24 @@ export function parseJevTenantIds(raw: string | undefined) {
   };
 }
 
+/** FLIP_AI_JEV_PREMIUM_PLANS=true extends JEV to every company with an active Premium plan. */
+export function parseJevPremiumPlans(raw: string | undefined) {
+  return String(raw || '').trim().toLowerCase() === 'true';
+}
+
+/**
+ * JEV runs when the global switch is on and the company is either listed in the pilot allowlist or,
+ * with FLIP_AI_JEV_PREMIUM_PLANS=true, served through an active Premium plan (planEntitled).
+ */
 export function isJevEnabledForTenant(input: {
   tenantId: string;
   enabledRaw?: string;
   tenantIdsRaw?: string;
+  premiumPlansRaw?: string;
+  planEntitled?: boolean;
 }) {
   if (!parseJevEnabled(input.enabledRaw)) return false;
+  if (input.planEntitled === true && parseJevPremiumPlans(input.premiumPlansRaw)) return true;
   const allowlist = parseJevTenantIds(input.tenantIdsRaw);
   return allowlist.configured && allowlist.valid
     && allowlist.tenantIds.includes(input.tenantId.trim().toLowerCase());

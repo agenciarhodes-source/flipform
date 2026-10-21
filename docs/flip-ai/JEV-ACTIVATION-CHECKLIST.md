@@ -88,3 +88,7 @@ If any item fails, disable `FLIP_AI_JEV_ENABLED` first. The existing non-JEV fal
 FlipForm uses one company-managed TypeSafe/JEV account and one server-side API key. Customer access is controlled independently by tenant allowlisting and each tenant's published brain configuration. Customers never receive or manage the TypeSafe API key.
 
 After the pilot is stable, tenant activation should move from the environment allowlist to a platform-admin control without moving the global TypeSafe credential into tenant data.
+
+## Phase 6 — every Premium plan
+
+Once the pilot is accepted, `FLIP_AI_JEV_PREMIUM_PLANS=true` extends JEV to every company served through an active Premium plan (`premium` or `premium-pro`), in the web chat and in WhatsApp attendance. Companies allowed only as pilots keep depending on `FLIP_AI_JEV_TENANT_IDS`. `FLIP_AI_JEV_ENABLED` and `FLIP_AI_JEV_DATA_PROCESSING_APPROVED` remain required, and turning `FLIP_AI_JEV_ENABLED` off still stops JEV for everyone.

@@ -1043,6 +1043,8 @@ export async function buildPublicChatContext(
     tenantId: turn.tenantId,
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
     tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
+    premiumPlansRaw: process.env.FLIP_AI_JEV_PREMIUM_PLANS,
+    planEntitled: runtime.accessMode === 'plan',
   });
   // Decision-only by default: the JEV reading is recorded and hinted to the model, but retrieval,
   // knowledge and history follow the same path as a tenant without JEV.
@@ -1078,6 +1080,7 @@ export async function buildPublicChatContext(
       chatRequestKey: turn.requestKey,
       state: decisionState,
       knowledgeIndexId: turn.knowledgeIndexId,
+      planEntitled: runtime.accessMode === 'plan',
     });
     decision = decisionRun.decision;
     decisionStatus = decisionRun.status;

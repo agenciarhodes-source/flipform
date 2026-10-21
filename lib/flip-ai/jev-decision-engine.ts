@@ -546,11 +546,15 @@ export async function runJevConversationDecision(input: {
   chatRequestKey: string;
   state: unknown;
   knowledgeIndexId?: string;
+  /** The company is served through an active Premium plan (see FLIP_AI_JEV_PREMIUM_PLANS). */
+  planEntitled?: boolean;
 }): Promise<JevDecisionRun> {
   const enabled = isJevEnabledForTenant({
     tenantId: input.tenantId,
     enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
     tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
+    premiumPlansRaw: process.env.FLIP_AI_JEV_PREMIUM_PLANS,
+    planEntitled: input.planEntitled,
   });
   if (!enabled) return { decision: null, status: 'disabled', reused: false, errorCode: null };
   if (process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED !== 'true') {
