@@ -166,7 +166,14 @@ export async function finalizeFlipAiQualification(input: {
   decision: FlipAiFinalQualification | null;
   model: string;
   evidenceMessageIds: string[];
+  /**
+   * web (default): the site chat, which also sends the QualifiedLead event.
+   * whatsapp: the WhatsApp attendance; the verdict and temperature are kept, and the ad events go
+   * out from the WhatsApp lead flow instead (one Lead event, with the ad attribution).
+   */
+  channel?: 'web' | 'whatsapp';
 }) {
+  const whatsapp = input.channel === 'whatsapp';
   if (!input.decision) return null;
   const parsed = flipAiFinalQualificationSchema.safeParse(input.decision);
   if (!parsed.success) return null;
@@ -179,8 +186,10 @@ export async function finalizeFlipAiQualification(input: {
         ON s.tenant_id = c.tenant_id AND s.conversation_id = c.id
       WHERE c.tenant_id = ${input.runtime.tenantId}
         AND c.id = ${input.conversationId}
-        AND c.provider = 'flip_ai'
-        AND c.channel = 'web'
+        ${whatsapp
+          ? Prisma.sql`AND c.provider = 'meta' AND c.channel = 'whatsapp'`
+          : Prisma.sql`AND c.provider = 'flip_ai'
+        AND c.channel = 'web'`}
         AND s.agent_id = ${input.runtime.id}
       FOR UPDATE OF c
     `);
@@ -232,7 +241,7 @@ export async function finalizeFlipAiQualification(input: {
     }
     if (parsed.data.classification === 'qualified' && !leadId) return null;
 
-    const qualifiedLeadEventId = parsed.data.classification === 'qualified'
+    const qualifiedLeadEventId = parsed.data.classification === 'qualified' && !whatsapp
       ? `flip-ai-qualified:${input.conversationId}`
       : null;
     const verdict = {
@@ -322,7 +331,14 @@ export async function finalizeFlipAiQualification(input: {
           entityId: leadId,
           action: 'lead.flip_ai_created',
         },
-      });
+      }) + (whatsapp ? await db.auditLog.count({
+        where: {
+          tenantId: input.runtime.tenantId,
+          entityType: 'lead',
+          entityId: leadId,
+          action: 'lead.whatsapp_ai_created',
+        },
+      }) : 0);
       const applied = await db.lead.updateMany({
         where: {
           id: leadId,

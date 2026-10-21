@@ -30,7 +30,7 @@ import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { showWhatsAppTyping } from '@/lib/meta/whatsapp-typing';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
-import { handleWhatsAppAiQualification, isWhatsAppAiLeadTenant } from './lead';
+import { handleWhatsAppAiQualification, whatsappContactName } from './lead';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -86,7 +86,16 @@ export function whatsappIntroduction(introduction: string | null | undefined, co
   return text || `assistente de ${companyName}`;
 }
 
-function whatsappInstructions(input: { agentName: string; companyName: string; introduction: string; firstReply: boolean; askPreferredName: boolean }) {
+function whatsappInstructions(input: {
+  agentName: string;
+  companyName: string;
+  introduction: string;
+  firstReply: boolean;
+  /** The name the person already gave (the lead's name), when there is one. */
+  knownName: string | null;
+  /** The name on the person's WhatsApp profile, to confirm. */
+  profileName: string | null;
+}) {
   return [
     `CANAL WHATSAPP: você está respondendo pelo WhatsApp oficial de ${input.companyName}.`,
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
@@ -98,9 +107,16 @@ function whatsappInstructions(input: { agentName: string; companyName: string; i
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
     'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
-    ...(input.askPreferredName
-      ? ['Num momento natural da conversa, se ainda não souber, pergunte como a pessoa prefere ser chamada e registre esse nome em identity.name.']
-      : []),
+    input.knownName
+      ? `NOME: o cliente já se identificou como "${input.knownName}". Chame-o assim e NÃO pergunte o nome de novo.`
+      : input.profileName
+        ? `NOME: o perfil do WhatsApp mostra "${input.profileName}". Logo no começo da conversa, confirme como a pessoa prefere ser chamada (por exemplo: "Posso te chamar de ${input.profileName.split(' ')[0]}?") e registre o nome em identity.name assim que ela responder.`
+        : 'NOME: logo no começo da conversa, pergunte como a pessoa prefere ser chamada e registre o nome em identity.name assim que ela responder.',
+    'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
+    'TRIAGEM: entenda o caso todo, lendo o histórico da conversa. Se a pessoa não se encaixar no benefício que procurou, não encerre:'
+      + ' investigue com perguntas se ela pode ter direito a outro benefício ou tese do escritório (por exemplo, auxílio-doença, BPC,'
+      + ' aposentadoria rural) e só então encaminhe.',
+    'QUALIFICAÇÃO: quando já houver informação suficiente para o advogado avaliar o caso, preencha a qualificação final.',
   ].join('\n');
 }
 
@@ -122,7 +138,8 @@ export async function replyToWhatsAppConversation(input: {
     where: { id: input.conversationId, tenantId: input.tenantId, provider: 'meta', channel: 'whatsapp' },
     select: {
       id: true, aiPausedAt: true,
-      externalContactIdentity: { select: { externalUserId: true } },
+      externalContactIdentity: { select: { externalUserId: true, displayName: true } },
+      lead: { select: { name: true } },
       tenant: { select: { name: true } },
     },
   });
@@ -337,7 +354,8 @@ export async function replyToWhatsAppConversation(input: {
         companyName: conversation.tenant.name,
         introduction: whatsappIntroduction(settings.introduction, conversation.tenant.name),
         firstReply: aiRepliesSoFar === 0,
-        askPreferredName: isWhatsAppAiLeadTenant(input.tenantId),
+        knownName: whatsappContactName(conversation.lead?.name),
+        profileName: whatsappContactName(conversation.externalContactIdentity.displayName),
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
@@ -407,6 +425,9 @@ export async function replyToWhatsAppConversation(input: {
       classification: parsed.qualification?.classification,
       preferredName: parsed.identity?.name,
       whatsappBusinessAccountId: connection.wabaId,
+      qualification: parsed.qualification,
+      model: raw.model,
+      evidenceMessageIds: context.evidenceMessageIds,
     }).catch((error) => console.error('WhatsApp AI lead failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     // With a lead, the conversation may show it is time for the next stage of the funnel.
     await suggestStageFromConversation({
