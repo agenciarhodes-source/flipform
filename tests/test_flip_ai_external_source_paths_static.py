@@ -16,7 +16,7 @@ def test_external_sources_can_be_limited_to_some_pages():
     assert "if (pathRules && !pathAllowed(url.pathname, pathRules.get(domainToASCII(url.hostname.toLowerCase())))) return null;" in web
     assert "const result = await searchOpenAiWeb(query, domains, { safetyIdentifier: input.conversationId, pathRules });" in web
     # The search tool still receives only domains; pages are filtered after it answers.
-    assert "tools: [{ type: 'web_search', filters: { allowed_domains: domains } }]," in web
+    assert "tools: [{ type: 'web_search', filters: { allowed_domains: filterDomains } }]," in web
     editor = read("components/flip-ai/external-sources-editor.tsx")
     assert "Limitar a estas páginas (opcional)" in editor
     assert "onClick={() => void editPaths(source)}" in editor
