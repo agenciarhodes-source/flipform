@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { buildReportContext, validateFiltersBelongToTenant } from '@/lib/reports-helpers';
+import { getFinalStages } from '@/lib/dashboard-metrics';
+import { closedInPeriod } from '@/lib/period-activity';
 
 export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   const { searchParams } = new URL(req.url);
@@ -11,10 +13,16 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   const err = await validateFiltersBelongToTenant(ctx);
   if (err) return NextResponse.json({ error: err }, { status: 400 });
 
+  // Received by the day they arrived; sales by the day they closed; losses by the day they were marked lost.
+  const { enteredAt: _arrival, ...scope } = ctx.leadsWhere;
+  const finalStages = await getFinalStages(prisma, ctx.tenantId, ctx.filters.pipelineId || undefined);
+  const closedAt = await closedInPeriod(prisma, { leadWhere: scope, finalStageIds: Array.from(finalStages.values()), start: ctx.from, end: ctx.to });
   const [byAgent, wonByAgent, lostByAgent] = await Promise.all([
     prisma.lead.groupBy({ by: ['assignedTo'], where: ctx.leadsWhere, _count: { _all: true } }),
-    prisma.lead.groupBy({ by: ['assignedTo'], where: { ...ctx.leadsWhere, status: 'won' }, _count: { _all: true } }),
-    prisma.lead.groupBy({ by: ['assignedTo'], where: { ...ctx.leadsWhere, status: 'lost' }, _count: { _all: true } }),
+    closedAt.size
+      ? prisma.lead.groupBy({ by: ['assignedTo'], where: { id: { in: Array.from(closedAt.keys()) } }, _count: { _all: true } })
+      : Promise.resolve([]),
+    prisma.lead.groupBy({ by: ['assignedTo'], where: { ...scope, status: 'lost', updatedAt: { gte: ctx.from, lte: ctx.to } }, _count: { _all: true } }),
   ]);
 
   type GroupRow = { assignedTo: string | null; _count: { _all: number }; [key: string]: unknown };
@@ -22,6 +30,10 @@ export const GET = withPermission('REPORTS_VIEW', async (req, session) => {
   const typedByAgent = byAgent as GroupRow[];
   const typedWon = wonByAgent as GroupRow[];
   const typedLost = lostByAgent as GroupRow[];
+  // An attendant who only closed old leads in the period still appears.
+  for (const row of [...typedWon, ...typedLost]) {
+    if (!typedByAgent.some((g) => g.assignedTo === row.assignedTo)) typedByAgent.push({ assignedTo: row.assignedTo, _count: { _all: 0 } });
+  }
   const userIds = typedByAgent.map((g) => g.assignedTo).filter(Boolean) as string[];
   const users = userIds.length
     ? await prisma.user.findMany({

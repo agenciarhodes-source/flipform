@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Prisma, type LeadStatus, type LeadTemperature, type PrismaClient } from '@prisma/client';
 import { formatLeadSource } from './leads';
+import { closedInPeriod, countByStage, stageEntriesInPeriod } from './period-activity';
 import { BRAZIL_STATES as BRAZIL_STATE_LIST, getBrazilStateName, normalizeBrazilCity, normalizeBrazilState, normalizeLocationText } from './brazil-locations';
 
 export const dashboardQuerySchema = z.object({
@@ -313,47 +314,43 @@ export async function calculateRevenue(db: Db, current: ExecutiveMetricParams, p
   return { currentCents, previousCents, current: currentCents / 100, previous: previousCents / 100, deltaPercent: deltaPercent(currentCents, previousCents), currency: 'BRL', hasRevenueSource: true };
 }
 
+/** Leads open today (not lost, not in the final stage), whatever the day they arrived. */
 export async function calculateOpenDeals(db: Db, params: ExecutiveMetricParams) {
   const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
   const finalStageIds = Array.from(finalStages.values());
-  const where = leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate });
+  const where = leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo });
   const current = await db.lead.count({ where: { ...where, status: { not: 'lost' as LeadStatus }, ...(finalStageIds.length ? { stageId: { notIn: finalStageIds } } : {}) } });
   return current;
 }
 
+/** Average time from arrival to sale, over the sales of the period (by the day they closed). */
 export async function calculateAverageTimeToClose(db: Db, params: ExecutiveMetricParams) {
   const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
   if (finalStages.size === 0) return null;
-  const leads = await db.lead.findMany({
-    where: { ...leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate }) },
-    select: { id: true, pipelineId: true, stageId: true, status: true, enteredAt: true, updatedAt: true },
+  const closedAt = await closedInPeriod(db, {
+    leadWhere: leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo }),
+    finalStageIds: Array.from(finalStages.values()),
+    start: params.startDate,
+    end: params.endDate,
   });
-  if (leads.length === 0) return null;
-  const finalLeadIds = leads.filter((lead) => finalStages.get(lead.pipelineId) === lead.stageId || lead.status === ('won' as LeadStatus)).map((lead) => lead.id);
-  if (finalLeadIds.length === 0) return null;
-  const histories = await db.leadStageHistory.findMany({
-    where: { leadId: { in: finalLeadIds }, toStageId: { in: Array.from(finalStages.values()) } },
-    orderBy: { createdAt: 'asc' },
-    select: { leadId: true, createdAt: true },
-  });
-  const firstCloseByLead = new Map<string, Date>();
-  for (const history of histories) if (!firstCloseByLead.has(history.leadId)) firstCloseByLead.set(history.leadId, history.createdAt);
+  if (closedAt.size === 0) return null;
+  const leads = await db.lead.findMany({ where: { id: { in: Array.from(closedAt.keys()) } }, select: { id: true, enteredAt: true } });
   const durations = leads.flatMap((lead) => {
-    if (!finalLeadIds.includes(lead.id)) return [];
-    const closedAt = firstCloseByLead.get(lead.id) || (finalStages.get(lead.pipelineId) === lead.stageId ? lead.updatedAt : null);
-    return closedAt ? [Math.max(0, Math.round((closedAt.getTime() - lead.enteredAt.getTime()) / 1000))] : [];
+    const closed = closedAt.get(lead.id);
+    return closed ? [Math.max(0, Math.round((closed.getTime() - lead.enteredAt.getTime()) / 1000))] : [];
   });
   return durations.length ? Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length) : null;
 }
 
+/** Sales of the period (by the day they closed) over the leads that arrived in the period. */
 async function calculateConversionRate(db: Db, params: ExecutiveMetricParams) {
   const finalStages = await getFinalStages(db, params.tenantId, params.pipelineId);
-  const leads = await db.lead.findMany({
-    where: leadScope({ tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo, startDate: params.startDate, endDate: params.endDate }),
-    select: { id: true, pipelineId: true, stageId: true, status: true },
-  });
-  const won = leads.filter((lead) => finalStages.get(lead.pipelineId) === lead.stageId || lead.status === ('won' as LeadStatus)).length;
-  return percent(won, leads.length);
+  const scope = { tenantId: params.tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo: params.assignedTo };
+  const [arrived, closedAt] = await Promise.all([
+    db.lead.count({ where: leadScope({ ...scope, startDate: params.startDate, endDate: params.endDate }) }),
+    closedInPeriod(db, { leadWhere: leadScope(scope), finalStageIds: Array.from(finalStages.values()), start: params.startDate, end: params.endDate }),
+  ]);
+  return percent(closedAt.size, arrived);
 }
 
 export async function getActivityPulseLast24h(db: Db, params: { tenantId: string; assignedTo?: string; now?: Date }) {
@@ -388,11 +385,10 @@ async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string 
   const previous = previousWindow(params.period.startDate, params.period.totalDays);
   const currentArgs = { tenantId, pipelineId: params.pipelineId, formId: params.formId, assignedTo, startDate: params.period.startDate, endDate: params.period.endDate };
   const previousArgs = { ...currentArgs, startDate: previous.start, endDate: previous.end };
-  const [activityPulse, financial, openDealsCurrent, openDealsPrevious, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
+  const [activityPulse, financial, openDealsCurrent, avgCloseCurrent, avgClosePrevious, conversionCurrent, conversionPrevious] = await Promise.all([
     getActivityPulseLast24h(db, { tenantId, assignedTo }),
     calculateFinancialMetrics(db, currentArgs, previousArgs),
     calculateOpenDeals(db, currentArgs),
-    calculateOpenDeals(db, previousArgs),
     calculateAverageTimeToClose(db, currentArgs),
     calculateAverageTimeToClose(db, previousArgs),
     calculateConversionRate(db, currentArgs),
@@ -402,7 +398,8 @@ async function getExecutiveMetrics(db: Db, tenantId: string, assignedTo: string 
     activityPulse,
     revenue: { ...financial.revenue, current: financial.revenue.currentCents / 100, previous: financial.revenue.previousCents / 100, currency: 'BRL' as const, hasRevenueSource: true },
     financial,
-    openDeals: { current: openDealsCurrent, previous: openDealsPrevious, delta: openDealsCurrent - openDealsPrevious, deltaPercent: deltaPercent(openDealsCurrent, openDealsPrevious) },
+    // Open deals are a picture of today, whatever the day each lead arrived; there is no earlier picture to compare.
+    openDeals: { current: openDealsCurrent, previous: null, delta: null, deltaPercent: null },
     averageTimeToClose: { currentSeconds: avgCloseCurrent, previousSeconds: avgClosePrevious, deltaSeconds: avgCloseCurrent != null && avgClosePrevious != null ? avgCloseCurrent - avgClosePrevious : null },
     conversionRate: { current: conversionCurrent, previous: conversionPrevious, deltaPoints: conversionPrevious != null ? Math.round((conversionCurrent - conversionPrevious) * 10) / 10 : null },
   };
@@ -494,13 +491,38 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const initialStageId = stages[0]?.id || selectedForm?.initialStageId;
   const finalStageId = stages.at(-1)?.id;
   const { initialStagesByPipeline, finalStagesByPipeline, stageOrderByPipeline } = await getPipelineStageMetrics(db, tenantId, pipelineId);
-  const finalStageCount = filteredLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)).length;
-  const firstStageCount = filteredLeads.filter((lead) => lead.stageId === (initialStagesByPipeline.get(lead.pipelineId) || initialStageId)).length;
-  const inProgress = filteredLeads.filter((lead) => {
-    const initial = initialStagesByPipeline.get(lead.pipelineId) || initialStageId;
-    const final = finalStagesByPipeline.get(lead.pipelineId);
-    return lead.status !== ('lost' as LeadStatus) && lead.stageId !== initial && lead.stageId !== final;
-  }).length;
+
+  // Each number counts on the day it happened: arrivals by the day the lead arrived, sales by the
+  // day it reached the final stage, movement by the day it entered each stage, and "em andamento"
+  // is a picture of today. A lead that arrived last month and closed this month is a sale this month.
+  const scopeWhere = leadScope({ tenantId, pipelineId, formId, assignedTo: agentScope });
+  const finalStageIds = Array.from(finalStagesByPipeline.values());
+  const inLocation = (lead: Parameters<typeof extractLeadLocation>[0]) => {
+    if (!selectedState && !selectedCity) return true;
+    const location = extractLeadLocation(lead);
+    if (selectedState && location.state !== selectedState) return false;
+    if (selectedCity && normalizeText(location.city || '') !== normalizeText(selectedCity)) return false;
+    return true;
+  };
+  const leadPick = {
+    id: true, formId: true, assignedTo: true, pipelineId: true, stageId: true, state: true, city: true,
+    answers: { select: { questionLabel: true, answer: true, field: { select: { fieldType: true } } } },
+  } as const;
+  const closedAt = await closedInPeriod(db, { leadWhere: scopeWhere, finalStageIds, start: period.startDate, end: period.endDate });
+  const [closedRows, openRows] = await Promise.all([
+    closedAt.size ? db.lead.findMany({ where: { id: { in: Array.from(closedAt.keys()) } }, select: leadPick }) : Promise.resolve([]),
+    db.lead.findMany({
+      where: { ...scopeWhere, status: { not: 'lost' as LeadStatus }, ...(finalStageIds.length ? { stageId: { notIn: finalStageIds } } : {}) },
+      select: leadPick,
+    }),
+  ]);
+  const closedLeads = closedRows.filter(inLocation);
+  const openNow = openRows.filter(inLocation);
+  const finalStageCount = closedLeads.length;
+  // Closings among the leads that arrived in the period, only to split the arrival profile below.
+  const cohortClosed = filteredLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)).length;
+  const firstStageCount = newLeads;
+  const inProgress = openNow.filter((lead) => lead.stageId !== (initialStagesByPipeline.get(lead.pipelineId) || initialStageId)).length;
   const qualified = filteredLeads.filter((lead) => isQualifiedLead(lead, finalStagesByPipeline, stageOrderByPipeline)).length;
   const advancedCount = filteredLeads.filter((lead) => {
     const index = stageOrderByPipeline.get(lead.pipelineId)?.get(lead.stageId);
@@ -542,7 +564,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
   const statusProfileBase = [
     { key: 'new', label: 'Novos', count: firstStageCount, color: '#3B82F6' },
     { key: 'progress', label: 'Em atendimento', count: inProgress, color: '#F59E0B' },
-    { key: 'qualified', label: 'Qualificados', count: Math.max(0, qualified - finalStageCount), color: '#8B5CF6' },
+    { key: 'qualified', label: 'Qualificados', count: Math.max(0, qualified - cohortClosed), color: '#8B5CF6' },
     { key: 'won', label: 'Fechamentos', count: finalStageCount, color: '#10B981' },
   ];
   const statusProfileTotal = statusProfileBase.reduce((sum, row) => sum + row.count, 0);
@@ -583,11 +605,29 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
     if (!lead.formId) continue;
     const current = formLeadCounts.get(lead.formId) || { total: 0, final: 0, qualified: 0, lastLeadAt: null };
     current.total += 1;
-    if (isClosedLead(lead, finalStagesByPipeline)) current.final += 1;
     if (isQualifiedLead(lead, finalStagesByPipeline, stageOrderByPipeline)) current.qualified += 1;
     if (!current.lastLeadAt || lead.createdAt > current.lastLeadAt) current.lastLeadAt = lead.createdAt;
     formLeadCounts.set(lead.formId, current);
   }
+  // Sales of the period per form, by the day they closed.
+  for (const lead of closedLeads) {
+    if (!lead.formId) continue;
+    const current = formLeadCounts.get(lead.formId) || { total: 0, final: 0, qualified: 0, lastLeadAt: null };
+    current.final += 1;
+    formLeadCounts.set(lead.formId, current);
+  }
+
+  // Movement per stage: leads that entered each stage in the period (the first stage counts arrivals).
+  const stageEntries = pipelineId
+    ? await stageEntriesInPeriod(db, { leadWhere: scopeWhere, stageIds: stages.map((stage) => stage.id), start: period.startDate, end: period.endDate })
+    : [];
+  let entriesForFunnel = stageEntries;
+  if (stageEntries.length && (selectedState || selectedCity)) {
+    const located = await db.lead.findMany({ where: { id: { in: Array.from(new Set(stageEntries.map((entry) => entry.leadId))) } }, select: leadPick });
+    const allowed = new Set(located.filter(inLocation).map((lead) => lead.id));
+    entriesForFunnel = stageEntries.filter((entry) => allowed.has(entry.leadId));
+  }
+  const enteredByStage = countByStage(entriesForFunnel);
 
   const revenueByAssignee = new Map<string, { revenueCents: number; purchases: number }>();
   for (const purchase of periodPurchases as any[]) {
@@ -615,8 +655,11 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       variationVsPrevious: filteredPreviousLeads.length > 0 ? percent(newLeads - filteredPreviousLeads.length, filteredPreviousLeads.length) : null,
     },
     funnel: pipelineId ? { pipelineId, stages: stages.map((stage, index) => {
-      const count = filteredLeads.filter((lead) => lead.stageId === stage.id).length;
-      const previousCount = index === 0 ? count : filteredLeads.filter((lead) => lead.stageId === stages[index - 1].id).length;
+      const stageCount = (stageIndex: number) => stageIndex === 0
+        ? Math.max(total, enteredByStage.get(stages[0].id) || 0)
+        : enteredByStage.get(stages[stageIndex].id) || 0;
+      const count = stageCount(index);
+      const previousCount = index === 0 ? count : stageCount(index - 1);
       const advanceRate = index === 0 ? 100 : previousCount > 0 ? percent(count, previousCount) : null;
       const dropOffRate = index === 0 ? 0 : previousCount > 0 ? Math.max(0, percent(previousCount - count, previousCount)) : null;
       return { ...stage, count, percentage: percent(count, total), advanceRate, dropOffRate, isFinal: index === stages.length - 1 };
@@ -636,7 +679,7 @@ export async function getDashboardMetrics(db: Db, tenantId: string, userId: stri
       return { id: form.id, name: form.name, slug: form.slug, totalLeads: counts.total, conversionRate: percent(counts.final, counts.total), qualificationRate: percent(counts.qualified, counts.total), lastLeadAt: counts.lastLeadAt?.toISOString() || null, publicUrl: `/f/${form.slug}`, editUrl: `/forms/${form.id}` };
     }),
     sources: sources.map((row) => ({ source: formatLeadSource(row.source), count: row._count, percentage: percent(row._count, baseLeads.length) })).sort((a, b) => b.count - a.count),
-    teamPerformance: role === 'agent' ? [] : (agents as any[]).map((a) => { const sellerLeads = filteredLeads.filter((lead) => (lead as any).assignedTo === a.userId); const won = sellerLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)); const sales = revenueByAssignee.get(a.userId) || { revenueCents: 0, purchases: 0 }; return { userId: a.userId, name: a.user.name, email: a.user.email, leadsReceived: sellerLeads.length, inProgress: sellerLeads.filter((lead) => lead.status !== ('lost' as LeadStatus) && !isClosedLead(lead, finalStagesByPipeline)).length, won: won.length, revenueCents: sales.revenueCents, conversionRate: percent(won.length, sellerLeads.length), averageTicketCents: sales.purchases ? Math.round(sales.revenueCents / sales.purchases) : 0, averageCloseTimeHours: null }; }),
+    teamPerformance: role === 'agent' ? [] : (agents as any[]).map((a) => { const sellerLeads = filteredLeads.filter((lead) => (lead as any).assignedTo === a.userId); const won = closedLeads.filter((lead) => lead.assignedTo === a.userId); const sales = revenueByAssignee.get(a.userId) || { revenueCents: 0, purchases: 0 }; return { userId: a.userId, name: a.user.name, email: a.user.email, leadsReceived: sellerLeads.length, inProgress: openNow.filter((lead) => lead.assignedTo === a.userId).length, won: won.length, revenueCents: sales.revenueCents, conversionRate: percent(won.length, sellerLeads.length), averageTicketCents: sales.purchases ? Math.round(sales.revenueCents / sales.purchases) : 0, averageCloseTimeHours: null }; }),
     tasks: { pending: tasks[0], overdue: tasks[1], completedToday: tasks[2], mine: tasks[3], recommendations: [tasks[1] > 0 ? `${tasks[1]} tarefas vencidas` : null, (tempCounts.get('hot') || 0) > 0 ? `${tempCounts.get('hot')} leads quentes para priorizar` : null].filter(Boolean) },
   };
 }
