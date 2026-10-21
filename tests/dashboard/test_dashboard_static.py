@@ -105,8 +105,10 @@ def test_dashboard_counts_final_stage_by_pipeline_for_all_pipelines():
     assert "initialStagesByPipeline" in metrics
     assert "finalStagesByPipeline" in metrics
     assert "stageOrderByPipeline" in metrics
-    assert "const finalStageCount = filteredLeads.filter((lead) => isClosedLead(lead, finalStagesByPipeline)).length" in metrics
-    assert "lead.status !== ('lost' as LeadStatus) && lead.stageId !== initial && lead.stageId !== final" in metrics
+    # D1: sales count on the day they closed; "em andamento" is a picture of today.
+    assert "const closedAt = await closedInPeriod(db, { leadWhere: scopeWhere, finalStageIds, start: period.startDate, end: period.endDate });" in metrics
+    assert "const finalStageCount = closedLeads.length;" in metrics
+    assert "const inProgress = openNow.filter(" in metrics
     assert "formsPerformance" in metrics and "counts.final" in metrics
 
 
