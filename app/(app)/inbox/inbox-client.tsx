@@ -364,6 +364,7 @@ export function InboxClient({
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [onlyLeads, setOnlyLeads] = useState(false);
   const [onlyUnassigned, setOnlyUnassigned] = useState(false);
+  const [onlyAi, setOnlyAi] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [whatsappAi, setWhatsappAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
   const [changingAi, setChangingAi] = useState(false);
@@ -429,11 +430,16 @@ export function InboxClient({
   const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
   const unassignedTotal = conversations.filter((conversation) => conversationOwner(conversation, currentUserId).kind === 'none').length;
   const leadTotal = conversations.filter((conversation) => conversation.lead).length;
+  // With the AI: WhatsApp conversations where the AI is on and not paused by the team.
+  const withAi = (conversation: InboxConversation) => whatsappAi.enabled && conversation.channel === 'whatsapp'
+    && !aiPaused(conversation, whatsappAi.resumeAfterHours);
+  const aiTotal = conversations.filter(withAi).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
     // Unread and "with lead" combine: unread conversations of leads only.
     const scoped = conversations.filter((conversation) => (!onlyUnread || conversation.unreadCount > 0) && (!onlyLeads || conversation.lead)
-      && (!onlyUnassigned || conversationOwner(conversation, currentUserId).kind === 'none'));
+      && (!onlyUnassigned || conversationOwner(conversation, currentUserId).kind === 'none')
+      && (!onlyAi || withAi(conversation)));
     if (!term) return scoped;
     return scoped.filter((conversation) => {
       const haystack = [
@@ -449,7 +455,7 @@ export function InboxClient({
         .toLocaleLowerCase('pt-BR');
       return haystack.includes(term);
     });
-  }, [conversations, search, onlyUnread, onlyLeads, onlyUnassigned, currentUserId]);
+  }, [conversations, search, onlyUnread, onlyLeads, onlyUnassigned, onlyAi, whatsappAi, currentUserId]);
 
   // Opens the card of the lead linked to the conversation; a conversation without a lead is
   // matched by phone first, so the attendant reaches the lead in one click.
@@ -803,20 +809,28 @@ export function InboxClient({
                 className="pl-9"
               />
             </div>
-            <div className="mt-2 flex gap-2" role="group" aria-label="Filtrar conversas">
-              <Button type="button" size="sm" variant={onlyUnread || onlyLeads || onlyUnassigned ? 'outline' : 'default'} onClick={() => { setOnlyUnread(false); setOnlyLeads(false); setOnlyUnassigned(false); }}>Todas</Button>
-              <Button type="button" size="sm" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread((value) => !value)}>
+            {/* Compact chips that wrap to a second line instead of being cut off. */}
+            <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar conversas">
+              <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyUnread || onlyLeads || onlyUnassigned || onlyAi ? 'outline' : 'default'}
+                onClick={() => { setOnlyUnread(false); setOnlyLeads(false); setOnlyUnassigned(false); setOnlyAi(false); }}>Todas</Button>
+              <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread((value) => !value)}>
                 Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}
               </Button>
-              <Button type="button" size="sm" variant={onlyLeads ? 'default' : 'outline'} onClick={() => setOnlyLeads((value) => !value)}
-                title="Só conversas de contatos que são leads no sistema">
-                Com lead{leadTotal ? ` (${leadTotal})` : ''}
-              </Button>
+              {whatsappAi.enabled ? (
+                <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyAi ? 'default' : 'outline'} onClick={() => setOnlyAi((value) => !value)}
+                  title="Conversas que a IA está atendendo agora (não pausadas pela equipe)">
+                  Com a IA ({aiTotal})
+                </Button>
+              ) : null}
               {unassignedTotal > 0 || onlyUnassigned ? (
-                <Button type="button" size="sm" variant={onlyUnassigned ? 'default' : 'outline'} onClick={() => setOnlyUnassigned((value) => !value)}>
+                <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyUnassigned ? 'default' : 'outline'} onClick={() => setOnlyUnassigned((value) => !value)}>
                   Sem responsável ({unassignedTotal})
                 </Button>
               ) : null}
+              <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyLeads ? 'default' : 'outline'} onClick={() => setOnlyLeads((value) => !value)}
+                title="Só conversas de contatos que são leads no sistema">
+                Com lead{leadTotal ? ` (${leadTotal})` : ''}
+              </Button>
             </div>
           </div>
 
