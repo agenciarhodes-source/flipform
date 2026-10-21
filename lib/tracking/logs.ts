@@ -21,6 +21,8 @@ export function getFinalTrackingLogs<T extends TrackingLogSummary>(logs: T[]) {
     if (log.status === 'skipped' && log.reason && LEGACY_NON_ACTIONABLE_REASONS.has(log.reason)) {
       continue;
     }
+    // Stubs of providers without a server transport (they never sent anything) are not shown as problems.
+    if (log.status === 'not_dispatched') continue;
 
     if (!log.eventId) {
       standalone.push(log);
