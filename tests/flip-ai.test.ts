@@ -1302,6 +1302,11 @@ test('PR 341 JEV activation is explicit and tenant allowlisted', () => {
   assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '' }), false);
   assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '*' }), false);
   assert.equal(parseJevTenantIds(`${tenantId},${tenantId}`).valid, false);
+  // Premium scope: only with the explicit flag, only for plan-entitled companies, never without the global switch.
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '', premiumPlansRaw: 'true', planEntitled: true }), true);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '', premiumPlansRaw: 'true', planEntitled: false }), false);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'true', tenantIdsRaw: '', premiumPlansRaw: 'false', planEntitled: true }), false);
+  assert.equal(isJevEnabledForTenant({ tenantId, enabledRaw: 'false', tenantIdsRaw: '', premiumPlansRaw: 'true', planEntitled: true }), false);
 });
 
 test('PR 341 JEV scores are normalized but business rules remain deterministic', () => {

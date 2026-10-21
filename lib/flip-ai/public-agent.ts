@@ -54,6 +54,8 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   initialStageId: string;
   rotationId: string | null;
   actionCapabilities?: FlipAiActionCapabilities;
+  /** plan = served through an active Premium plan; pilot = allowed by the pilot list only. */
+  accessMode?: 'plan' | 'pilot';
 };
 
 async function publicSchemaReady(): Promise<boolean> {
@@ -223,6 +225,7 @@ export async function resolvePublicFlipAiRuntime(input: {
       && endpoint.agent.rotation.form.isActive
       ? endpoint.agent.rotationId : null,
     actionCapabilities,
+    accessMode: planAccess ? 'plan' : 'pilot',
   };
 }
 
