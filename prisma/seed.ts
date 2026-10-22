@@ -4,10 +4,24 @@ type Role = 'owner' | 'admin' | 'manager' | 'agent' | 'viewer';
 type LeadTemperature = 'cold' | 'warm' | 'hot';
 type LeadStatus = 'open' | 'won' | 'lost';
 import bcrypt from 'bcryptjs';
+import { PLAN_CATALOG, PLAN_CATALOG_UNSOLD } from '../lib/billing/plan-catalog';
 
 const prisma = new PrismaClient();
 
+/**
+ * The demo seed ERASES every company, user and lead before creating the demo data. It must never
+ * run against production: it only runs with ALLOW_DESTRUCTIVE_SEED=true and outside production.
+ */
+function assertSeedAllowed() {
+  const production = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  if (production || process.env.ALLOW_DESTRUCTIVE_SEED !== 'true') {
+    console.error('Seed bloqueado: ele apaga todas as empresas e usuários. Use só em banco local/de teste, com ALLOW_DESTRUCTIVE_SEED=true.');
+    process.exit(1);
+  }
+}
+
 async function main() {
+  assertSeedAllowed();
   console.log('🌱 Seeding LeadFlow...');
 
   // Clean (apenas para demo)
@@ -26,35 +40,10 @@ async function main() {
   await prisma.tenant.deleteMany();
 
 
-  const commercialPlans = [
-    {
-      slug: 'starter', name: 'Starter', description: 'Plano de entrada para pequenos negócios que precisam capturar, organizar e acompanhar leads.',
-      price: '97', billingCycle: 'monthly', maxUsers: 3, maxForms: 5, maxPipelines: 2, maxLeadsPerMonth: 2500,
-      canUseReports: false, canExportCsv: true, canUseCustomBranding: false, canUseMetaPixel: false, canUseWebhooks: false, canUseTasks: true, isActive: true,
-    },
-    {
-      slug: 'growth', name: 'Growth', description: 'Plano recomendado para empresas em crescimento que precisam de CRM, funil, formulários e integrações.',
-      price: '157', billingCycle: 'monthly', maxUsers: 7, maxForms: 15, maxPipelines: 5, maxLeadsPerMonth: 10000,
-      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
-    },
-    {
-      slug: 'pro', name: 'Pro', description: 'Plano profissional para operações comerciais com volume, múltiplas equipes e integrações avançadas.',
-      price: '397', billingCycle: 'monthly', maxUsers: 20, maxForms: 60, maxPipelines: 25, maxLeadsPerMonth: 75000,
-      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
-    },
-    {
-      slug: 'enterprise', name: 'Enterprise', description: 'Plano sob consulta para operações com necessidades customizadas, SLA dedicado e suporte avançado.',
-      price: '0', billingCycle: 'monthly', maxUsers: 0, maxForms: 0, maxPipelines: 0, maxLeadsPerMonth: 0,
-      canUseReports: true, canExportCsv: true, canUseCustomBranding: true, canUseMetaPixel: true, canUseWebhooks: true, canUseTasks: true, isActive: true,
-    },
-  ] as const;
-
-  for (const plan of commercialPlans) {
-    await prisma.plan.upsert({
-      where: { slug: plan.slug },
-      create: plan as any,
-      update: plan as any,
-    });
+  // Plans from the official catalog (lib/billing/plan-catalog.ts), never old hardcoded prices.
+  for (const plan of [...PLAN_CATALOG, ...PLAN_CATALOG_UNSOLD]) {
+    const data = { ...plan, price: plan.price.toFixed(2), billingCycle: 'monthly' as const };
+    await prisma.plan.upsert({ where: { slug: plan.slug }, create: data, update: data });
   }
 
   // Tenant
