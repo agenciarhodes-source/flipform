@@ -77,10 +77,14 @@ export function KnowledgeMasterEditor({ agent, onClose, onSaved }: {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível salvar.');
       const saved = data.master as KnowledgeMasterSummary;
-      setMaster({ ...saved, content }); setIndex(null); setHits([]); onSaved(saved);
+      // The server put back the approved learnings section at the end of the Markdown.
+      const savedContent = typeof data.content === 'string' ? data.content : content;
+      if (savedContent !== content) setContent(savedContent);
+      setMaster({ ...saved, content: savedContent }); setIndex(null); setHits([]); onSaved(saved);
+      const kept = data.learningsRestored ? ' Os aprendizados aprovados da empresa foram mantidos no fim do Markdown.' : '';
       setMessage(agent.status === 'published'
-        ? `Revisão ${saved.revision} salva. O chat continua com a revisão anterior até você processar a base.`
-        : `Revisão ${saved.revision} salva. Agora processe a base.`);
+        ? `Revisão ${saved.revision} salva.${kept} O chat continua com a revisão anterior até você processar a base.`
+        : `Revisão ${saved.revision} salva.${kept} Agora processe a base.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha de conexão. Reabra o editor antes de tentar novamente.');
     } finally { inFlight.current = false; setSaving(false); }
   }
