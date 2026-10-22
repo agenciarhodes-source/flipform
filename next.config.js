@@ -57,6 +57,15 @@ const nextConfig = {
         headers: [{ key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' }],
       },
       {
+        // The inbox records voice notes for WhatsApp; the rest of the app keeps the microphone off.
+        source: '/inbox',
+        headers: [{ key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' }],
+      },
+      {
+        source: '/inbox/:path*',
+        headers: [{ key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' }],
+      },
+      {
         source: '/(.*)',
         has: [{ type: 'header', key: 'x-forwarded-proto', value: 'https' }],
         headers: [{ key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' }],

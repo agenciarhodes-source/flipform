@@ -70,9 +70,14 @@ export function VoiceRecorder({ disabled, onSend }: { disabled?: boolean; onSend
           return current + 1;
         });
       }, 1_000);
-    } catch {
+    } catch (failure) {
       stopTracks();
-      setError('Permita o uso do microfone no navegador para gravar.');
+      const name = failure instanceof DOMException ? failure.name : '';
+      setError(name === 'NotFoundError' || name === 'OverconstrainedError'
+        ? 'Nenhum microfone encontrado. Conecte um microfone e tente de novo.'
+        : name === 'NotReadableError' || name === 'AbortError'
+          ? 'O microfone está em uso por outro programa (chamada, gravador). Feche-o e tente de novo.'
+          : 'Permita o uso do microfone no navegador para gravar (cadeado ao lado do endereço › Microfone).');
     }
   }
 
