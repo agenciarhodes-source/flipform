@@ -6,7 +6,7 @@ import Link from 'next/link';
 type PaymentMethod = 'pix' | 'card' | 'boleto';
 
 /** A plan as sold: price and limits come from the plans table, the same values that are charged. */
-export type CheckoutPlan = { slug: string; name: string; price: number; features: string[]; recommended?: boolean };
+export type CheckoutPlan = { slug: string; name: string; price: number; features: string[]; recommended?: boolean; includesAi?: boolean };
 
 function toBrl(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -95,7 +95,7 @@ export function CheckoutClient({ initialSlug, plans, trialDays }: { initialSlug:
                 <button key={item.slug} type="button" onClick={() => setPlanSlug(item.slug)} className={`relative flex w-full items-start gap-3 rounded-xl border-2 p-4 text-left ${item.slug === planSlug ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
                   {item.recommended && <span className="absolute -top-2 right-3 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">Mais escolhido</span>}
                   <span className={`mt-1 h-4 w-4 rounded-full border-2 ${item.slug === planSlug ? 'border-blue-600 bg-blue-600' : 'border-slate-300'}`} />
-                  <div className="flex-1"><div className="flex items-center justify-between"><strong className="text-slate-900">{item.name}</strong><strong className="text-slate-900">{toBrl(item.price)}<span className="text-xs font-normal text-slate-500">/mês</span></strong></div><p className="text-xs text-slate-500">{item.features.join(' · ')}</p></div>
+                  <div className="flex-1"><div className="flex items-center justify-between"><strong className="text-slate-900">{item.name}</strong><strong className="text-slate-900">{toBrl(item.price)}<span className="text-xs font-normal text-slate-500">/mês</span></strong></div><p className="text-xs text-slate-500">{item.features.join(' · ')}</p>{item.includesAi && <p className="mt-1 text-xs font-semibold text-violet-700">Inclui o atendente de IA (Flip AI) no site e no WhatsApp</p>}</div>
                 </button>
               ))}
             </div>
@@ -130,7 +130,7 @@ export function CheckoutClient({ initialSlug, plans, trialDays }: { initialSlug:
         <aside className="lg:sticky lg:top-24 lg:self-start">
           <div className="rounded-2xl border border-slate-200 bg-white p-6">
             <h3 className="mb-3 font-semibold text-slate-900">Resumo da compra</h3>
-            <div className="border-b border-slate-200 py-3"><p className="font-semibold text-slate-900">FlipForm {plan.name}</p><p className="text-xs text-slate-500">Assinatura mensal</p></div>
+            <div className="border-b border-slate-200 py-3"><p className="font-semibold text-slate-900">FlipForm {plan.name}</p><p className="text-xs text-slate-500">Assinatura mensal{plan.includesAi ? ' · com atendente de IA' : ''}</p></div>
             {trialDays > 0 && <div className="mt-3 flex justify-between text-sm"><span>Hoje</span><span className="font-semibold text-emerald-700">R$ 0,00 · {trialDays} dias grátis</span></div>}
             <div className="mt-3 flex justify-between border-t-2 border-slate-900 pt-3 font-bold text-slate-900"><span>{trialDays > 0 ? 'Depois do teste' : 'Total'}</span><span>{toBrl(total)}/mês</span></div>
             {trialDays > 0 && payment==='card' && <p className="mt-2 text-xs text-slate-500">Cupom de desconto, se tiver, é aplicado na página de pagamento do Stripe.</p>}

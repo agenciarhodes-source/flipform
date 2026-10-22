@@ -11,6 +11,9 @@ import {
   planPriceCents,
   stripeProductId,
   stripeSubscriptionsEnabled,
+  isPlanSlug,
+  isSellablePlan,
+  planIncludesAi,
   subscriptionPeriodEnd,
   tenantStatusFor,
 } from '../lib/billing/subscription-rules';
@@ -64,6 +67,17 @@ test('status do pagamento a partir dos eventos de fatura', () => {
   assert.equal(invoicePaymentStatus('invoice.overdue', { status: 'open' }), 'overdue');
   assert.equal(invoicePaymentStatus('invoice.payment_failed', { status: 'open' }), 'failed');
   assert.equal(invoicePaymentStatus('invoice.finalized', { status: 'draft' }), null);
+});
+
+test('planos à venda: ativos e com preço; Premium inclui a IA', () => {
+  assert.equal(isSellablePlan({ isActive: true, price: '349.00' }), true);
+  assert.equal(isSellablePlan({ isActive: true, price: '0.00' }), false);
+  assert.equal(isSellablePlan({ isActive: false, price: '1497.00' }), false);
+  assert.equal(planIncludesAi('premium'), true);
+  assert.equal(planIncludesAi('premium-pro'), true);
+  assert.equal(planIncludesAi('business'), false);
+  assert.equal(isPlanSlug('premium-pro'), true);
+  assert.equal(isPlanSlug('../admin'), false);
 });
 
 test('limites do plano e produto do Stripe', () => {

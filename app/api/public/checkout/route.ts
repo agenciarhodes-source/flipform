@@ -11,7 +11,7 @@ import {
 } from "@/lib/asaas";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { logPlatformAudit } from "@/lib/platform-audit";
-import { checkoutMethod, stripeSubscriptionsEnabled, type CheckoutMethod } from "@/lib/billing/subscription-rules";
+import { checkoutMethod, isPlanSlug, isSellablePlan, stripeSubscriptionsEnabled, type CheckoutMethod } from "@/lib/billing/subscription-rules";
 import { StripeFoundationConfigError } from "@/lib/stripe/config";
 import { startStripeSubscription, StripeSubscriptionCheckoutError } from "@/lib/stripe/subscription-checkout";
 
@@ -43,7 +43,6 @@ const ALLOWED_ORIGINS = new Set(
     officialOriginFromUrl(process.env.NEXT_PUBLIC_BASE_URL),
   ].filter((origin): origin is string => Boolean(origin)),
 );
-const PUBLIC_PLAN_SLUGS = new Set(["starter", "growth", "pro"]);
 const PUBLIC_CHECKOUT_UNAVAILABLE_MESSAGE =
   "Checkout temporariamente indisponível. Entre em contato com o suporte.";
 const SAFE_ASAAS_CONFIG_ERROR_CODES = new Set([
@@ -371,9 +370,9 @@ async function stripeCheckout(
 ) {
   const plan = await prisma.plan.findFirst({
     where: { slug: input.planSlug, isActive: true },
-    select: { id: true, slug: true, name: true, price: true, billingCycle: true },
+    select: { id: true, slug: true, name: true, price: true, billingCycle: true, isActive: true },
   });
-  if (!plan || !PUBLIC_PLAN_SLUGS.has(plan.slug)) {
+  if (!plan || !isSellablePlan(plan)) {
     return json({ ok: false, error: "Plano inválido ou indisponível." }, { status: 400 }, origin);
   }
   const resolved = await resolveCheckoutTenant(input.email, input.companyName);
@@ -463,7 +462,7 @@ export async function POST(req: Request) {
     body?.paymentMethod || body?.metadata?.paymentMethod,
   );
 
-  if (!PUBLIC_PLAN_SLUGS.has(planSlug)) {
+  if (!isPlanSlug(planSlug)) {
     return json(
       { ok: false, error: "Plano inválido ou indisponível." },
       { status: 400 },
@@ -515,9 +514,10 @@ export async function POST(req: Request) {
       name: true,
       price: true,
       billingCycle: true,
+      isActive: true,
     },
   });
-  if (!plan || !PUBLIC_PLAN_SLUGS.has(plan.slug)) {
+  if (!plan || !isSellablePlan(plan)) {
     return json(
       { ok: false, error: "Plano inválido ou indisponível." },
       { status: 400 },

@@ -43,3 +43,14 @@ def test_checkout_page_shows_the_prices_that_are_charged():
     assert "priceNumber: 97" not in client
     assert "Cupom aplicado! (10% off)" not in client
     assert "(sem juros)" not in client
+    assert ".filter(isSellablePlan)" in page
+
+
+def test_every_active_paid_plan_is_sold_and_pricing_reads_the_plans_table():
+    route = read("app/api/public/checkout/route.ts")
+    assert "PUBLIC_PLAN_SLUGS" not in route
+    assert route.count("!isSellablePlan(plan)") == 2
+    pricing = read("app/pricing/page.tsx")
+    assert "prisma.plan.findMany(" in pricing
+    assert "R$ 97/mês" not in pricing
+    assert "Inclui o atendente de IA" in pricing

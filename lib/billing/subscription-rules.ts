@@ -8,8 +8,20 @@ export const SUBSCRIPTION_PURPOSE = 'flipform_subscription';
 export const TRIAL_DAYS = 7;
 /** Days the customer has to pay a Pix/boleto invoice. */
 export const INVOICE_DAYS_UNTIL_DUE = 3;
-/** The plans sold on the public checkout. */
-export const PUBLIC_PLAN_SLUGS = ['starter', 'growth', 'pro'] as const;
+/** A plan is sold on the public checkout while it is active and has a price (free and internal plans are not). */
+export function isSellablePlan(plan: { isActive: boolean; price: unknown }) {
+  return plan.isActive && planPriceCents(plan.price) > 0;
+}
+
+/** Plans that include the Flip AI attendant (their price covers the AI usage). */
+export function planIncludesAi(slug: string) {
+  return slug.toLowerCase().startsWith('premium');
+}
+
+/** A plan slug as it may appear in a checkout link. */
+export function isPlanSlug(value: string) {
+  return /^[a-z0-9][a-z0-9-]{1,39}$/.test(value);
+}
 
 export type CheckoutMethod = 'card' | 'pix' | 'boleto';
 export type OurSubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'suspended' | 'canceled' | 'paused';
