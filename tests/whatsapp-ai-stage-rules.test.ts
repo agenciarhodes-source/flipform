@@ -4,7 +4,8 @@ import test from 'node:test';
 import { acceptedSuggestion, candidateStages, exampleCriterionFor } from '../lib/whatsapp-ai/stage-rules';
 
 // The funnel of a law firm (stages out of a straight line) and of a generic sales team.
-const law = [
+type Stage = { id: string; name: string; orderIndex: number; isArchived: boolean; rule: { criterion: string; enabled: boolean } | null };
+const law: Stage[] = [
   { id: 'novo', name: 'Novo lead', orderIndex: 0, isArchived: false, rule: null },
   { id: 'cliente', name: 'Já é Cliente', orderIndex: 1, isArchived: false, rule: null },
   { id: 'retorno', name: 'Aguardando Retorno', orderIndex: 2, isArchived: false, rule: null },
@@ -16,7 +17,7 @@ const law = [
   { id: 'fechado', name: 'Contrato fechado', orderIndex: 8, isArchived: false, rule: null },
 ];
 const now = new Date('2026-10-21T12:00:00Z');
-const ids = (stageOrderIndex: number, stages = law) =>
+const ids = (stageOrderIndex: number, stages: Stage[] = law) =>
   candidateStages({ lead: { status: 'open', stageOrderIndex }, stages, lastManualMoveAt: null, now }).map((stage) => stage.id);
 
 test('sem critério escrito, a IA lê as etapas pelo nome (qualquer empresa)', () => {
