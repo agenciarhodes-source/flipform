@@ -50,8 +50,10 @@ export function StageRulesManager({ initialPipelines }: { initialPipelines: Pipe
       <div>
         <h2 className="text-lg font-semibold">Etapas automáticas</h2>
         <p className="text-sm text-muted-foreground">
-          Escreva, para cada etapa, quando o lead deve ir para ela. A IA compara a conversa do WhatsApp com esses critérios e sugere mover o lead
-          (ou move sozinha, se o número estiver no modo automático). Etapas sem critério nunca são usadas. A IA nunca move para trás.
+          A IA lê as etapas do funil pelo nome, entende o momento do lead na conversa do WhatsApp e sugere mover o lead (ou move sozinha, se o
+          número estiver no modo automático). Um critério escrito aqui vale mais que o nome da etapa. Etapa desligada nunca é usada.
+          A etapa final (venda) e etapas de tempo, como &quot;Não retorna&quot;, só com critério escrito. A IA não volta o lead para trás,
+          exceto para &quot;Não qualificado&quot; ou &quot;Já é cliente&quot;.
         </p>
       </div>
       {pipelines.map((pipeline) => (

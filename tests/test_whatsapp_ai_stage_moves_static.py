@@ -17,7 +17,8 @@ def test_stage_moves_start_as_suggestions_and_follow_the_kanban_rules():
     move = read("lib/leads/move-stage.ts")
     assert "dispatchKanbanStageTracking({" in move and "enqueueGoogleConversionEvents({" in move
     rules = read("lib/whatsapp-ai/stage-rules.ts")
-    assert "stage.orderIndex > input.lead.stageOrderIndex" in rules  # never backwards
+    # never backwards, except to an outcome such as "Não qualificado" or "Já é cliente"
+    assert "if (stage.orderIndex < input.lead.stageOrderIndex && !OUTCOME_STAGE.test(stage.name)) continue;" in rules
     assert "if (input.lead.status !== 'open') return [];" in rules
 
 
