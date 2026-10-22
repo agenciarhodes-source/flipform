@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 function ErrorPageContent() {
   const params = useSearchParams();
   const plan = (params.get('plan') || 'growth').toLowerCase();
-  const safePlan = ['starter', 'growth', 'pro'].includes(plan) ? plan : 'growth';
+  const safePlan = /^[a-z0-9][a-z0-9-]{1,39}$/.test(plan) ? plan : 'growth';
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 text-slate-700">
