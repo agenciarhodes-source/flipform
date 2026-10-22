@@ -27,12 +27,14 @@ const CLASSIFIER_FORMAT: OpenAiJsonSchemaFormat = {
 
 function classifierInstructions(candidates: StageCandidate[], currentStage: string) {
   return [
-    'Você analisa uma conversa de WhatsApp entre um escritório e um cliente para decidir se o lead deve avançar de etapa no funil.',
+    'Você analisa uma conversa de WhatsApp entre uma empresa e um cliente para decidir em que etapa do funil o lead está agora.',
+    'Leia a conversa inteira: o que o cliente contou, o resultado da triagem, o que foi pedido e o que ele respondeu ou enviou.',
     `Etapa atual do lead: "${currentStage}".`,
-    'Etapas possíveis e o critério de cada uma:',
+    'Etapas para onde ele pode ir e o que significa cada uma (critério escrito pela empresa, ou o sentido do nome da etapa):',
     ...candidates.map((candidate) => `- id ${candidate.id} · "${candidate.name}": ${candidate.criterion}`),
-    'Responda move=true e o stageId somente quando a conversa mostrar claramente que o critério daquela etapa foi cumprido.',
-    'Se mais de uma servir, escolha a mais avançada que estiver claramente cumprida. Na dúvida, move=false.',
+    'Responda move=true com o stageId da etapa que melhor descreve o momento ATUAL do lead, somente quando a conversa mostrar isso com clareza.',
+    'Se a etapa atual ainda descreve bem o momento, ou se houver dúvida, responda move=false. Nunca mova por suposição.',
+    'Se mais de uma servir, escolha a mais avançada que estiver claramente cumprida.',
     'Em reason, explique em uma frase curta, em português, o que na conversa justifica a mudança.',
   ].join('\n');
 }

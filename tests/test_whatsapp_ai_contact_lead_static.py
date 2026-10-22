@@ -32,6 +32,6 @@ def test_the_ai_knows_the_name_and_never_asks_it_again():
     assert "Nunca deixe essa pergunta para o fim da conversa." in reply
     assert "knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer," in reply
     assert "preferredName: parsed.identity?.name || nameInAnswer," in reply
-    assert "investigue com perguntas se ela pode ter direito a outro benefício" in reply
+    assert "veja com perguntas se outro produto, serviço ou tese da empresa serve para ela" in reply
     # Handing the case to the team always comes with the verdict, which sends the ad conversion.
     assert "SEMPRE que você disser que vai encaminhar o caso para a equipe" in reply
