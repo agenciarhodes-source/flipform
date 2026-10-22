@@ -11,6 +11,9 @@ import {
 } from "@/lib/asaas";
 import { getClientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { logPlatformAudit } from "@/lib/platform-audit";
+import { checkoutMethod, stripeSubscriptionsEnabled, type CheckoutMethod } from "@/lib/billing/subscription-rules";
+import { StripeFoundationConfigError } from "@/lib/stripe/config";
+import { startStripeSubscription, StripeSubscriptionCheckoutError } from "@/lib/stripe/subscription-checkout";
 
 const OFFICIAL_FLIPFORM_HOSTS = new Set([
   "flipform.com.br",
@@ -361,6 +364,55 @@ async function resolveCheckoutTenant(email: string, companyName: string) {
   return { tenant } as const;
 }
 
+/** Subscription paid through Stripe (card, Pix or boleto), with the free trial. */
+async function stripeCheckout(
+  input: { planSlug: string; name: string; email: string; phone: string; companyName: string; method: CheckoutMethod },
+  origin: string | null,
+) {
+  const plan = await prisma.plan.findFirst({
+    where: { slug: input.planSlug, isActive: true },
+    select: { id: true, slug: true, name: true, price: true, billingCycle: true },
+  });
+  if (!plan || !PUBLIC_PLAN_SLUGS.has(plan.slug)) {
+    return json({ ok: false, error: "Plano inválido ou indisponível." }, { status: 400 }, origin);
+  }
+  const resolved = await resolveCheckoutTenant(input.email, input.companyName);
+  if ("error" in resolved) {
+    return json({ ok: false, error: resolved.error }, { status: 409 }, origin);
+  }
+  const tenant = resolved.tenant;
+  await logPlatformAudit({
+    tenantId: tenant.id, userId: null, entityType: "checkout", entityId: input.email,
+    action: "billing.checkout_started", metadata: { planSlug: plan.slug, provider: "stripe", method: input.method },
+  });
+  try {
+    const result = await startStripeSubscription({
+      tenant: { id: tenant.id, name: tenant.name },
+      plan: { ...plan, billingCycle: String(plan.billingCycle) },
+      email: input.email,
+      name: input.name,
+      phone: input.phone || null,
+      method: input.method,
+    });
+    return json({ ok: true, ...result }, undefined, origin);
+  } catch (error) {
+    if (error instanceof StripeSubscriptionCheckoutError && error.code === "ALREADY_SUBSCRIBED") {
+      return json({ ok: false, error: "Esta empresa já tem uma assinatura. Entre pelo login ou fale com o suporte." }, { status: 409 }, origin);
+    }
+    const code = error instanceof StripeFoundationConfigError || error instanceof StripeSubscriptionCheckoutError
+      ? error.code : "STRIPE_CHECKOUT_FAILED";
+    console.error("[public-checkout]", { event: "stripe_checkout_failed", planSlug: plan.slug, tenantId: tenant.id, code });
+    await logPlatformAudit({
+      tenantId: tenant.id, userId: null, entityType: "checkout", entityId: input.email,
+      action: "billing.checkout_failed", metadata: { planSlug: plan.slug, provider: "stripe", code },
+    });
+    if (error instanceof StripeFoundationConfigError) {
+      return json(publicCheckoutUnavailablePayload(code), { status: 503 }, origin);
+    }
+    return json({ ok: false, error: PUBLIC_CHECKOUT_PAYMENT_ERROR, errorCode: code }, { status: 502 }, origin);
+  }
+}
+
 export async function OPTIONS(req: Request) {
   const origin = req.headers.get("origin");
   if (forbiddenOrigin(origin)) return new NextResponse(null, { status: 403 });
@@ -431,6 +483,13 @@ export async function POST(req: Request) {
       { status: 400 },
       origin,
     );
+  }
+
+  if (stripeSubscriptionsEnabled()) {
+    return stripeCheckout({
+      planSlug, name, email, phone, companyName,
+      method: checkoutMethod(body?.paymentMethod || body?.metadata?.paymentMethod),
+    }, origin);
   }
 
   try {

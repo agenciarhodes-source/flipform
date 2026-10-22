@@ -10,6 +10,7 @@ import {
   retrieveVerifiedStripeTopUpPayment,
   StripeTopUpWebhookError,
 } from '@/lib/stripe/top-up-webhook';
+import { applyStripeSubscriptionEvent, isStripeSubscriptionEvent } from '@/lib/stripe/subscription-webhook';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,17 @@ export async function POST(req: Request) {
     event = getStripeClient().webhooks.constructEvent(rawBody, signature, webhookSecret);
   } catch {
     return NextResponse.json({ error: 'invalid_signature' }, { status: 400 });
+  }
+
+  // FlipForm subscription (plans) first; everything else is a Flip AI credit top-up.
+  if (isStripeSubscriptionEvent(event)) {
+    try {
+      const result = await applyStripeSubscriptionEvent(event);
+      return NextResponse.json({ ok: true, ...result });
+    } catch (error) {
+      captureServerException(error, { route: '/api/webhooks/stripe', method: 'POST' });
+      return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+    }
   }
 
   try {

@@ -168,6 +168,15 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     }
   }
 
+  if (String(env.STRIPE_SUBSCRIPTIONS_ENABLED || '').trim().toLowerCase() === 'true') {
+    addCheck(
+      'STRIPE_SUBSCRIPTIONS_ENABLED',
+      stripeEnabled && Boolean(stripeWebhookSecret),
+      'Stripe subscriptions ready (Stripe enabled with webhook secret)',
+      'STRIPE_SUBSCRIPTIONS_ENABLED=true requires STRIPE_ENABLED=true and STRIPE_WEBHOOK_SECRET.',
+    );
+  }
+
   addCheck('NEXT_PUBLIC_MARKETING_URL format', isHttpsUrl(env.NEXT_PUBLIC_MARKETING_URL), 'NEXT_PUBLIC_MARKETING_URL valid URL', 'NEXT_PUBLIC_MARKETING_URL must be a valid https URL.');
   addCheck('NEXT_PUBLIC_APP_URL format', isHttpsUrl(env.NEXT_PUBLIC_APP_URL), 'NEXT_PUBLIC_APP_URL valid URL', 'NEXT_PUBLIC_APP_URL must be a valid https URL.');
   addCheck('NEXT_PUBLIC_ADMIN_URL format', isHttpsUrl(env.NEXT_PUBLIC_ADMIN_URL), 'NEXT_PUBLIC_ADMIN_URL valid URL', 'NEXT_PUBLIC_ADMIN_URL must be a valid https URL.');
