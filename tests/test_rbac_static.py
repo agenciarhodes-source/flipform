@@ -42,7 +42,7 @@ def test_agent_scope_is_enforced_for_lead_queries_and_access():
     assert '...getLeadScopeForRole(session)' in leads_route
     lead_detail = read('app/api/leads/[id]/route.ts')
     assert 'assertCanAccessLead(session, lead)' in lead_detail
-    assert "? ['name', 'email', 'phone', 'temperature']" in lead_detail
+    assert "? ['temperature']" in lead_detail
 
 
 def test_only_owner_can_delete_leads_in_the_ui_or_api():
