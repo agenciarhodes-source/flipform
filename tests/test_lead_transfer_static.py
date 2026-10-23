@@ -17,7 +17,7 @@ def test_changing_the_lead_owner_moves_its_conversations_with_history():
     put = route.split("export const PUT", 1)[1].split("export const DELETE", 1)[0]
     assert "message.update" not in put and "message.delete" not in put
     # Attendants still cannot hand their leads to someone else.
-    assert "? ['name', 'email', 'phone', 'temperature']" in put
+    assert "? ['temperature']" in put
 
 
 def test_managers_can_pause_attendants_in_the_rotation():

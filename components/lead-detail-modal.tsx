@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
@@ -130,12 +131,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [savingLocation, setSavingLocation] = useState(false);
   const [resolvingActionRequest, setResolvingActionRequest] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
+  const [basicForm, setBasicForm] = useState({ name: '', email: '' });
+  const [savingBasic, setSavingBasic] = useState(false);
 
   const load = async () => {
     setLoading(true);
     const res = await fetch(`/api/leads/${leadId}`).then((r) => r.json());
     setLead(res.lead);
     setLocationForm({ state: normalizeBrazilState(res.lead?.state || '') || res.lead?.state || '', city: res.lead?.city || '' });
+    setBasicForm({ name: res.lead?.name || '', email: res.lead?.email || '' });
     try { const purchasesRes = await fetch(`/api/leads/${leadId}/purchases`).then((r) => r.json()); setPurchases(purchasesRes.purchases || []); setPurchaseSummary(purchasesRes.summary || null); } catch { toast.error('Não foi possível carregar as compras deste lead.'); }
     setLoading(false);
   };
@@ -162,6 +166,21 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     toast.success('Temperatura atualizada');
     load(); onChange();
   };
+
+  // Name and e-mail only: the contact phone stays as registered.
+  const saveBasicInfo = async () => {
+    try {
+      setSavingBasic(true);
+      const res = await fetch(`/api/leads/${leadId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: basicForm.name, email: basicForm.email }) });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Não foi possível salvar os dados do lead.');
+      toast.success('Dados do lead atualizados.');
+      await load(); onChange();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar os dados do lead.');
+    } finally { setSavingBasic(false); }
+  };
+  const basicChanged = Boolean(lead) && (basicForm.name.trim() !== (lead?.name || '') || basicForm.email.trim().toLowerCase() !== (lead?.email || ''));
 
   const saveLocation = async () => {
     try {
@@ -373,6 +392,28 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               <div className="col-span-2"><div className="text-muted-foreground mb-2">Responsável</div>{lead.activeAgents?.length ? <Select value={lead.assignedTo || 'none'} onValueChange={updateAssignee}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Sem responsável</SelectItem>{lead.activeAgents.map((agent: any) => <SelectItem key={agent.userId} value={agent.userId}>{agent.name} — {agent.email}</SelectItem>)}</SelectContent></Select> : <div className="font-medium">{lead.assignedUser?.name || 'Sem responsável'}</div>}</div>
             </div>
             </section>
+
+            {lead.canEdit && (
+              <section className="space-y-3 rounded-xl border bg-white p-4">
+                <h3 className="font-heading text-sm font-semibold">Dados básicos</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="lead-basic-name" className="text-sm font-medium mb-2 block">Nome</label>
+                    <Input id="lead-basic-name" value={basicForm.name} maxLength={160} onChange={(event) => setBasicForm((current) => ({ ...current, name: event.target.value }))} />
+                  </div>
+                  <div>
+                    <label htmlFor="lead-basic-email" className="text-sm font-medium mb-2 block">E-mail</label>
+                    <Input id="lead-basic-email" type="email" value={basicForm.email} placeholder="Sem e-mail" onChange={(event) => setBasicForm((current) => ({ ...current, email: event.target.value }))} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label htmlFor="lead-basic-phone" className="text-sm font-medium mb-2 block">Telefone de contato</label>
+                    <Input id="lead-basic-phone" value={lead.phone || 'Sem telefone'} disabled readOnly />
+                    <p className="mt-1 text-xs text-muted-foreground">O telefone cadastrado não pode ser alterado: ele liga o lead às conversas do WhatsApp.</p>
+                  </div>
+                </div>
+                <Button size="sm" onClick={saveBasicInfo} disabled={savingBasic || !basicChanged}>{savingBasic ? 'Salvando...' : 'Salvar dados'}</Button>
+              </section>
+            )}
 
             <section className="space-y-3 rounded-xl border bg-white p-4">
               <h3 className="font-heading text-sm font-semibold">Localização</h3>

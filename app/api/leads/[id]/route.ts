@@ -11,6 +11,7 @@ import {
 import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { parseLeadBasicInfo } from '@/lib/leads/basic-info';
 import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
 import { getFlipAiHumanHandoff } from '@/lib/flip-ai/human-handoff';
 import { getFlipAiHumanActionRequest } from '@/lib/flip-ai/human-action-request';
@@ -138,7 +139,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     canDeleteChatAttachments: canDeleteChatAttachment(session.role),
     flipAiHumanHandoff,
     flipAiHumanActionRequest: flipAiHumanActionRequestView,
-    saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
+    saleValueAuditLogs, activeAgents: activeAgents.map((agent) => ({ userId: agent.userId, name: agent.user.name, email: agent.user.email })), canDelete: canDeleteLead(session.role), canEdit: canEditLead(session.role, lead, session.userId), canContactWhatsApp: can(session.role, 'LEADS_CONTACT_WHATSAPP') } });
 });
 
 export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }) => {
@@ -149,12 +150,20 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
   }
   const body = await req.json();
   const allowed: any = {};
+  // The contact phone is never edited: it ties the lead to its WhatsApp conversations and ads.
   const editableFields = session.role === 'agent'
-    ? ['name', 'email', 'phone', 'temperature']
-    : ['name', 'email', 'phone', 'temperature', 'assignedTo', 'lostReason'];
+    ? ['temperature']
+    : ['temperature', 'assignedTo', 'lostReason'];
   editableFields.forEach((k) => {
     if (body[k] !== undefined) allowed[k] = body[k];
   });
+  const basic = parseLeadBasicInfo({ name: body?.name, email: body?.email });
+  if (!basic.ok) return NextResponse.json({ error: basic.error }, { status: 400 });
+  Object.assign(allowed, basic.data);
+  const previousBasic = {
+    ...(basic.data.name !== undefined && basic.data.name !== lead.name ? { previousName: lead.name } : {}),
+    ...(basic.data.email !== undefined && basic.data.email !== lead.email ? { previousEmail: lead.email } : {}),
+  };
   if (Object.prototype.hasOwnProperty.call(allowed, 'assignedTo')) {
     allowed.assignedTo = allowed.assignedTo || null;
     if (allowed.assignedTo) {
@@ -178,7 +187,7 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string } }
   await logAudit({
     tenantId: session.tenantId, userId: session.userId,
     entityType: 'lead', entityId: lead.id, action: 'lead.updated',
-    metadata: { changes: Object.keys(allowed), assignedTo: allowed.assignedTo,
+    metadata: { changes: Object.keys(allowed), assignedTo: allowed.assignedTo, ...previousBasic,
       ...(transferring ? { previousAssignedTo: lead.assignedTo, conversationsTransferred } : {}), message: Object.prototype.hasOwnProperty.call(allowed, 'assignedTo') ? 'Responsável do lead atualizado manualmente.' : undefined },
   });
   return NextResponse.json({ ok: true });
