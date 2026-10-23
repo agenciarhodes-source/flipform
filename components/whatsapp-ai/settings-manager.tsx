@@ -19,6 +19,7 @@ type Settings = {
   liveEnabled: boolean;
   stageMode: 'suggest' | 'auto';
   introduction: string | null;
+  reactivationEnabled: boolean;
   updatedAt: string | null;
 };
 type NumberRow = { connectionId: string; phone: string | null; name: string | null; settings: Settings };
@@ -100,6 +101,7 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           liveEnabled: form.liveEnabled,
           stageMode: form.stageMode,
           introduction: form.introduction?.trim() || null,
+          reactivationEnabled: form.reactivationEnabled,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -234,6 +236,18 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
           onChange={(event) => setResumeText(event.target.value)} />
         <span className="block text-xs text-muted-foreground">
           Quando alguém da equipe responde ou clica em “Pausar IA”, a IA para naquela conversa. Vazio: ela só volta quando alguém clicar em “Devolver para a IA”.
+        </span>
+      </label>
+
+      <label className="flex items-start gap-2 text-sm">
+        <Switch checked={form.reactivationEnabled} onCheckedChange={(checked) => update({ reactivationEnabled: checked })} aria-label="Mensagem de reativação" />
+        <span>
+          <span className="font-medium">Mensagem de reativação (23h)</span>
+          <span className="block text-xs text-muted-foreground">
+            Se o cliente ficar 23 horas sem responder depois da última mensagem da empresa, a IA manda um lembrete cordial do ponto em que a
+            conversa parou, convidando-o a retomar. Sai dentro da janela gratuita de 24h do WhatsApp (sem modelo pago), uma vez por conversa
+            parada, e usa poucos créditos do Flip AI. Não vale para leads ganhos ou perdidos.
+          </span>
         </span>
       </label>
 

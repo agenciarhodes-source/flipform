@@ -39,6 +39,7 @@ export const whatsappAiSettingsInputSchema = z.object({
   liveEnabled: z.boolean().optional().default(false),
   stageMode: z.enum(['suggest', 'auto']).optional().default('suggest'),
   introduction: z.string().trim().max(120).nullable().optional().default(null),
+  reactivationEnabled: z.boolean().optional().default(false),
 }).strict();
 export type WhatsAppAiSettingsInput = z.infer<typeof whatsappAiSettingsInputSchema>;
 
@@ -67,7 +68,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
         aiSettings: {
           select: {
             enabled: true, agentId: true, scheduleMode: true, businessHours: true,
-            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, testPhoneNumbers: true, liveEnabled: true, stageMode: true, introduction: true, updatedAt: true,
+            noReplyMinutes: true, dailyCreditLimit: true, resumeAfterHours: true, testPhoneNumbers: true, liveEnabled: true, stageMode: true, introduction: true, reactivationEnabled: true, updatedAt: true,
           },
         },
       },
@@ -99,6 +100,7 @@ export async function getWhatsAppAiWorkspace(session: SessionPayload) {
           liveEnabled: settings?.liveEnabled ?? false,
           stageMode: (settings?.stageMode === 'auto' ? 'auto' : 'suggest') as 'auto' | 'suggest',
           introduction: settings?.introduction ?? null,
+          reactivationEnabled: settings?.reactivationEnabled ?? false,
           updatedAt: settings?.updatedAt?.toISOString() ?? null,
         },
       };
@@ -141,6 +143,7 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
     liveEnabled: input.liveEnabled,
     stageMode: input.stageMode,
     introduction: input.introduction?.replace(/\s+/g, ' ').trim() || null,
+    reactivationEnabled: input.reactivationEnabled,
     updatedBy: access.userId,
   };
   const saved = await prisma.tenantWhatsAppAiSettings.upsert({
@@ -163,11 +166,13 @@ export async function saveWhatsAppAiSettings(session: SessionPayload, input: Wha
           enabled: before.enabled, agentId: before.agentId, scheduleMode: before.scheduleMode,
           noReplyMinutes: before.noReplyMinutes, dailyCreditLimit: before.dailyCreditLimit,
           liveEnabled: before.liveEnabled, testNumbers: before.testPhoneNumbers.length,
+          reactivationEnabled: before.reactivationEnabled,
         } : null,
         after: {
           enabled: saved.enabled, agentId: saved.agentId, scheduleMode: saved.scheduleMode,
           noReplyMinutes: saved.noReplyMinutes, dailyCreditLimit: saved.dailyCreditLimit,
           liveEnabled: saved.liveEnabled, testNumbers: saved.testPhoneNumbers.length,
+          reactivationEnabled: saved.reactivationEnabled,
         },
       },
     },

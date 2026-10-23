@@ -1709,6 +1709,8 @@ model TenantWhatsAppAiSettings {
   stageMode        String   @default("suggest") @map("stage_mode")
   /// How the AI introduces itself in its first reply, e.g. "assistente do Escritório X". Empty = "assistente de <empresa>".
   introduction     String?  @map("introduction")
+  /// Sends one cordial reminder when the customer is silent for 23 h (inside the free 24 h window).
+  reactivationEnabled Boolean @default(false) @map("reactivation_enabled")
   updatedBy        String?  @map("updated_by")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
