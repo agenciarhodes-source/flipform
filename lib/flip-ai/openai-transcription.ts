@@ -26,6 +26,8 @@ export async function transcribeVoiceNote(input: {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Words to spell right, such as the customer's name. */
+  prompt?: string;
 }) {
   const apiKey = input.apiKey || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new OpenAiTranscriptionError('OPENAI_API_KEY_MISSING');
@@ -39,6 +41,7 @@ export async function transcribeVoiceNote(input: {
   form.set('model', FLIP_AI_VOICE_NOTE_TRANSCRIPTION_MODEL);
   form.set('language', 'pt');
   form.set('response_format', 'json');
+  if (input.prompt?.trim()) form.set('prompt', input.prompt.trim().slice(0, 400));
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.timeoutMs || 45_000);
