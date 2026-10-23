@@ -1,4 +1,6 @@
 import 'server-only';
+import { loadAttendantRole } from './attendant-role-server';
+import type { AttendantRole } from './attendant-role';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -56,6 +58,8 @@ export type PublicFlipAiRuntime = PublicFlipAiAgent & {
   actionCapabilities?: FlipAiActionCapabilities;
   /** plan = served through an active Premium plan; pilot = allowed by the pilot list only. */
   accessMode?: 'plan' | 'pilot';
+  /** analyst = triage then the team; closer = up to the close (default). */
+  attendantRole?: AttendantRole;
 };
 
 async function publicSchemaReady(): Promise<boolean> {
@@ -191,7 +195,7 @@ export async function resolvePublicFlipAiRuntime(input: {
     select: { id: true, revision: true },
   });
   if (!index) return null;
-  const [appearance, actionCapabilities] = await Promise.all([
+  const [appearance, actionCapabilities, attendantRole] = await Promise.all([
     resolveAgentAppearance({
       tenantId: endpoint.agent.tenantId,
       agentId: endpoint.agent.id,
@@ -200,6 +204,7 @@ export async function resolvePublicFlipAiRuntime(input: {
       tenantId: endpoint.agent.tenantId,
       agentId: endpoint.agent.id,
     }),
+    loadAttendantRole(endpoint.agent.tenantId, endpoint.agent.id),
   ]);
 
   return {
@@ -215,6 +220,7 @@ export async function resolvePublicFlipAiRuntime(input: {
     tenantLogoUrl: endpoint.agent.tenant.logoUrl,
     knowledgeRevision: index.revision,
     knowledgeIndexId: index.id,
+    attendantRole,
     pipelineId: endpoint.agent.pipelineId,
     initialStageId: endpoint.agent.initialStageId,
     rotationId: endpoint.agent.rotationId

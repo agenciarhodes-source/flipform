@@ -3,6 +3,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import type { AttendantRole } from '@/lib/flip-ai/attendant-role';
 import { resolvePublicFlipAiRuntime, type PublicFlipAiRuntime } from '@/lib/flip-ai/public-agent';
 import {
   buildPublicChatContext,
@@ -95,7 +96,10 @@ function whatsappInstructions(input: {
   knownName: string | null;
   /** The name on the person's WhatsApp profile, to confirm. */
   profileName: string | null;
+  /** analyst = triage then the team; closer = up to the close. */
+  role?: AttendantRole;
 }) {
+  const analyst = input.role === 'analyst';
   return [
     `CANAL WHATSAPP: você está respondendo pelo WhatsApp oficial de ${input.companyName}.`,
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
@@ -112,10 +116,14 @@ function whatsappInstructions(input: {
       : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
-    'SEU PAPEL É A TRIAGEM (prioridade máxima) E, DEPOIS, O FECHAMENTO: primeiro entenda o perfil e a situação do cliente com as'
-      + ' perguntas certas, sem dar aula nem consulta; depois entenda em que momento ele está e conduza ao próximo passo que fecha'
-      + ' o negócio. Uma pergunta por mensagem (no máximo duas bem curtas), sempre reagindo ao que ele acabou de dizer: é uma'
-      + ' conversa, não um questionário.',
+    analyst
+      ? 'SEU PAPEL É A TRIAGEM (prioridade máxima), E SÓ ELA: entenda o perfil e a situação do cliente com as perguntas certas,'
+        + ' sem dar aula nem consulta, e passe o caso para o time de atendimento. Uma pergunta por mensagem (no máximo duas bem'
+        + ' curtas), sempre reagindo ao que ele acabou de dizer: é uma conversa, não um questionário.'
+      : 'SEU PAPEL É A TRIAGEM (prioridade máxima) E, DEPOIS, O FECHAMENTO: primeiro entenda o perfil e a situação do cliente com as'
+        + ' perguntas certas, sem dar aula nem consulta; depois entenda em que momento ele está e conduza ao próximo passo que fecha'
+        + ' o negócio. Uma pergunta por mensagem (no máximo duas bem curtas), sempre reagindo ao que ele acabou de dizer: é uma'
+        + ' conversa, não um questionário.',
     'SEM EXPLICAÇÕES DESNECESSÁRIAS: não explique por conta própria como funciona um produto, serviço, regra ou direito. Só explique'
       + ' se o cliente perguntar diretamente, e então em uma frase, voltando em seguida para a próxima pergunta.',
     'NÃO PRESUMA NADA: use apenas o que o cliente disse com as próprias palavras. Não dê como certo nenhum fato que ele não confirmou'
@@ -126,10 +134,17 @@ function whatsappInstructions(input: {
       + ' que decidem se ela tem o perfil (conforme a base de conhecimento da empresa); 4) se ela quer seguir.'
       + ' Leia o histórico da conversa e não repita perguntas já respondidas. Se a pessoa não se encaixar no que procurou, não'
       + ' encerre de imediato: veja com perguntas se outro produto, serviço ou tese da empresa serve para ela, e só então encaminhe.',
-    'MOMENTO DE QUALIFICAR: assim que os dados que decidem o caso estiverem confirmados pelo cliente, não estique a conversa:'
-      + ' combine o próximo passo do fechamento (o que a base de conhecimento indicar: documentos, provas, visita, reunião, proposta'
-      + ' ou contratação), diga que a equipe dá sequência e preencha a qualificação final. Nunca qualifique com base em suposição.'
-      + ' A mudança de etapa do lead no funil usa o que você registrar aqui, por isso registre só fatos que o cliente confirmou.',
+    analyst
+      ? 'MOMENTO DE QUALIFICAR: assim que os dados que decidem o perfil estiverem confirmados pelo cliente, não estique a conversa:'
+        + ' faça um resumo curto, diga que vai passar para o time de atendimento dar sequência e preencha a qualificação final.'
+        + ' Não peça documentos, provas nem agendamentos; se o cliente mandar algum documento, agradeça e diga que a equipe vai'
+        + ' analisar. Nunca qualifique com base em suposição. A mudança de etapa do lead no funil usa o que você registrar aqui,'
+        + ' por isso registre só fatos que o cliente confirmou.'
+      : 'MOMENTO DE QUALIFICAR: assim que os dados que decidem o caso estiverem confirmados pelo cliente, não estique a triagem:'
+        + ' peça você mesma o próximo passo do fechamento (o que a base de conhecimento indicar: documentos, provas, visita, reunião,'
+        + ' proposta ou contratação) e só encaminhe para a equipe quando o cliente estiver pronto para fechar. Preencha a'
+        + ' qualificação final quando encaminhar. Nunca qualifique com base em suposição. A mudança de etapa do lead no funil usa'
+        + ' o que você registrar aqui, por isso registre só fatos que o cliente confirmou.',
     'QUALIFICAÇÃO: quando já houver informação suficiente para a equipe avaliar o caso, preencha a qualificação final.'
       + ' SEMPRE que você disser que vai encaminhar o caso para a equipe, um atendente ou um especialista, preencha a qualificação'
       + ' final NESSA MESMA resposta: "qualified" quando há perfil e a pessoa quer seguir; "nurture" quando falta informação'
@@ -383,6 +398,7 @@ export async function replyToWhatsAppConversation(input: {
         firstReply: aiRepliesSoFar === 0,
         knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
+        role: runtime.attendantRole,
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]

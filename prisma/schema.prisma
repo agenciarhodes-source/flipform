@@ -1945,3 +1945,20 @@ model AttendanceLearningSuggestion {
   @@index([tenantId, status, createdAt])
   @@map("attendance_learning_suggestions")
 }
+
+/// Attendant profile of a Flip AI attendant: analyst (triage, then hands off) or closer (up to the close).
+/// An attendant without a row works as closer.
+model AttendantProfile {
+  id        String   @id
+  tenantId  String   @map("tenant_id")
+  /// Flip AI attendant it belongs to. No database link to flip_ai_agents (audited).
+  agentId   String   @unique @map("agent_id")
+  /// analyst | closer
+  role      String   @default("closer")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("ai_attendant_profiles")
+}
