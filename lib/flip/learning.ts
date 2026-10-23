@@ -14,6 +14,7 @@ import {
   cleanTopic,
   GENERAL_TOPIC,
   LEARNING_KINDS,
+  LEARNING_SECTION,
   LEARNING_MAX_SUGGESTIONS,
   parseLearningSuggestions,
   replaceLearningSection,
@@ -234,6 +235,21 @@ export async function listLearning(tenantId: string) {
 
 export class LearningDecisionError extends Error {
   constructor(public status: number, message: string) { super(message); }
+}
+
+/**
+ * A Master Markdown saved without the learnings section (for example, a new file pasted over the
+ * old one) gets the section back with the company's approved learnings, so they are never lost.
+ * Removing a learning is done on the learning page, not by deleting the section.
+ */
+export async function keepApprovedLearnings(tenantId: string, content: string) {
+  if (content.includes(LEARNING_SECTION)) return { content, restored: false };
+  const approved = await prisma.attendanceLearningSuggestion.findMany({
+    where: { tenantId, status: 'approved' }, orderBy: { decidedAt: 'asc' }, take: 300,
+    select: { kind: true, topic: true, title: true, content: true },
+  });
+  if (!approved.length) return { content, restored: false };
+  return { content: replaceLearningSection(content, approved), restored: true };
 }
 
 /**
