@@ -3,6 +3,7 @@ import 'server-only';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getBrazilianPhoneAliases, isValidBrazilianPhone, normalizeBrazilianLeadPhone } from '@/lib/leads';
+import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ensureConversation } from './core';
 
 type LeadPhoneRow = {
@@ -115,6 +116,53 @@ async function safelyLinkConversation(input: {
 
     return { linked: true, reason: 'linked' as const, conversationId: conversation.id };
   });
+}
+
+/**
+ * A conversation linked to a lead with no owner: the lead's form rotation picks one, and the
+ * conversation gets the same person. Nothing changes when someone is already responsible.
+ */
+async function fillMissingOwner(tenantId: string, conversationId: string, leadId: string) {
+  return prisma.$transaction(async (tx) => {
+    const conversation = await tx.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { assignedTo: true },
+    });
+    if (!conversation || conversation.assignedTo) return null;
+    const lead = await tx.lead.findFirst({ where: { id: leadId, tenantId }, select: { assignedTo: true, formId: true } });
+    if (!lead) return null;
+    let owner = lead.assignedTo;
+    if (!owner && lead.formId) {
+      owner = (await assignLeadByRotation({ tenantId, formId: lead.formId, tx })).assignedTo;
+      if (owner) {
+        await tx.lead.updateMany({ where: { id: leadId, tenantId, assignedTo: null }, data: { assignedTo: owner } });
+      }
+    }
+    if (!owner) return null;
+    await tx.conversation.updateMany({ where: { id: conversationId, tenantId, assignedTo: null }, data: { assignedTo: owner } });
+    return owner;
+  });
+}
+
+/**
+ * Called for every new WhatsApp message of a conversation with no lead (all companies): when
+ * exactly one lead of the company has this number (with or without the ninth digit), the
+ * conversation is linked to it and gets its owner, so the Inbox shows the registered name.
+ */
+export async function autoLinkWhatsAppConversation(input: { tenantId: string; conversationId: string; phone?: string | null }) {
+  const result = await linkWhatsAppConversationToMatchingLead(input);
+  const leadId = 'leadId' in result ? result.leadId : undefined;
+  if (!result.linked || !leadId) return result;
+  await fillMissingOwner(input.tenantId, input.conversationId, leadId).catch(() => null);
+  if (result.reason === 'linked') {
+    await prisma.auditLog.create({
+      data: {
+        tenantId: input.tenantId, userId: null, entityType: 'conversation', entityId: input.conversationId,
+        action: 'INBOX_CONVERSATION_LEAD_LINKED', metadata: { leadId, source: 'auto_phone_match' },
+      },
+    }).catch(() => undefined);
+  }
+  return result;
 }
 
 export async function linkWhatsAppConversationToMatchingLead(input: {

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { findAccessibleInboxConversation } from '@/lib/inbox/access';
-import { linkWhatsAppConversationToMatchingLead } from '@/lib/conversations/whatsapp-lead-linking';
+import { autoLinkWhatsAppConversation } from '@/lib/conversations/whatsapp-lead-linking';
 
 /**
  * Finds the lead of a conversation that is not linked yet, by the phone number, with or without
@@ -13,7 +13,7 @@ export const POST = withPermission('INBOX_VIEW', async (_req: NextRequest, sessi
   const conversation = await findAccessibleInboxConversation(session, ctx.params.id);
   if (!conversation) return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
 
-  const result = await linkWhatsAppConversationToMatchingLead({ tenantId: session.tenantId, conversationId: conversation.id });
+  const result = await autoLinkWhatsAppConversation({ tenantId: session.tenantId, conversationId: conversation.id });
   const leadId = 'leadId' in result ? result.leadId : undefined;
   if (!result.linked || !leadId) {
     const error = result.reason === 'ambiguous_lead'

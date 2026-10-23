@@ -140,6 +140,34 @@ export async function isLeadNameConfirmed(tenantId: string, leadId: string, prof
 }
 
 /**
+ * A lead that existed before the AI (a form, an import, the team) and the name the person told
+ * the AI, if any. Null for a lead the WhatsApp AI opened itself: that one keeps the old rules.
+ */
+export async function leadRegistration(tenantId: string, leadId: string) {
+  const lead = await prisma.lead.findFirst({
+    where: { id: leadId, tenantId },
+    select: { name: true, createdAt: true, formId: true },
+  });
+  if (!lead) return null;
+  const openedByAi = await prisma.auditLog.count({
+    where: { tenantId, entityType: 'lead', entityId: leadId, action: 'lead.whatsapp_ai_created' },
+  });
+  if (openedByAi) return null;
+  const confirmed = await prisma.auditLog.findFirst({
+    where: { tenantId, entityType: 'lead', entityId: leadId, action: 'lead.whatsapp_ai_name_confirmed' },
+    orderBy: { createdAt: 'desc' },
+    select: { metadata: true },
+  });
+  const metadata = (confirmed?.metadata && typeof confirmed.metadata === 'object' ? confirmed.metadata : {}) as Record<string, unknown>;
+  return {
+    name: lead.name,
+    createdAt: lead.createdAt,
+    fromForm: Boolean(lead.formId),
+    preferredName: typeof metadata.preferredName === 'string' ? metadata.preferredName : null,
+  };
+}
+
+/**
  * Called after each AI reply (pilot companies only):
  * 1. The conversation becomes a lead early, with the minimum: the person said how to be called, or
  *    replied to the AI at least once (real interest). Name + WhatsApp number, first stage of the
@@ -189,7 +217,7 @@ export async function handleWhatsAppAiQualification(input: {
       await prisma.auditLog.create({
         data: {
           tenantId: input.tenantId, userId: null, entityType: 'lead', entityId: leadId,
-          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id },
+          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id, preferredName },
         },
       }).catch(() => undefined);
     }
@@ -239,7 +267,7 @@ export async function handleWhatsAppAiQualification(input: {
       await prisma.auditLog.create({
         data: {
           tenantId: input.tenantId, userId: null, entityType: 'lead', entityId: leadId,
-          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id },
+          action: 'lead.whatsapp_ai_name_confirmed', metadata: { agentId: input.runtime.id, preferredName },
         },
       }).catch(() => undefined);
     }

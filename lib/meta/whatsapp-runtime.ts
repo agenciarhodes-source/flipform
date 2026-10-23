@@ -5,6 +5,7 @@ import { isOptOutMessage } from '@/lib/post-sale/rules';
 import { recordContactOptOut } from '@/lib/post-sale/runner';
 import { parseWhatsAppReferral } from '@/lib/whatsapp-ai/lead';
 import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
+import { autoLinkWhatsAppConversation } from '@/lib/conversations/whatsapp-lead-linking';
 
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -517,6 +518,14 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           // "SAIR" (or similar): no more automatic messages from this company to this number.
           if (isOptOutMessage(messageText)) {
             await recordContactOptOut({ tenantId: connection.tenantId, phone: resolvedExternalUserId, source: 'keyword' }).catch(() => undefined);
+          }
+          // Someone who already registered (a form, the team) is found by the number and linked now.
+          if (!persisted.conversation.leadId) {
+            await autoLinkWhatsAppConversation({
+              tenantId: connection.tenantId,
+              conversationId: persisted.conversation.id,
+              phone: resolvedExternalUserId,
+            }).catch(() => undefined);
           }
           // The first message after a click-to-WhatsApp ad carries the ad; it is kept once.
           const referral = parseWhatsAppReferral(message?.referral);
