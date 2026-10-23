@@ -265,10 +265,20 @@ export async function setInboxConversationStatus(input: {
     const now = new Date();
     await tx.conversation.update({
       where: { id: conversation.id },
+      // Resolving also stops the AI for good: if the customer writes again, a person answers.
       data: input.status === 'resolved'
-        ? { status: 'resolved', resolvedAt: now, unreadCount: 0 }
+        ? { status: 'resolved', resolvedAt: now, unreadCount: 0,
+          aiPausedAt: now, aiPausedBy: input.session.userId, aiPauseReason: 'resolved' }
         : { status: 'open', resolvedAt: null },
     });
+    if (input.status === 'resolved') {
+      await tx.auditLog.create({
+        data: {
+          tenantId: input.session.tenantId, userId: input.session.userId, entityType: 'conversation',
+          entityId: conversation.id, action: 'whatsapp_ai.paused', metadata: { reason: 'resolved' },
+        },
+      });
+    }
 
     return {
       conversationId: conversation.id,

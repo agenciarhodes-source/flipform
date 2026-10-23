@@ -8,6 +8,7 @@ import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isTestPhoneNumber } from './eligibility';
+import { isConversationAiPaused } from './pause';
 import {
   cleanReactivationText,
   REACTIVATION_AFTER_HOURS,
@@ -45,7 +46,7 @@ async function transcript(tenantId: string, conversationId: string) {
 export async function sweepWhatsAppReactivations(now = new Date()) {
   const numbers = await prisma.tenantWhatsAppAiSettings.findMany({
     where: { enabled: true, reactivationEnabled: true, agentId: { not: null }, connection: { status: 'connected' } },
-    select: { tenantId: true, agentId: true, liveEnabled: true, testPhoneNumbers: true, connection: { select: { phoneNumberId: true } } },
+    select: { tenantId: true, agentId: true, liveEnabled: true, testPhoneNumbers: true, resumeAfterHours: true, connection: { select: { phoneNumberId: true } } },
   });
   let sent = 0;
   for (const number of numbers) {
@@ -60,6 +61,8 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
     const candidates = await prisma.conversation.findMany({
       where: {
         tenantId: number.tenantId, provider: 'meta', channel: 'whatsapp',
+        // A resolved conversation never gets a reminder.
+        status: { not: 'resolved' },
         lastInboundAt: {
           lte: new Date(now.getTime() - REACTIVATION_AFTER_HOURS * 3_600_000),
           gte: new Date(now.getTime() - REACTIVATION_LAST_MINUTE * 60_000),
@@ -68,7 +71,7 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
       orderBy: { lastInboundAt: 'asc' },
       take: 30,
       select: {
-        id: true, lastInboundAt: true, lastOutboundAt: true,
+        id: true, lastInboundAt: true, lastOutboundAt: true, aiPausedAt: true, aiPauseReason: true,
         externalContactIdentity: { select: { externalUserId: true, displayName: true } },
         lead: { select: { name: true, status: true, stage: { select: { name: true } } } },
         messages: {
@@ -85,7 +88,10 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
         lastInboundAt: conversation.lastInboundAt,
         lastOutboundAt: conversation.lastOutboundAt,
         leadStatus: conversation.lead ? String(conversation.lead.status) : null,
+        leadStageName: conversation.lead?.stage?.name ?? null,
       }, now)) continue;
+      // A person is handling it (AI paused or the conversation was resolved): the AI stays quiet.
+      if (isConversationAiPaused(conversation, number.resumeAfterHours, now)) continue;
       // Only conversations of this number, and only customers the AI may talk to.
       const inboundMeta = conversation.messages[0]?.metadata as Record<string, unknown> | null;
       if (inboundMeta?.phoneNumberId && inboundMeta.phoneNumberId !== number.connection.phoneNumberId) continue;
