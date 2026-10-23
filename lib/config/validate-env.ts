@@ -65,9 +65,13 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
   addCheck('ADMIN_HOSTNAME', hasValue(env.ADMIN_HOSTNAME), 'ADMIN_HOSTNAME configured', 'ADMIN_HOSTNAME is required.');
   addCheck('DATABASE_URL', hasValue(env.DATABASE_URL), 'DATABASE_URL configured', 'DATABASE_URL is required.');
   addCheck('JWT_SECRET_CURRENT', hasValue(env.JWT_SECRET_CURRENT), 'JWT_SECRET_CURRENT configured', 'JWT_SECRET_CURRENT is required.');
-  addCheck('ASAAS_BASE_URL', hasValue(env.ASAAS_BASE_URL), 'ASAAS_BASE_URL configured', 'ASAAS_BASE_URL is required.');
-  addCheck('ASAAS_API_KEY', hasValue(env.ASAAS_API_KEY), 'ASAAS_API_KEY configured', 'ASAAS_API_KEY is required.');
-  addCheck('ASAAS_WEBHOOK_TOKEN', hasValue(env.ASAAS_WEBHOOK_TOKEN), 'ASAAS_WEBHOOK_TOKEN configured', 'ASAAS_WEBHOOK_TOKEN is required.');
+  // Plans are paid through Stripe; Asaas (legacy) is optional and only checked when configured.
+  const asaasConfigured = hasValue(env.ASAAS_BASE_URL) || hasValue(env.ASAAS_API_KEY) || hasValue(env.ASAAS_WEBHOOK_TOKEN);
+  if (asaasConfigured) {
+    addCheck('ASAAS_BASE_URL', hasValue(env.ASAAS_BASE_URL), 'ASAAS_BASE_URL configured', 'ASAAS_BASE_URL is required when Asaas is configured.');
+    addCheck('ASAAS_API_KEY', hasValue(env.ASAAS_API_KEY), 'ASAAS_API_KEY configured', 'ASAAS_API_KEY is required when Asaas is configured.');
+    addCheck('ASAAS_WEBHOOK_TOKEN', hasValue(env.ASAAS_WEBHOOK_TOKEN), 'ASAAS_WEBHOOK_TOKEN configured', 'ASAAS_WEBHOOK_TOKEN is required when Asaas is configured.');
+  }
   addCheck('EMAIL_PROVIDER', hasValue(env.EMAIL_PROVIDER), 'EMAIL_PROVIDER configured', 'EMAIL_PROVIDER is required.');
   addCheck('EMAIL_FROM', hasValue(env.EMAIL_FROM), 'EMAIL_FROM configured', 'EMAIL_FROM is required.');
   addCheck('EMAIL_REPLY_TO', hasValue(env.EMAIL_REPLY_TO), 'EMAIL_REPLY_TO configured', 'EMAIL_REPLY_TO is required.');
@@ -209,7 +213,9 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     addCheck('ADMIN_HOSTNAME production', env.ADMIN_HOSTNAME === 'admin.flipform.com.br', 'ADMIN_HOSTNAME production value OK', 'ADMIN_HOSTNAME must be admin.flipform.com.br in production.');
 
     const allowSandbox = String(env.ALLOW_SANDBOX_ASAAS_IN_PRODUCTION || '').toLowerCase() === 'true';
-    if (env.ASAAS_BASE_URL !== 'https://api.asaas.com/v3' && !allowSandbox) {
+    if (!asaasConfigured) {
+      checks.push({ key: 'ASAAS_BASE_URL production', ok: true, message: 'Asaas not configured (plans are paid through Stripe)' });
+    } else if (env.ASAAS_BASE_URL !== 'https://api.asaas.com/v3' && !allowSandbox) {
       errors.push('ASAAS_BASE_URL must be https://api.asaas.com/v3 in production (or ALLOW_SANDBOX_ASAAS_IN_PRODUCTION=true).');
       checks.push({ key: 'ASAAS_BASE_URL production', ok: false, message: 'ASAAS_BASE_URL must point to production Asaas in production.' });
     } else {
@@ -235,8 +241,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     const sensitiveKeys = [
       'DATABASE_URL',
       'JWT_SECRET_CURRENT',
-      'ASAAS_API_KEY',
-      'ASAAS_WEBHOOK_TOKEN',
+      ...(asaasConfigured ? ['ASAAS_API_KEY', 'ASAAS_WEBHOOK_TOKEN'] as const : []),
       'CRON_SECRET',
       'INTERNAL_JOB_SECRET',
       ...(stripeEnabled ? ['STRIPE_RESTRICTED_KEY'] as const : []),
@@ -263,7 +268,7 @@ export function validateEnvironment(env: NodeJS.ProcessEnv): EnvValidationResult
     hostRouting: hasValue(env.APP_HOSTNAME) && hasValue(env.ADMIN_HOSTNAME),
     database: hasValue(env.DATABASE_URL),
     auth: hasValue(env.JWT_SECRET_CURRENT),
-    asaas: hasValue(env.ASAAS_BASE_URL) && hasValue(env.ASAAS_API_KEY) && hasValue(env.ASAAS_WEBHOOK_TOKEN),
+    asaas: !asaasConfigured || (hasValue(env.ASAAS_BASE_URL) && hasValue(env.ASAAS_API_KEY) && hasValue(env.ASAAS_WEBHOOK_TOKEN)),
     email: hasValue(env.EMAIL_PROVIDER) && hasValue(env.EMAIL_FROM) && hasValue(env.EMAIL_REPLY_TO),
     internalJobs: hasValue(env.CRON_SECRET) && hasValue(env.INTERNAL_JOB_SECRET),
     jev: !jevEnabled || (

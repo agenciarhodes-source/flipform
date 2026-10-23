@@ -26,14 +26,14 @@ export class StripeSubscriptionCheckoutError extends Error {
   }
 }
 
-type CheckoutPlan = { id: string; slug: string; name: string; price: unknown; billingCycle: string };
+export type CheckoutPlan = { id: string; slug: string; name: string; price: unknown; billingCycle: string };
 
 function appBaseUrl() {
   return (process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://app.flipform.com.br').replace(/\/+$/, '');
 }
 
 /** One Stripe product per plan, created the first time it is sold. */
-async function ensurePlanProduct(stripe: Stripe, plan: CheckoutPlan) {
+export async function ensurePlanProduct(stripe: Stripe, plan: CheckoutPlan) {
   const id = stripeProductId(plan.slug);
   try {
     const product = await stripe.products.retrieve(id);
