@@ -11,6 +11,7 @@ import { formatLeadSource, MANUAL_LEAD_SOURCES } from '@/lib/leads';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity } from '@/lib/brazil-locations';
 import { todayDateOnly } from '@/lib/date-only';
+import { formatBrazilPhone, isValidBrazilMobilePhone } from '@/lib/form-field-validation';
 
 type Stage = { id: string; name: string; orderIndex: number; isArchived?: boolean };
 type Pipeline = { id: string; name: string; isArchived?: boolean; stages: Stage[] };
@@ -49,7 +50,14 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
     if (!stages.some((stage) => stage.id === form.stageId)) setForm((current) => ({ ...current, stageId: stages[0]?.id || '' }));
   }, [form.pipelineId, selectedPipeline]);
 
+  // Same rule as the public forms: a Brazilian mobile, +55 (DDD) 9 0000-0000.
+  const phoneInvalid = Boolean(form.phone.replace(/\D/g, '').replace(/^55/, '')) && !isValidBrazilMobilePhone(form.phone);
+
   const submit = async () => {
+    if (phoneInvalid) {
+      toast.error('Informe um celular do Brasil: +55 (DDD) 9 0000-0000.');
+      return;
+    }
     setSaving(true);
     setDuplicate(null);
     try {
@@ -80,7 +88,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         <div className="space-y-1.5"><Label>Nome *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div className="space-y-1.5"><Label>Origem do lead *</Label><Select value={form.source} onValueChange={(source) => setForm({ ...form, source })}><SelectTrigger><SelectValue placeholder="Selecione a origem" /></SelectTrigger><SelectContent>{MANUAL_LEAD_SOURCES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Data de entrada do lead *</Label><Input type="date" value={form.entryDate} max={todayDateOnly()} onChange={(e) => setForm({ ...form, entryDate: e.target.value })} required /></div>
-        <div className="space-y-1.5"><Label>Telefone</Label><Input placeholder="+55 (00) 9 0000-0000" value={form.phone} onChange={(e) => { setDuplicate(null); setForm({ ...form, phone: e.target.value }); }} /></div>
+        <div className="space-y-1.5"><Label>Telefone</Label><Input type="tel" inputMode="tel" placeholder="+55 (00) 9 0000-0000" value={form.phone} aria-invalid={phoneInvalid} onChange={(e) => { setDuplicate(null); const digits = e.target.value.replace(/\D/g, ''); setForm({ ...form, phone: digits && digits !== '55' ? formatBrazilPhone(e.target.value) : '' }); }} />{phoneInvalid && <p className="text-xs text-destructive">Use um celular do Brasil com DDD: +55 (00) 9 0000-0000.</p>}</div>
         <div className="space-y-1.5"><Label>E-mail</Label><Input value={form.email} onChange={(e) => { setDuplicate(null); setForm({ ...form, email: e.target.value }); }} /></div>
         <div className="space-y-1.5"><Label>Pipeline *</Label><Select value={form.pipelineId} onValueChange={(pipelineId) => setForm({ ...form, pipelineId })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{activePipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-1.5"><Label>Etapa *</Label><Select value={form.stageId} onValueChange={(stageId) => setForm({ ...form, stageId })}><SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{stages.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
@@ -91,7 +99,7 @@ export function ManualLeadDialog({ open, onOpenChange, pipelines, defaultPipelin
         <div className="space-y-1.5"><Label>Cidade</Label><CityCombobox state={form.state} value={form.city} onValueChange={(city) => setForm((current) => ({ ...current, city }))} allowEmpty /></div>
         <div className="space-y-1.5 sm:col-span-2"><Label>Observações</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
       </div>
-      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="button" onClick={() => submit()} disabled={saving || !!duplicate}>{saving ? 'Salvando...' : 'Salvar lead'}</Button></DialogFooter>
+      <DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button><Button type="button" onClick={() => submit()} disabled={saving || !!duplicate || phoneInvalid}>{saving ? 'Salvando...' : 'Salvar lead'}</Button></DialogFooter>
     </DialogContent>
   </Dialog>;
 }
