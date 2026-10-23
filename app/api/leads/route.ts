@@ -4,8 +4,9 @@ import { withPermission } from '@/lib/rbac-server';
 import { getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
-import { isValidBrazilianPhone, normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
+import { normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
 import { findExistingLeadIdByContactInTenant } from '@/lib/form-duplicate-lead';
+import { isValidBrazilMobilePhone } from '@/lib/form-field-validation';
 import { dateOnlyToDate, isValidDateOnly, todayDateOnly } from '@/lib/date-only';
 
 function dateOnlyBoundary(value: string, endOfDay = false) {
@@ -111,7 +112,10 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
     const phone = normalizeBrazilianLeadPhone(parsed.data.phone);
     if (!email && !phone) return NextResponse.json({ error: 'Informe telefone ou e-mail.' }, { status: 400 });
     if (email && !/^\S+@\S+\.\S+$/.test(email)) return NextResponse.json({ error: 'Informe um e-mail válido.' }, { status: 400 });
-    if (phone && !isValidBrazilianPhone(phone)) return NextResponse.json({ error: 'Informe um telefone válido.' }, { status: 400 });
+    // Same rule as the public forms: only a Brazilian mobile with area code is saved.
+    if (phone && !isValidBrazilMobilePhone(phone)) {
+      return NextResponse.json({ error: 'Informe um celular do Brasil: +55 (DDD) 9 0000-0000.' }, { status: 400 });
+    }
 
     const [pipeline, stage, assignedUser] = await Promise.all([
       prisma.pipeline.findFirst({ where: { id: parsed.data.pipelineId, tenantId: session.tenantId, isArchived: false } }),

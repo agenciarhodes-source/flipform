@@ -40,7 +40,7 @@ def test_manual_lead_ui_in_leads_and_kanban():
     assert 'Criar mesmo assim' not in dialog
     assert 'Origem original:' in dialog
     assert 'Não é possível cadastrar novamente.' in dialog
-    assert 'disabled={saving || !!duplicate}' in dialog
+    assert 'disabled={saving || !!duplicate || phoneInvalid}' in dialog
     assert 'Novo lead' in leads
     assert 'ManualLeadDialog' in leads
     assert 'formatLeadSource(l.source)' in leads
