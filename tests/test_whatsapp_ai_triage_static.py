@@ -23,7 +23,7 @@ def test_global_whatsapp_instructions_have_no_law_firm_wording():
 
 def test_every_attendant_gets_the_commercial_policy():
     style = (ROOT / "lib/flip-ai/conversation-style.ts").read_text(encoding="utf-8")
-    assert "export function buildCommercialGuidance()" in style
-    assert "...buildCommercialGuidance()," in style
+    assert "export function buildCommercialGuidance(role: AttendantRole = DEFAULT_ATTENDANT_ROLE)" in style
+    assert "...buildCommercialGuidance(role)," in style
     assert "OBJETIVO COMERCIAL" in style
     assert "As regras e restrições da base de conhecimento da empresa valem acima destas orientações" in style

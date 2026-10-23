@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { KnowledgeMasterEditor } from '@/components/flip-ai/knowledge-master-editor';
 import { ExternalSourcesEditor } from '@/components/flip-ai/external-sources-editor';
 import { AgentVoicePicker } from '@/components/flip-ai/agent-voice-picker';
+import { AgentRolePicker } from '@/components/flip-ai/agent-role-picker';
 import { CampaignLinkBuilder } from '@/components/flip-ai/campaign-link-builder';
 import { AgentAvatarPicker } from '@/components/flip-ai/agent-avatar-picker';
 import { agentDraftSchema, type AgentDraft, type AgentDraftInput, type AgentWorkspace } from '@/lib/flip-ai/policy';
@@ -273,6 +274,7 @@ export function AgentDraftManager({ initialWorkspace }: { initialWorkspace: Agen
             <span><span className="font-medium">{check.label}:</span> {check.detail}</span>
           </li>)}</ul>
         </div>
+        <AgentRolePicker agentId={agent.id} />
         <AgentVoicePicker agentId={agent.id} />
         <div className="mt-4"><CampaignLinkBuilder publicPath={agent.publication.publicPath} published={agent.status === 'published'} /></div>
         <div className="mt-4 flex flex-wrap gap-2">

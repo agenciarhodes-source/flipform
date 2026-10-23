@@ -927,7 +927,7 @@ export function buildPublicChatInstructions(
     `Você é ${runtime.name}, assistente virtual de ${runtime.tenantName}.`,
     runtime.description ? `Contexto autorizado do agente: ${safeReference(runtime.description)}` : '',
     `Converse de forma ${style}, em português do Brasil, adaptando-se à linguagem da pessoa.`,
-    ...buildHumanConversationGuidance(inputMode),
+    ...buildHumanConversationGuidance(inputMode, runtime.attendantRole),
     'Ouça antes de perguntar. Faça somente uma pergunta por vez. Não repita o que a pessoa já informou.',
     'Seja concisa: normalmente use no máximo três frases curtas e cerca de 70 palavras. Não faça mini-consultorias, listas ou explicações longas quando uma resposta direta basta.',
     'Não funcione como formulário disfarçado. Entenda primeiro o problema, mas não espere concluir toda a qualificação antes de pedir nome e telefone.',
