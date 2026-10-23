@@ -33,6 +33,7 @@ import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbo
 import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isLeadNameConfirmed, leadRegistration, whatsappContactName } from './lead';
 import { registrationNameState, registrationNote } from './registration-rules';
+import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -283,16 +284,20 @@ export async function replyToWhatsAppConversation(input: {
   const extraUserNotes: string[] = [];
   let inputMode: 'text' | 'voice' = 'text';
   let receivedFiles = false;
+  // Names the company already has (WhatsApp profile, registration): a voice note never misspells them.
+  const knownNames = knownFirstNames([conversation.externalContactIdentity.displayName, conversation.lead?.name]);
   for (const message of pending) {
     if (message.text?.trim()) parts.push(message.text.trim());
     if (message.type === 'audio') {
-      const transcript = await transcribeWhatsAppVoiceNote({
+      const heard = await transcribeWhatsAppVoiceNote({
         tenantId: input.tenantId,
         agentId: runtime.id,
         connectionId: connection.id,
         accessTokenEncrypted: connection.accessTokenEncrypted,
         message,
+        hint: transcriptionHint(knownNames),
       });
+      const transcript = heard ? alignTranscriptNames(heard, knownNames) : null;
       if (transcript) {
         inputMode = 'voice';
         parts.push(transcript);
@@ -423,7 +428,10 @@ export async function replyToWhatsAppConversation(input: {
         ? await isLeadNameConfirmed(input.tenantId, conversation.leadId, profileName)
         : false;
     // When the AI's last question was the name, the answer is read here too, not only by the model.
-    const nameInAnswer = nameFromReply(recentOutbound[0]?.text, turnText, profileName ? profileName.split(' ')[0] : null);
+    const nameInAnswer = alignNameSpelling(
+      nameFromReply(recentOutbound[0]?.text, turnText, profileName ? profileName.split(' ')[0] : null),
+      knownNames,
+    );
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
     context = {
       ...context,
@@ -507,7 +515,7 @@ export async function replyToWhatsAppConversation(input: {
       conversationId: conversation.id,
       runtime,
       classification: parsed.qualification?.classification,
-      preferredName: parsed.identity?.name || nameInAnswer,
+      preferredName: alignNameSpelling(parsed.identity?.name || nameInAnswer, knownNames),
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,
@@ -536,6 +544,7 @@ async function transcribeWhatsAppVoiceNote(input: {
   connectionId: string;
   accessTokenEncrypted: string | null;
   message: { id: string; metadata: Prisma.JsonValue | null };
+  hint?: string;
 }) {
   const mediaId = metadataOf(input.message.metadata).mediaId;
   if (typeof mediaId !== 'string') return null;
@@ -545,7 +554,7 @@ async function transcribeWhatsAppVoiceNote(input: {
   try {
     const media = await downloadWhatsAppMedia({ mediaId, accessToken });
     if (media.bytes.byteLength > MAX_VOICE_NOTE_BYTES) return null;
-    const heard = await transcribeVoiceNote({ bytes: media.bytes, mimeType: media.mimeType });
+    const heard = await transcribeVoiceNote({ bytes: media.bytes, mimeType: media.mimeType, prompt: input.hint });
     if (!heard?.text) return null;
     await chargeAudioUsage({
       tenantId: input.tenantId,
