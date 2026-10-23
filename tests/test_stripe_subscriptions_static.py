@@ -9,8 +9,8 @@ def read(path):
 
 def test_public_checkout_uses_stripe_only_behind_the_flag():
     route = read("app/api/public/checkout/route.ts")
-    assert "if (stripeSubscriptionsEnabled()) {" in route
-    assert route.index("if (stripeSubscriptionsEnabled()) {") < route.index("assertAsaasConfig({ requirePublicUrls: true });")
+    assert "if (!stripeSubscriptionsEnabled()) {" in route
+    assert "asaas" not in route.lower()
 
 
 def test_card_goes_to_stripe_page_and_pix_boleto_to_monthly_invoices_with_trial():
@@ -49,7 +49,7 @@ def test_checkout_page_shows_the_prices_that_are_charged():
 def test_every_active_paid_plan_is_sold_and_pricing_reads_the_plans_table():
     route = read("app/api/public/checkout/route.ts")
     assert "PUBLIC_PLAN_SLUGS" not in route
-    assert route.count("!isSellablePlan(plan)") == 2
+    assert route.count("!isSellablePlan(plan)") == 1
     pricing = read("app/pricing/page.tsx")
     assert "prisma.plan.findMany(" in pricing
     assert "R$ 97/mês" not in pricing

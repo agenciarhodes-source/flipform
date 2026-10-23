@@ -28,7 +28,9 @@ import {
 } from "@/components/ui/card";
 import ChangePlanClient from "./change-plan-client";
 import CancelSubscriptionClient from "./cancel-subscription-client";
+import BillingPortalClient from "./billing-portal-client";
 import LgpdClient from "./lgpd-client";
+import { isSellablePlan } from "@/lib/billing/subscription-rules";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -93,6 +95,17 @@ function daysUntil(date: Date | string | null | undefined) {
   return Math.max(0, Math.ceil((target - now) / (1000 * 60 * 60 * 24)));
 }
 
+/** How the invoice is paid, in plain words. */
+function billingTypeLabel(value: string | null | undefined) {
+  const labels: Record<string, string> = {
+    INVOICE: "Fatura (Pix, boleto ou cartão)",
+    CREDIT_CARD: "Cartão de crédito",
+    PIX: "Pix",
+    BOLETO: "Boleto",
+  };
+  return labels[String(value || "").toUpperCase()] || value || "—";
+}
+
 function paymentUrl(payment: { invoiceUrl: string | null; bankSlipUrl: string | null }) {
   return payment.invoiceUrl || payment.bankSlipUrl || null;
 }
@@ -102,7 +115,7 @@ export default async function BillingPage() {
   if (!session) return null;
   if (!can(session.role, "BILLING_VIEW")) redirect("/dashboard?error=permission-denied");
 
-  const [tenant, subscription, payments, pendingPayments] = await Promise.all([
+  const [tenant, subscription, payments, pendingPayments, planRows] = await Promise.all([
     prisma.tenant.findUnique({
       where: { id: session.tenantId },
       select: {
@@ -131,7 +144,13 @@ export default async function BillingPage() {
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 10,
     }),
+    prisma.plan.findMany({
+      where: { isActive: true },
+      orderBy: { price: "asc" },
+      select: { slug: true, name: true, price: true, isActive: true },
+    }),
   ]);
+  const sellablePlans = planRows.filter(isSellablePlan).map((plan) => ({ slug: plan.slug, name: plan.name, price: Number(plan.price) }));
 
   const currentPlan = subscription?.plan || tenant?.plan || null;
   const tenantStatus = String(tenant?.status || "").toLowerCase();
@@ -146,6 +165,8 @@ export default async function BillingPage() {
   const lastPayment = lastPaidPayment || payments[0] || null;
   const firstPayablePendingPayment = pendingPayments.find((payment) => paymentUrl(payment));
   const payNowUrl = firstPayablePendingPayment ? paymentUrl(firstPayablePendingPayment) : null;
+  // Paid through Stripe: the owner manages card, invoices, plan and cancellation here.
+  const isStripe = String(subscription?.provider || "").toLowerCase() === "stripe" && !isCourtesy;
 
   return (
     <div className="p-4 lg:p-8 space-y-6 animate-fade-in">
@@ -251,7 +272,7 @@ export default async function BillingPage() {
               <CreditCard className="h-4 w-4" /> Plano atual
             </div>
             <CardTitle>{currentPlan?.name || "Plano não definido"}</CardTitle>
-            <CardDescription>{currentPlan?.description || "Confira os detalhes do plano vinculado ao seu tenant."}</CardDescription>
+            <CardDescription>{currentPlan?.description || "Confira os detalhes do plano da sua empresa."}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
@@ -277,11 +298,11 @@ export default async function BillingPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Status do tenant</span>
+              <span className="text-muted-foreground">Status da empresa</span>
               <Badge variant={statusVariant(tenant?.status)}>{statusLabel(tenant?.status)}</Badge>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Grace period</span>
+              <span className="text-muted-foreground">Prazo de tolerância</span>
               <span className="font-medium">{formatDate(subscription?.gracePeriodEndsAt)}</span>
             </div>
           </CardContent>
@@ -332,7 +353,7 @@ export default async function BillingPage() {
                           <span className="font-semibold">{formatMoney(payment.value)}</span>
                         </div>
                         <div className="text-muted-foreground">Vencimento: {formatDate(payment.dueDate)}</div>
-                        <div className="text-muted-foreground">Tipo: {payment.billingType || "—"}</div>
+                        <div className="text-muted-foreground">Forma: {billingTypeLabel(payment.billingType)}</div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {payment.invoiceUrl && (
@@ -372,7 +393,7 @@ export default async function BillingPage() {
               <FileText className="h-4 w-4" /> Pagamentos recentes
             </div>
             <CardTitle>Histórico</CardTitle>
-            <CardDescription>Últimos registros financeiros do seu tenant.</CardDescription>
+            <CardDescription>Últimos registros financeiros da sua empresa.</CardDescription>
           </CardHeader>
           <CardContent>
             {payments.length === 0 ? (
@@ -405,10 +426,12 @@ export default async function BillingPage() {
         </Card>
       </div>
 
+      {isStripe && <BillingPortalClient />}
+
       {!isBlocked && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <ChangePlanClient currentPlan={currentPlan?.slug || null} />
-          <CancelSubscriptionClient />
+          <ChangePlanClient currentPlan={currentPlan?.slug || null} plans={sellablePlans} selfServe={isStripe} />
+          <CancelSubscriptionClient selfServe={isStripe} />
           <LgpdClient />
         </div>
       )}
