@@ -74,9 +74,24 @@ async function mediaAccessToken(accessTokenEncrypted: string | null) {
     || null;
 }
 
+/**
+ * What to do after the customer sends files, by attendant profile. The analyst only acknowledges;
+ * the closer keeps collecting what is missing until everything for the analysis has arrived.
+ */
+export function receivedFilesNote(role: AttendantRole | undefined) {
+  if (role === 'analyst') {
+    return '[Nota interna: agradeça o arquivo em uma frase e diga que a equipe vai analisar. Não comente o conteúdo nem peça outros documentos.]';
+  }
+  return '[Nota interna: agradeça o arquivo em uma frase. Em seguida, olhando a lista de documentos que você pediu nesta conversa'
+    + ' (ou a lista da base de conhecimento para este caso), diga quais ainda faltam e peça o próximo, um por vez. Se o cliente'
+    + ' disser que não tem algum, explique em uma ou duas frases onde e como conseguir. Só quando todos os documentos necessários'
+    + ' para a análise tiverem chegado (ou o cliente disser que não tem os que faltam), faça o resumo e diga que a equipe dá'
+    + ' sequência. Não diga apenas que a equipe vai analisar enquanto ainda faltar documento.]';
+}
+
 const MEDIA_NOTES: Record<string, string> = {
-  image: '[O cliente enviou uma foto. Agradeça e diga que ela foi recebida; o conteúdo será analisado pela equipe.]',
-  document: '[O cliente enviou um documento. Agradeça e diga que ele foi recebido; o conteúdo será analisado pela equipe.]',
+  image: '[O cliente enviou uma foto.]',
+  document: '[O cliente enviou um documento.]',
   video: '[O cliente enviou um vídeo. Diga que foi recebido.]',
   sticker: '[O cliente enviou uma figurinha.]',
 };
@@ -263,6 +278,7 @@ export async function replyToWhatsAppConversation(input: {
   const parts: string[] = [];
   const extraUserNotes: string[] = [];
   let inputMode: 'text' | 'voice' = 'text';
+  let receivedFiles = false;
   for (const message of pending) {
     if (message.text?.trim()) parts.push(message.text.trim());
     if (message.type === 'audio') {
@@ -281,6 +297,7 @@ export async function replyToWhatsAppConversation(input: {
         extraUserNotes.push('[O cliente enviou um áudio que não pôde ser ouvido. Peça, com gentileza, que escreva a mensagem.]');
       }
     } else if (message.type === 'image' || message.type === 'document') {
+      receivedFiles = true;
       // Checked against the company's document lists; only the result is kept.
       const token = await mediaAccessToken(connection.accessTokenEncrypted);
       const checked = token
@@ -298,6 +315,7 @@ export async function replyToWhatsAppConversation(input: {
       extraUserNotes.push(MEDIA_NOTES[message.type]);
     }
   }
+  if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));
   const turnText = (parts.join('\n') || extraUserNotes.join('\n') || 'Olá').slice(0, 2_000);
   if (input.trigger === 'handback') {
     extraUserNotes.push('[Nota interna, não mostre ao cliente: a equipe devolveu esta conversa para você. Responda o que o cliente perguntou ou pediu nas últimas mensagens e continue o atendimento de onde parou, sem repetir o que a equipe já disse.]');
