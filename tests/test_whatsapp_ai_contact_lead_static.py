@@ -30,7 +30,7 @@ def test_the_ai_knows_the_name_and_never_asks_it_again():
     reply = read("lib/whatsapp-ai/reply.ts")
     assert "NÃO pergunte o nome de novo." in reply
     assert "Nunca deixe essa pergunta para o fim da conversa." in reply
-    assert "knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer," in reply
+    assert ": nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer," in reply
     assert "preferredName: parsed.identity?.name || nameInAnswer," in reply
     assert "veja com perguntas se outro produto, serviço ou tese da empresa serve para ela" in reply
     # Handing the case to the team always comes with the verdict, which sends the ad conversion.

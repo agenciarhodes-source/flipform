@@ -31,7 +31,8 @@ import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { showWhatsAppTyping } from '@/lib/meta/whatsapp-typing';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isConversationAiPaused } from './pause';
-import { handleWhatsAppAiQualification, isLeadNameConfirmed, whatsappContactName } from './lead';
+import { handleWhatsAppAiQualification, isLeadNameConfirmed, leadRegistration, whatsappContactName } from './lead';
+import { registrationNameState, registrationNote } from './registration-rules';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -113,6 +114,8 @@ function whatsappInstructions(input: {
   profileName: string | null;
   /** analyst = triage then the team; closer = up to the close. */
   role?: AttendantRole;
+  /** The person came from a company form: said on the first reply. */
+  registrationNote?: string | null;
 }) {
   const analyst = input.role === 'analyst';
   return [
@@ -130,6 +133,7 @@ function whatsappInstructions(input: {
       ? `NOME: o cliente já disse que prefere ser chamado de "${input.knownName}". Chame-o assim e NÃO pergunte o nome de novo.`
       : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
+    ...(input.firstReply && input.registrationNote ? [input.registrationNote] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
     analyst
       ? 'SEU PAPEL É A TRIAGEM (prioridade máxima), E SÓ ELA: entenda o perfil e a situação do cliente com as perguntas certas,'
@@ -400,10 +404,24 @@ export async function replyToWhatsAppConversation(input: {
       select: { metadata: true, text: true },
     });
     const aiRepliesSoFar = recentOutbound.filter((message) => typeof metadataOf(message.metadata).aiAgentId === 'string').length;
-    const profileName = whatsappContactName(conversation.externalContactIdentity.displayName);
-    const nameConfirmed = conversation.leadId
-      ? await isLeadNameConfirmed(input.tenantId, conversation.leadId, profileName)
-      : false;
+    const whatsappName = whatsappContactName(conversation.externalContactIdentity.displayName);
+    // A lead that registered before (a form, the team): its name is the one to confirm, not the WhatsApp profile.
+    const registration = conversation.leadId
+      ? await leadRegistration(input.tenantId, conversation.leadId).catch(() => null)
+      : null;
+    const registrationName = registration
+      ? registrationNameState({
+        registeredName: registration.name,
+        preferredName: registration.preferredName,
+        aiRepliesSoFar,
+      })
+      : null;
+    const profileName = registrationName?.nameToConfirm || whatsappName;
+    const nameConfirmed = registrationName
+      ? Boolean(registrationName.knownName)
+      : conversation.leadId
+        ? await isLeadNameConfirmed(input.tenantId, conversation.leadId, profileName)
+        : false;
     // When the AI's last question was the name, the answer is read here too, not only by the model.
     const nameInAnswer = nameFromReply(recentOutbound[0]?.text, turnText, profileName ? profileName.split(' ')[0] : null);
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
@@ -414,9 +432,14 @@ export async function replyToWhatsAppConversation(input: {
         companyName: conversation.tenant.name,
         introduction: whatsappIntroduction(settings.introduction, conversation.tenant.name),
         firstReply: aiRepliesSoFar === 0,
-        knownName: nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
+        knownName: registrationName
+          ? nameInAnswer || registrationName.knownName
+          : nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
         role: runtime.attendantRole,
+        registrationNote: registration?.fromForm
+          ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
+          : null,
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]

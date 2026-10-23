@@ -13,7 +13,7 @@ def test_clicking_the_contact_opens_the_lead_card_or_finds_it_by_phone():
     assert "<LeadDetailModal leadId={leadModal.leadId}" in inbox
     match = read("app/api/inbox/conversations/[id]/match-lead/route.ts")
     assert "findAccessibleInboxConversation(session, ctx.params.id)" in match
-    assert "linkWhatsAppConversationToMatchingLead({ tenantId: session.tenantId, conversationId: conversation.id })" in match
+    assert "autoLinkWhatsAppConversation({ tenantId: session.tenantId, conversationId: conversation.id })" in match
 
 
 def test_a_conversation_can_be_marked_unread_from_the_right_click_menu():
