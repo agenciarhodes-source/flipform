@@ -4,6 +4,8 @@
  * At 23 hours the 24-hour customer service window is still open, so no paid template is needed.
  * Pure rules, easy to test.
  */
+import { isOutcomeStageName } from './stage-rules';
+
 export const REACTIVATION_AFTER_HOURS = 23;
 /** The window closes 24 h after the customer's last message; this margin keeps the send inside it. */
 export const REACTIVATION_LAST_MINUTE = 23 * 60 + 50;
@@ -14,6 +16,8 @@ export type ReactivationCandidate = {
   lastInboundAt: Date | null;
   lastOutboundAt: Date | null;
   leadStatus: string | null;
+  /** The lead's stage: "Não qualificado" or "Já é cliente" never get a reminder. */
+  leadStageName?: string | null;
 };
 
 /** Whether this conversation is due for its reminder now. */
@@ -26,6 +30,8 @@ export function reactivationDue(candidate: ReactivationCandidate, now: Date) {
   if (now.getTime() - candidate.lastOutboundAt.getTime() < REACTIVATION_MIN_SILENCE_AFTER_TEAM_MS) return false;
   // Closed deals (won or lost) are left alone.
   if (candidate.leadStatus && candidate.leadStatus !== 'open') return false;
+  // Not qualified or already a client: a reminder costs and helps no one.
+  if (isOutcomeStageName(candidate.leadStageName)) return false;
   return true;
 }
 

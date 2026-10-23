@@ -189,7 +189,7 @@ export async function replyToWhatsAppConversation(input: {
   const conversation = await prisma.conversation.findFirst({
     where: { id: input.conversationId, tenantId: input.tenantId, provider: 'meta', channel: 'whatsapp' },
     select: {
-      id: true, aiPausedAt: true,
+      id: true, aiPausedAt: true, aiPauseReason: true,
       leadId: true,
       externalContactIdentity: { select: { externalUserId: true, displayName: true } },
       lead: { select: { name: true } },
@@ -478,7 +478,7 @@ export async function replyToWhatsAppConversation(input: {
       },
       select: { id: true },
     });
-    const pausedMeanwhile = await prisma.conversation.findFirst({ where: { id: conversation.id }, select: { aiPausedAt: true } });
+    const pausedMeanwhile = await prisma.conversation.findFirst({ where: { id: conversation.id }, select: { aiPausedAt: true, aiPauseReason: true } });
     if (answeredMeanwhile || (pausedMeanwhile && isConversationAiPaused(pausedMeanwhile, settings.resumeAfterHours, new Date()))) {
       await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_TEAM_ANSWERED' }, 'response');
       return { replied: false, reason: 'team_answered_meanwhile' };

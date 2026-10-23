@@ -23,6 +23,13 @@ test('não lembra quando o cliente falou por último, quando a equipe acabou de 
   assert.equal(reactivationDue({ lastInboundAt: hoursAgo(23.1), lastOutboundAt: hoursAgo(22), leadStatus: 'lost' }, now), false);
 });
 
+test('não lembra lead não qualificado nem quem já é cliente', () => {
+  const base = { lastInboundAt: hoursAgo(23.1), lastOutboundAt: hoursAgo(22), leadStatus: 'open' };
+  assert.equal(reactivationDue({ ...base, leadStageName: 'Não qualificado' }, now), false);
+  assert.equal(reactivationDue({ ...base, leadStageName: 'Já é cliente' }, now), false);
+  assert.equal(reactivationDue({ ...base, leadStageName: 'Em andamento' }, now), true);
+});
+
 test('um lembrete por silêncio e texto limpo para o WhatsApp', () => {
   assert.equal(reactivationKey('c1', hoursAgo(23)), reactivationKey('c1', hoursAgo(23)));
   assert.notEqual(reactivationKey('c1', hoursAgo(23)), reactivationKey('c1', hoursAgo(10)));

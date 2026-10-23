@@ -7,8 +7,11 @@ import { isTestPhoneNumber } from './eligibility';
  * Human and AI never answer the same conversation at once. The AI is paused in a conversation
  * when someone takes it over or a person of the team answers it (in FlipForm or on the phone),
  * and it only comes back when someone hands it back, or after the hours set for the number.
+ * A conversation marked as resolved stops the AI for good: no reminder, no reactivation, and if
+ * the customer writes again the conversation comes back to the team (human attendance), until
+ * someone hands it back to the AI.
  */
-export const AI_PAUSE_REASONS = ['manual', 'human_reply_system', 'human_reply_phone'] as const;
+export const AI_PAUSE_REASONS = ['manual', 'human_reply_system', 'human_reply_phone', 'resolved'] as const;
 export type AiPauseReason = (typeof AI_PAUSE_REASONS)[number];
 
 export async function pauseConversationAi(input: {
@@ -64,11 +67,13 @@ export async function resumeConversationAi(input: { tenantId: string; conversati
 
 /** Whether the AI is paused in a conversation now, given the return time set for the number. */
 export function isConversationAiPaused(
-  conversation: { aiPausedAt: Date | null },
+  conversation: { aiPausedAt: Date | null; aiPauseReason?: string | null },
   resumeAfterHours: number | null,
   now = new Date(),
 ) {
   if (!conversation.aiPausedAt) return false;
+  // Resolved: never comes back by itself.
+  if (conversation.aiPauseReason === 'resolved') return true;
   if (!resumeAfterHours) return true;
   return now.getTime() - conversation.aiPausedAt.getTime() < resumeAfterHours * 3_600_000;
 }

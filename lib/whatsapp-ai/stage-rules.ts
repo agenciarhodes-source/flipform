@@ -31,6 +31,11 @@ const TIME_BASED_STAGE = /n[aã]o\s*retorn|sem\s*retorno|sem\s*resposta|n[aã]o\
 /** Outcomes the AI may move a lead to even when they sit earlier in the funnel. */
 const OUTCOME_STAGE = /n[aã]o\s*qualific|desqualific|sem\s*perfil|j[aá]\s*(é|e)\s*cliente/i;
 
+/** A stage that closes the sales conversation (not qualified, already a client). */
+export function isOutcomeStageName(name: string | null | undefined) {
+  return Boolean(name && OUTCOME_STAGE.test(name));
+}
+
 export function exampleCriterionFor(stageName: string) {
   return STAGE_CRITERION_EXAMPLES.find((example) => example.match.test(stageName))?.criterion || '';
 }
