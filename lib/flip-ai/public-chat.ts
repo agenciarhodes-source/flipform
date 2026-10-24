@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { historyContent } from '@/lib/flip-ai/history-content';
 import { isValidBrazilianPhone } from '@/lib/leads';
 import { recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
 import { FlipAiError } from './access';
@@ -1244,11 +1245,12 @@ export async function buildPublicChatContext(
       where: { tenantId: turn.tenantId, agentId: turn.agentId, conversationId: turn.conversationId },
       select: { summary: true, turnCount: true },
     }),
+    // Text and voice notes (through their transcript); other files say nothing to the AI here.
     prisma.message.findMany({
-      where: { tenantId: turn.tenantId, conversationId: turn.conversationId, type: 'text', text: { not: null } },
+      where: { tenantId: turn.tenantId, conversationId: turn.conversationId, type: { in: ['text', 'audio'] } },
       orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
-      take: 14,
-      select: { id: true, direction: true, text: true },
+      take: 20,
+      select: { id: true, direction: true, type: true, text: true, metadata: true, sentByUserId: true },
     }),
     prisma.conversation.findFirst({
       where: { tenantId: turn.tenantId, id: turn.conversationId, provider: 'flip_ai', channel: 'web' },
@@ -1259,11 +1261,14 @@ export async function buildPublicChatContext(
       conversationId: turn.conversationId,
     }),
   ]);
-  const chronological = history.reverse().flatMap((message) => message.text ? [{
-    id: message.id,
-    role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
-    content: message.text,
-  }] : []);
+  const chronological = history.reverse().flatMap((message) => {
+    const content = historyContent(message);
+    return content ? [{
+      id: message.id,
+      role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
+      content,
+    }] : [];
+  }).slice(-14);
   const budgetedHistory = contextSteeringEnabled
     ? buildBudgetedHistory(
       chronological,

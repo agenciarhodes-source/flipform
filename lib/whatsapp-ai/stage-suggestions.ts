@@ -6,7 +6,8 @@ import { streamOpenAiText, type OpenAiJsonSchemaFormat } from '@/lib/flip-ai/ope
 import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { moveLeadToStage } from '@/lib/leads/move-stage';
-import { acceptedSuggestion, candidateStages, type StageCandidate } from './stage-rules';
+import { historyContent, isTeamMessage } from '@/lib/flip-ai/history-content';
+import { acceptedSuggestion, candidateStages, isOutcomeStageName, type StageCandidate } from './stage-rules';
 import { conversationDocumentContext } from './documents';
 
 const CLASSIFIER_FORMAT: OpenAiJsonSchemaFormat = {
@@ -86,11 +87,15 @@ export async function suggestStageFromConversation(input: {
     where: { tenantId: input.tenantId, conversationId: input.conversationId },
     orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
     take: 24,
-    select: { direction: true, type: true, text: true },
+    select: { direction: true, type: true, text: true, metadata: true, sentByUserId: true },
   });
+  // Voice notes count through their transcript, and the team is told apart from the AI.
+  const teamInvolved = history.some((message) => isTeamMessage(message));
   const transcript = history.reverse().map((message) => {
-    const who = message.direction === 'inbound' ? 'Cliente' : 'Escritório';
-    const body = message.text?.trim() || (message.type !== 'text' ? `[${message.type} enviado]` : '');
+    const team = isTeamMessage(message);
+    const who = message.direction === 'inbound' ? 'Cliente' : team ? 'Equipe' : 'Escritório';
+    const content = historyContent(message)?.replace(/^\[Equipe\] /, '');
+    const body = content || (message.type !== 'text' ? `[${message.type} enviado]` : '');
     return body ? `${who}: ${body.slice(0, 600)}` : '';
   }).filter(Boolean).join('\n');
   if (!transcript) return { kind: 'no_messages' as const };
@@ -120,7 +125,10 @@ export async function suggestStageFromConversation(input: {
     data: { status: 'expired', decidedAt: now },
   });
 
-  if (input.mode === 'auto') {
+  // A case the team is handling is never closed by the AI alone ("Não qualificado", "Já é cliente"):
+  // the move waits as a suggestion for a person to approve.
+  const autoMove = input.mode === 'auto' && !(teamInvolved && isOutcomeStageName(accepted.stage.name));
+  if (autoMove) {
     const moved = await moveLeadToStage({
       tenantId: input.tenantId,
       leadId: lead.id,

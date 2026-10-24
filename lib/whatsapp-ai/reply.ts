@@ -34,9 +34,10 @@ import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isLeadNameConfirmed, leadRegistration, whatsappContactName } from './lead';
 import { registrationNameState, registrationNote } from './registration-rules';
 import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
+import { messageTranscript } from '@/lib/flip-ai/history-content';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
-import { decideWhatsAppAiAnswer, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -117,6 +118,8 @@ function whatsappInstructions(input: {
   role?: AttendantRole;
   /** The person came from a company form: said on the first reply. */
   registrationNote?: string | null;
+  /** Someone of the team already talked to this customer. */
+  teamInvolved?: boolean;
 }) {
   const analyst = input.role === 'analyst';
   return [
@@ -124,6 +127,7 @@ function whatsappInstructions(input: {
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
     'sem títulos nem listas longas. Para destacar algo, use *texto* (um asterisco de cada lado).',
     'O telefone do cliente já é conhecido, porque ele está falando por este WhatsApp: nunca peça o número de telefone.',
+    'Não cite fontes nem coloque links de sites na resposta (nada de "Fonte:"). Só mande um link se o cliente pedir.',
     `APRESENTAÇÃO NO WHATSAPP: neste canal você não usa o nome ${input.agentName} nem nenhum nome próprio; você é a ${input.introduction}.`,
     input.firstReply
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
@@ -135,6 +139,18 @@ function whatsappInstructions(input: {
       : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
     ...(input.firstReply && input.registrationNote ? [input.registrationNote] : []),
+    // Global: a verdict against the customer is never given by the AI.
+    'NUNCA diga ao cliente que ele não tem direito, não tem perfil, não se enquadra ou que não há o que fazer (nem com'
+      + ' outras palavras, como "não identificamos elementos"). Se parecer que não há caminho, diga que vai deixar anotado'
+      + ' para a equipe analisar se existe outro caminho, e pare por aí. Antes disso, procure com perguntas outro caminho'
+      + ' possível (outra prova, outro documento, outra situação), como a base de conhecimento orientar.',
+    ...(input.teamInvolved ? [
+      'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
+        + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
+        + ' passos, caminho encontrado). Não refaça a triagem, não repita perguntas que a equipe já fez e nunca contradiga a'
+        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que vai passar para a equipe, sem decidir'
+        + ' sozinho.',
+    ] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
     analyst
       ? 'SEU PAPEL É A TRIAGEM (prioridade máxima), E SÓ ELA: entenda o perfil e a situação do cliente com as perguntas certas,'
@@ -296,6 +312,7 @@ export async function replyToWhatsAppConversation(input: {
         accessTokenEncrypted: connection.accessTokenEncrypted,
         message,
         hint: transcriptionHint(knownNames),
+        knownNames,
       });
       const transcript = heard ? alignTranscriptNames(heard, knownNames) : null;
       if (transcript) {
@@ -400,6 +417,17 @@ export async function replyToWhatsAppConversation(input: {
     attribution: undefined,
   };
 
+  // Older voice notes of the conversation (the customer's and the team's) are transcribed once and
+  // kept, so the AI reads what was said in audio, not only what was typed.
+  await transcribeRecentVoiceNotes({
+    tenantId: input.tenantId,
+    conversationId: conversation.id,
+    agentId: runtime.id,
+    connectionId: connection.id,
+    accessTokenEncrypted: connection.accessTokenEncrypted,
+    knownNames,
+  }).catch(() => undefined);
+
   try {
     let context = await buildPublicChatContext(runtime, turn);
     const recentOutbound = await prisma.message.findMany({
@@ -433,6 +461,13 @@ export async function replyToWhatsAppConversation(input: {
       knownNames,
     );
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
+    // Someone of the team (in FlipForm or on the phone) already talked to this customer.
+    const teamInvolved = await prisma.message.count({
+      where: {
+        tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound',
+        OR: [{ sentByUserId: { not: null } }, { metadata: { path: ['businessAppEcho'], equals: true } }],
+      },
+    }).then((count) => count > 0).catch(() => false);
     context = {
       ...context,
       instructions: `${context.instructions}\n\n${whatsappInstructions({
@@ -448,6 +483,7 @@ export async function replyToWhatsAppConversation(input: {
         registrationNote: registration?.fromForm
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
           : null,
+        teamInvolved,
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
@@ -515,7 +551,8 @@ export async function replyToWhatsAppConversation(input: {
       conversationId: conversation.id,
       runtime,
       classification: parsed.qualification?.classification,
-      preferredName: alignNameSpelling(parsed.identity?.name || nameInAnswer, knownNames),
+      // The model may read "Simmm" as a name: only something that can be a name is kept.
+      preferredName: alignNameSpelling(plausibleName(parsed.identity?.name) || nameInAnswer, knownNames),
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,
@@ -545,7 +582,11 @@ async function transcribeWhatsAppVoiceNote(input: {
   accessTokenEncrypted: string | null;
   message: { id: string; metadata: Prisma.JsonValue | null };
   hint?: string;
+  knownNames?: string[];
 }) {
+  // Already transcribed: read it again, never paid twice.
+  const kept = messageTranscript(input.message.metadata);
+  if (kept) return kept;
   const mediaId = metadataOf(input.message.metadata).mediaId;
   if (typeof mediaId !== 'string') return null;
   if (!await hasCreditsForAudio(input.tenantId)) return null;
@@ -565,9 +606,54 @@ async function transcribeWhatsAppVoiceNote(input: {
       usage: resolveTranscriptionUsage({ reported: heard.reported, transcriptCharacters: heard.text.length }),
       metadata: { whatsappConnectionId: input.connectionId },
     });
-    return heard.text.slice(0, 2_000);
+    const text = alignTranscriptNames(heard.text.slice(0, 2_000), input.knownNames || []);
+    await keepTranscript(input.tenantId, input.message.id, text);
+    return text;
   } catch {
     return null;
+  }
+}
+
+/** The transcript stays with the message: the Inbox shows it and the AI and the review read it. */
+async function keepTranscript(tenantId: string, messageId: string, transcript: string) {
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE messages
+    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('transcript', ${transcript}::text)
+    WHERE id = ${messageId} AND tenant_id = ${tenantId}
+  `).catch(() => undefined);
+}
+
+/** At most this many older voice notes are transcribed per answer, so an answer never waits long. */
+const OLDER_VOICE_NOTES_PER_ANSWER = 4;
+
+async function transcribeRecentVoiceNotes(input: {
+  tenantId: string;
+  conversationId: string;
+  agentId: string;
+  connectionId: string;
+  accessTokenEncrypted: string | null;
+  knownNames: string[];
+}) {
+  const recent = await prisma.message.findMany({
+    where: { tenantId: input.tenantId, conversationId: input.conversationId },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 20,
+    select: { id: true, type: true, metadata: true },
+  });
+  const missing = recent
+    .filter((message) => message.type === 'audio' && !messageTranscript(message.metadata)
+      && typeof metadataOf(message.metadata).mediaId === 'string')
+    .slice(0, OLDER_VOICE_NOTES_PER_ANSWER);
+  for (const message of missing) {
+    await transcribeWhatsAppVoiceNote({
+      tenantId: input.tenantId,
+      agentId: input.agentId,
+      connectionId: input.connectionId,
+      accessTokenEncrypted: input.accessTokenEncrypted,
+      message,
+      hint: transcriptionHint(input.knownNames),
+      knownNames: input.knownNames,
+    });
   }
 }
 

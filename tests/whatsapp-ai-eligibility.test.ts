@@ -8,6 +8,7 @@ import {
   toWhatsAppText,
   withWhatsAppSourceLinks,
   nameFromReply,
+  plausibleName,
   type WhatsAppAiRuleSettings,
 } from '../lib/whatsapp-ai/eligibility';
 
@@ -80,14 +81,18 @@ test('o texto sai no formato do WhatsApp', () => {
   assert.equal(toWhatsAppText('## Olá\n\nSeu **caso** tem solução.\n\n\n\nVamos?'), 'Olá\n\nSeu *caso* tem solução.\n\nVamos?');
 });
 
-test('no WhatsApp, a marca de fonte externa vira o link no final', () => {
+test('no WhatsApp, a resposta nunca termina com "Fonte:" e link', () => {
   const sources = [{ url: 'https://www.gov.br/inss/pt-br/a' }, { url: 'https://www.planalto.gov.br/b' }];
   assert.equal(withWhatsAppSourceLinks('O BPC é de um salário mínimo [Fonte externa 1].', sources),
-    'O BPC é de um salário mínimo.\n\nFonte: https://www.gov.br/inss/pt-br/a');
-  assert.equal(withWhatsAppSourceLinks('Texto [Fontes externas 1 e 2] fim.', sources),
-    'Texto fim.\n\nFonte: https://www.gov.br/inss/pt-br/a\nhttps://www.planalto.gov.br/b');
+    'O BPC é de um salário mínimo.');
+  assert.equal(withWhatsAppSourceLinks('Texto [Fontes externas 1 e 2] fim.', sources), 'Texto fim.');
   assert.equal(withWhatsAppSourceLinks('Sem fonte.', sources), 'Sem fonte.');
-  assert.equal(withWhatsAppSourceLinks('Fonte inexistente [Fonte externa 9].', sources), 'Fonte inexistente.');
+  assert.equal(
+    withWhatsAppSourceLinks('Você já pagou INSS alguma vez?\n\nFonte: https://www.gov.br/inss/x?trk=a\nhttps://www.gov.br/y', sources),
+    'Você já pagou INSS alguma vez?',
+  );
+  // A link the customer asked for, inside the text, stays.
+  assert.equal(withWhatsAppSourceLinks('O site é https://junqueiraadvogados.com', sources), 'O site é https://junqueiraadvogados.com');
 });
 
 test('o nome é lido da resposta quando a IA perguntou como chamar', () => {
@@ -99,9 +104,27 @@ test('o nome é lido da resposta quando a IA perguntou como chamar', () => {
   assert.equal(nameFromReply(ask, 'sou a Ana Paula', null), 'Ana Paula');
   assert.equal(nameFromReply('Posso te chamar de Diego?', 'sim', 'Diego'), 'Diego');
   assert.equal(nameFromReply('Posso te chamar de Diego?', 'pode', 'Diego'), 'Diego');
+  // "Simmm" is a yes, never a name.
+  assert.equal(nameFromReply('Posso te chamar de Valdecir?', 'Simmm', 'Valdecir'), 'Valdecir');
+  assert.equal(nameFromReply('Posso te chamar de Valdecir?', 'Siiim!!', 'Valdecir'), 'Valdecir');
+  assert.equal(nameFromReply('Posso te chamar de Valdecir?', 'pode simmm', 'Valdecir'), 'Valdecir');
+  assert.equal(nameFromReply('Como você prefere ser chamado?', 'Simmm', null), null);
+  assert.equal(nameFromReply('Como você prefere ser chamado?', 'okkk', null), null);
+  assert.equal(nameFromReply('Posso te chamar de Ana?', 'Simone', 'Ana'), 'Simone');
   assert.equal(nameFromReply(ask, 'quero saber do meu benefício que foi negado ontem pelo inss', null), null);
   assert.equal(nameFromReply(ask, '2000', null), null);
   assert.equal(nameFromReply(ask, 'obrigado', null), null);
   assert.equal(nameFromReply('Quantas pessoas moram na casa?', 'Diego', null), null);
   assert.equal(nameFromReply(null, 'Diego', null), null);
+});
+
+test('sim, ok ou obrigada nunca viram nome', () => {
+  assert.equal(plausibleName('Simmm'), null);
+  assert.equal(plausibleName('Ok'), null);
+  assert.equal(plausibleName('Obrigadaaa'), null);
+  assert.equal(plausibleName('Bom dia'), null);
+  assert.equal(plausibleName(''), null);
+  assert.equal(plausibleName('Simone'), 'Simone');
+  assert.equal(plausibleName('Isaac'), 'Isaac');
+  assert.equal(plausibleName('Valdecir'), 'Valdecir');
 });
