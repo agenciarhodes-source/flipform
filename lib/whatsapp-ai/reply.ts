@@ -34,6 +34,7 @@ import { isConversationAiPaused } from './pause';
 import { handleWhatsAppAiQualification, isLeadNameConfirmed, leadRegistration, whatsappContactName } from './lead';
 import { registrationNameState, registrationNote } from './registration-rules';
 import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
+import { messageTranscript } from '@/lib/flip-ai/history-content';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -297,6 +298,7 @@ export async function replyToWhatsAppConversation(input: {
         accessTokenEncrypted: connection.accessTokenEncrypted,
         message,
         hint: transcriptionHint(knownNames),
+        knownNames,
       });
       const transcript = heard ? alignTranscriptNames(heard, knownNames) : null;
       if (transcript) {
@@ -400,6 +402,17 @@ export async function replyToWhatsAppConversation(input: {
     outboundExternalId: `ai:whatsapp:${event.id}`,
     attribution: undefined,
   };
+
+  // Older voice notes of the conversation (the customer's and the team's) are transcribed once and
+  // kept, so the AI reads what was said in audio, not only what was typed.
+  await transcribeRecentVoiceNotes({
+    tenantId: input.tenantId,
+    conversationId: conversation.id,
+    agentId: runtime.id,
+    connectionId: connection.id,
+    accessTokenEncrypted: connection.accessTokenEncrypted,
+    knownNames,
+  }).catch(() => undefined);
 
   try {
     let context = await buildPublicChatContext(runtime, turn);
@@ -547,7 +560,11 @@ async function transcribeWhatsAppVoiceNote(input: {
   accessTokenEncrypted: string | null;
   message: { id: string; metadata: Prisma.JsonValue | null };
   hint?: string;
+  knownNames?: string[];
 }) {
+  // Already transcribed: read it again, never paid twice.
+  const kept = messageTranscript(input.message.metadata);
+  if (kept) return kept;
   const mediaId = metadataOf(input.message.metadata).mediaId;
   if (typeof mediaId !== 'string') return null;
   if (!await hasCreditsForAudio(input.tenantId)) return null;
@@ -567,9 +584,54 @@ async function transcribeWhatsAppVoiceNote(input: {
       usage: resolveTranscriptionUsage({ reported: heard.reported, transcriptCharacters: heard.text.length }),
       metadata: { whatsappConnectionId: input.connectionId },
     });
-    return heard.text.slice(0, 2_000);
+    const text = alignTranscriptNames(heard.text.slice(0, 2_000), input.knownNames || []);
+    await keepTranscript(input.tenantId, input.message.id, text);
+    return text;
   } catch {
     return null;
+  }
+}
+
+/** The transcript stays with the message: the Inbox shows it and the AI and the review read it. */
+async function keepTranscript(tenantId: string, messageId: string, transcript: string) {
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE messages
+    SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('transcript', ${transcript}::text)
+    WHERE id = ${messageId} AND tenant_id = ${tenantId}
+  `).catch(() => undefined);
+}
+
+/** At most this many older voice notes are transcribed per answer, so an answer never waits long. */
+const OLDER_VOICE_NOTES_PER_ANSWER = 4;
+
+async function transcribeRecentVoiceNotes(input: {
+  tenantId: string;
+  conversationId: string;
+  agentId: string;
+  connectionId: string;
+  accessTokenEncrypted: string | null;
+  knownNames: string[];
+}) {
+  const recent = await prisma.message.findMany({
+    where: { tenantId: input.tenantId, conversationId: input.conversationId },
+    orderBy: [{ createdAt: 'desc' }],
+    take: 20,
+    select: { id: true, type: true, metadata: true },
+  });
+  const missing = recent
+    .filter((message) => message.type === 'audio' && !messageTranscript(message.metadata)
+      && typeof metadataOf(message.metadata).mediaId === 'string')
+    .slice(0, OLDER_VOICE_NOTES_PER_ANSWER);
+  for (const message of missing) {
+    await transcribeWhatsAppVoiceNote({
+      tenantId: input.tenantId,
+      agentId: input.agentId,
+      connectionId: input.connectionId,
+      accessTokenEncrypted: input.accessTokenEncrypted,
+      message,
+      hint: transcriptionHint(input.knownNames),
+      knownNames: input.knownNames,
+    });
   }
 }
 

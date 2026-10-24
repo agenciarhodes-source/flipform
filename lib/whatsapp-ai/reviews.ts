@@ -7,6 +7,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { optOutPhone } from '@/lib/post-sale/runner';
+import { messageTranscript } from '@/lib/flip-ai/history-content';
 import {
   DAILY_REVIEWS_PER_RUN,
   inDailyReviewWindow,
@@ -100,7 +101,8 @@ export async function reviewPendingConversations(
       const who = message.direction === 'inbound' ? 'Cliente'
         : typeof metadataOf(message.metadata).aiAgentId === 'string' ? 'IA'
           : message.sentByUserId ? 'Equipe' : 'Sistema';
-      const body = message.text?.trim() || `[${message.type}]`;
+      const transcript = message.type === 'audio' ? messageTranscript(message.metadata) : null;
+      const body = transcript ? `[áudio] ${transcript}` : message.text?.trim() || `[${message.type}]`;
       return `${who}: ${body.slice(0, 700)}`;
     }).join('\n');
 

@@ -206,6 +206,12 @@ function messageMediaId(message: { metadata: unknown }) {
   return typeof metadata.mediaId === 'string' ? metadata.mediaId : null;
 }
 
+/** What was said in a voice note, when it was transcribed for the AI. */
+function audioTranscript(metadata: unknown) {
+  const value = metadata && typeof metadata === 'object' ? (metadata as Record<string, unknown>).transcript : null;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 /** Shows the photo, audio, video or document of a message, read from Meta when the bubble appears. */
 function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: boolean }) {
   const [failed, setFailed] = useState(false);
@@ -991,6 +997,11 @@ export function InboxClient({
                               </div>
                             )}
                             <MessageMedia message={message} outbound={outbound} />
+                            {message.type === 'audio' && audioTranscript(message.metadata) ? (
+                              <p className={`mb-1 whitespace-pre-wrap break-words text-xs italic ${outbound ? 'text-white/85' : 'text-muted-foreground'}`}>
+                                Transcrição: “{audioTranscript(message.metadata)}”
+                              </p>
+                            ) : null}
                             {message.text && !(message.type === 'audio' && message.text === '🎤 Áudio') ? (
                               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
                             ) : !messageMediaId(message) ? (
