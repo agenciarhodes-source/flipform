@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { registrationFirstName } from '@/lib/whatsapp-ai/registration-rules';
 
 function clean(value: string) {
   // Meta refuses parameters with line breaks, tabs or long runs of spaces.
@@ -22,7 +23,9 @@ export async function resolveWhatsAppTemplateValues(tenantId: string, conversati
     },
   });
   if (!conversation) return null;
-  const name = clean(conversation.lead?.name || conversation.externalContactIdentity.displayName || '') || 'cliente';
+  // "Olá, Katerine!" instead of the full name in capitals: the first name, written normally.
+  const fullName = clean(conversation.lead?.name || conversation.externalContactIdentity.displayName || '');
+  const name = registrationFirstName(fullName) || fullName || 'cliente';
   const date = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' })
     .format(conversation.lead?.createdAt || conversation.startedAt);
   return [name, date, clean(conversation.tenant.name) || 'nossa empresa'];

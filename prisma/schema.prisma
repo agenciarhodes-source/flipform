@@ -1842,6 +1842,39 @@ model PostSaleSend {
   @@map("post_sale_sends")
 }
 
+/// Welcome template on WhatsApp for people who sent a form and did not write (per company).
+model WhatsAppWelcomeSettings {
+  id           String    @id @default(cuid())
+  tenantId     String    @unique @map("tenant_id")
+  enabled      Boolean   @default(false)
+  /// Approved template as "name:language".
+  template     String?
+  delayMinutes Int       @default(2) @map("delay_minutes")
+  /// Only leads that arrive after the option was switched on get the message.
+  enabledAt    DateTime? @map("enabled_at")
+  updatedBy    String?   @map("updated_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("whatsapp_welcome_settings")
+}
+
+/// One per lead: the lock that makes the welcome go once.
+model WhatsAppWelcomeSend {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  leadId    String   @unique @map("lead_id")
+  messageId String?  @map("message_id")
+  /// pending | sent | failed | skipped
+  status    String
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, createdAt])
+  @@map("whatsapp_welcome_sends")
+}
+
 /// People who asked not to receive automatic messages from a company (by phone).
 model ContactOptOut {
   id        String   @id @default(cuid())

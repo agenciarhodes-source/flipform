@@ -3,6 +3,7 @@ import { isCronRequestAuthorized } from '@/lib/cron-auth';
 import { sweepUnansweredWhatsAppConversations } from '@/lib/whatsapp-ai/reply';
 import { sweepWhatsAppReactivations } from '@/lib/whatsapp-ai/reactivation';
 import { sweepDailyAiReviews } from '@/lib/whatsapp-ai/reviews';
+import { sweepWhatsAppWelcomes } from '@/lib/whatsapp-ai/welcome';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,8 +14,9 @@ async function handle(req: Request) {
   if (!isCronRequestAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   const result = await sweepUnansweredWhatsAppConversations();
   const reactivation = await sweepWhatsAppReactivations().catch(() => ({ numbers: 0, sent: 0, failed: true }));
+  const welcome = await sweepWhatsAppWelcomes().catch(() => ({ companies: 0, sent: 0, failed: true }));
   const reviews = await sweepDailyAiReviews().catch(() => ({ tenants: 0, reviewed: 0, failed: true }));
-  return NextResponse.json({ ok: true, ...result, reactivation, reviews });
+  return NextResponse.json({ ok: true, ...result, reactivation, welcome, reviews });
 }
 
 export const GET = handle;
