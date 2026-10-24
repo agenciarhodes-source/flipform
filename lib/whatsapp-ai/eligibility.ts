@@ -91,24 +91,18 @@ export function decideWhatsAppAiAnswer(input: {
 }
 
 /**
- * On WhatsApp there is no panel showing the links of external sources, so the "[Fonte externa N]"
- * marks are taken out of the text and the pages actually cited go at the end (at most two).
+ * On WhatsApp a conversation never ends with "Fonte: <link>": it reads like a robot and the links
+ * are long. The "[Fonte externa N]" marks and any "Fonte:" line with a link are taken out; the
+ * sources stay recorded with the reply. A link the customer asked for, inside the text, stays.
  */
-export function withWhatsAppSourceLinks(text: string, sources: Array<{ url: string }>) {
-  const cited: number[] = [];
-  const clean = text
-    .replace(/\s*\[\s*fontes?\s+externas?\s*([^\]]*)\]/gi, (_mark, inside: string) => {
-      for (const digits of inside.match(/\d+/g) || []) cited.push(Number(digits));
-      return '';
-    })
+export function withWhatsAppSourceLinks(text: string, _sources: Array<{ url: string }> = []) {
+  return text
+    .replace(/\s*\[\s*fontes?\s+externas?\s*[^\]]*\]/gi, '')
+    .replace(/^[ \t]*(?:fontes?|refer[êe]ncias?)[ \t]*:[^\n]*https?:\/\/[^\n]*(?:\n[ \t]*https?:\/\/[^\n]*)*/gim, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
-  const urls = [...new Set(cited)]
-    .map((number) => sources[number - 1]?.url)
-    .filter((url): url is string => typeof url === 'string' && url.startsWith('https://'))
-    .slice(0, 2);
-  return urls.length ? `${clean}\n\nFonte: ${urls.join('\n')}` : clean;
 }
 
 /** WhatsApp marks bold with one asterisk; models often write Markdown with two. */

@@ -124,6 +124,7 @@ function whatsappInstructions(input: {
     'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
     'sem títulos nem listas longas. Para destacar algo, use *texto* (um asterisco de cada lado).',
     'O telefone do cliente já é conhecido, porque ele está falando por este WhatsApp: nunca peça o número de telefone.',
+    'Não cite fontes nem coloque links de sites na resposta (nada de "Fonte:"). Só mande um link se o cliente pedir.',
     `APRESENTAÇÃO NO WHATSAPP: neste canal você não usa o nome ${input.agentName} nem nenhum nome próprio; você é a ${input.introduction}.`,
     input.firstReply
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`

@@ -80,14 +80,18 @@ test('o texto sai no formato do WhatsApp', () => {
   assert.equal(toWhatsAppText('## Olá\n\nSeu **caso** tem solução.\n\n\n\nVamos?'), 'Olá\n\nSeu *caso* tem solução.\n\nVamos?');
 });
 
-test('no WhatsApp, a marca de fonte externa vira o link no final', () => {
+test('no WhatsApp, a resposta nunca termina com "Fonte:" e link', () => {
   const sources = [{ url: 'https://www.gov.br/inss/pt-br/a' }, { url: 'https://www.planalto.gov.br/b' }];
   assert.equal(withWhatsAppSourceLinks('O BPC é de um salário mínimo [Fonte externa 1].', sources),
-    'O BPC é de um salário mínimo.\n\nFonte: https://www.gov.br/inss/pt-br/a');
-  assert.equal(withWhatsAppSourceLinks('Texto [Fontes externas 1 e 2] fim.', sources),
-    'Texto fim.\n\nFonte: https://www.gov.br/inss/pt-br/a\nhttps://www.planalto.gov.br/b');
+    'O BPC é de um salário mínimo.');
+  assert.equal(withWhatsAppSourceLinks('Texto [Fontes externas 1 e 2] fim.', sources), 'Texto fim.');
   assert.equal(withWhatsAppSourceLinks('Sem fonte.', sources), 'Sem fonte.');
-  assert.equal(withWhatsAppSourceLinks('Fonte inexistente [Fonte externa 9].', sources), 'Fonte inexistente.');
+  assert.equal(
+    withWhatsAppSourceLinks('Você já pagou INSS alguma vez?\n\nFonte: https://www.gov.br/inss/x?trk=a\nhttps://www.gov.br/y', sources),
+    'Você já pagou INSS alguma vez?',
+  );
+  // A link the customer asked for, inside the text, stays.
+  assert.equal(withWhatsAppSourceLinks('O site é https://junqueiraadvogados.com', sources), 'O site é https://junqueiraadvogados.com');
 });
 
 test('o nome é lido da resposta quando a IA perguntou como chamar', () => {
