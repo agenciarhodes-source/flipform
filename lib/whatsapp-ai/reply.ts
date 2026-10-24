@@ -118,6 +118,8 @@ function whatsappInstructions(input: {
   role?: AttendantRole;
   /** The person came from a company form: said on the first reply. */
   registrationNote?: string | null;
+  /** Someone of the team already talked to this customer. */
+  teamInvolved?: boolean;
 }) {
   const analyst = input.role === 'analyst';
   return [
@@ -137,6 +139,18 @@ function whatsappInstructions(input: {
       : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
     ...(input.firstReply && input.registrationNote ? [input.registrationNote] : []),
+    // Global: a verdict against the customer is never given by the AI.
+    'NUNCA diga ao cliente que ele não tem direito, não tem perfil, não se enquadra ou que não há o que fazer (nem com'
+      + ' outras palavras, como "não identificamos elementos"). Se parecer que não há caminho, diga que vai deixar anotado'
+      + ' para a equipe analisar se existe outro caminho, e pare por aí. Antes disso, procure com perguntas outro caminho'
+      + ' possível (outra prova, outro documento, outra situação), como a base de conhecimento orientar.',
+    ...(input.teamInvolved ? [
+      'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
+        + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
+        + ' passos, caminho encontrado). Não refaça a triagem, não repita perguntas que a equipe já fez e nunca contradiga a'
+        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que vai passar para a equipe, sem decidir'
+        + ' sozinho.',
+    ] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
     analyst
       ? 'SEU PAPEL É A TRIAGEM (prioridade máxima), E SÓ ELA: entenda o perfil e a situação do cliente com as perguntas certas,'
@@ -447,6 +461,13 @@ export async function replyToWhatsAppConversation(input: {
       knownNames,
     );
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
+    // Someone of the team (in FlipForm or on the phone) already talked to this customer.
+    const teamInvolved = await prisma.message.count({
+      where: {
+        tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound',
+        OR: [{ sentByUserId: { not: null } }, { metadata: { path: ['businessAppEcho'], equals: true } }],
+      },
+    }).then((count) => count > 0).catch(() => false);
     context = {
       ...context,
       instructions: `${context.instructions}\n\n${whatsappInstructions({
@@ -462,6 +483,7 @@ export async function replyToWhatsAppConversation(input: {
         registrationNote: registration?.fromForm
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
           : null,
+        teamInvolved,
       })}${documents ? `\n\n${documents.text}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]

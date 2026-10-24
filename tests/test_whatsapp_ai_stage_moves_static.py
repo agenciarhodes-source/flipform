@@ -12,7 +12,7 @@ def test_stage_moves_start_as_suggestions_and_follow_the_kanban_rules():
     assert "\"stage_mode\" TEXT NOT NULL DEFAULT 'suggest'" in migration
     assert "DROP" not in migration and "flip_ai_" not in migration
     suggestions = read("lib/whatsapp-ai/stage-suggestions.ts")
-    assert "if (input.mode === 'auto') {" in suggestions
+    assert "if (autoMove) {" in suggestions
     assert "status: 'pending'," in suggestions
     move = read("lib/leads/move-stage.ts")
     assert "dispatchKanbanStageTracking({" in move and "enqueueGoogleConversionEvents({" in move

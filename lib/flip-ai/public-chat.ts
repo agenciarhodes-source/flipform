@@ -1250,7 +1250,7 @@ export async function buildPublicChatContext(
       where: { tenantId: turn.tenantId, conversationId: turn.conversationId, type: { in: ['text', 'audio'] } },
       orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
       take: 20,
-      select: { id: true, direction: true, type: true, text: true, metadata: true },
+      select: { id: true, direction: true, type: true, text: true, metadata: true, sentByUserId: true },
     }),
     prisma.conversation.findFirst({
       where: { tenantId: turn.tenantId, id: turn.conversationId, provider: 'flip_ai', channel: 'web' },
