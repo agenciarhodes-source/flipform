@@ -36,7 +36,7 @@ import { registrationNameState, registrationNote } from './registration-rules';
 import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
-import { decideWhatsAppAiAnswer, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -516,7 +516,8 @@ export async function replyToWhatsAppConversation(input: {
       conversationId: conversation.id,
       runtime,
       classification: parsed.qualification?.classification,
-      preferredName: alignNameSpelling(parsed.identity?.name || nameInAnswer, knownNames),
+      // The model may read "Simmm" as a name: only something that can be a name is kept.
+      preferredName: alignNameSpelling(plausibleName(parsed.identity?.name) || nameInAnswer, knownNames),
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,

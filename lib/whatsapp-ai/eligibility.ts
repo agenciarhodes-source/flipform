@@ -109,6 +109,30 @@ export function withWhatsAppSourceLinks(text: string, _sources: Array<{ url: str
 const NAME_PREFIXES = /^(?:(?:pode\s+)?me\s+chamar\s+de|me\s+chamo|meu\s+nome\s+(?:é|e)|(?:eu\s+)?sou(?:\s+(?:o|a))?|é|e)\s+/i;
 const YES = /^(?:sim|pode|pode\s+sim|pode\s+ser|claro|isso|ok|certo|com\s+certeza)\b/i;
 const NOT_A_NAME = /^(?:sim|não|nao|ok|obrigad[oa]|bom\s+dia|boa\s+tarde|boa\s+noite|oi|olá|ola)$/i;
+/** Affirmations and small talk written with repeated letters ("Simmm", "okkk", "issoo"), compared squashed. */
+const SQUASHED_YES = /^(?:sim|s|pode|pode\s+sim|pode\s+ser|claro|iso|ok|certo|com\s+certeza|aham|uhum|exato|positivo|beleza|blz|tudo\s+bem)$/;
+const SQUASHED_NOT_A_NAME = /^(?:sim|s|n|nao|não|ok|pode|pode\s+sim|pode\s+ser|claro|iso|certo|com\s+certeza|aham|uhum|exato|positivo|beleza|blz|tudo\s+bem|obrigad[oa]|vlw|valeu|bom\s+dia|boa\s+tarde|boa\s+noite|oi|ola|olá|hum|ah|eita|k|rs)$/;
+
+/** "Simmm!!" -> "sim": lower case, no punctuation, each repeated letter once. */
+function squashWords(value: string) {
+  return value.toLowerCase().replace(/[^\p{L}\s]/gu, ' ').replace(/(\p{L})\1+/gu, '$1').replace(/\s+/g, ' ').trim();
+}
+
+/** Whether the whole answer is just a "yes" (any spelling: "sim", "Simmm", "pode sim!"). */
+export function isAffirmation(value: string | null | undefined) {
+  return SQUASHED_YES.test(squashWords(value || ''));
+}
+
+/**
+ * A name only when it can be one: "Simmm", "ok", "obrigada" or "bom dia" are never a name.
+ * Returns the name trimmed, or null.
+ */
+export function plausibleName(value: string | null | undefined) {
+  const name = (value || '').trim();
+  if (!name || !/\p{L}/u.test(name)) return null;
+  if (SQUASHED_NOT_A_NAME.test(squashWords(name))) return null;
+  return name;
+}
 
 /**
  * The name in the customer's answer, when the AI's last message asked how to call them.
@@ -118,12 +142,15 @@ const NOT_A_NAME = /^(?:sim|não|nao|ok|obrigad[oa]|bom\s+dia|boa\s+tarde|boa\s+
 export function nameFromReply(question: string | null | undefined, answer: string, profileFirstName: string | null) {
   if (!question || !/cham(?:ad[oa]|ar)|seu nome|como (?:posso|devo)/i.test(question)) return null;
   const text = answer.trim().replace(/[.!]+$/, '');
+  // "Sim", "Simmm", "pode sim!": a yes to "Posso te chamar de X?" is X, never a name of its own.
+  if (isAffirmation(text)) return profileFirstName || null;
   if (YES.test(text) && profileFirstName) {
     const rest = text.replace(YES, '').replace(/^[,\s]+/, '');
     if (!rest) return profileFirstName;
   }
   const name = text.replace(YES, '').replace(/^[,\s]+/, '').replace(NAME_PREFIXES, '').trim();
   if (!/^\p{L}[\p{L}\p{M}' -]{1,40}$/u.test(name) || name.split(/\s+/).length > 4 || NOT_A_NAME.test(name)) return null;
+  if (!plausibleName(name)) return null;
   return name.split(/\s+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
 
