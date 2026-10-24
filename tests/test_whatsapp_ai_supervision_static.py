@@ -9,7 +9,8 @@ def read(path):
 
 def test_supervision_reviews_on_open_and_never_changes_the_conversation():
     reviews = read("lib/whatsapp-ai/reviews.ts")
-    assert "if (reviewed >= REVIEWS_PER_OPEN) break;" in reviews
+    assert "const limit = options.limit ?? REVIEWS_PER_OPEN;" in reviews
+    assert "if (reviewed >= limit) break;" in reviews
     assert "Não copie dados pessoais" in reviews
     for forbidden in ("message.update", "conversation.update", "enqueueAndDispatch"):
         assert forbidden not in reviews

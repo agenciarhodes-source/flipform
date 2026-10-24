@@ -7,7 +7,15 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { optOutPhone } from '@/lib/post-sale/runner';
-import { parseIssues, readyForReview, REVIEW_ISSUES, REVIEWS_PER_OPEN, weeklySummary } from './review-rules';
+import {
+  DAILY_REVIEWS_PER_RUN,
+  inDailyReviewWindow,
+  parseIssues,
+  readyForReview,
+  REVIEW_ISSUES,
+  REVIEWS_PER_OPEN,
+  weeklySummary,
+} from './review-rules';
 
 const DAY = 86_400_000;
 
@@ -36,7 +44,12 @@ function metadataOf(value: Prisma.JsonValue | null) {
  * Reviews, when someone opens the supervision page, up to 10 conversations the AI took part in
  * that stopped. The verdict stays with the conversation; nothing in the conversation changes.
  */
-export async function reviewPendingConversations(tenantId: string, now = new Date()) {
+export async function reviewPendingConversations(
+  tenantId: string,
+  now = new Date(),
+  options: { limit?: number; deadline?: number } = {},
+) {
+  const limit = options.limit ?? REVIEWS_PER_OPEN;
   if (!process.env.OPENAI_API_KEY?.trim()) return { reviewed: 0 };
   const wallet = await getFlipAiCreditBalanceForTenant(tenantId).catch(() => null);
   if (!wallet?.available || wallet.balanceCredits <= 0) return { reviewed: 0 };
@@ -59,7 +72,8 @@ export async function reviewPendingConversations(tenantId: string, now = new Dat
   let reviewed = 0;
 
   for (const conversation of conversations) {
-    if (reviewed >= REVIEWS_PER_OPEN) break;
+    if (reviewed >= limit) break;
+    if (options.deadline && Date.now() > options.deadline) break;
     const messages = await prisma.message.findMany({
       where: { tenantId, conversationId: conversation.id },
       orderBy: [{ createdAt: 'desc' }],
@@ -132,6 +146,29 @@ export async function reviewPendingConversations(tenantId: string, now = new Dat
     reviewed += 1;
   }
   return { reviewed };
+}
+
+/**
+ * Daily review, without anyone opening the page: every morning (6:00 to 7:59, Brasília) the
+ * scheduler reviews, a few at a time, the AI conversations of every company with the AI on.
+ * Conversations already reviewed are skipped, so each one is paid for once.
+ */
+export async function sweepDailyAiReviews(now = new Date()) {
+  if (!inDailyReviewWindow(now)) return { tenants: 0, reviewed: 0 };
+  const deadline = Date.now() + 20_000;
+  const tenants = await prisma.tenantWhatsAppAiSettings.findMany({
+    where: { enabled: true, agentId: { not: null } },
+    select: { tenantId: true },
+    distinct: ['tenantId'],
+  });
+  let reviewed = 0;
+  for (const { tenantId } of tenants) {
+    if (Date.now() > deadline) break;
+    const result = await reviewPendingConversations(tenantId, now, { limit: DAILY_REVIEWS_PER_RUN, deadline })
+      .catch(() => ({ reviewed: 0 }));
+    reviewed += result.reviewed;
+  }
+  return { tenants: tenants.length, reviewed };
 }
 
 export async function supervisionView(tenantId: string, now = new Date()) {

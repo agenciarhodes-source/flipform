@@ -4,6 +4,12 @@
  */
 export const REVIEW_QUIET_HOURS = 2;
 export const REVIEWS_PER_OPEN = 10;
+/** The daily review runs early in the morning (Brasília), so the results are ready at the start of the day. */
+export const DAILY_REVIEW_HOURS = [6, 7] as const;
+/** Per company, per run of the scheduler (every minute), so each run stays short. */
+export const DAILY_REVIEWS_PER_RUN = 2;
+/** Problems that need a person even when the score is not low: sensitive in any business. */
+export const ALERT_ISSUES = ['made_up', 'should_handoff'] as const;
 
 export const REVIEW_ISSUES = {
   wrong_answer: '❌ Resposta errada ou fora da base',
@@ -28,6 +34,27 @@ export function readyForReview(input: {
   if (!input.aiReplied || input.alreadyReviewedLastMessage || !input.lastMessageAt) return false;
   if (input.paused || input.optedOut) return true;
   return input.now.getTime() - input.lastMessageAt.getTime() >= REVIEW_QUIET_HOURS * 3_600_000;
+}
+
+/** Whether the daily review runs now: from 6:00 to 7:59, Brasília time. */
+export function inDailyReviewWindow(now: Date) {
+  const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }).format(now));
+  return (DAILY_REVIEW_HOURS as readonly number[]).includes(hour);
+}
+
+/** A review that becomes an alert for the managers: low score, or the AI invented or should have passed it on. */
+export function reviewNeedsAttention(review: { score: number; issues: unknown }) {
+  if (review.score <= 2) return true;
+  const issues = parseIssues(review.issues);
+  return ALERT_ISSUES.some((issue) => issues.includes(issue));
+}
+
+/** "Nota 3 · 🌀 Inventou informação: ..." for the alert line. */
+export function reviewAlertDetail(review: { score: number; issues: unknown; summary: string }) {
+  const labels = parseIssues(review.issues)
+    .filter((issue) => (ALERT_ISSUES as readonly string[]).includes(issue))
+    .map((issue) => REVIEW_ISSUES[issue]);
+  return `Nota ${review.score}${labels.length ? ` · ${labels.join(' · ')}` : ''}: ${review.summary}`;
 }
 
 export function parseIssues(value: unknown): ReviewIssue[] {

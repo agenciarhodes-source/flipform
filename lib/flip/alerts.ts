@@ -5,6 +5,7 @@ import { can } from '@/lib/rbac';
 import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { isWaitingForAnswer } from '@/lib/inbox/unanswered';
 import { FLIP_ALERT_ORDER, FLIP_ALERT_RULES, overloadedAttendants, waitingFor, type FlipAlert } from './alert-rules';
+import { reviewAlertDetail, reviewNeedsAttention } from '@/lib/whatsapp-ai/review-rules';
 
 const MAX_PER_KIND = 50;
 const DAY = 86_400_000;
@@ -193,20 +194,22 @@ export async function computeFlipAlerts(session: Scope, now = new Date()) {
     });
   }
 
-  // Managers also see the AI conversations the Flip rated badly.
+  // Managers also see the AI conversations the Flip rated badly, or where the AI invented
+  // something or should have passed the case to a person.
   if (seesTeam) {
-    const badReviews = await prisma.flipAiConversationReview.findMany({
-      where: { tenantId: session.tenantId, status: 'new', score: { lte: 2 } },
+    const recentReviews = await prisma.flipAiConversationReview.findMany({
+      where: { tenantId: session.tenantId, status: 'new', createdAt: { gte: new Date(now.getTime() - 14 * DAY) } },
       orderBy: { createdAt: 'desc' },
-      take: MAX_PER_KIND,
-      select: { id: true, score: true, summary: true, createdAt: true, conversation: { select: { lead: { select: { name: true } }, externalContactIdentity: { select: { displayName: true, phone: true } } } } },
+      take: 300,
+      select: { id: true, score: true, issues: true, summary: true, createdAt: true, conversation: { select: { lead: { select: { name: true } }, externalContactIdentity: { select: { displayName: true, phone: true } } } } },
     }).catch(() => []);
+    const badReviews = recentReviews.filter(reviewNeedsAttention).slice(0, MAX_PER_KIND);
     for (const review of badReviews) {
       alerts.push({
         kind: 'ai_review_problem',
         id: `ai-review:${review.id}`,
         title: review.conversation.lead?.name || review.conversation.externalContactIdentity.displayName || review.conversation.externalContactIdentity.phone || 'Conversa da IA',
-        detail: `Nota ${review.score}: ${review.summary}`,
+        detail: reviewAlertDetail(review),
         href: '/whatsapp-ai/review',
         ownerId: null,
         ownerName: null,

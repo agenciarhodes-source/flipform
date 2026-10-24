@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseIssues, readyForReview, weeklySummary } from '../lib/whatsapp-ai/review-rules';
+import {
+  inDailyReviewWindow,
+  parseIssues,
+  readyForReview,
+  reviewAlertDetail,
+  reviewNeedsAttention,
+  weeklySummary,
+} from '../lib/whatsapp-ai/review-rules';
 
 const now = new Date('2026-10-21T15:00:00Z');
 const base = { aiReplied: true, lastMessageAt: new Date(now.getTime() - 3 * 3_600_000), paused: false, optedOut: false, alreadyReviewedLastMessage: false, now };
@@ -30,4 +37,20 @@ test('resumo da semana com média e problemas mais comuns', () => {
   assert.equal(summary?.average, 3.3);
   assert.equal(summary?.topIssues[0].issue, 'should_handoff');
   assert.equal(weeklySummary([]), null);
+});
+
+test('a avaliação diária roda das 6h às 7h59 de Brasília', () => {
+  assert.equal(inDailyReviewWindow(new Date('2026-10-24T09:30:00Z')), true); // 6h30
+  assert.equal(inDailyReviewWindow(new Date('2026-10-24T10:59:00Z')), true); // 7h59
+  assert.equal(inDailyReviewWindow(new Date('2026-10-24T11:00:00Z')), false); // 8h
+  assert.equal(inDailyReviewWindow(new Date('2026-10-24T08:59:00Z')), false); // 5h59
+});
+
+test('vira alerta: nota baixa, IA inventou ou devia ter passado para uma pessoa', () => {
+  assert.equal(reviewNeedsAttention({ score: 2, issues: [] }), true);
+  assert.equal(reviewNeedsAttention({ score: 4, issues: ['made_up'] }), true);
+  assert.equal(reviewNeedsAttention({ score: 3, issues: ['should_handoff'] }), true);
+  assert.equal(reviewNeedsAttention({ score: 3, issues: ['tone'] }), false);
+  assert.equal(reviewNeedsAttention({ score: 5, issues: 'x' }), false);
+  assert.match(reviewAlertDetail({ score: 3, issues: ['made_up', 'tone'], summary: 'Citou prazo errado.' }), /^Nota 3 · .*Inventou informação: Citou prazo errado\.$/);
 });
