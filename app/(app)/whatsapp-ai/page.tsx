@@ -11,6 +11,7 @@ import { StageRulesManager } from '@/components/whatsapp-ai/stage-rules-manager'
 import { listStageRulePipelines } from '@/lib/whatsapp-ai/stage-rules-server';
 import { DocumentChecklistsManager } from '@/components/whatsapp-ai/document-checklists-manager';
 import { PostSaleManager } from '@/components/whatsapp-ai/post-sale-manager';
+import { WelcomeManager } from '@/components/whatsapp-ai/welcome-manager';
 import { prisma } from '@/lib/prisma';
 import { checklistItemsToText, type ChecklistItem } from '@/lib/whatsapp-ai/document-rules';
 
@@ -37,6 +38,7 @@ export default async function WhatsAppAiPage() {
         <div className="mx-auto max-w-4xl space-y-5 px-4 pb-6 md:px-6">
           <StageRulesManager initialPipelines={pipelines} />
           <DocumentChecklistsManager initial={checklists} />
+          <WelcomeManager />
           <PostSaleManager />
         </div>
       </>

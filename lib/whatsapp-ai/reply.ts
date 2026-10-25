@@ -480,7 +480,7 @@ export async function replyToWhatsAppConversation(input: {
           : nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
         role: runtime.attendantRole,
-        registrationNote: registration?.fromForm
+        registrationNote: registration?.fromForm && recentOutbound.length === 0
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
           : null,
         teamInvolved,
