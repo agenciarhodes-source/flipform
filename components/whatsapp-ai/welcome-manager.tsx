@@ -73,7 +73,7 @@ export function WelcomeManager() {
         <label className="flex flex-wrap items-center gap-2 text-sm">
           Esperar
           <input type="number" min={30} max={3600} step={30} className="w-24 rounded border p-1.5" value={settings.delaySeconds}
-            onChange={(event) => update({ delaySeconds: Math.max(30, Math.min(3600, Number(event.target.value) || 90)) })} />
+            onChange={(event) => update({ delaySeconds: Math.max(30, Math.min(3600, Number(event.target.value) || 30)) })} />
           segundos ({waitLabel(settings.delaySeconds)}) pela mensagem da pessoa antes de enviar
         </label>
         <p className="text-xs text-muted-foreground">

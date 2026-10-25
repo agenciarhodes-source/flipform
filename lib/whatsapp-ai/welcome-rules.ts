@@ -7,7 +7,7 @@
 /** Only fresh leads: an older one is a different conversation, not a welcome. */
 export const WELCOME_LOOKBACK_HOURS = 24;
 export const WELCOME_DEFAULT_DELAY_MINUTES = 2;
-export const WELCOME_DEFAULT_DELAY_SECONDS = 90;
+export const WELCOME_DEFAULT_DELAY_SECONDS = 30;
 export const WELCOME_MIN_DELAY_SECONDS = 30;
 export const WELCOME_MAX_DELAY_SECONDS = 3600;
 
