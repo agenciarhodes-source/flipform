@@ -5,7 +5,14 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 
-type Settings = { enabled: boolean; template: string | null; delayMinutes: number };
+type Settings = { enabled: boolean; template: string | null; delaySeconds: number };
+
+/** 90 -> "1 min 30 s". */
+function waitLabel(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return [minutes ? `${minutes} min` : '', rest ? `${rest} s` : ''].filter(Boolean).join(' ');
+}
 type Template = { name: string; language: string; category?: string | null };
 
 /** Welcome template on WhatsApp for people who sent a form and did not write. */
@@ -63,12 +70,15 @@ export function WelcomeManager() {
           <Switch checked={settings.enabled} onCheckedChange={(checked) => update({ enabled: checked })} aria-label="Enviar boas-vindas" />
           Enviar boas-vindas aos novos cadastros
         </label>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex flex-wrap items-center gap-2 text-sm">
           Esperar
-          <input type="number" min={1} max={60} className="w-20 rounded border p-1.5" value={settings.delayMinutes}
-            onChange={(event) => update({ delayMinutes: Math.max(1, Math.min(60, Number(event.target.value) || 2)) })} />
-          minutos pela mensagem da pessoa antes de enviar
+          <input type="number" min={30} max={3600} step={30} className="w-24 rounded border p-1.5" value={settings.delaySeconds}
+            onChange={(event) => update({ delaySeconds: Math.max(30, Math.min(3600, Number(event.target.value) || 90)) })} />
+          segundos ({waitLabel(settings.delaySeconds)}) pela mensagem da pessoa antes de enviar
         </label>
+        <p className="text-xs text-muted-foreground">
+          O sistema confere a cada minuto, então o modelo sai entre {waitLabel(settings.delaySeconds)} e {waitLabel(settings.delaySeconds + 60)} depois do cadastro.
+        </p>
         <select className="w-full rounded border bg-white p-2 text-sm" value={settings.template || ''}
           onChange={(event) => update({ template: event.target.value || null })}>
           <option value="">Escolha um modelo aprovado</option>

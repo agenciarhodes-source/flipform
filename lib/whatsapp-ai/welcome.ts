@@ -12,6 +12,7 @@ import { parseTemplateRef } from '@/lib/post-sale/rules';
 import {
   customerAlreadyWrote,
   WELCOME_MAX_PER_COMPANY_PER_RUN,
+  welcomeDelaySeconds,
   welcomeSkipReason,
   welcomeWindow,
   type WelcomeSkipReason,
@@ -36,7 +37,7 @@ export async function sweepWhatsAppWelcomes(now = new Date()) {
   for (const settings of companies) {
     const ref = parseTemplateRef(settings.template);
     if (!ref || !settings.enabledAt) continue;
-    const window = welcomeWindow({ enabledAt: settings.enabledAt, delayMinutes: settings.delayMinutes, now });
+    const window = welcomeWindow({ enabledAt: settings.enabledAt, delaySeconds: welcomeDelaySeconds(settings), now });
     if (window.from >= window.until) continue;
 
     const leads = await prisma.lead.findMany({

@@ -1850,6 +1850,8 @@ model WhatsAppWelcomeSettings {
   /// Approved template as "name:language".
   template     String?
   delayMinutes Int       @default(2) @map("delay_minutes")
+  /// The wait in seconds (30 to 3600); empty means delayMinutes.
+  delaySeconds Int?      @map("delay_seconds")
   /// Only leads that arrive after the option was switched on get the message.
   enabledAt    DateTime? @map("enabled_at")
   updatedBy    String?   @map("updated_by")

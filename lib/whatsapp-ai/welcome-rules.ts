@@ -7,14 +7,23 @@
 /** Only fresh leads: an older one is a different conversation, not a welcome. */
 export const WELCOME_LOOKBACK_HOURS = 24;
 export const WELCOME_DEFAULT_DELAY_MINUTES = 2;
+export const WELCOME_DEFAULT_DELAY_SECONDS = 90;
+export const WELCOME_MIN_DELAY_SECONDS = 30;
+export const WELCOME_MAX_DELAY_SECONDS = 3600;
+
+/** The wait in seconds, from the new setting or, for older settings, the minutes. */
+export function welcomeDelaySeconds(settings: { delaySeconds?: number | null; delayMinutes: number }) {
+  const seconds = settings.delaySeconds ?? settings.delayMinutes * 60;
+  return Math.max(WELCOME_MIN_DELAY_SECONDS, Math.min(WELCOME_MAX_DELAY_SECONDS, Math.round(seconds)));
+}
 export const WELCOME_MAX_PER_COMPANY_PER_RUN = 20;
 
 /** The window of leads to look at now: arrived after the option was on, and at least `delay` ago. */
-export function welcomeWindow(input: { enabledAt: Date; delayMinutes: number; now: Date }) {
+export function welcomeWindow(input: { enabledAt: Date; delaySeconds: number; now: Date }) {
   const lookback = new Date(input.now.getTime() - WELCOME_LOOKBACK_HOURS * 3_600_000);
   return {
     from: input.enabledAt > lookback ? input.enabledAt : lookback,
-    until: new Date(input.now.getTime() - Math.max(1, input.delayMinutes) * 60_000),
+    until: new Date(input.now.getTime() - Math.max(WELCOME_MIN_DELAY_SECONDS, input.delaySeconds) * 1_000),
   };
 }
 
