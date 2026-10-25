@@ -31,3 +31,12 @@ def test_first_name_in_templates_and_no_repeated_registration_note():
     assert "registrationNote: registration?.fromForm && recentOutbound.length === 0" in reply
     page = read("app/(app)/whatsapp-ai/page.tsx")
     assert "<WelcomeManager />" in page
+
+
+def test_the_wait_is_in_seconds():
+    sql = read("prisma/migrations/20261031120000_whatsapp_welcome_delay_seconds/migration.sql")
+    assert 'ADD COLUMN IF NOT EXISTS "delay_seconds" INTEGER;' in sql
+    welcome = read("lib/whatsapp-ai/welcome.ts")
+    assert "delaySeconds: welcomeDelaySeconds(settings)" in welcome
+    manager = read("components/whatsapp-ai/welcome-manager.tsx")
+    assert "segundos ({waitLabel(settings.delaySeconds)})" in manager
