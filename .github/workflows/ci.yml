@@ -53,6 +53,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Security (protocol S1): Next.js must stay on a patched 14.2 release (CVE-2025-29927 and others).
+      - name: Next.js security floor
+        run: node -e "const v=require('next/package.json').version.split('.').map(Number); if (v[0]===14 && v[1]===2 && v[2]<35) { throw new Error('next '+v.join('.')+' has known security issues; use 14.2.35 or newer'); }"
+
+      # Security (protocol S1): known vulnerabilities in production dependencies, reported on every PR.
+      - name: Dependency audit (production)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Prisma generate
         run: npx prisma generate
 
