@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CONTACT_CONSENT_ACTION, CONTACT_CONSENT_NOTICE_VERSION, contactConsentNotice } from '@/lib/whatsapp-consent';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
+import { FORM_SUBMIT_LIMIT, formBotReason } from '@/lib/forms/bot-guard';
 import { prisma } from '@/lib/prisma';
 import { publicSubmitSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
@@ -41,6 +42,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
+    // Limit per person (IP) and form (security protocol S4): stops floods of fake leads.
+    const submitLimit = await rateLimit({ key: `form-submit:${slug}:${getClientIp(req)}`, ...FORM_SUBMIT_LIMIT });
+    if (!submitLimit.allowed) return rateLimitResponse(submitLimit);
+
     const host = normalizeHostname(req.headers.get('host'));
     const appDomain = normalizeHostname(process.env.NEXT_PUBLIC_APP_DOMAIN || 'app.flipform.com.br');
     const isPlatformHost = !host || host === appDomain || host === 'localhost' || host === '127.0.0.1' || host.endsWith('.vercel.app');
@@ -62,6 +67,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
     });
     if (!form) {
       return NextResponse.json({ error: 'Formulário não encontrado ou inativo.' }, { status: 404 });
+    }
+
+    // A robot (hidden field filled, or sent faster than a person can) gets a neutral answer and no
+    // lead is created; only the count goes to the audit log, never the answers.
+    const botReason = formBotReason(parsed.data.guard);
+    if (botReason) {
+      await prisma.auditLog.create({
+        data: {
+          tenantId: form.tenant.id, userId: null, entityType: 'form', entityId: form.id,
+          action: 'form.bot_blocked', metadata: { reason: botReason },
+        },
+      }).catch(() => undefined);
+      return NextResponse.json({ ok: true, qualified: false, disqualification: null });
     }
 
     const BLOCKED_TENANT_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);

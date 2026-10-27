@@ -145,6 +145,11 @@ export const publicSubmitSchema = z.object({
     )
     .default([]),
   attribution: publicAttributionSchema.optional(),
+  // Anti-robot check (security protocol S4): hidden field and time to fill.
+  guard: z.object({
+    hp: z.string().max(500).optional(),
+    elapsedMs: z.number().int().min(0).max(7 * 86_400_000).optional(),
+  }).strict().optional(),
 }).strict();
 
 

@@ -15,6 +15,8 @@ export function PublicFormView({
   metaPixelId?: string | null;
 }) {
   const openedAtMs = useRef(0);
+  // Hidden field people never see (security protocol S4): only robots fill it.
+  const honeypot = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!openedAtMs.current) openedAtMs.current = Date.now();
@@ -36,6 +38,10 @@ export function PublicFormView({
         body: JSON.stringify({
           answers,
           attribution: buildPublicAttribution(window.location.href, document.referrer),
+          guard: {
+            hp: honeypot.current?.value || '',
+            elapsedMs: openedAtMs.current ? Math.max(0, Date.now() - openedAtMs.current) : undefined,
+          },
         }),
       });
     } catch {
@@ -58,5 +64,13 @@ export function PublicFormView({
     }
     return result;
   };
-  return <div className="min-h-screen"><PublicTypeform form={form} onSubmit={submit} /></div>;
+  return (
+    <div className="min-h-screen">
+      <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+        <label htmlFor="ff-contact-confirmation">Deixe este campo em branco</label>
+        <input id="ff-contact-confirmation" name="ff_contact_confirmation" type="text" ref={honeypot} tabIndex={-1} autoComplete="off" defaultValue="" />
+      </div>
+      <PublicTypeform form={form} onSubmit={submit} />
+    </div>
+  );
 }
