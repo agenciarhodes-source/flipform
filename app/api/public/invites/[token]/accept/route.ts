@@ -5,7 +5,7 @@ import { hashPassword, setSessionCookie } from '@/lib/auth';
 import { inviteAcceptSchema } from '@/lib/schemas-users';
 import { logAudit } from '@/lib/audit';
 
-export async function POST(req: Request, ctx: { params: { token: string } }) {
+export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   try {
     const ip = getClientIp(req);
     const rl = rateLimit({ key: `invite:accept:ip:${ip}`, limit: 20, windowMs: 60 * 60 * 1000 });
@@ -16,7 +16,7 @@ export async function POST(req: Request, ctx: { params: { token: string } }) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
 
     const invite = await prisma.invite.findUnique({
-      where: { token: ctx.params.token },
+      where: { token: (await ctx.params).token },
       include: { tenant: true },
     });
     if (!invite) return NextResponse.json({ error: 'Convite inválido' }, { status: 404 });

@@ -14,7 +14,7 @@ export default async function AppGroupLayout({
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const pathname = headers().get("x-pathname") || "";
+  const pathname = (await headers()).get("x-pathname") || "";
   const isBillingRoute = pathname === "/billing" || pathname.startsWith("/billing/");
   const isGroupRoute = pathname === "/group" || pathname.startsWith("/group/");
 

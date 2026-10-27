@@ -22,7 +22,8 @@ function monthOptions(count = 12) {
 }
 
 /** How much the operation costs: AI and WhatsApp, per month, per result and per day. */
-export default async function CostsPage({ searchParams }: { searchParams: { month?: string } }) {
+export default async function CostsPage(props: { searchParams: Promise<{ month?: string }> }) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');

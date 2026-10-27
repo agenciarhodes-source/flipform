@@ -39,7 +39,8 @@ function withSession(response: NextResponse, token: string, created: boolean) {
  * Issues a short-lived link so the visitor's browser can send one photo or document straight
  * to private storage. The file is only used after the server checks it, in the messages route.
  */
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const session = getOrCreatePublicSessionToken(request.cookies.get(COOKIE_NAME)?.value);
   const domainHost = customDomainHost(request);
   if (domainHost === null) {

@@ -25,8 +25,8 @@ import { findExistingLeadIdByContactInTenant } from '@/lib/form-duplicate-lead';
  * - Bloqueia formulário inativo, pipeline arquivado ou stage arquivado.
  * - Retorna mensagens de erro amigáveis em português.
  */
-export async function POST(req: Request, ctx: { params: { slug: string } }) {
-  const slug = ctx.params.slug;
+export async function POST(req: Request, ctx: { params: Promise<{ slug: string }> }) {
+  const slug = (await ctx.params).slug;
   try {
     let body: unknown;
     try {

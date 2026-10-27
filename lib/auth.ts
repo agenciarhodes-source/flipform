@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
+import { resolveRouteContext } from "./http/route-context";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "./prisma";
 import {
@@ -57,7 +58,7 @@ export function verifyToken(token: string): SessionPayload | null {
 
 export async function setSessionCookie(payload: SessionPayload) {
   const token = signToken(payload);
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: isSecureRequest(),
     sameSite: getSameSite(),
@@ -66,8 +67,8 @@ export async function setSessionCookie(payload: SessionPayload) {
   });
 }
 
-export function clearSessionCookie() {
-  cookies().set(COOKIE_NAME, "", {
+export async function clearSessionCookie() {
+  (await cookies()).set(COOKIE_NAME, "", {
     httpOnly: true,
     secure: isSecureRequest(),
     sameSite: getSameSite(),
@@ -76,13 +77,13 @@ export function clearSessionCookie() {
   });
 }
 
-function readCookieToken(): string | undefined {
-  const c = cookies();
+async function readCookieToken(): Promise<string | undefined> {
+  const c = await cookies();
   return c.get(COOKIE_NAME)?.value;
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const token = readCookieToken();
+  const token = await readCookieToken();
   if (!token) return null;
   return verifyToken(token);
 }
@@ -125,7 +126,8 @@ export function withAuth<T = any>(
     ctx: T,
   ) => Promise<NextResponse> | NextResponse,
 ) {
-  return async (req: NextRequest, ctx: T) => {
+  return async (req: NextRequest, rawCtx: any) => {
+    const ctx = await resolveRouteContext(rawCtx as T);
     const session = getSessionFromRequest(req);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -181,7 +183,8 @@ export function withPlatformAdmin<T = any>(
     ctx: T,
   ) => Promise<NextResponse> | NextResponse,
 ) {
-  return async (req: NextRequest, ctx: T) => {
+  return async (req: NextRequest, rawCtx: any) => {
+    const ctx = await resolveRouteContext(rawCtx as T);
     const session = getSessionFromRequest(req);
     if (!session)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

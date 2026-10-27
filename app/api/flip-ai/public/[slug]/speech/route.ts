@@ -35,7 +35,8 @@ function refuse(status: number, error: string) {
  * Speaks one reply the attendant already wrote in the caller's own conversation.
  * The text never comes from the browser: it is read from the stored message.
  */
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const domainHost = customDomainHost(request);
   if (domainHost === null) return refuse(404, 'Not found');
 
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
   if (!message?.text) return refuse(404, 'Mensagem não encontrada.');
 
   // Speaking a reply uses the company's credits. Without credits the person reads the same reply.
-  if (!await hasCreditsForAudio(runtimeContext.tenantId)) return refuse(402, 'Áudio indisponível no momento.');
+  if (!(await hasCreditsForAudio(runtimeContext.tenantId))) return refuse(402, 'Áudio indisponível no momento.');
 
   try {
     // Each attendant speaks with the voice chosen for it; the default applies when none was chosen.

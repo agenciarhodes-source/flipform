@@ -5,7 +5,8 @@ import { PublicFormView } from './public-form-view';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
-export default async function PublicFormPage({ params }: { params: { slug: string } }) {
+export default async function PublicFormPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const form = await prisma.form.findFirst({
     where: { slug: params.slug, isActive: true },
     include: {

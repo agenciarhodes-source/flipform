@@ -1,5 +1,6 @@
 // Server-only: wraps API handlers with permission checks. Importa lib/auth (jsonwebtoken).
 import 'server-only';
+import { resolveRouteContext } from '@/lib/http/route-context';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionFromRequest, type SessionPayload } from './auth';
 import { can, type PermissionKey } from './rbac';
@@ -11,7 +12,8 @@ export function withPermission<T = any>(
   permission: PermissionKey,
   handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse> | NextResponse,
 ) {
-  return async (req: NextRequest, ctx: T) => {
+  return async (req: NextRequest, rawCtx: any) => {
+    const ctx = await resolveRouteContext(rawCtx as T);
     const session = getSessionFromRequest(req);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (!can(session.role, permission)) {

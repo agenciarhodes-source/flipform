@@ -42,6 +42,6 @@ export const POST = withAuth(async (req, session) => {
     });
   }
 
-  clearSessionCookie();
+  await clearSessionCookie();
   return NextResponse.json({ ok: true, message: 'Senha alterada com sucesso. Faça login novamente.' });
 });

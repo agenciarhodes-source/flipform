@@ -19,12 +19,12 @@ async function safeAudit(params: Parameters<typeof logPlatformAudit>[0]) {
   }
 }
 
-export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await requirePlatformAdmin();
     if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED' }, { status: 403 });
 
-    const id = String(ctx.params.id || '').trim();
+    const id = String((await ctx.params).id || '').trim();
     if (!id) return NextResponse.json({ error: 'ID inválido.', code: 'INVALID_ID' }, { status: 400 });
 
     const current = await prisma.allowedUser.findUnique({ where: { id } });
@@ -67,12 +67,12 @@ export async function PATCH(req: Request, ctx: { params: { id: string } }) {
   }
 }
 
-export async function DELETE(_req: Request, ctx: { params: { id: string } }) {
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await requirePlatformAdmin();
     if (!session) return NextResponse.json({ error: 'Não autorizado', code: 'UNAUTHORIZED' }, { status: 403 });
 
-    const id = String(ctx.params.id || '').trim();
+    const id = String((await ctx.params).id || '').trim();
     if (!id) return NextResponse.json({ error: 'ID inválido.', code: 'INVALID_ID' }, { status: 400 });
 
     const current = await prisma.allowedUser.findUnique({ where: { id } });

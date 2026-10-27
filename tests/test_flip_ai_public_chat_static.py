@@ -36,7 +36,7 @@ def test_public_chat_reuses_existing_custom_domain_rewrite():
     custom_page = read("app/custom-domain/chat/[slug]/page.tsx")
     platform_page = read("app/chat/[slug]/page.tsx")
     assert "`/custom-domain${pathname}`" in middleware
-    assert "headers().get('host')" in custom_page
+    assert "(await headers()).get('host')" in custom_page
     assert "resolvePublicFlipAiAgent" in custom_page
     assert "resolvePublicFlipAiAgent" in platform_page
     assert "searchParams" not in custom_page + platform_page

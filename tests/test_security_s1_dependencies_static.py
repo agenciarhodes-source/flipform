@@ -7,11 +7,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_next_is_on_a_patched_release():
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
-    assert package["dependencies"]["next"] == "14.2.35"
-    assert lock["packages"]["node_modules/next"]["version"] == "14.2.35"
-    assert lock["packages"]["node_modules/@next/env"]["version"] == "14.2.35"
+    # Next.js 14 no longer gets security fixes; 15.5.28 closes the known advisories (S1c).
+    assert package["dependencies"]["next"] == "15.5.28"
+    assert lock["packages"]["node_modules/next"]["version"] == "15.5.28"
+    assert lock["packages"]["node_modules/@next/env"]["version"] == "15.5.28"
     major, minor, patch = (int(part) for part in lock["packages"]["node_modules/next"]["version"].split("."))
-    assert (major, minor) != (14, 2) or patch >= 25  # CVE-2025-29927 fixed in 14.2.25
+    assert (major, minor, patch) >= (15, 5, 28)
 
 
 def test_ci_checks_dependencies_on_every_pr():

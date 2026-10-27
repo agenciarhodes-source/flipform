@@ -7,8 +7,9 @@ import { resolveMetaRuntimeConfig } from '@/lib/meta/runtime';
 
 const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
-export default async function CustomDomainPublicFormPage({ params }: { params: { slug: string } }) {
-  const host = normalizeHostname(headers().get('host'));
+export default async function CustomDomainPublicFormPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
+  const host = normalizeHostname((await headers()).get('host'));
   if (!host || !params.slug) return notFound();
   const customDomain = await prisma.customFormDomain.findFirst({
     where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' },

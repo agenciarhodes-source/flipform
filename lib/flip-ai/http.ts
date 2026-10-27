@@ -2,6 +2,7 @@ import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest, type SessionPayload } from '@/lib/auth';
 import { FlipAiError } from './access';
+import { resolveRouteContext } from '@/lib/http/route-context';
 
 function errorResponse(error: unknown): NextResponse {
   if (error instanceof FlipAiError) return NextResponse.json({ code: error.code, error: error.message }, { status: error.status });
@@ -12,7 +13,8 @@ function errorResponse(error: unknown): NextResponse {
   return NextResponse.json({ code: 'FLIP_AI_UNAVAILABLE', error: 'Não foi possível salvar ou carregar o Flip AI. Tente novamente.' }, { status: 500 });
 }
 export function withFlipAiSession<T = unknown>(handler: (req: NextRequest, session: SessionPayload, ctx: T) => Promise<NextResponse>) {
-  return async (req: NextRequest, ctx: T) => {
+  return async (req: NextRequest, rawCtx: any) => {
+    const ctx = await resolveRouteContext(rawCtx as T);
     let response: NextResponse;
     try {
       const session = getSessionFromRequest(req);

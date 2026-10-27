@@ -5,7 +5,8 @@ import { resolvePublicFlipAiAgent } from '@/lib/flip-ai/public-agent';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PublicFlipAiChatPage({ params }: { params: { slug: string } }) {
+export default async function PublicFlipAiChatPage(props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const agent = await resolvePublicFlipAiAgent({ slug: params.slug });
   if (!agent) notFound();
   return <PublicFlipAiChatShell agent={agent} attachmentsEnabled={chatAttachmentsEnabled()} />;
