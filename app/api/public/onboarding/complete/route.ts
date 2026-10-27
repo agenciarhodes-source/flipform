@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   } else {
     if (!user.passwordHash) {
       const passwordHash = await hashPassword(password);
-      user = await prisma.user.update({ where: { id: user.id }, data: { name, passwordHash } });
+      user = await prisma.user.update({ where: { id: user.id }, data: { name, passwordHash, sessionVersion: { increment: 1 } } });
     }
   }
 

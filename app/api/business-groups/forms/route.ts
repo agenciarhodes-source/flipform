@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getVerifiedSessionFromRequest } from '@/lib/auth';
 import { BusinessGroupReadScopeError, resolveBusinessGroupReadScope } from '@/lib/business-group-read-scope';
 
 const querySchema = z.object({
@@ -12,7 +12,7 @@ const querySchema = z.object({
 });
 
 export async function GET(req: NextRequest) {
-  const session = getSessionFromRequest(req);
+  const session = await getVerifiedSessionFromRequest(req);
   if (!session || session.globalRole === 'platform_admin') {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }

@@ -57,7 +57,12 @@ export function verifyToken(token: string): SessionPayload | null {
 }
 
 export async function setSessionCookie(payload: SessionPayload) {
-  const token = signToken(payload);
+  // The current session version goes into the token: ending sessions raises it in the database.
+  const sv = await prisma.user
+    .findUnique({ where: { id: payload.userId }, select: { sessionVersion: true } })
+    .then((user) => user?.sessionVersion ?? 0)
+    .catch(() => 0);
+  const token = signToken({ ...payload, sv });
   (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: isSecureRequest(),
@@ -94,6 +99,28 @@ export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
   return verifyToken(token);
 }
 
+/**
+ * The session as the database says it is now (security protocol S2): null when the person was
+ * removed from the company, the session was ended on every device or the user no longer exists.
+ * The role and the Super Admin flag come from the database, not from the 7-day token.
+ */
+export async function verifiedSession(session: SessionPayload | null): Promise<SessionPayload | null> {
+  if (!session) return null;
+  const { verifySessionAccess } = await import("./session-access");
+  const verified = await verifySessionAccess(session);
+  return verified.ok ? verified.session : null;
+}
+
+export async function getVerifiedSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
+  return verifiedSession(getSessionFromRequest(req));
+}
+
+export async function getVerifiedSession(): Promise<SessionPayload | null> {
+  return verifiedSession(await getSession());
+}
+
+const SESSION_ENDED = { error: "Sua sessão terminou. Entre novamente.", code: "session_revoked" };
+
 export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) {
@@ -128,10 +155,11 @@ export function withAuth<T = any>(
 ) {
   return async (req: NextRequest, rawCtx: any) => {
     const ctx = await resolveRouteContext(rawCtx as T);
-    const session = getSessionFromRequest(req);
-    if (!session) {
+    if (!getSessionFromRequest(req)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const session = await getVerifiedSessionFromRequest(req);
+    if (!session) return NextResponse.json(SESSION_ENDED, { status: 401 });
     // Tenant gating (apenas se a sessão tem tenantId). Super Admin nunca é bloqueado.
     if (session.tenantId && session.globalRole !== "platform_admin") {
       const tenant = await prisma.tenant.findUnique({
@@ -185,9 +213,11 @@ export function withPlatformAdmin<T = any>(
 ) {
   return async (req: NextRequest, rawCtx: any) => {
     const ctx = await resolveRouteContext(rawCtx as T);
-    const session = getSessionFromRequest(req);
-    if (!session)
+    if (!getSessionFromRequest(req))
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // The Super Admin flag is read from the database: a revoked access stops at once.
+    const session = await getVerifiedSessionFromRequest(req);
+    if (!session) return NextResponse.json(SESSION_ENDED, { status: 401 });
     if (session.globalRole !== "platform_admin") {
       return NextResponse.json(
         { error: "Acesso restrito ao Super Admin da plataforma." },

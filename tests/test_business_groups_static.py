@@ -35,7 +35,7 @@ def test_group_access_is_server_authoritative_and_schema_safe():
 
 def test_group_switch_validates_signed_session_membership_and_target_billing_before_cookie():
     route = read('app/api/business-groups/switch/route.ts')
-    assert 'getSessionFromRequest(req)' in route
+    assert 'getVerifiedSessionFromRequest(req)' in route
     assert 'withAuth' not in route
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in route
     assert 'findAuthorizedBusinessGroupTenant(state, parsed.data)' in route
@@ -49,7 +49,7 @@ def test_group_switch_validates_signed_session_membership_and_target_billing_bef
 
 def test_group_overview_is_read_only_and_not_trapped_by_current_tenant_billing():
     route = read('app/api/business-groups/overview/route.ts')
-    assert 'getSessionFromRequest(req)' in route
+    assert 'getVerifiedSessionFromRequest(req)' in route
     assert 'withAuth' not in route
     assert 'getBusinessGroupAccessesForUser(prisma, session.userId)' in route
     assert 'tenantId: { in: tenantIds }' in route

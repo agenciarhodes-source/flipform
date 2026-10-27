@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { LogoutButton } from "@/components/logout-button";
 import {
   LayoutDashboard,
@@ -22,7 +22,7 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session || session.globalRole !== "platform_admin") {
     redirect("/admin/login");
   }

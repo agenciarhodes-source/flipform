@@ -1,6 +1,6 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionFromRequest, type SessionPayload } from '@/lib/auth';
+import { getVerifiedSessionFromRequest, type SessionPayload } from '@/lib/auth';
 import { FlipAiError } from './access';
 import { resolveRouteContext } from '@/lib/http/route-context';
 
@@ -17,7 +17,7 @@ export function withFlipAiSession<T = unknown>(handler: (req: NextRequest, sessi
     const ctx = await resolveRouteContext(rawCtx as T);
     let response: NextResponse;
     try {
-      const session = getSessionFromRequest(req);
+      const session = await getVerifiedSessionFromRequest(req);
       if (!session) throw new FlipAiError('UNAUTHORIZED', 401, 'Entre na sua conta.');
       if (req.method !== 'GET' && req.headers.get('origin') !== req.nextUrl.origin) throw new FlipAiError('INVALID_ORIGIN', 403, 'Origem da solicitação inválida.');
       response = await handler(req, session, ctx);

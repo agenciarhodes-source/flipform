@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getVerifiedSessionFromRequest } from '@/lib/auth';
 import { evaluateBillingAccess } from '@/lib/billing-access';
 import { getBusinessGroupAccessesForUser, BusinessGroupError } from '@/lib/business-groups';
 
@@ -41,7 +41,7 @@ function percent(value: number, total: number) {
 }
 
 export async function GET(req: NextRequest) {
-  const session = getSessionFromRequest(req);
+  const session = await getVerifiedSessionFromRequest(req);
   if (!session || session.globalRole === 'platform_admin') {
     return NextResponse.json({ error: 'Não autorizado.' }, { status: 401 });
   }

@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       if (!user) {
         user = await tx.user.create({ data: { email: rec.email, name: rec.email.split('@')[0], passwordHash: hashed } });
       } else {
-        user = await tx.user.update({ where: { id: user.id }, data: { passwordHash: hashed } });
+        user = await tx.user.update({ where: { id: user.id }, data: { passwordHash: hashed, sessionVersion: { increment: 1 } } });
       }
 
       const tu = await tx.tenantUser.findFirst({ where: { tenantId: rec.tenantId, userId: user.id } });

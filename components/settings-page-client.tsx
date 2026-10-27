@@ -36,6 +36,7 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+  const [endingSessions, setEndingSessions] = useState(false);
 
   const slugValid = SLUG_REGEX_FE.test(slug);
   const colorValid = /^#[0-9A-Fa-f]{6}$/.test(primaryColor);
@@ -95,6 +96,23 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
       toast.error(e.message || 'Erro ao alterar senha.');
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  // Ends the session on every device (security protocol S2).
+  const logoutEverywhere = async () => {
+    if (!window.confirm('Sair de todos os aparelhos? Você e qualquer outro acesso com a sua conta precisarão entrar de novo.')) return;
+    setEndingSessions(true);
+    try {
+      const res = await fetch('/api/auth/logout-all', { method: 'POST' });
+      if (!res.ok) throw new Error('Não foi possível encerrar as sessões.');
+      toast.success('Todas as sessões foram encerradas.');
+      router.push('/login');
+      router.refresh();
+    } catch (e: any) {
+      toast.error(e.message || 'Não foi possível encerrar as sessões.');
+    } finally {
+      setEndingSessions(false);
     }
   };
 
@@ -211,6 +229,14 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
         <Button onClick={changePassword} disabled={changingPassword || !currentPassword || !newPassword || !confirmNewPassword}>
           {changingPassword ? 'Alterando...' : 'Alterar senha'}
         </Button>
+        <div className="border-t pt-4">
+          <p className="text-sm text-muted-foreground mb-2">
+            Esqueceu a conta aberta em outro computador ou celular? Encerre todas as sessões da sua conta.
+          </p>
+          <Button variant="outline" onClick={logoutEverywhere} disabled={endingSessions}>
+            {endingSessions ? 'Encerrando...' : 'Sair de todos os aparelhos'}
+          </Button>
+        </div>
       </Card>
 
       {/* Estatísticas */}

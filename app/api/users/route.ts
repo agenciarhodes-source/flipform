@@ -90,7 +90,7 @@ export const POST = withPermission('USERS_CREATE_DIRECT', async (req, session) =
         user = await tx.user.create({ data: { name: parsed.data.name, email, passwordHash } });
       } else if (!currentTenantUser) {
         const passwordHash = await hashPassword(parsed.data.password);
-        user = await tx.user.update({ where: { id: user.id }, data: { name: parsed.data.name, email, passwordHash } });
+        user = await tx.user.update({ where: { id: user.id }, data: { name: parsed.data.name, email, passwordHash, sessionVersion: { increment: 1 } } });
       } else {
         user = await tx.user.update({ where: { id: user.id }, data: { name: parsed.data.name, email } });
       }
