@@ -18,9 +18,9 @@ export const GET = withPermission('USERS_VIEW', async (_req, session) => {
 
 export const POST = withPermission('USERS_INVITE', async (req, session) => {
   try {
-    const rlTenant = rateLimit({ key: `invite:create:tenant:${session.tenantId}`, limit: 20, windowMs: 60 * 60 * 1000 });
+    const rlTenant = await rateLimit({ key: `invite:create:tenant:${session.tenantId}`, limit: 20, windowMs: 60 * 60 * 1000 });
     if (!rlTenant.allowed) return rateLimitResponse(rlTenant);
-    const rlUser = rateLimit({ key: `invite:create:user:${session.userId}`, limit: 10, windowMs: 60 * 60 * 1000 });
+    const rlUser = await rateLimit({ key: `invite:create:user:${session.userId}`, limit: 10, windowMs: 60 * 60 * 1000 });
     if (!rlUser.allowed) return rateLimitResponse(rlUser);
 
     const body = await req.json();

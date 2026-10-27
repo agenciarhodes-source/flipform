@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 async function run(req: Request, method: 'GET' | 'POST') {
   try {
-    const rl = rateLimit({ key: `job:google-conversions:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 1000 });
+    const rl = await rateLimit({ key: `job:google-conversions:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 1000 });
     if (!rl.allowed) return rateLimitResponse(rl);
 
     if (!isCronRequestAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

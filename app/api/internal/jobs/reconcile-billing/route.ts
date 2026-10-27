@@ -14,7 +14,7 @@ function isAuthorized(req: Request) {
 export async function POST(req: Request) {
   try {
   const ip = getClientIp(req);
-  const rl = rateLimit({ key: `job:reconcile-billing:ip:${ip}`, limit: 10, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `job:reconcile-billing:ip:${ip}`, limit: 10, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   if (!isAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

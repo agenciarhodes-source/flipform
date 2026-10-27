@@ -47,7 +47,7 @@ export const GET = withPlatformAdmin(async () => NextResponse.json({
 }, { headers: noStore }));
 
 export const POST = withPlatformAdmin(async (req, session) => {
-  const limit = rateLimit({
+  const limit = await rateLimit({
     key: `admin:jev-readiness:${session.userId}:${getClientIp(req)}`,
     limit: 3,
     windowMs: 60 * 60_000,

@@ -15,7 +15,7 @@ const bodySchema = z.object({
 export const POST = withPermission(
   'INTEGRATIONS_EDIT',
   async (req: NextRequest, session, ctx: { params: { eventId: string } }) => {
-    const rl = rateLimit({
+    const rl = await rateLimit({
       key: `instagram-private-reply:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
       limit: 30,
       windowMs: 60_000,

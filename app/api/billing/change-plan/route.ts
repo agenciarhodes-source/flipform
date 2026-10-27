@@ -14,7 +14,7 @@ export const runtime = 'nodejs';
  * goes to Stripe first (the difference is prorated on the next invoice); only then the plan changes here.
  */
 export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `billing:change-plan:user:${session.userId}:ip:${getClientIp(req)}`, limit: 20, windowMs: 60 * 60 * 1000 });
+  const rl = await rateLimit({ key: `billing:change-plan:user:${session.userId}:ip:${getClientIp(req)}`, limit: 20, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const body = await req.json().catch(() => ({}));

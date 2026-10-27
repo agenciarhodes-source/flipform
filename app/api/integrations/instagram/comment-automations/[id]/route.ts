@@ -19,7 +19,7 @@ const ruleSchema = z.object({
 export const PATCH = withPermission(
   'INTEGRATIONS_EDIT',
   async (req: NextRequest, session, ctx: { params: { id: string } }) => {
-    const rl = rateLimit({
+    const rl = await rateLimit({
       key: `instagram-comment-automation-update:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
       limit: 60,
       windowMs: 60_000,

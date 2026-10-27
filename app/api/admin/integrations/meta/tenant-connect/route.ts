@@ -16,7 +16,7 @@ import {
 const bodySchema = z.object({ tenantId: z.string().trim().uuid() }).strict();
 
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin-meta-oauth-connect:${session.userId}:${getClientIp(req)}`,
     limit: 20,
     windowMs: 10 * 60_000,

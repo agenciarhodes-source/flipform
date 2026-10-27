@@ -22,7 +22,7 @@ const bodySchema = z.object({
 }).strict();
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-embedded-signup-config:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
     windowMs: 10 * 60_000,

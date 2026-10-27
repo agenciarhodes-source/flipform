@@ -36,7 +36,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req: NextRequest,
 });
 
 export const PUT = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-agent-signature:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 20,
     windowMs: 60_000,

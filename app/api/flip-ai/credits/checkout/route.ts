@@ -13,7 +13,7 @@ const schema = z.object({
 }).strict();
 
 export const POST = withPermission('FLIP_AI_MANAGE', async (req, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `flip-ai-credit-checkout:${session.tenantId}:${session.userId}`,
     limit: 10,
     windowMs: 60_000,

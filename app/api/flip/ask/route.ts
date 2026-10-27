@@ -9,7 +9,7 @@ const bodySchema = z.object({ question: z.string().trim().min(3).max(300) }).str
 
 /** "Pergunte ao Flip". The question is kept in the audit log; the answer is not stored. */
 export const POST = withPermission('LEADS_VIEW', async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `flip-ask:${session.tenantId}:${session.userId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `flip-ask:${session.tenantId}:${session.userId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Escreva uma pergunta de 3 a 300 caracteres.' }, { status: 400 });

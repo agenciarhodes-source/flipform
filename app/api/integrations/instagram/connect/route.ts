@@ -15,7 +15,7 @@ import {
 } from '@/lib/meta/instagram-state';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `instagram-business-login:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
     windowMs: 10 * 60_000,

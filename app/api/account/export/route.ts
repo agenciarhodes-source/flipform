@@ -5,7 +5,7 @@ import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logAudit } from '@/lib/audit';
 
 export const GET = withAuth(async (_req: NextRequest, session) => {
-  const rl = rateLimit({ key: `account:export:tenant:${session.tenantId}`, limit: 5, windowMs: 60 * 60 * 1000 });
+  const rl = await rateLimit({ key: `account:export:tenant:${session.tenantId}`, limit: 5, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   if (!['owner', 'admin'].includes(session.role)) return NextResponse.json({ error: 'Você não tem permissão para executar esta ação.', code: 'FORBIDDEN' }, { status: 403 });
 

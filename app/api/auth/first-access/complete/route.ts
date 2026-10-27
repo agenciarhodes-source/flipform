@@ -7,7 +7,7 @@ import { resolveFirstAccessToken } from '@/lib/first-access';
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
-  const rl = rateLimit({ key: `first-access:complete:ip:${ip}`, limit: 10, windowMs: 60 * 60 * 1000 });
+  const rl = await rateLimit({ key: `first-access:complete:ip:${ip}`, limit: 10, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const body = await req.json().catch(() => ({} as any));

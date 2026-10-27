@@ -12,7 +12,7 @@ import {
 export const dynamic = 'force-dynamic';
 
 export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `google-funnel-mappings-put:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `google-funnel-mappings-put:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   try {
     const body = await req.json().catch(() => null);
@@ -42,7 +42,7 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx:
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `google-funnel-mappings-delete:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `google-funnel-mappings-delete:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   try {
     const result = await archiveGoogleFunnelMapping({

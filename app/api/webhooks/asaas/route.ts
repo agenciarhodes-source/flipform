@@ -18,7 +18,7 @@ import { getAppLoginUrl } from "@/lib/public-urls";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const rl = rateLimit({
+    const rl = await rateLimit({
       key: `webhook:asaas:ip:${ip}`,
       limit: 120,
       windowMs: 60 * 1000,

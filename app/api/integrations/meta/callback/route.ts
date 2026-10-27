@@ -57,7 +57,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     }
   }
 
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `meta-oauth-callback:${targetTenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 20,
     windowMs: 10 * 60_000,

@@ -257,7 +257,7 @@ export async function POST(req: Request) {
   }
 
   const ip = getClientIp(req);
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `public-checkout:ip:${ip}`,
     limit: 20,
     windowMs: 10 * 60 * 1000,

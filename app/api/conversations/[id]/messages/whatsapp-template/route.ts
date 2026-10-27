@@ -17,7 +17,7 @@ const bodySchema = z.object({
 // Sends an approved template: the only message Meta accepts for someone who has not written
 // in the last 24 hours. The browser only names the template; its text always comes from Meta.
 export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-template-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 30,
     windowMs: 60_000,

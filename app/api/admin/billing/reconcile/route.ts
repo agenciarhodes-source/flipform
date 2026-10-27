@@ -6,7 +6,7 @@ import { reconcileProviderSubscription, reconcileSubscription, reconcileTenantBi
 
 export const POST = withPlatformAdmin(async (req, session) => {
   try {
-  const rl = rateLimit({ key: `admin:billing-reconcile:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `admin:billing-reconcile:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json().catch(() => ({} as any));
   const subscriptionId = body?.subscriptionId ? String(body.subscriptionId) : null;

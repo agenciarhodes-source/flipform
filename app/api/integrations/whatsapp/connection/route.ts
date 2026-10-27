@@ -112,7 +112,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-connection-disconnect:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
     windowMs: 10 * 60_000,

@@ -14,7 +14,7 @@ const SAMPLE_TEXT = 'Olá! Eu sou a voz do seu atendente. Vou explicar tudo com 
 /** Plays a short fixed sample of one voice to someone managing attendants. */
 export const POST = withFlipAiSession(async (req, session) => {
   await prisma.$transaction((db) => requireFlipAiAccess(db, session));
-  const limited = rateLimit({ key: `flip-ai:voice-sample:user:${session.userId}`, limit: 30, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({ key: `flip-ai:voice-sample:user:${session.userId}`, limit: 30, windowMs: 60 * 60 * 1000 });
   if (!limited.allowed) throw new FlipAiError('VOICE_SAMPLE_RATE_LIMIT', 429, 'Muitas amostras em pouco tempo. Tente mais tarde.');
 
   const body = await readFlipAiBody(req);

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
   const sessionToken = request.cookies.get(COOKIE_NAME)?.value || '';
   if (!SESSION_TOKEN.test(sessionToken)) return refuse(401, 'Sessão inválida.');
 
-  const limited = rateLimit({ key: `flip-ai:speech:ip:${getClientIp(request)}`, limit: 40, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({ key: `flip-ai:speech:ip:${getClientIp(request)}`, limit: 40, windowMs: 60 * 60 * 1000 });
   if (!limited.allowed) return rateLimitResponse(limited);
 
   const body = await request.json().catch(() => null) as { messageId?: unknown } | null;

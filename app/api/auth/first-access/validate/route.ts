@@ -6,7 +6,7 @@ import { resolveFirstAccessToken } from '@/lib/first-access';
 
 export async function GET(req: Request) {
   const ip = getClientIp(req);
-  const rl = rateLimit({ key: `first-access:validate:ip:${ip}`, limit: 30, windowMs: 60 * 60 * 1000 });
+  const rl = await rateLimit({ key: `first-access:validate:ip:${ip}`, limit: 30, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const token = new URL(req.url).searchParams.get('token') || '';

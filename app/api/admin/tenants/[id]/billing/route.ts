@@ -16,7 +16,7 @@ function mapAsaasSubscriptionStatus(status: string, fallback: string) {
 }
 
 export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `admin:tenant-billing:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `admin:tenant-billing:user:${session.userId}`, limit: 60, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json().catch(() => ({}));
   const action = String(body.action || '');

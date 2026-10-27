@@ -114,7 +114,7 @@ function safeProviderError(error: unknown) {
 }
 
 export const GET = withPermission('INTEGRATIONS_VIEW', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-templates-list:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 60,
     windowMs: 5 * 60_000,
@@ -142,7 +142,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (req: NextRequest, 
 });
 
 export const POST = withPermission('INTEGRATIONS_MANAGE', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-templates-create:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
     windowMs: 10 * 60_000,
@@ -203,7 +203,7 @@ export const POST = withPermission('INTEGRATIONS_MANAGE', async (req: NextReques
 
 // Deleting is permanent at Meta: owners and admins only (INTEGRATIONS_MANAGE), after confirming.
 export const DELETE = withPermission('INTEGRATIONS_MANAGE', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-templates-delete:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,
     windowMs: 10 * 60_000,

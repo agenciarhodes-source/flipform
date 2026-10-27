@@ -15,7 +15,7 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 /** A voice note recorded in the Inbox, sent to the customer on WhatsApp. */
 export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `whatsapp-audio-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `whatsapp-audio-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const form = await req.formData().catch(() => null);

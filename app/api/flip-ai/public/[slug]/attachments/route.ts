@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ slug
     return withSession(NextResponse.json({ error: 'Not found' }, { status: 404 }), session.token, session.created);
   }
 
-  const limited = rateLimit({ key: `flip-ai:attachment:ip:${getClientIp(request)}`, limit: 30, windowMs: 60 * 60 * 1000 });
+  const limited = await rateLimit({ key: `flip-ai:attachment:ip:${getClientIp(request)}`, limit: 30, windowMs: 60 * 60 * 1000 });
   if (!limited.allowed) return rateLimitResponse(limited);
 
   const body = await request.json().catch(() => null) as { name?: unknown; mimeType?: unknown; sizeBytes?: unknown } | null;

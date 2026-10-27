@@ -13,9 +13,9 @@ export const runtime = 'nodejs';
  * the platform admin.
  */
 export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, session) => {
-  const rlTenant = rateLimit({ key: `billing:cancel:tenant:${session.tenantId}`, limit: 5, windowMs: 60 * 60 * 1000 });
+  const rlTenant = await rateLimit({ key: `billing:cancel:tenant:${session.tenantId}`, limit: 5, windowMs: 60 * 60 * 1000 });
   if (!rlTenant.allowed) return rateLimitResponse(rlTenant);
-  const rlIp = rateLimit({ key: `billing:cancel:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 60 * 1000 });
+  const rlIp = await rateLimit({ key: `billing:cancel:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 60 * 1000 });
   if (!rlIp.allowed) return rateLimitResponse(rlIp);
   const body = await req.json().catch(() => ({}));
   const reason = String(body.reason || '').trim().slice(0, 1000);
