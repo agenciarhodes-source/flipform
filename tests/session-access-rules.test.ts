@@ -31,6 +31,12 @@ test('quem entra pelo grupo empresarial continua com acesso', () => {
   assert.deepEqual(decideSessionAccess({ ...base, membership: null, groupRole: 'admin' }), { ok: true, role: 'admin', globalRole: null });
 });
 
+test('o painel do grupo empresarial (sessão sem empresa) continua funcionando', () => {
+  const hub = { ...base, tenantId: '', membership: null, groupRole: 'owner' };
+  assert.deepEqual(decideSessionAccess(hub), { ok: true, role: 'owner', globalRole: null });
+  assert.deepEqual(decideSessionAccess({ ...hub, groupRole: null }), { ok: false, reason: 'membership_revoked' });
+});
+
 test('Super Admin vale só se o banco ainda disser que é', () => {
   const admin = { ...base, tenantId: '', membership: null, user: { sessionVersion: 0, globalRole: 'platform_admin' } };
   assert.deepEqual(decideSessionAccess(admin), { ok: true, role: 'owner', globalRole: 'platform_admin' });

@@ -12,7 +12,10 @@ export type SessionAccessInput = {
   tenantId: string | null | undefined;
   /** The person's own membership in the company of the session. */
   membership: { role: string; status: string } | null;
-  /** Role through an active business group that contains the company, when there is one. */
+  /**
+   * Role through an active business group: the group that contains the company of the session,
+   * or, for the group hub session (no company yet), any active group of the person.
+   */
   groupRole: string | null;
   /** Role written in the token, kept only for a Super Admin without membership. */
   tokenRole: string;
@@ -26,9 +29,12 @@ export function decideSessionAccess(input: SessionAccessInput): SessionAccessDec
   if (!input.user) return { ok: false, reason: 'user_missing' };
   if ((input.tokenVersion ?? 0) !== input.user.sessionVersion) return { ok: false, reason: 'session_revoked' };
   const globalRole = input.user.globalRole === 'platform_admin' ? 'platform_admin' : null;
-  // Super Admin session without a company.
+  // Session without a company: the Super Admin, or the business group hub (the person picks a
+  // company of the group after signing in).
   if (!input.tenantId) {
-    return globalRole ? { ok: true, role: input.tokenRole, globalRole } : { ok: false, reason: 'membership_revoked' };
+    if (globalRole) return { ok: true, role: input.tokenRole, globalRole };
+    if (input.groupRole) return { ok: true, role: input.groupRole, globalRole };
+    return { ok: false, reason: 'membership_revoked' };
   }
   if (input.membership && input.membership.status === 'active') {
     return { ok: true, role: input.membership.role, globalRole };
