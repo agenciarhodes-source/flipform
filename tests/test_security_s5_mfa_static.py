@@ -36,3 +36,11 @@ def test_screens():
     assert "<MfaLoginStep dark" in read("app/admin/login/page.tsx")
     assert "<MfaCard />" in read("components/settings-page-client.tsx")
     assert "<MfaCard />" in read("app/admin/(secure)/security/page.tsx")
+
+
+def test_super_admin_can_turn_it_off_for_a_lost_phone():
+    route = read("app/api/admin/tenants/[id]/users/[tenantUserId]/mfa-reset/route.ts")
+    assert "export const POST = withPlatformAdmin(" in route
+    assert "sessionVersion: { increment: 1 }" in route
+    assert "action: 'platform.user_mfa_reset'" in route
+    assert "Desligar 2 etapas" in read("app/admin/(secure)/tenants/[id]/page.tsx")

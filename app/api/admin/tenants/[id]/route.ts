@@ -7,7 +7,7 @@ export const GET = withPlatformAdmin(async (_req, _session, ctx: { params: { id:
     where: { id: ctx.params.id },
     include: {
       plan: true,
-      tenantUsers: { include: { user: { select: { id: true, name: true, email: true, createdAt: true } } }, orderBy: { createdAt: 'asc' } },
+      tenantUsers: { include: { user: { select: { id: true, name: true, email: true, createdAt: true, mfaEnabledAt: true } } }, orderBy: { createdAt: 'asc' } },
       forms: { select: { id: true, name: true, slug: true, isActive: true, createdAt: true } },
       pipelines: { select: { id: true, name: true, isDefault: true, isArchived: true } },
       statusHistory: { include: { changer: { select: { id: true, name: true, email: true } } }, orderBy: { createdAt: 'desc' }, take: 30 },

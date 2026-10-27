@@ -341,6 +341,27 @@ export default function TenantDetailPage() {
     }
   };
 
+  // Lost phone and recovery codes: turn the two-step verification off after confirming the identity.
+  const resetUserMfa = async (tenantUser: any) => {
+    const reason = window.prompt(`Desligar a verificação em duas etapas de ${tenantUser.user.email}?
+
+Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-mail cadastrado) e descreva aqui como confirmou:`);
+    if (!reason) return;
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/users/${tenantUser.id}/mfa-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Não foi possível desligar.');
+      toast.success(`Verificação em duas etapas desligada para ${tenantUser.user.name}. A pessoa entra só com a senha e pode ligar de novo.`);
+      await load();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   if (!tenant) return <div className="p-8 text-muted-foreground"><Loader2 className="w-5 h-5 inline animate-spin mr-2" />Carregando...</div>;
 
   return (
@@ -429,8 +450,14 @@ export default function TenantDetailPage() {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="py-2 px-4">{tu.status}</td>
-                      <td className="py-2 px-4 text-right">
+                      <td className="py-2 px-4">
+                        {tu.status}
+                        {tu.user.mfaEnabledAt ? <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">2 etapas</span> : null}
+                      </td>
+                      <td className="py-2 px-4 text-right space-x-2 whitespace-nowrap">
+                        {tu.user.mfaEnabledAt ? (
+                          <Button size="sm" variant="ghost" onClick={() => resetUserMfa(tu)}>Desligar 2 etapas</Button>
+                        ) : null}
                         <Button
                           size="sm"
                           variant="outline"
