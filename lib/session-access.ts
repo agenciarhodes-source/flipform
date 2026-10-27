@@ -26,10 +26,13 @@ export function forgetSessionAccess(userId: string) {
   for (const key of accessCache.keys()) if (key.startsWith(`${userId}|`)) accessCache.delete(key);
 }
 
-async function groupRoleFor(userId: string, tenantId: string) {
+/** The role through an active business group: of the group with this company, or any group (hub). */
+async function groupRoleFor(userId: string, tenantId: string | null) {
   const state = await getBusinessGroupAccessesForUser(prisma, userId).catch(() => null);
   if (!state?.schemaReady) return null;
-  const access = state.accesses.find((group) => group.tenants.some((tenant) => tenant.id === tenantId));
+  const access = tenantId
+    ? state.accesses.find((group) => group.tenants.some((tenant) => tenant.id === tenantId))
+    : state.accesses[0];
   return access ? mapBusinessGroupRoleToTenantRole(access.role) : null;
 }
 
@@ -53,9 +56,9 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
         })
         : Promise.resolve(null),
     ]);
-    const groupRole = session.tenantId && user && (!membership || membership.status !== 'active')
-      ? await groupRoleFor(session.userId, session.tenantId)
-      : null;
+    const needsGroup = user && user.globalRole !== 'platform_admin'
+      && (!session.tenantId || !membership || membership.status !== 'active');
+    const groupRole = needsGroup ? await groupRoleFor(session.userId, session.tenantId || null) : null;
     decision = decideSessionAccess({
       tokenVersion: session.sv,
       user: user ? { sessionVersion: user.sessionVersion, globalRole: user.globalRole } : null,
