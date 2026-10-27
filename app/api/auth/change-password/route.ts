@@ -29,7 +29,7 @@ export const POST = withAuth(async (req, session) => {
   }
 
   const newHash = await hashPassword(newPassword);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash } });
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: newHash, sessionVersion: { increment: 1 } } });
 
   if (session.tenantId) {
     await logAudit({

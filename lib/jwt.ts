@@ -8,6 +8,8 @@ export interface JwtSessionPayload {
   name: string;
   tenantSlug: string;
   globalRole?: string | null;
+  /** Session version of the user when the token was issued (security protocol S2). */
+  sv?: number;
 }
 
 const JWT_SECRET_CURRENT = process.env.JWT_SECRET_CURRENT || process.env.JWT_SECRET;

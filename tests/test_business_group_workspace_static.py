@@ -20,7 +20,7 @@ def test_group_read_scope_is_membership_and_billing_authoritative():
 
 def test_group_leads_api_is_read_only_and_labels_company_and_assignee():
     route = read('app/api/business-groups/leads/route.ts')
-    assert 'getSessionFromRequest(req)' in route
+    assert 'getVerifiedSessionFromRequest(req)' in route
     assert 'resolveBusinessGroupReadScope' in route
     assert 'tenantId: { in: scope.tenantIds }' in route
     assert 'prisma.lead.findMany' in route
@@ -37,7 +37,7 @@ def test_group_leads_api_is_read_only_and_labels_company_and_assignee():
 
 def test_group_forms_api_is_read_only_and_tenant_scoped():
     route = read('app/api/business-groups/forms/route.ts')
-    assert 'getSessionFromRequest(req)' in route
+    assert 'getVerifiedSessionFromRequest(req)' in route
     assert 'resolveBusinessGroupReadScope' in route
     assert 'tenantId: { in: scope.tenantIds }' in route
     assert 'prisma.form.findMany' in route

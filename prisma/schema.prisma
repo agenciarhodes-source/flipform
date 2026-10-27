@@ -193,6 +193,8 @@ model User {
   passwordHash String   @map("password_hash")
   avatarUrl    String?  @map("avatar_url")
   globalRole   String?  @map("global_role") // null | "platform_admin"
+  /// Raised to end every open session of the user (security protocol S2).
+  sessionVersion Int    @default(0) @map("session_version")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
