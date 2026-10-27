@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
-import { verifyPassword, setSessionCookie } from '@/lib/auth';
+import { verifyPassword } from '@/lib/auth';
+import { startSessionOrMfa } from '@/lib/mfa/server';
 import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     }
 
     if (user.globalRole === 'platform_admin') {
-      await setSessionCookie({
+      const mfaGate = await startSessionOrMfa({
         userId: user.id,
         tenantId: '',
         role: 'platform_admin',
@@ -52,7 +53,8 @@ export async function POST(req: Request) {
         name: user.name,
         tenantSlug: '',
         globalRole: 'platform_admin',
-      });
+      }, { ok: true, platformAdmin: true });
+      if (mfaGate) return mfaGate;
       logLogin('platform_admin_success', { ip, email: normalizedEmail, userId: user.id });
       return NextResponse.json({ ok: true, platformAdmin: true });
     }
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
     if (businessGroupAccess) {
       const primaryGroup = groupState.accesses[0];
       const groupSessionRole = mapBusinessGroupRoleToTenantRole(primaryGroup.role);
-      await setSessionCookie({
+      const mfaGate = await startSessionOrMfa({
         userId: user.id,
         tenantId: '',
         role: groupSessionRole,
@@ -72,7 +74,8 @@ export async function POST(req: Request) {
         name: user.name,
         tenantSlug: '',
         globalRole: null,
-      });
+      }, { ok: true, platformAdmin: false, businessGroupAccess: true });
+      if (mfaGate) return mfaGate;
 
       try {
         await logPlatformAudit({
@@ -145,7 +148,7 @@ export async function POST(req: Request) {
 
     const selectedAllowedUser = allowedByTenant.get(selectedMembership.tenantId);
 
-    await setSessionCookie({
+    const mfaGate = await startSessionOrMfa({
       userId: user.id,
       tenantId: selectedMembership.tenantId,
       role: selectedMembership.role,
@@ -153,7 +156,8 @@ export async function POST(req: Request) {
       name: user.name,
       tenantSlug: selectedMembership.tenant.slug,
       globalRole: null,
-    });
+    }, { ok: true, platformAdmin: false, businessGroupAccess: false });
+    if (mfaGate) return mfaGate;
 
     await prisma.tenant.update({ where: { id: selectedMembership.tenantId }, data: { lastLoginAt: new Date() } });
 

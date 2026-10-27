@@ -8,12 +8,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Shield } from 'lucide-react';
+import { MfaLoginStep } from '@/components/mfa/mfa-login-step';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('admin@flipform.com.br');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+
+  const goIn = (data: any) => {
+    if (!data.platformAdmin) { toast.error('Esta conta não tem acesso administrativo.'); return; }
+    toast.success('Bem-vindo ao painel da plataforma');
+    router.push('/admin');
+    router.refresh();
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,10 +35,11 @@ export default function AdminLoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Falha no login');
-      if (!data.platformAdmin) throw new Error('Esta conta não tem acesso administrativo.');
-      toast.success('Bem-vindo ao painel da plataforma');
-      router.push('/admin');
-      router.refresh();
+      if (data.mfaRequired && data.mfaToken) {
+        setMfaToken(data.mfaToken);
+        return;
+      }
+      goIn(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -51,6 +61,9 @@ export default function AdminLoginPage() {
         </div>
         <h2 className="font-heading text-xl font-bold mb-1">Acesso restrito</h2>
         <p className="text-sm text-slate-400 mb-5">Apenas administradores da plataforma.</p>
+        {mfaToken ? (
+          <MfaLoginStep dark mfaToken={mfaToken} onSuccess={goIn} onCancel={() => { setMfaToken(null); setPassword(''); }} />
+        ) : (
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-slate-200">E-mail</Label>
@@ -64,6 +77,7 @@ export default function AdminLoginPage() {
             {loading ? 'Entrando...' : 'Entrar'}
           </Button>
         </form>
+        )}
         <div className="mt-5 text-center text-sm">
           <Link href="/login" className="text-slate-400 hover:text-slate-200">← Voltar ao login normal</Link>
         </div>

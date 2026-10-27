@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
-import { hashPassword, setSessionCookie } from '@/lib/auth';
+import { hashPassword } from '@/lib/auth';
+import { setSessionCookieUnlessMfa } from '@/lib/mfa/server';
 import { inviteAcceptSchema } from '@/lib/schemas-users';
 import { logAudit } from '@/lib/audit';
 
@@ -57,7 +58,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
       metadata: { email: invite.email, role: invite.role },
     });
 
-    await setSessionCookie({
+    await setSessionCookieUnlessMfa({
       userId: user.id, tenantId: invite.tenantId, role: invite.role,
       email: user.email, name: user.name, tenantSlug: invite.tenant.slug,
     });
