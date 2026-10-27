@@ -1,5 +1,6 @@
 import { FormBuilder } from '@/components/form-builder';
 
-export default function EditFormPage({ params }: { params: { id: string } }) {
+export default async function EditFormPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   return <FormBuilder formId={params.id} />;
 }

@@ -43,11 +43,12 @@ function statusClass(status: string) {
   return 'bg-slate-100 text-slate-700';
 }
 
-export default async function FlipAiUsagePage({
-  searchParams,
-}: {
-  searchParams?: FlipAiUsageSearchParams;
-}) {
+export default async function FlipAiUsagePage(
+  props: {
+    searchParams?: Promise<FlipAiUsageSearchParams>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const session = await getSession();
   if (!session) redirect('/login');
   const usageRange = resolveFlipAiUsageRange(searchParams);

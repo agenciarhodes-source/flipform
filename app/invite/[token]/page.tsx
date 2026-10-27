@@ -2,7 +2,8 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { InviteAcceptClient } from './invite-accept-client';
 
-export default async function InvitePage({ params }: { params: { token: string } }) {
+export default async function InvitePage(props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   const invite = await prisma.invite.findUnique({
     where: { token: params.token },
     include: { tenant: { select: { name: true, slug: true, primaryColor: true } } },

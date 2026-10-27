@@ -5,7 +5,8 @@ import { CheckoutClient, type CheckoutPlan } from './checkout-client';
 export const dynamic = 'force-dynamic';
 
 /** Public checkout: the plans, prices and limits come from the plans table (what is really charged). */
-export default async function CheckoutPage({ params }: { params: { planSlug: string } }) {
+export default async function CheckoutPage(props: { params: Promise<{ planSlug: string }> }) {
+  const params = await props.params;
   const rows = await prisma.plan.findMany({
     where: { isActive: true },
     orderBy: { price: 'asc' },

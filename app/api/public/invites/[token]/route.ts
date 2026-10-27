@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET(_req: Request, ctx: { params: { token: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ token: string }> }) {
   const invite = await prisma.invite.findUnique({
-    where: { token: ctx.params.token },
+    where: { token: (await ctx.params).token },
     include: { tenant: { select: { name: true, slug: true, primaryColor: true } } },
   });
   if (!invite) return NextResponse.json({ error: 'Convite não encontrado' }, { status: 404 });

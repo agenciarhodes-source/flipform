@@ -3,9 +3,9 @@ import { prisma } from '@/lib/prisma';
 
 const BLOCKED_TENANT_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
-export async function GET(_req: Request, ctx: { params: { slug: string } }) {
+export async function GET(_req: Request, ctx: { params: Promise<{ slug: string }> }) {
   const form = await prisma.form.findFirst({
-    where: { slug: ctx.params.slug, isActive: true },
+    where: { slug: (await ctx.params).slug, isActive: true },
     include: {
       fields: { orderBy: { orderIndex: 'asc' } },
       tenant: { select: { id: true, status: true, name: true, logoUrl: true, primaryColor: true } },

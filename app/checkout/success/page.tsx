@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { TRIAL_DAYS } from '@/lib/billing/subscription-rules';
 
-export default function SuccessPage({ searchParams }: { searchParams?: { trial?: string; method?: string } }) {
+export default async function SuccessPage(props: { searchParams?: Promise<{ trial?: string; method?: string }> }) {
+  const searchParams = await props.searchParams;
   const trial = searchParams?.trial === '1';
   const method = searchParams?.method === 'card' ? 'card' : searchParams?.method === 'boleto' ? 'boleto' : searchParams?.method === 'pix' ? 'pix' : null;
   return (

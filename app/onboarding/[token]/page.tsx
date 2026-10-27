@@ -1,8 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useState, use } from 'react';
 import Link from 'next/link';
 
-export default function OnboardingPage({ params }: { params: { token: string } }) {
+export default function OnboardingPage(props: { params: Promise<{ token: string }> }) {
+  const params = use(props.params);
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

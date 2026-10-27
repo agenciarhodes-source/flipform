@@ -10,6 +10,6 @@ export async function POST() {
       entityType: 'session', entityId: session.userId, action: 'auth.logout',
     });
   }
-  clearSessionCookie();
+  await clearSessionCookie();
   return NextResponse.json({ ok: true });
 }

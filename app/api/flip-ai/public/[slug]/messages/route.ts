@@ -148,7 +148,8 @@ async function tryCaptureLead(input: {
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const session = getOrCreatePublicSessionToken(request.cookies.get(COOKIE_NAME)?.value);
   const domainHost = customDomainHost(request);
   if (domainHost === null) {
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest, { params }: { params: { slug: s
       body = { ...(body as Record<string, unknown>), attachment: attachmentInfo(attachment) };
       if (attachment.kind === 'audio') {
         // Listening to a voice message uses the company's credits, like every other reply.
-        if (!await hasCreditsForAudio(runtimeContext.tenantId)) {
+        if (!(await hasCreditsForAudio(runtimeContext.tenantId))) {
           return jsonError(new FlipAiError(
             'FLIP_AI_CREDIT_BALANCE_INSUFFICIENT', 402,
             'Saldo de créditos Flip AI insuficiente. Adicione créditos para continuar.',

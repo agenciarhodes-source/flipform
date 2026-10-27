@@ -65,7 +65,8 @@ function jsonError(error: unknown, token: string, created: boolean) {
   );
 }
 
-export async function POST(request: NextRequest, { params }: { params: { slug: string } }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ slug: string }> }) {
+  const params = await props.params;
   const session = getOrCreatePublicSessionToken(request.cookies.get(COOKIE_NAME)?.value);
   const domainHost = customDomainHost(request);
   if (domainHost === null) {

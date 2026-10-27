@@ -169,7 +169,7 @@ def test_admin_domain_action_endpoints_exist_and_audit_required_events():
 
 def test_custom_domain_public_route_resolves_by_active_host_and_ssl_gate():
     page = read('app/custom-domain/[slug]/page.tsx')
-    assert "normalizeHostname(headers().get('host'))" in page
+    assert "normalizeHostname((await headers()).get('host'))" in page
     assert "where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' }" in page
     assert 'tenantId: customDomain.tenantId' in page
     assert 'slug: params.slug' in page
