@@ -55,7 +55,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
   );
   if (!validState) return clearState(redirect('error'));
 
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `instagram-business-login-callback:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 20,
     windowMs: 10 * 60_000,

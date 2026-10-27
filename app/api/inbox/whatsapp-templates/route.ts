@@ -9,7 +9,7 @@ import { findAccessibleInboxConversation } from '@/lib/inbox/access';
 
 // The approved templates an attendant can send from the Inbox to start a conversation.
 export const GET = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `inbox-whatsapp-templates:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 30,
     windowMs: 5 * 60_000,

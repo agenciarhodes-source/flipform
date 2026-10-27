@@ -8,7 +8,7 @@ import { evaluateBillingAccess } from '@/lib/billing-access';
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
-  const rl = rateLimit({ key: `public-onboarding:ip:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
+  const rl = await rateLimit({ key: `public-onboarding:ip:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const body = await req.json().catch(() => ({} as any));

@@ -36,7 +36,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req: NextRequest,
 });
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `instagram-message-automation-create:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 30,
     windowMs: 60_000,

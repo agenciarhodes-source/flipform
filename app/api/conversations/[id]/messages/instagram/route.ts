@@ -10,7 +10,7 @@ const bodySchema = z.object({
 }).strict();
 
 export const POST = withPermission('INBOX_MANAGE', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `instagram-conversation-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 60,
     windowMs: 60_000,

@@ -25,7 +25,7 @@ export const POST = withPlatformAdmin(async (
   session,
   ctx: { params: { id: string; orderId: string } },
 ) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin:flip-ai-top-up:action:${session.userId}`,
     limit: 60,
     windowMs: 60 * 1000,

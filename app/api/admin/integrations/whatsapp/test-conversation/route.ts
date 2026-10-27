@@ -14,7 +14,7 @@ const bodySchema = z.object({
 }).strict();
 
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin-whatsapp-meta-review-conversation:${session.userId}:${getClientIp(req)}`,
     limit: 12,
     windowMs: 10 * 60_000,

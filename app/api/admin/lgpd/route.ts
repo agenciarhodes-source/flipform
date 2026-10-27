@@ -21,7 +21,7 @@ function metaStr(meta: unknown, key: string): string {
 }
 
 export const GET = withPlatformAdmin(async (req, session) => {
-  const rl = rateLimit({ key: `admin:lgpd:get:${session.userId}:ip:${getClientIp(req)}`, limit: 120, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `admin:lgpd:get:${session.userId}:ip:${getClientIp(req)}`, limit: 120, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const requestLogs = await prisma.auditLog.findMany({
@@ -81,7 +81,7 @@ export const GET = withPlatformAdmin(async (req, session) => {
 });
 
 export const PATCH = withPlatformAdmin(async (req, session) => {
-  const rl = rateLimit({ key: `admin:lgpd:patch:${session.userId}:ip:${getClientIp(req)}`, limit: 30, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `admin:lgpd:patch:${session.userId}:ip:${getClientIp(req)}`, limit: 30, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const body = await req.json().catch(() => ({}) as Record<string, unknown>) as Record<string, unknown>;

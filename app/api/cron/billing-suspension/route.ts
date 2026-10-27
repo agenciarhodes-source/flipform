@@ -7,7 +7,7 @@ import { isCronRequestAuthorized } from "@/lib/cron-auth";
 export async function POST(req: Request) {
   try {
     const ip = getClientIp(req);
-    const rl = rateLimit({
+    const rl = await rateLimit({
       key: `job:billing-suspension:ip:${ip}`,
       limit: 10,
       windowMs: 60 * 1000,

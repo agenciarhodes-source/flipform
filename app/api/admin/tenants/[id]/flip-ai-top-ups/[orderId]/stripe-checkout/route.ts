@@ -11,7 +11,7 @@ export const POST = withPlatformAdmin(async (
   session,
   ctx: { params: { id: string; orderId: string } },
 ) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin:stripe-checkout:${session.userId}`,
     limit: 20,
     windowMs: 60 * 1000,

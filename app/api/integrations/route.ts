@@ -12,7 +12,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
 });
 
 export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
-  const rl = rateLimit({ key: `integrations-put:${session.tenantId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `integrations-put:${session.tenantId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const body = await req.json();
   const parsed = integrationsSchema.safeParse(body);

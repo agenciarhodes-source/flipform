@@ -17,9 +17,9 @@ export async function POST(req: Request) {
   const ip = getClientIp(req);
   const bodyForRate = await req.clone().json().catch(() => ({} as any));
   const emailForRate = String(bodyForRate?.email || '').trim().toLowerCase();
-  const rlIp = rateLimit({ key: `login:ip:${ip}`, limit: 10, windowMs: 10 * 60 * 1000 });
+  const rlIp = await rateLimit({ key: `login:ip:${ip}`, limit: 10, windowMs: 10 * 60 * 1000 });
   if (!rlIp.allowed) return rateLimitResponse(rlIp);
-  if (emailForRate) { const rlEmail = rateLimit({ key: `login:email:${emailForRate}`, limit: 5, windowMs: 10 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
+  if (emailForRate) { const rlEmail = await rateLimit({ key: `login:email:${emailForRate}`, limit: 5, windowMs: 10 * 60 * 1000 }); if (!rlEmail.allowed) return rateLimitResponse(rlEmail); }
 
   try {
     const body = await req.json();

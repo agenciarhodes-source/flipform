@@ -29,7 +29,7 @@ export const GET = withPlatformAdmin(async (_req, _session, ctx: { params: { id:
 });
 
 export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin:flip-ai-top-up:create:${session.userId}`,
     limit: 30,
     windowMs: 60 * 1000,

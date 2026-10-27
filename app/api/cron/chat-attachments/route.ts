@@ -10,7 +10,7 @@ export const maxDuration = 60;
 /** Deletes chat files whose retention ended. Expired files are also cleared whenever a new one arrives. */
 async function run(req: Request, method: 'GET' | 'POST') {
   try {
-    const rl = rateLimit({ key: `job:chat-attachments:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 1000 });
+    const rl = await rateLimit({ key: `job:chat-attachments:ip:${getClientIp(req)}`, limit: 10, windowMs: 60 * 1000 });
     if (!rl.allowed) return rateLimitResponse(rl);
 
     if (!isCronRequestAuthorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });

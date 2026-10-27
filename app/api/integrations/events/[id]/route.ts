@@ -10,7 +10,7 @@ function serializeEvent(event: any) {
 }
 
 export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `integrations-events-put:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `integrations-events-put:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const existing = await prisma.kanbanStageTrackingEvent.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!existing) return NextResponse.json({ error: 'Evento não encontrado.' }, { status: 404 });
@@ -44,7 +44,7 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx:
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `integrations-events-delete:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `integrations-events-delete:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const existing = await prisma.kanbanStageTrackingEvent.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!existing) return NextResponse.json({ error: 'Evento não encontrado.' }, { status: 404 });

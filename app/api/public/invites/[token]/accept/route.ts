@@ -8,7 +8,7 @@ import { logAudit } from '@/lib/audit';
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }) {
   try {
     const ip = getClientIp(req);
-    const rl = rateLimit({ key: `invite:accept:ip:${ip}`, limit: 20, windowMs: 60 * 60 * 1000 });
+    const rl = await rateLimit({ key: `invite:accept:ip:${ip}`, limit: 20, windowMs: 60 * 60 * 1000 });
     if (!rl.allowed) return rateLimitResponse(rl);
 
     const body = await req.json();

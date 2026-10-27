@@ -19,7 +19,7 @@ const MAX_WEBHOOK_BYTES = 1_000_000;
 
 export async function POST(req: Request) {
   const ip = getClientIp(req);
-  const rl = rateLimit({ key: `webhook:stripe:ip:${ip}`, limit: 240, windowMs: 60 * 1000 });
+  const rl = await rateLimit({ key: `webhook:stripe:ip:${ip}`, limit: 240, windowMs: 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   let webhookSecret: string;

@@ -4,7 +4,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { validateWhatsAppConnectionHealth } from '@/lib/meta/whatsapp-connection-health';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-connection-health:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 6,
     windowMs: 10 * 60_000,

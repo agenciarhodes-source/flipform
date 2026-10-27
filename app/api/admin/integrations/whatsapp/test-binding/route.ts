@@ -28,7 +28,7 @@ class WhatsAppTestBindingConflictError extends Error {
 }
 
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin-whatsapp-test-binding:${session.userId}:${getClientIp(req)}`,
     limit: 12,
     windowMs: 10 * 60_000,

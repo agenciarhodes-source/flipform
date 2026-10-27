@@ -70,7 +70,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
 });
 
 export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `meta-connection-disconnect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
+  const rl = await rateLimit({ key: `meta-connection-disconnect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: 'Muitas alterações na conexão Meta. Tente novamente em instantes.' }, { status: 429 });
 
   const connection = await prisma.tenantMetaConnection.findFirst({

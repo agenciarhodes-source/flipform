@@ -25,7 +25,7 @@ export const GET = withPermission('FLIP_AI_MANAGE', async (_req: NextRequest, se
 });
 
 export const PUT = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-ai-settings:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 30,
     windowMs: 60_000,

@@ -23,7 +23,7 @@ export const GET = withPermission('INTEGRATIONS_VIEW', async (_req, session) => 
 });
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
-  const rl = rateLimit({ key: `integrations-events-post:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `integrations-events-post:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const parsed = kanbanEventSchema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Payload inválido' }, { status: 400 });

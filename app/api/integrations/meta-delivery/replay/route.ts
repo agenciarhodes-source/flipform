@@ -6,7 +6,7 @@ import { replayFailedMetaEvents } from '@/lib/tracking';
 
 /** Resends the Meta events that failed in the last days, with their original time. */
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `meta-replay:${session.tenantId}:${getClientIp(req)}`, limit: 3, windowMs: 10 * 60_000 });
+  const rl = await rateLimit({ key: `meta-replay:${session.tenantId}:${getClientIp(req)}`, limit: 3, windowMs: 10 * 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: 'Aguarde alguns minutos antes de reenviar de novo.' }, { status: 429 });
   const summary = await replayFailedMetaEvents(session.tenantId);
   if (summary.blocked) {

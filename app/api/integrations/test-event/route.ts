@@ -11,7 +11,7 @@ import { sendMetaCapiEvent } from '@/lib/tracking/meta-capi';
 const schema = z.object({ provider: z.enum(['meta','gtm','ga4','google_ads']), eventName: z.string().min(1).max(64).default('Lead') });
 
 export const POST = withPermission('INTEGRATIONS_TEST', async (req, session) => {
-  const rl = rateLimit({ key: `integrations-test:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `integrations-test:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const parsed = schema.safeParse(await req.json());
   if (!parsed.success) return NextResponse.json({ error: 'Payload inválido' }, { status: 400 });

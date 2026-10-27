@@ -19,7 +19,7 @@ const bodySchema = z.object({
 const BINDING_CHANGED = 'WHATSAPP_BINDING_CHANGED';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `whatsapp-phone-registration:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 5,
     windowMs: 15 * 60_000,

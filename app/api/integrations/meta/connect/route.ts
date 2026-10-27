@@ -8,7 +8,7 @@ import { META_ADS_ONBOARDING_PURPOSE } from '@/lib/meta/onboarding';
 import { createMetaOAuthStateForPurpose, META_OAUTH_STATE_COOKIE, META_OAUTH_STATE_COOKIE_PATH, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
-  const rl = rateLimit({ key: `meta-oauth-connect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
+  const rl = await rateLimit({ key: `meta-oauth-connect:${session.tenantId}:${getClientIp(req)}`, limit: 10, windowMs: 10 * 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const currentConnection = await prisma.tenantMetaConnection.findFirst({

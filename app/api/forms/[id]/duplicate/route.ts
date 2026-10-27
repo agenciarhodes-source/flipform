@@ -16,7 +16,7 @@ function jsonValue(value: Prisma.JsonValue | null): Prisma.InputJsonValue | type
 }
 
 export const POST = withPermission('FORMS_CREATE', async (_req, session, ctx: { params: { id: string } }) => {
-  const rl = rateLimit({ key: `form-duplicate:${session.tenantId}:${session.userId}`, limit: 10, windowMs: 60_000 });
+  const rl = await rateLimit({ key: `form-duplicate:${session.tenantId}:${session.userId}`, limit: 10, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 
   const sourceForm = await prisma.form.findFirst({

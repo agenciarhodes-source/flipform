@@ -14,7 +14,7 @@ function appBaseUrl() {
 
 /** "Gerenciar pagamento e faturas": opens Stripe's own page for the owner of the company. */
 export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `billing:portal:user:${session.userId}:ip:${getClientIp(req)}`, limit: 20, windowMs: 60 * 60 * 1000 });
+  const rl = await rateLimit({ key: `billing:portal:user:${session.userId}:ip:${getClientIp(req)}`, limit: 20, windowMs: 60 * 60 * 1000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   try {
     const url = await createBillingPortalUrl(session.tenantId, `${appBaseUrl()}/billing`);

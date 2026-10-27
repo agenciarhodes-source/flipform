@@ -10,7 +10,7 @@ import { getMetaAdsReadOnlyDiagnostics } from '@/lib/meta/ads-diagnostics';
 const tenantIdSchema = z.string().trim().uuid();
 
 export const GET = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({
+  const rl = await rateLimit({
     key: `admin-meta-ads-diagnostics:${session.userId}:${getClientIp(req)}`,
     limit: 60,
     windowMs: 10 * 60_000,

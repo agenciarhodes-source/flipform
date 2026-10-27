@@ -1879,6 +1879,18 @@ model WhatsAppWelcomeSend {
   @@map("whatsapp_welcome_sends")
 }
 
+/// Tries per key (login, codes, forms, chat), shared by every server (security protocol S3).
+/// The key is a SHA-256 hash: no e-mail or IP is stored.
+model RateLimitBucket {
+  keyHash   String   @id @map("key_hash")
+  count     Int
+  resetAt   DateTime @map("reset_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([resetAt])
+  @@map("rate_limit_buckets")
+}
+
 /// People who asked not to receive automatic messages from a company (by phone).
 model ContactOptOut {
   id        String   @id @default(cuid())

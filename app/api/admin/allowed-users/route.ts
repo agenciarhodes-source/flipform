@@ -48,7 +48,7 @@ function toErrorDetails(error: unknown) {
 
 export async function GET(req: Request) {
   try {
-    const rl = rateLimit({ key: `admin:allowed-users:get:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
+    const rl = await rateLimit({ key: `admin:allowed-users:get:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
     if (!rl.allowed) return rateLimitResponse(rl);
     const session = await requirePlatformAdmin();
     if (!session) return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
@@ -160,7 +160,7 @@ export async function POST(req: Request) {
   } | null = null;
 
   try {
-    const rl = rateLimit({ key: `admin:allowed-users:post:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
+    const rl = await rateLimit({ key: `admin:allowed-users:post:${getClientIp(req)}`, limit: 60, windowMs: 60_000 });
     if (!rl.allowed) return rateLimitResponse(rl);
     await assertAdminSchemaReady();
 

@@ -99,7 +99,7 @@ async function getDiscoveryContext(tenantId: string) {
 }
 
 export const GET = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `admin-meta-tenant-assets-read:${session.userId}:${getClientIp(req)}`, limit: 120, windowMs: 10 * 60_000 });
+  const rl = await rateLimit({ key: `admin-meta-tenant-assets-read:${session.userId}:${getClientIp(req)}`, limit: 120, windowMs: 10 * 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: 'Muitas consultas de ativos Meta. Tente novamente em instantes.' }, { status: 429 });
 
   const tenantParsed = tenantIdSchema.safeParse(req.nextUrl.searchParams.get('tenantId'));
@@ -148,7 +148,7 @@ export const GET = withPlatformAdmin(async (req: NextRequest, session) => {
 });
 
 export const PUT = withPlatformAdmin(async (req: NextRequest, session) => {
-  const rl = rateLimit({ key: `admin-meta-tenant-assets-write:${session.userId}:${getClientIp(req)}`, limit: 30, windowMs: 10 * 60_000 });
+  const rl = await rateLimit({ key: `admin-meta-tenant-assets-write:${session.userId}:${getClientIp(req)}`, limit: 30, windowMs: 10 * 60_000 });
   if (!rl.allowed) return NextResponse.json({ error: 'Muitas alterações de ativos Meta. Tente novamente em instantes.' }, { status: 429 });
 
   const parsed = bindingSchema.safeParse(await req.json().catch(() => null));
