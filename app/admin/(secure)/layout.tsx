@@ -59,6 +59,7 @@ export default async function AdminLayout({
           <AdminLink href="/admin/integrations" icon={Plug} label="Integrações" />
           <AdminLink href="/admin/lgpd" icon={ScrollText} label="LGPD" />
           <AdminLink href="/admin/audit" icon={ScrollText} label="Audit logs" />
+          <AdminLink href="/admin/security" icon={Shield} label="Segurança da conta" />
         </nav>
         <div className="p-3 border-t border-slate-800 text-xs text-slate-400">
           <div className="px-2 mb-2">

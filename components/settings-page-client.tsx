@@ -1,4 +1,5 @@
 'use client';
+import { MfaCard } from '@/components/mfa/mfa-card';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -238,6 +239,8 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           </Button>
         </div>
       </Card>
+
+      <MfaCard />
 
       {/* Estatísticas */}
       <Card className="p-5">

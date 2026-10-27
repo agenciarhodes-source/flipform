@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { completeOnboardingSchema } from '@/lib/schemas';
 import { verifyOnboardingToken } from '@/lib/jwt';
-import { hashPassword, setSessionCookie } from '@/lib/auth';
+import { hashPassword } from '@/lib/auth';
+import { setSessionCookieUnlessMfa } from '@/lib/mfa/server';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(req: Request) {
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
     create: { tenantId: allowed.tenantId, userId: user.id, role: (allowed.role as any), status: 'active' },
   });
 
-  await setSessionCookie({ userId: user.id, tenantId: allowed.tenantId, role: allowed.role, email: user.email, name: user.name, tenantSlug: allowed.tenant.slug });
+  await setSessionCookieUnlessMfa({ userId: user.id, tenantId: allowed.tenantId, role: allowed.role, email: user.email, name: user.name, tenantSlug: allowed.tenant.slug });
   await logAudit({ tenantId: allowed.tenantId, userId: user.id, entityType: 'auth', entityId: user.id, action: 'auth.onboarding_completed' });
 
   return NextResponse.json({ ok: true });

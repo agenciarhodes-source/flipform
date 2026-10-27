@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyOnboardingToken } from '@/lib/jwt';
-import { hashPassword, setSessionCookie } from '@/lib/auth';
+import { hashPassword } from '@/lib/auth';
+import { setSessionCookieUnlessMfa } from '@/lib/mfa/server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { evaluateBillingAccess } from '@/lib/billing-access';
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
 
   const access = evaluateBillingAccess({ tenantStatus: tenant?.status, subscriptionStatus: sub?.status, gracePeriodEndsAt: sub?.gracePeriodEndsAt || null });
 
-  await setSessionCookie({ userId: user.id, tenantId: payload.tenantId, role: 'owner', email: user.email, name: user.name, tenantSlug: tenant?.slug || '', globalRole: null });
+  await setSessionCookieUnlessMfa({ userId: user.id, tenantId: payload.tenantId, role: 'owner', email: user.email, name: user.name, tenantSlug: tenant?.slug || '', globalRole: null });
 
   if (!access.allowAccess) {
     await logPlatformAudit({ tenantId: payload.tenantId, userId: user.id, entityType: 'onboarding', entityId: user.id, action: 'onboarding.pending_payment' });

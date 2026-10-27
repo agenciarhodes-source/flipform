@@ -9,12 +9,26 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Zap } from 'lucide-react';
+import { MfaLoginStep } from '@/components/mfa/mfa-login-step';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+
+  const goIn = (data: any) => {
+    toast.success('Bem-vindo!');
+    if (data.platformAdmin) {
+      router.push('/admin');
+    } else if (data.businessGroupAccess) {
+      router.push('/group');
+    } else {
+      router.push('/dashboard');
+    }
+    router.refresh();
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,15 +41,11 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erro no login');
-      toast.success('Bem-vindo!');
-      if (data.platformAdmin) {
-        router.push('/admin');
-      } else if (data.businessGroupAccess) {
-        router.push('/group');
-      } else {
-        router.push('/dashboard');
+      if (data.mfaRequired && data.mfaToken) {
+        setMfaToken(data.mfaToken);
+        return;
       }
-      router.refresh();
+      goIn(data);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -73,8 +83,11 @@ export default function LoginPage() {
             </div>
             <span className="font-heading font-bold text-lg">FlipForm</span>
           </div>
-          <h2 className="font-heading text-2xl font-bold mb-2">Entrar</h2>
-          <p className="text-muted-foreground text-sm mb-6">Acesse sua conta para gerenciar seus leads.</p>
+          <h2 className="font-heading text-2xl font-bold mb-2">{mfaToken ? 'Verificação em duas etapas' : 'Entrar'}</h2>
+          {!mfaToken && <p className="text-muted-foreground text-sm mb-6">Acesse sua conta para gerenciar seus leads.</p>}
+          {mfaToken ? (
+            <MfaLoginStep mfaToken={mfaToken} onSuccess={goIn} onCancel={() => { setMfaToken(null); setPassword(''); }} />
+          ) : (
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
@@ -88,6 +101,7 @@ export default function LoginPage() {
               {loading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
+          )}
           <div className="mt-3 text-xs text-center text-muted-foreground">
             <Link href="/legal/terms" className="underline">Termos</Link>{' · '}
             <Link href="/legal/privacy" className="underline">Privacidade</Link>{' · '}
