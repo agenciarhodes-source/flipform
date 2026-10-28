@@ -10,7 +10,7 @@
 
 | # | Risco / pendência | Prob. | Impacto | Prioridade | Plano | Dono | Prazo | Status |
 |---|---|---|---|---|---|---|---|---|
-| R1 | **Backup do banco: só 6 horas de histórico e nenhuma cópia agendada.** Um erro percebido depois de 6 horas não tem como ser desfeito. | Média | Muito alto | **Crítica** | Aumentar PITR do Neon para 7 dias; criar snapshot diário (30 dias); proteger o ramo `production`; testar recuperação | Responsável | Imediato (com autorização) | Aberto |
+| R1 | Backup do banco: tinha só 6 horas de histórico e nenhuma cópia agendada | — | — | — | PITR de 7 dias, snapshot diário por 30 dias e ramo `production` protegido | Responsável | 28/10/2026 | **Resolvido** (falta o teste de recuperação, R13) |
 | R2 | Repositório de código **público** | Média | Alto | Alta | Tornar privado (fase 0) | Responsável | Fase 0 | Aberto |
 | R3 | MFA não ativado nas contas (FlipForm Super Admin, GitHub, Vercel, Neon, OpenAI, Meta, Google) | Média | Muito alto | Alta | Ativar Google Authenticator em todas (fase 0) | Responsável | Fase 0 | Aberto |
 | R4 | Ramo `main` sem proteção (dá para enviar código sem PR/testes) | Baixa | Alto | Média | Ativar proteção de branch no GitHub (fase 0) | Responsável | Fase 0 | Aberto |
@@ -32,3 +32,4 @@
 | 28/10/2026 | Fase 2: Gitleaks + Semgrep a cada mudança (T1); testes de rotas, isolamento entre empresas e permissões (T2); OWASP ZAP semanal (T3) |
 | 28/10/2026 | Removida a rota que criava sessão só com e-mail (hotfix #534) |
 | 28/10/2026 | Telas do Super Admin passaram a conferir a sessão no banco; criptografia de tokens com selo de tamanho fixo |
+| 28/10/2026 | Backup do banco: histórico de 7 dias, cópia diária por 30 dias, ramo de produção protegido (R1) |

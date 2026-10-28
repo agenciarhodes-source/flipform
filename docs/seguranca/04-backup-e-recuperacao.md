@@ -17,7 +17,9 @@
 | Código | **GitHub** (repositório + cópias locais dos desenvolvedores) | Alto (já é versionado) |
 | Configuração e segredos | Variáveis de ambiente da **Vercel** | Alto: manter cópia segura em gerenciador de senhas |
 
-## 2. Situação atual do banco (verificada em 28/10/2026)
+## 2. Situação do banco
+
+### Antes (verificada em 28/10/2026)
 
 | Item | Situação | Comentário |
 |---|---|---|
@@ -25,16 +27,26 @@
 | Cópias agendadas (snapshots) | **Nenhuma** | Existe só uma cópia manual de 25/09/2026. |
 | Ramo de produção protegido | **Não** | Proteger impede exclusão acidental. |
 
-> **Tradução:** hoje, se alguém apagar dados por engano e só percebermos no dia seguinte, **não há como recuperar** pelo banco. Isso é o item de maior prioridade no Registro de Riscos (arquivo 08).
+> **Tradução:** se alguém apagasse dados por engano e só percebêssemos no dia seguinte, **não haveria como recuperar** pelo banco.
+
+### Depois (aplicado em 28/10/2026, com autorização do responsável)
+
+| Item | Situação | Comentário |
+|---|---|---|
+| Histórico para restauração a um ponto no tempo (PITR) | **7 dias** | Dá para voltar o banco a qualquer minuto da última semana. |
+| Cópias agendadas (snapshots) | **Diária, às 03h (Brasília), guardada por 30 dias** | Cópia completa de cada dia do último mês. |
+| Ramo de produção protegido | **Sim** | O banco de produção não pode ser excluído por engano. |
+
+Custo estimado: menos de US$ 0,50 por mês (preços do plano Launch do Neon: histórico US$ 0,20/GB-mês; snapshots US$ 0,09/GB-mês).
 
 ## 3. Metas (o que queremos)
 
 | Meta | Valor | Como chegar |
 |---|---|---|
-| **RPO** (perda máxima) | 1 minuto para erros percebidos em até 7 dias; 24 horas para o resto | Aumentar o PITR do Neon para **7 dias** + snapshot **diário** guardado por 30 dias |
+| **RPO** (perda máxima) | 1 minuto para erros percebidos em até 7 dias; 24 horas para o resto (até 30 dias) | PITR de 7 dias + snapshot diário por 30 dias (**em vigor desde 28/10/2026**) |
 | **RTO** (tempo para voltar) | 4 horas | Procedimento da seção 5 testado a cada 3 meses |
 
-As mudanças da seção 3 são configurações do Neon (podem gerar custo) e **só serão feitas com autorização do responsável**.
+Qualquer mudança nessas configurações do Neon só é feita com autorização do responsável.
 
 ## 4. Regras
 
