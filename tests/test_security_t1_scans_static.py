@@ -26,7 +26,7 @@ def test_gitleaks_is_pinned_verified_and_redacted():
 
 
 def test_semgrep_is_pinned_and_blocks_only_new_high_findings_on_branches():
-    assert "SEMGREP_VERSION: 1.110.0" in WORKFLOW
+    assert "SEMGREP_VERSION: 1.180.0" in WORKFLOW
     assert "--metrics=off" in WORKFLOW
     assert '--severity ERROR --error --baseline-commit "$(git merge-base origin/main HEAD)"' in WORKFLOW
     assert "p/owasp-top-ten" in WORKFLOW

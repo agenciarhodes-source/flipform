@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SEMGREP_VERSION: 1.110.0
+      SEMGREP_VERSION: 1.180.0
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -95,13 +95,13 @@ jobs:
         run: |
           set -euo pipefail
           rules=(--config p/owasp-top-ten --config p/typescript --config p/react --config p/secrets)
-          common=(scan --metrics=off --quiet --json --output semgrep.json "${rules[@]}")
+          common=(scan --metrics=off --json --output semgrep.json "${rules[@]}")
           if [ "$EVENT" = "push" ] && [ "$REF" != "refs/heads/main" ]; then
             # A branch fails only on new high-severity findings it introduces.
-            semgrep "${common[@]}" --severity ERROR --error --baseline-commit "$(git merge-base origin/main HEAD)"
+            semgrep "${common[@]}" --severity ERROR --error --baseline-commit "$(git merge-base origin/main HEAD)" 2> >(tee semgrep.log >&2)
           else
             # main and the weekly scan: full report, never blocking.
-            semgrep "${common[@]}" || true
+            semgrep "${common[@]}" 2> >(tee semgrep.log >&2) || true
           fi
 
       - name: Summary
@@ -112,7 +112,10 @@ jobs:
               echo "### Semgrep"
               jq -r '.results | group_by(.extra.severity) | map("- \(.[0].extra.severity): \(length)") | .[]' semgrep.json
               jq -r '.results[] | "- `\(.path):\(.start.line)` \(.check_id) (\(.extra.severity))"' semgrep.json | head -100
+              jq -r '.errors[]? | "- erro: \(.message // .type)"' semgrep.json | head -20
             } >> "$GITHUB_STEP_SUMMARY"
+          elif [ -f semgrep.log ]; then
+            { echo "### Semgrep não terminou"; echo '```'; tail -40 semgrep.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Keep the report
