@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatDateTime } from '@/lib/utils';
 import { formatLeadSource } from '@/lib/leads';
+import { answerDisplayText } from '@/lib/privacy/documents';
 import { formatCurrencyBRLFromCents, parseBRLToCents } from '@/lib/currency-brl';
 import { Mail, Phone, User, Flame, Snowflake, Thermometer, Trash2, Pencil, MessageCircle, Sparkles } from 'lucide-react';
 import { TasksTab } from '@/components/tasks-tab';
@@ -131,6 +132,18 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
   const [savingLocation, setSavingLocation] = useState(false);
   const [resolvingActionRequest, setResolvingActionRequest] = useState(false);
   const [deletingAttachment, setDeletingAttachment] = useState<string | null>(null);
+  // CPF/CNPJ shown on request only; each view is recorded (security protocol S7).
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const revealDocument = async (answerId: string) => {
+    try {
+      const res = await fetch(`/api/leads/${leadId}/answers/${answerId}/document`, { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível mostrar.');
+      setRevealed((current) => ({ ...current, [answerId]: data.value }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível mostrar.');
+    }
+  };
   const [basicForm, setBasicForm] = useState({ name: '', email: '' });
   const [savingBasic, setSavingBasic] = useState(false);
 
@@ -451,7 +464,12 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             ) : lead.answers.map((a: any) => (
               <div key={a.id} className="border rounded-md p-3">
                 <div className="text-xs text-muted-foreground mb-1">{a.questionLabel}</div>
-                <div className="font-medium">{typeof a.answer === 'object' ? JSON.stringify(a.answer) : String(a.answer)}</div>
+                <div className="font-medium flex flex-wrap items-center gap-2">
+                  <span>{revealed[a.id] || answerDisplayText(a.answer)}</span>
+                  {a.answer && typeof a.answer === 'object' && a.answer.protected && !revealed[a.id] ? (
+                    <Button type="button" size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => void revealDocument(a.id)}>Mostrar</Button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </TabsContent>

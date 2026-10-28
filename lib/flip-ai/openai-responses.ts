@@ -2,6 +2,7 @@ import 'server-only';
 import type { FlipAiModelContentPart } from './chat-attachment';
 
 import { z } from 'zod';
+import { maskDocumentNumbers } from '@/lib/privacy/documents';
 
 export const FLIP_AI_TEXT_MODEL = process.env.OPENAI_FLIP_AI_TEXT_MODEL || 'gpt-5.6-luna';
 // The budget covers the whole structured turn (reply, identity, qualification, memory)
@@ -9,6 +10,15 @@ export const FLIP_AI_TEXT_MODEL = process.env.OPENAI_FLIP_AI_TEXT_MODEL || 'gpt-
 export const FLIP_AI_MAX_OUTPUT_TOKENS = 1_500;
 /** Larger budget for the single recovery attempt after a truncated response. */
 export const FLIP_AI_RECOVERY_MAX_OUTPUT_TOKENS = 4_000;
+
+function maskDocumentsInMessages(messages: OpenAiConversationInput['messages']) {
+  return messages.map((message) => ({
+    ...message,
+    content: typeof message.content === 'string'
+      ? maskDocumentNumbers(message.content)
+      : message.content.map((part) => (part.type === 'input_text' ? { ...part, text: maskDocumentNumbers(part.text) } : part)),
+  }));
+}
 
 export type OpenAiConversationInput = {
   instructions: string;
@@ -83,7 +93,8 @@ export async function streamOpenAiText(
       body: JSON.stringify({
         model: options.model || FLIP_AI_TEXT_MODEL,
         instructions: input.instructions,
-        input: input.messages,
+        // Security protocol S7: CPF and CNPJ numbers never leave for the AI provider.
+        input: maskDocumentsInMessages(input.messages),
         max_output_tokens: options.maxOutputTokens || FLIP_AI_MAX_OUTPUT_TOKENS,
         store: false,
         stream: true,

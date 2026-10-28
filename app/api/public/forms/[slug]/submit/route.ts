@@ -13,6 +13,7 @@ import { assignLeadByRotation } from '@/lib/lead-assignment';
 import { ATTRIBUTION_LIMITS, normalizeAttributionString, parseAttributionCookies } from '@/lib/attribution';
 import { cleanOptions, isValidBrazilMobilePhone, isValidCnpj, isValidCpf, isValidEmail, evaluateQualification, normalizeBrazilPhone, normalizeCnpj, normalizeCpf, normalizeEmail, normalizeSelectionMode, requiresOptions } from '@/lib/form-field-validation';
 import { findExistingLeadIdByContactInTenant } from '@/lib/form-duplicate-lead';
+import { protectDocumentAnswer } from '@/lib/privacy/protect-answer';
 
 /**
  * Public form submit endpoint.
@@ -260,7 +261,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ slug: string }
             create: normalizedAnswers.map((a) => ({
               fieldId: a.fieldId,
               questionLabel: a.label,
-              answer: (a.value ?? null) as any,
+              // Security protocol S7: CPF and CNPJ are kept encrypted, with a masked copy for screens.
+              answer: protectDocumentAnswer(a.fieldType, a.value) as any,
             })),
           },
           history: {

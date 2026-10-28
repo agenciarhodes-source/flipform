@@ -1,6 +1,7 @@
 import type { FlipAiConversationMemorySnapshot } from './conversation-memory-policy';
 import type { FlipAiLeadIntelligenceSnapshot } from './lead-intelligence-policy';
 import type { FlipAiAvailabilitySnapshot } from './availability-policy';
+import { answerDisplayText } from '@/lib/privacy/documents';
 
 export type FlipAiHumanHandoffSnapshot = {
   summary: string;
@@ -182,9 +183,7 @@ export function buildFlipAiHumanHandoffSnapshot(input: {
     input.hasEmail ? 'E-mail já capturado.' : '',
     ...memoryFacts.slice(0, 6),
     ...input.answers.slice(0, 3).map((answer) => {
-      const value = typeof answer.answer === 'string'
-        ? answer.answer
-        : JSON.stringify(answer.answer);
+      const value = answerDisplayText(answer.answer);
       const compact = cleanText(value, 220);
       return compact ? `${cleanText(answer.questionLabel, 120)}: ${compact}` : '';
     }),

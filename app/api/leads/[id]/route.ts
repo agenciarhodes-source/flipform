@@ -11,6 +11,14 @@ import {
 import { can } from '@/lib/rbac';
 import { withAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
+import { isProtectedAnswer } from '@/lib/privacy/documents';
+
+/** Protected documents go out masked; the full number only through the audited "Mostrar". */
+function publicLeadAnswer<T extends { answer: unknown }>(item: T) {
+  return isProtectedAnswer(item.answer)
+    ? { ...item, answer: { protected: item.answer.protected, masked: item.answer.masked } }
+    : item;
+}
 import { parseLeadBasicInfo } from '@/lib/leads/basic-info';
 import { getFlipAiLeadIntelligence } from '@/lib/flip-ai/lead-intelligence';
 import { getFlipAiHumanHandoff } from '@/lib/flip-ai/human-handoff';
@@ -131,7 +139,7 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     }
     : null;
 
-  return NextResponse.json({ lead: { ...lead, flipAiAgentName, whatsappConsentAt,
+  return NextResponse.json({ lead: { ...lead, answers: lead.answers.map(publicLeadAnswer), flipAiAgentName, whatsappConsentAt,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiConversation,
