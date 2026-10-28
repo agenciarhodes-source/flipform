@@ -1,0 +1,10 @@
+# Security protocol T1: only shipped code is judged.
+node_modules/
+.next/
+out/
+coverage/
+public/
+tests/
+e2e/
+*.min.js
+package-lock.json
