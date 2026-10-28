@@ -11,7 +11,7 @@ def test_the_ai_answers_only_when_every_check_passes():
     reply = read("lib/whatsapp-ai/reply.ts")
     for check in (
         "if (!latestInbound || latestInbound.id !== input.inboundMessageId) return { replied: false, reason: 'newer_message' };",
-        "if (outboundAt && outboundAt >= inboundAt) return { replied: false, reason: 'already_answered' };",
+        "if (!takeover && outboundAt && outboundAt >= inboundAt) return { replied: false, reason: 'already_answered' };",
         "if (!decision.answer) return { replied: false, reason: decision.reason };",
         "if (isConversationAiPaused(conversation, settings.resumeAfterHours, now)) return { replied: false, reason: 'paused' };",
         "return { replied: false, reason: 'daily_limit' };",

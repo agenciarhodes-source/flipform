@@ -35,6 +35,7 @@ import { handleWhatsAppAiQualification, isLeadNameConfirmed, leadRegistration, w
 import { registrationNameState, registrationNote } from './registration-rules';
 import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
 import { messageTranscript } from '@/lib/flip-ai/history-content';
+import { CLOSER_TAKEOVER_NOTE } from './closer-takeover-rules';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -198,7 +199,7 @@ export async function replyToWhatsAppConversation(input: {
   conversationId: string;
   /** The message that started this run; a newer one takes over the reply. */
   inboundMessageId: string;
-  trigger: 'message' | 'no_reply_sweep' | 'handback';
+  trigger: 'message' | 'no_reply_sweep' | 'handback' | 'closer_takeover';
   now?: Date;
 }): Promise<WhatsAppAiOutcome> {
   const now = input.now || new Date();
@@ -219,18 +220,23 @@ export async function replyToWhatsAppConversation(input: {
     prisma.message.findFirst({
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'inbound' },
       orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      select: { id: true, externalMessageId: true, providerTimestamp: true, createdAt: true, metadata: true },
+      select: { id: true, externalMessageId: true, providerTimestamp: true, createdAt: true, metadata: true, text: true },
     }),
     prisma.message.findFirst({
       where: { tenantId: input.tenantId, conversationId: conversation.id, direction: 'outbound' },
       orderBy: [{ providerTimestamp: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      select: { id: true, providerTimestamp: true, createdAt: true },
+      select: { id: true, providerTimestamp: true, createdAt: true, metadata: true },
     }),
   ]);
   if (!latestInbound || latestInbound.id !== input.inboundMessageId) return { replied: false, reason: 'newer_message' };
   const inboundAt = latestInbound.providerTimestamp || latestInbound.createdAt;
   const outboundAt = latestOutbound ? latestOutbound.providerTimestamp || latestOutbound.createdAt : null;
-  if (outboundAt && outboundAt >= inboundAt) return { replied: false, reason: 'already_answered' };
+  // Closer takeover: the AI itself spoke last (it handed the case over); if anyone else did, it stops.
+  const takeover = input.trigger === 'closer_takeover';
+  if (takeover && typeof metadataOf(latestOutbound?.metadata ?? null).aiAgentId !== 'string') {
+    return { replied: false, reason: 'already_answered' };
+  }
+  if (!takeover && outboundAt && outboundAt >= inboundAt) return { replied: false, reason: 'already_answered' };
   // The free reply window is 24 hours from the customer's last message.
   if (now.getTime() - inboundAt.getTime() > 23 * 3_600_000) return { replied: false, reason: 'window_closed' };
 
@@ -342,7 +348,8 @@ export async function replyToWhatsAppConversation(input: {
     }
   }
   if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));
-  const turnText = (parts.join('\n') || extraUserNotes.join('\n') || 'Olá').slice(0, 2_000);
+  const turnText = (parts.join('\n') || extraUserNotes.join('\n') || (takeover ? latestInbound.text?.trim() : '') || 'Olá').slice(0, 2_000);
+  if (takeover) extraUserNotes.push(CLOSER_TAKEOVER_NOTE);
   if (input.trigger === 'handback') {
     extraUserNotes.push('[Nota interna, não mostre ao cliente: a equipe devolveu esta conversa para você. Responda o que o cliente perguntou ou pediu nas últimas mensagens e continue o atendimento de onde parou, sem repetir o que a equipe já disse.]');
   }
@@ -359,7 +366,8 @@ export async function replyToWhatsAppConversation(input: {
   }
 
   const plan = await assertFlipAiConversationRuntimeReady({ tenantId: input.tenantId });
-  const requestKey = `whatsapp:${input.tenantId}:${conversation.id}:${latestInbound.id}`;
+  // One takeover per customer message, apart from the usual answer to that message.
+  const requestKey = `whatsapp:${input.tenantId}:${conversation.id}:${takeover ? 'closer:' : ''}${latestInbound.id}`;
   const attemptToken = randomUUID();
   let event;
   try {

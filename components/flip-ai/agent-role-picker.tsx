@@ -30,7 +30,9 @@ export function AgentRolePicker({ agentId }: { agentId: string }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Não foi possível salvar o perfil.');
-      toast.success(`Perfil do atendente: ${ATTENDANT_ROLE_LABELS[next].name}. Vale a partir da próxima resposta.`);
+      const takeover = Number(data?.takeover) || 0;
+      toast.success(`Perfil do atendente: ${ATTENDANT_ROLE_LABELS[next].name}. Vale a partir da próxima resposta.`
+        + (takeover ? ` A IA vai retomar como Closer ${takeover === 1 ? '1 atendimento' : `${takeover} atendimentos`} que tinha passado para a equipe nas últimas horas.` : ''));
     } catch (error) {
       setRole(previous);
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar o perfil.');
