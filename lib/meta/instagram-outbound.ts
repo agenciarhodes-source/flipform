@@ -52,7 +52,13 @@ type OutboxMetadata = {
   providerFailedAt?: string;
   providerErrorCode?: string;
   providerErrorType?: string;
+  /** Sent by the Flip AI attendant, not by a person of the team. */
+  aiAgentId?: string;
+  aiAgentName?: string;
 };
+
+/** The Flip AI attendant that writes a message instead of a person of the team. */
+export type InstagramAiSender = { agentId: string; agentName: string };
 
 function sha256(value: string) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -186,23 +192,41 @@ async function findExistingOutboxMessage(tenantId: string, externalMessageId: st
   });
 }
 
+/** A conversation the Flip AI answers: it must exist in the company and the person must have written first. */
+async function loadConversationForAi(input: { tenantId: string; conversationId: string }) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, tenantId: input.tenantId, provider: 'meta', channel: 'instagram' },
+    include: { externalContactIdentity: { select: { externalUserId: true } } },
+  });
+  if (!conversation) throw new InstagramOutboundError('NOT_FOUND', 'Conversation not found');
+  if (!conversation.lastInboundAt) {
+    throw new InstagramOutboundError('RECIPIENT_NOT_ELIGIBLE', 'Instagram recipient has not initiated the conversation');
+  }
+  return conversation;
+}
+
 async function enqueueInstagramTextMessage(input: {
   tenantId: string;
   conversationId: string;
   requestedByUserId: string;
   text: string;
   idempotencyKey: string;
+  aiSender?: InstagramAiSender;
 }) {
   const tenantId = input.tenantId.trim();
   const conversationId = input.conversationId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
   const text = input.text.trim();
   const idempotencyKey = input.idempotencyKey.trim();
-  if (!tenantId || !conversationId || !requestedByUserId || !text || !idempotencyKey) {
+  const aiSender = input.aiSender || null;
+  if (!tenantId || !conversationId || (!requestedByUserId && !aiSender) || !text || !idempotencyKey) {
     throw new InstagramOutboundError('INVALID_REQUEST', 'Missing Instagram outbound fields');
   }
 
-  const conversation = await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
+  // A person needs the inbox permission; the Flip AI answers only conversations the customer started.
+  const conversation = aiSender
+    ? await loadConversationForAi({ tenantId, conversationId })
+    : await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
   const recipientIgScopedId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
   const fingerprint = requestFingerprint(conversationId, text);
@@ -236,6 +260,7 @@ async function enqueueInstagramTextMessage(input: {
     idempotencyKeyHash,
     requestFingerprint: fingerprint,
     dispatchState: 'queued',
+    ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
   };
 
   try {
@@ -250,7 +275,7 @@ async function enqueueInstagramTextMessage(input: {
         type: 'text',
         text,
         status: 'queued',
-        sentByUserId: requestedByUserId,
+        sentByUserId: aiSender ? null : requestedByUserId,
         metadata: toJson(metadata),
       },
     });
@@ -511,9 +536,11 @@ async function sendInstagramText(input: {
 export async function enqueueAndDispatchInstagramTextMessage(input: {
   tenantId: string;
   conversationId: string;
+  /** The person sending; empty when aiSender is given. */
   requestedByUserId: string;
   text: string;
   idempotencyKey: string;
+  aiSender?: InstagramAiSender;
 }): Promise<InstagramOutboundResult> {
   const enqueued = await enqueueInstagramTextMessage(input);
   const dispatch = await beginDispatch(input.tenantId, enqueued.message.id);

@@ -22,7 +22,7 @@ export const POST = withPermission('INBOX_MANAGE', async (req: NextRequest, sess
   if (!parsed.success) return NextResponse.json({ error: 'Ação inválida.' }, { status: 400 });
 
   const conversation = await findAccessibleInboxConversation(session, ctx.params.id);
-  if (!conversation || conversation.channel !== 'whatsapp') {
+  if (!conversation || (conversation.channel !== 'whatsapp' && conversation.channel !== 'instagram')) {
     return NextResponse.json({ error: 'Conversa não encontrada.' }, { status: 404 });
   }
 
@@ -33,6 +33,7 @@ export const POST = withPermission('INBOX_MANAGE', async (req: NextRequest, sess
   if (parsed.data.action === 'resume') {
     await resumeConversationAi({ tenantId: session.tenantId, conversationId: conversation.id, userId: session.userId });
   }
+  if (conversation.channel === 'instagram') return NextResponse.json({ ok: true });
 
   const pending = await pendingWhatsAppReply({ tenantId: session.tenantId, conversationId: conversation.id });
   if (pending.status === 'answering') {

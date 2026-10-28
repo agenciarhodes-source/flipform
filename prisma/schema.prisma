@@ -148,6 +148,7 @@ model Tenant {
   googleConversionMappings GoogleConversionMapping[]
   googleConversionEvents GoogleConversionEvent[]
   whatsappAiSettings TenantWhatsAppAiSettings[]
+  instagramAiSettings TenantInstagramAiSettings[]
   pipelineStageAiRules PipelineStageAiRule[]
   leadStageSuggestions LeadStageSuggestion[]
   documentChecklists   DocumentChecklist[]
@@ -936,6 +937,7 @@ model TenantInstagramConnection {
 
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   connectedBy User?  @relation("TenantInstagramConnectionConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  aiSettings  TenantInstagramAiSettings?
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -1730,6 +1732,34 @@ model TenantWhatsAppAiSettings {
 
   @@index([tenantId])
   @@map("tenant_whatsapp_ai_settings")
+}
+
+/// Whether the Flip AI answers the Direct of a connected Instagram account, and with which agent.
+model TenantInstagramAiSettings {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  connectionId     String   @unique @map("connection_id")
+  enabled          Boolean  @default(false)
+  /// Flip AI agent that answers (checked in code: published and of the same company).
+  agentId          String?  @map("agent_id")
+  /// Releases the AI to everyone who writes to the account.
+  liveEnabled      Boolean  @default(false) @map("live_enabled")
+  /// While liveEnabled is off, the AI only answers these Instagram usernames (tests), without "@".
+  testUsernames    String[] @default([]) @map("test_usernames")
+  dailyCreditLimit Int?     @map("daily_credit_limit")
+  /// Hands a paused conversation back to the AI after these hours without a team reply; empty = never.
+  resumeAfterHours Int?     @map("resume_after_hours")
+  /// How the AI introduces itself in its first reply. Empty = "assistente de <empresa>".
+  introduction     String?  @map("introduction")
+  updatedBy        String?  @map("updated_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connection TenantInstagramConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_instagram_ai_settings")
 }
 
 /// When the Flip AI should move a lead to this stage, written by the company in Portuguese.

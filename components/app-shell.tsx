@@ -37,6 +37,7 @@ import {
   Network,
   Building2,
   MessageCircle,
+  Instagram,
   Sparkles,
 } from "lucide-react";
 import { FlipNavBadge } from "@/components/flip/alerts-board";
@@ -65,6 +66,7 @@ const NAV: NavItem[] = [
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },
   { href: "/whatsapp-ai", label: "Atendimento WhatsApp", icon: MessageCircle, permission: "FLIP_AI_MANAGE" },
+  { href: "/instagram-ai", label: "Atendimento Instagram", icon: Instagram, permission: "FLIP_AI_MANAGE" },
   { href: "/forms", label: "Formulários", icon: FileText },
   { href: "/sales-rotation", label: "Rodízio de leads", icon: Shuffle, permission: "LEAD_ASSIGNMENT_ROTATION_VIEW" },
   { href: "/domains", label: "Domínios", icon: Globe2, permission: "DOMAINS_VIEW" },

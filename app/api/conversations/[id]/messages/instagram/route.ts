@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { enqueueAndDispatchInstagramTextMessage, InstagramOutboundError } from '@/lib/meta/instagram-outbound';
+import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 
 const bodySchema = z.object({
   text: z.string().trim().min(1).max(4096),
@@ -31,6 +32,10 @@ export const POST = withPermission('INBOX_MANAGE', async (req: NextRequest, sess
       idempotencyKey: parsed.data.idempotencyKey,
     });
 
+    // A person of the team answered: the AI steps back in this conversation.
+    if (result.status !== 'failed') {
+      await pauseConversationAi({ tenantId: session.tenantId, conversationId: ctx.params.id, userId: session.userId, reason: 'human_reply_system' }).catch(() => undefined);
+    }
     if (result.status === 'failed') {
       return NextResponse.json({
         error: 'A Meta recusou o envio ou a conexão do Instagram não está disponível.',
