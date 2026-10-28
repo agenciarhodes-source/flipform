@@ -9,5 +9,6 @@ def test_received_files_follow_the_attendant_profile():
     assert "o conteúdo será analisado pela equipe" not in reply
     assert "export function receivedFilesNote(role: AttendantRole | undefined)" in reply
     assert "if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));" in reply
-    assert "diga quais ainda faltam e peça o próximo, um por vez" in reply
+    assert "diga de uma vez quais ainda faltam e peça para enviar" in reply
+    assert "um por vez" not in reply
     assert "Não diga apenas que a equipe vai analisar enquanto ainda faltar documento." in reply

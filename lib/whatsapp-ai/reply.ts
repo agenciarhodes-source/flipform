@@ -87,7 +87,7 @@ export function receivedFilesNote(role: AttendantRole | undefined) {
     return '[Nota interna: agradeça o arquivo em uma frase e diga que a equipe vai analisar. Não comente o conteúdo nem peça outros documentos.]';
   }
   return '[Nota interna: agradeça o arquivo em uma frase. Em seguida, olhando a lista de documentos que você pediu nesta conversa'
-    + ' (ou a lista da base de conhecimento para este caso), diga quais ainda faltam e peça o próximo, um por vez. Se o cliente'
+    + ' (ou a lista da base de conhecimento para este caso), diga de uma vez quais ainda faltam e peça para enviar. Se o cliente'
     + ' disser que não tem algum, explique em uma ou duas frases onde e como conseguir. Só quando todos os documentos necessários'
     + ' para a análise tiverem chegado (ou o cliente disser que não tem os que faltam), faça o resumo e diga que a equipe dá'
     + ' sequência. Não diga apenas que a equipe vai analisar enquanto ainda faltar documento.]';
