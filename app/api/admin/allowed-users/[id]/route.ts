@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
 const ALLOWED_STATUSES = new Set(['pending', 'accepted', 'active', 'blocked', 'revoked', 'expired']);
 
 async function requirePlatformAdmin() {
-  const session = await getSession();
+  // Security protocol T2: confirmed in the database, so an ended session or a removed Super Admin stops at once.
+  const session = await getVerifiedSession();
   if (!session || session.globalRole !== 'platform_admin') return null;
   return session;
 }

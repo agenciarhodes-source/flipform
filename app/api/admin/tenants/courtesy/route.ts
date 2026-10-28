@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { logPlatformAudit } from '@/lib/platform-audit';
@@ -19,7 +19,8 @@ async function planBySlug(slug?: string) {
 
 export async function POST(req: Request) {
   try {
-    const session = await getSession();
+    // Security protocol T2: confirmed in the database on every request.
+    const session = await getVerifiedSession();
     if (!session || session.globalRole !== 'platform_admin') {
       return adminError('Não autorizado', 403, { code: 'UNAUTHORIZED' });
     }

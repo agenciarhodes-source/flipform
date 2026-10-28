@@ -97,7 +97,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
 
     await prisma.$transaction(async (tx: import('@prisma/client').Prisma.TransactionClient) => {
       await tx.form.update({
-        where: { id: ctx.params.id },
+        where: { id: existing.id },
         data: {
           name: data.name,
           slug: nextSlug,
@@ -160,7 +160,7 @@ export const PUT = withPermission('FORMS_EDIT', async (req, session, ctx: { para
 export const DELETE = withPermission('FORMS_DELETE', async (_req, session, ctx: { params: { id: string } }) => {
   const existing = await prisma.form.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!existing) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });
-  await prisma.form.delete({ where: { id: ctx.params.id } });
+  await prisma.form.delete({ where: { id: existing.id } });
   await logAudit({
     tenantId: session.tenantId, userId: session.userId,
     entityType: 'form', entityId: existing.id, action: 'form.deleted',
