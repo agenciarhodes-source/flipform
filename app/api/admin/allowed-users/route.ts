@@ -1,4 +1,4 @@
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { assertAdminSchemaReady } from '@/lib/admin/assert-admin-schema-ready';
 import { adminError, adminOk } from '@/lib/api/admin-response';
 import { prisma } from '@/lib/prisma';
@@ -25,7 +25,8 @@ const ERROR_STATUS: Record<string, number> = {
 type AllowedUsersFilters = { q?: string; tenantId?: string; status?: string; active?: string };
 type ErrorLike = { message?: string; code?: string; meta?: unknown; stack?: string; details?: unknown; status?: number; name?: string };
 
-async function requirePlatformAdmin() { const s = await getSession(); return s?.globalRole === 'platform_admin' ? s : null; }
+// Security protocol T2: confirmed in the database on every request.
+async function requirePlatformAdmin() { const s = await getVerifiedSession(); return s?.globalRole === 'platform_admin' ? s : null; }
 
 function logAdminAllowedUsers(event: string, metadata: Record<string, unknown>) {
   console.info('[admin/allowed-users]', { event, ...metadata });

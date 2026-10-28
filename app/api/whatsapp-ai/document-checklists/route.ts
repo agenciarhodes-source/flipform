@@ -49,7 +49,7 @@ export const PUT = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, ses
   const data = { name: parsed.data.name, items, enabled: parsed.data.enabled, updatedBy: session.userId };
   const saved = parsed.data.id
     ? await prisma.documentChecklist.updateMany({ where: { id: parsed.data.id, tenantId: session.tenantId }, data }).then(async (result) => (
-      result.count ? prisma.documentChecklist.findUnique({ where: { id: parsed.data.id! } }) : null))
+      result.count ? prisma.documentChecklist.findFirst({ where: { id: parsed.data.id!, tenantId: session.tenantId } }) : null))
     : await prisma.documentChecklist.create({ data: { tenantId: session.tenantId, ...data } });
   if (!saved) return NextResponse.json({ error: 'Lista não encontrada.' }, { status: 404 });
   await prisma.auditLog.create({

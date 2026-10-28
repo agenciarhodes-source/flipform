@@ -2,6 +2,8 @@ import 'server-only';
 import crypto from 'crypto';
 
 const PREFIX = 'ffenc:v1:';
+/** Every value this module encrypts carries the full 16-byte GCM tag; a shorter one is refused. */
+const GCM_TAG_BYTES = 16;
 
 function getKey(): Buffer {
   const secret = process.env.INTEGRATION_SECRET_KEY;
@@ -15,7 +17,7 @@ export function encryptIntegrationSecret(value: string): string {
   const plain = value.trim();
   if (!plain) return '';
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv, { authTagLength: GCM_TAG_BYTES });
   const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${PREFIX}${iv.toString('base64url')}:${tag.toString('base64url')}:${encrypted.toString('base64url')}`;
@@ -27,8 +29,10 @@ export function decryptIntegrationSecret(value: string | null | undefined): stri
   const [, payload] = value.split(PREFIX);
   const [ivRaw, tagRaw, encryptedRaw] = payload.split(':');
   if (!ivRaw || !tagRaw || !encryptedRaw) return null;
-  const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), Buffer.from(ivRaw, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
+  const tag = Buffer.from(tagRaw, 'base64url');
+  if (tag.length !== GCM_TAG_BYTES) return null;
+  const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), Buffer.from(ivRaw, 'base64url'), { authTagLength: GCM_TAG_BYTES });
+  decipher.setAuthTag(tag);
   const decrypted = Buffer.concat([decipher.update(Buffer.from(encryptedRaw, 'base64url')), decipher.final()]);
   return decrypted.toString('utf8');
 }
