@@ -11,6 +11,7 @@ import {
 } from '@/lib/meta/instagram-webhook-runtime';
 import { drainInstagramCommentAutomationQueue } from '@/lib/meta/instagram-comment-automation';
 import { scheduleAfterResponse } from '@/lib/vercel-wait-until';
+import { replyToInstagramAfterQuietPeriod } from '@/lib/instagram-ai/reply';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,7 +55,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await processInstagramWebhook(payload);
-    console.info('Meta Instagram webhook processed', result);
+    const { aiCandidates, ...counts } = result;
+    console.info('Meta Instagram webhook processed', { ...counts, aiCandidates: aiCandidates.length });
+
+    // Atendimento Instagram: only the latest message of each conversation leads to a reply, and
+    // every check (AI on, test profile, pause, window, limit) runs again at that moment.
+    const latestByConversation = new Map(aiCandidates.map((candidate) => [candidate.conversationId, candidate]));
+    for (const candidate of latestByConversation.values()) {
+      const work = replyToInstagramAfterQuietPeriod(candidate)
+        .then((outcome) => console.info('Instagram AI reply', { conversationId: candidate.conversationId, ...outcome }))
+        .catch((error) => console.error('Instagram AI reply failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+      if (!scheduleAfterResponse(work)) await work;
+    }
 
     const coreWork = runAutomationWorker()
       .then(workerResult => {
