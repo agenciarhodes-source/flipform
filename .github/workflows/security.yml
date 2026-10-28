@@ -1,0 +1,125 @@
+name: Security
+
+# Security protocol T1: every push is checked for leaked secrets (Gitleaks) and insecure code
+# (Semgrep). On a branch only what the branch adds is judged, so old findings never block a PR;
+# every Monday the whole repository and its whole history are scanned and reported.
+# Read-only: nothing here touches the database, the deploy or any integration.
+
+on:
+  push:
+    branches: ['**']
+  schedule:
+    - cron: '0 9 * * 1' # Mondays, 06:00 Brasília
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.24.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Gitleaks (checksum verified)
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          file="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$file" "$base/$file"
+          curl -sSfL -o "$RUNNER_TEMP/checksums.txt" "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          (cd "$RUNNER_TEMP" && grep " ${file}\$" checksums.txt | sha256sum -c -)
+          tar -xzf "$RUNNER_TEMP/$file" -C "$RUNNER_TEMP" gitleaks
+
+      - name: Scan (secrets are always redacted in the log)
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          args=(git --redact --no-banner --config .gitleaks.toml --report-format sarif --report-path gitleaks.sarif)
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "Whole history"
+          elif [ "$REF" = "refs/heads/main" ]; then
+            if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then args+=(--log-opts="${BEFORE}..${SHA}"); else args+=(--log-opts="-1"); fi
+          else
+            args+=(--log-opts="origin/main..HEAD")
+          fi
+          "$RUNNER_TEMP/gitleaks" "${args[@]}" .
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+          retention-days: 30
+
+  code:
+    name: Code scan (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEMGREP_VERSION: 1.110.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep
+        run: python -m pip install --disable-pip-version-check "semgrep==${SEMGREP_VERSION}"
+
+      - name: Scan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          rules=(--config p/owasp-top-ten --config p/typescript --config p/react --config p/secrets)
+          common=(scan --metrics=off --quiet --json --output semgrep.json "${rules[@]}")
+          if [ "$EVENT" = "push" ] && [ "$REF" != "refs/heads/main" ]; then
+            # A branch fails only on new high-severity findings it introduces.
+            semgrep "${common[@]}" --severity ERROR --error --baseline-commit "$(git merge-base origin/main HEAD)"
+          else
+            # main and the weekly scan: full report, never blocking.
+            semgrep "${common[@]}" || true
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f semgrep.json ]; then
+            {
+              echo "### Semgrep"
+              jq -r '.results | group_by(.extra.severity) | map("- \(.[0].extra.severity): \(length)") | .[]' semgrep.json
+              jq -r '.results[] | "- `\(.path):\(.start.line)` \(.check_id) (\(.extra.severity))"' semgrep.json | head -100
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-report
+          path: semgrep.json
+          if-no-files-found: ignore
+          retention-days: 30

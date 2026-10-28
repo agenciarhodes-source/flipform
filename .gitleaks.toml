@@ -1,0 +1,17 @@
+# Security protocol T1: Gitleaks with its default rules, plus the placeholder values that only
+# exist in tests and CI (never real secrets).
+title = "FlipForm"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholders used only in tests and CI"
+regexes = [
+  '''test-placeholder''',
+  '''staging-local-secret''',
+  '''staging-local-previous''',
+]
+paths = [
+  '''package-lock\.json''',
+]
