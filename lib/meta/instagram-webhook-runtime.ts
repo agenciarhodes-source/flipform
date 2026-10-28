@@ -263,6 +263,8 @@ export async function processInstagramWebhook(payload: unknown) {
     automationsQueued: 0,
     messageAutomationsQueued: 0,
     ignored: 0,
+    /** New Direct messages without a keyword automation: the Flip AI may answer them (Atendimento Instagram). */
+    aiCandidates: [] as Array<{ tenantId: string; conversationId: string; inboundMessageId: string }>,
   };
 
   if (!payload || typeof payload !== 'object' || (payload as any).object !== 'instagram') return result;
@@ -325,7 +327,8 @@ export async function processInstagramWebhook(payload: unknown) {
           text: normalized.text,
           type: normalized.type,
           providerTimestamp: providerTimestamp(event?.timestamp),
-          metadata: normalized.metadata,
+          // A keyword automation answers this message: the Flip AI does not answer on top of it.
+          metadata: preparedAutomation && normalized.text ? { ...normalized.metadata, automationMatched: true } : normalized.metadata,
         }, preparedAutomation && normalized.text ? {
           onCreated: async (tx, created) => {
             await enqueueInstagramMessageCoreAutomation(tx, {
@@ -346,6 +349,12 @@ export async function processInstagramWebhook(payload: unknown) {
           if (automationQueued) {
             result.messageAutomationsQueued += 1;
             result.automationsQueued += 1;
+          } else {
+            result.aiCandidates.push({
+              tenantId: connection.tenantId,
+              conversationId: persisted.conversation.id,
+              inboundMessageId: persisted.message.id,
+            });
           }
         }
       }
