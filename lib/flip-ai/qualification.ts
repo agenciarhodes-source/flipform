@@ -199,11 +199,18 @@ export async function finalizeFlipAiQualification(input: {
     const existing = await db.flipAiQualification.findFirst({
       where: { tenantId: input.runtime.tenantId, conversationId: input.conversationId },
     });
-    // A verdict is final, with one exception: a conversation closed as out of profile or without
-    // enough information is upgraded when the person later shows real fit. It is never downgraded.
-    const revising = Boolean(existing)
-      && (existing?.classification === 'disqualified' || existing?.classification === 'insufficient')
-      && (parsed.data.classification === 'qualified' || parsed.data.classification === 'nurture');
+    // A verdict only ever goes up as the conversation moves forward, never down:
+    // - out of profile or without enough information -> maturing or qualified, when real fit shows up;
+    // - maturing -> qualified;
+    // - maturing -> maturing with a higher score (e.g. the person sent the documents).
+    // A qualified verdict is final.
+    const revising = Boolean(existing) && (
+      ((existing?.classification === 'disqualified' || existing?.classification === 'insufficient')
+        && (parsed.data.classification === 'qualified' || parsed.data.classification === 'nurture'))
+      || (existing?.classification === 'nurture' && parsed.data.classification === 'qualified')
+      || (existing?.classification === 'nurture' && parsed.data.classification === 'nurture'
+        && (summarizeFlipAiQualificationScore(parsed.data).score ?? 0) > (summarizeFlipAiQualificationScore(existing).score ?? 0))
+    );
     if (existing && !revising) return existing;
 
     const evidence = [...new Set(input.evidenceMessageIds)].slice(-20);

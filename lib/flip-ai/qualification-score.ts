@@ -7,7 +7,12 @@
  * Readiness 10 / Confidence 5), renormalised over the three components a
  * final qualification has.
  */
-export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-12.1';
+export const FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION = '2026-10-28.1';
+/**
+ * Intent that shows the person is going ahead (sent documents, confirmed the next step): a lead
+ * still maturing in profile is hot from here, not warm.
+ */
+export const FLIP_AI_HOT_INTENT_SCORE = 80;
 /** A disqualified conversation never shows more than this, whatever the partial scores say. */
 export const FLIP_AI_DISQUALIFIED_SCORE_CAP = 10;
 
@@ -59,7 +64,7 @@ export function summarizeFlipAiQualificationScore(qualification: {
     : qualification.classification === 'qualified'
       ? 'hot'
       : qualification.classification === 'nurture' && score >= 50
-        ? 'warm'
+        ? (bound(qualification.intentScore, 100) >= FLIP_AI_HOT_INTENT_SCORE ? 'hot' : 'warm')
         : 'cold';
 
   return { policyVersion: FLIP_AI_QUALIFICATION_SCORE_POLICY_VERSION, score, temperature, partial };
