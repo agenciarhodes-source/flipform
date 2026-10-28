@@ -16,6 +16,11 @@ test('score combina aderência, intenção e confiança com pesos fixos', () => 
 test('temperatura sugerida segue a classificação e o score', () => {
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 60, intentScore: 55, confidence: 0.7 }).temperature, 'warm');
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 40, intentScore: 30, confidence: 0.6 }).temperature, 'cold');
+  // Good profile still maturing, but going ahead (sent documents): hot.
+  assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 65, intentScore: 85, confidence: 0.8 }).temperature, 'hot');
+  assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 65, intentScore: 79, confidence: 0.8 }).temperature, 'warm');
+  // High intent never warms up a weak profile.
+  assert.equal(summarizeFlipAiQualificationScore({ classification: 'nurture', fitScore: 10, intentScore: 90, confidence: 0.5 }).temperature, 'cold');
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 95, intentScore: 95, confidence: 0.9 }).temperature, 'cold');
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 95, intentScore: 95, confidence: 0.9 }).score, 10);
   assert.equal(summarizeFlipAiQualificationScore({ classification: 'disqualified', fitScore: 10, intentScore: 30, confidence: 0.9 }).score, 10);

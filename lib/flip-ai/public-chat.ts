@@ -1002,6 +1002,7 @@ export function buildPublicChatInstructions(
     'Sempre que você disser que vai encaminhar a pessoa ou o contato dela para o time, ou quando ela acabar de completar nome e telefone, finalize qualification nesta mesma resposta, com resumo, motivos e próxima ação. Nunca encaminhe alguém deixando qualification como null.',
     'Evite encaminhar alguém como insufficient. A triagem é o que sustenta a nota: use a resposta da pessoa à pergunta de triagem e o que ela já contou para definir fitScore e intentScore. Se a pessoa já passou o contato e você ainda não sabe se ela faz parte do público que a empresa atende, agradeça e faça essa única pergunta de triagem antes de encerrar; se ela não responder, finalize mesmo assim com o que há. Nunca deixe de registrar o contato por falta de triagem.',
     'Se a conversa já tinha sido tratada como fora do perfil ou sem informação suficiente e a pessoa trouxer um fato novo que mostre aderência, reavalie: finalize qualification outra vez com a nova classificação, o novo resumo e os novos motivos.',
+    'Quando a pessoa avançar depois de uma qualificação já feita (enviou documentos, confirmou que quer seguir, aceitou o próximo passo), reavalie: finalize qualification outra vez com o resumo e os motivos atualizados. Quem enviou documentos ou confirmou que quer seguir tem intentScore de no mínimo 80.',
   ].filter(Boolean).join('\n\n');
 }
 

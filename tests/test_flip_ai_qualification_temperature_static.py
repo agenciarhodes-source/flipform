@@ -37,6 +37,10 @@ def test_a_verdict_is_only_ever_upgraded_never_downgraded_or_rewritten():
     rule = ENGINE.split("const revising = Boolean(existing)")[1].split("if (existing && !revising) return existing;")[0]
     assert "existing?.classification === 'disqualified' || existing?.classification === 'insufficient'" in rule
     assert "parsed.data.classification === 'qualified' || parsed.data.classification === 'nurture'" in rule
+    # Maturing goes up to qualified, or stays maturing only with a higher score; qualified is final.
+    assert "(existing?.classification === 'nurture' && parsed.data.classification === 'qualified')" in rule
+    assert "summarizeFlipAiQualificationScore(parsed.data).score ?? 0) > (summarizeFlipAiQualificationScore(existing).score ?? 0)" in rule
+    assert "existing?.classification === 'qualified'" not in rule
     assert "await db.flipAiQualification.update({ where: { id: existing.id }, data: verdict })" in ENGINE
     assert "'flip_ai.qualification.revised'" in ENGINE
     assert "previousClassification: existing.classification" in ENGINE
@@ -47,3 +51,4 @@ def test_a_verdict_is_only_ever_upgraded_never_downgraded_or_rewritten():
 def test_attendant_is_told_it_may_reassess_a_recovered_conversation():
     chat = (ROOT / "lib/flip-ai/public-chat.ts").read_text(encoding="utf-8")
     assert "reavalie: finalize qualification outra vez com a nova classificação" in chat
+    assert "Quem enviou documentos ou confirmou que quer seguir tem intentScore de no mínimo 80." in chat
