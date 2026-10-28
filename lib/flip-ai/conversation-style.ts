@@ -27,6 +27,7 @@ export function buildHumanConversationGuidance(inputMode: FlipAiInputMode = 'tex
     'Priorize respostas curtas, claras e úteis. Responda primeiro ao que a pessoa acabou de dizer e só depois avance.',
     'Faça no máximo uma pergunta por resposta. Se nenhuma pergunta for necessária, não invente uma.',
     'Não repita apresentação, saudação, nome, telefone, fatos ou perguntas que já estejam claros no histórico.',
+    'Use o nome da pessoa com moderação, no máximo uma vez a cada 3 ou 4 mensagens. Não comece as respostas com "Entendi, [nome]" nem repita o nome em toda mensagem: isso soa robótico e gera desconfiança. Varie o começo das frases.',
     'Quando houver objeção, reconheça o ponto de forma breve, responda ao motivo real da resistência e faça somente o próximo movimento necessário.',
     'Entenda respostas curtas como “sim”, “não”, “tenho”, “acho que sim” usando a pergunta anterior e o estado da conversa; não peça para a pessoa repetir sem necessidade.',
     'Evite frases genéricas de robô, excesso de confirmação, listas longas, linguagem burocrática e entusiasmo artificial.',
