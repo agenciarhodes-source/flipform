@@ -69,8 +69,9 @@ export function decideWhatsAppAiAnswer(input: {
   settings: WhatsAppAiRuleSettings;
   customerWaId: string;
   now: Date;
-  /** handback: someone of the team handed the conversation to the AI (or asked it to answer) now. */
-  trigger: 'message' | 'no_reply_sweep' | 'handback';
+  /** handback: someone of the team handed the conversation to the AI (or asked it to answer) now.
+   * closer_takeover: the attendant was switched to Closer and takes back what it handed over. */
+  trigger: 'message' | 'no_reply_sweep' | 'handback' | 'closer_takeover';
 }): WhatsAppAiDecision {
   const { settings } = input;
   if (!settings.enabled) return { answer: false, reason: 'disabled' };
@@ -79,7 +80,7 @@ export function decideWhatsAppAiAnswer(input: {
     return { answer: false, reason: 'not_test_number' };
   }
   // A person chose the AI for this conversation now, so the hours set for the number do not hold it back.
-  if (input.trigger === 'handback') return { answer: true };
+  if (input.trigger === 'handback' || input.trigger === 'closer_takeover') return { answer: true };
   if (settings.scheduleMode === 'outside_hours' && settings.businessHours
     && isWithinBusinessHours(settings.businessHours, input.now)) {
     return { answer: false, reason: 'business_hours' };

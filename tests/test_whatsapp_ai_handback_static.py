@@ -20,8 +20,8 @@ def test_handing_back_to_the_ai_answers_the_pending_message():
 
 def test_only_a_person_handing_back_skips_the_hours_of_the_number():
     rules = read("lib/whatsapp-ai/eligibility.ts")
-    assert rules.index("if (input.trigger === 'handback') return { answer: true };") > rules.index("reason: 'not_test_number'")
-    assert rules.index("if (input.trigger === 'handback') return { answer: true };") < rules.index("reason: 'business_hours'")
+    assert rules.index("if (input.trigger === 'handback' || input.trigger === 'closer_takeover') return { answer: true };") > rules.index("reason: 'not_test_number'")
+    assert rules.index("if (input.trigger === 'handback' || input.trigger === 'closer_takeover') return { answer: true };") < rules.index("reason: 'business_hours'")
 
 
 def test_the_inbox_offers_an_answer_now_button_for_waiting_conversations():
