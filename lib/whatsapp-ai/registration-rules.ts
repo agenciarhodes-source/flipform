@@ -4,6 +4,8 @@
  * WhatsApp profile, and the first reply says where the contact came from.
  */
 
+import { clearFirstName } from './name-clarity';
+
 /** First name of the registration, written normally ("LUIZA BEATRIZ" -> "Luiza"). */
 export function registrationFirstName(name: string | null | undefined) {
   const clean = (name || '').replace(/[^\p{L}\p{M}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim();
@@ -51,5 +53,6 @@ export function registrationNameState(input: {
   const preferred = (input.preferredName || '').trim() || null;
   if (preferred) return { knownName: preferred, nameToConfirm: first };
   if (input.aiRepliesSoFar === 0) return { knownName: null, nameToConfirm: first };
-  return { knownName: first, nameToConfirm: first };
+  // Without an answer the registration name is used only when it is clearly a first name ("Rf" is not).
+  return { knownName: clearFirstName(first), nameToConfirm: first };
 }

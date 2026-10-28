@@ -36,6 +36,7 @@ import { registrationNameState, registrationNote } from './registration-rules';
 import { alignNameSpelling, alignTranscriptNames, knownFirstNames, transcriptionHint } from './name-spelling';
 import { messageTranscript } from '@/lib/flip-ai/history-content';
 import { CLOSER_TAKEOVER_NOTE } from './closer-takeover-rules';
+import { askedForName, clearFirstName, nameQuestion } from './name-clarity';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -115,6 +116,8 @@ function whatsappInstructions(input: {
   knownName: string | null;
   /** The name on the person's WhatsApp profile, to confirm. */
   profileName: string | null;
+  /** The AI already asked how to call the person and got no name back. */
+  nameAsked?: boolean;
   /** analyst = triage then the team; closer = up to the close. */
   role?: AttendantRole;
   /** The person came from a company form: said on the first reply. */
@@ -136,8 +139,14 @@ function whatsappInstructions(input: {
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
     'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
     input.knownName
-      ? `NOME: o cliente já disse que prefere ser chamado de "${input.knownName}". Chame-o assim e NÃO pergunte o nome de novo.`
-      : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${input.profileName ? `"Posso te chamar de ${input.profileName.split(' ')[0]}?"` : '"Como você prefere ser chamado(a)?"'}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
+      ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
+      : input.nameAsked
+        ? 'NOME: você já perguntou como a pessoa prefere ser chamada e ela ainda não disse. Não pergunte de novo e não use nenhum nome até ela dizer.'
+        // Global: "Posso te chamar de X?" only when X is clearly a first name; profile names such as
+        // "Rf", "Mãe" or "Loja Bela" get "Como posso te chamar?" (lib/whatsapp-ai/name-clarity.ts).
+        : `NOME PENDENTE (prioridade): você ainda não sabe como a pessoa prefere ser chamada. Nesta resposta, responda a dúvida dela em no máximo uma frase e termine perguntando ${nameQuestion(input.profileName)}. Só continue a triagem depois que ela responder. Nunca deixe essa pergunta para o fim da conversa.`,
+    'O nome do perfil do WhatsApp ou do cadastro nem sempre é o nome da pessoa (pode ser uma abreviação, um apelido, uma palavra comum ou o nome de uma empresa). Só trate como nome o que a própria pessoa disser.',
+    'USO DO NOME: chame a pessoa pelo nome só de vez em quando (por exemplo, ao cumprimentar ou num momento importante), no máximo uma vez a cada 3 ou 4 mensagens. Não repita o nome em toda resposta e não comece as respostas com "Entendi, [nome]": isso soa robótico e gera desconfiança. Varie o começo das frases, como numa conversa natural.',
     'Quando a pessoa disser o nome, registre em identity.name. O telefone já é o deste WhatsApp.',
     ...(input.firstReply && input.registrationNote ? [input.registrationNote] : []),
     // Global: a verdict against the customer is never given by the AI.
@@ -465,7 +474,8 @@ export async function replyToWhatsAppConversation(input: {
         : false;
     // When the AI's last question was the name, the answer is read here too, not only by the model.
     const nameInAnswer = alignNameSpelling(
-      nameFromReply(recentOutbound[0]?.text, turnText, profileName ? profileName.split(' ')[0] : null),
+      // A plain "sim" only confirms a name the AI actually offered ("Posso te chamar de X?").
+      nameFromReply(recentOutbound[0]?.text, turnText, clearFirstName(profileName)),
       knownNames,
     );
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
@@ -487,6 +497,7 @@ export async function replyToWhatsAppConversation(input: {
           ? nameInAnswer || registrationName.knownName
           : nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
+        nameAsked: askedForName(recentOutbound.map((message) => message.text)),
         role: runtime.attendantRole,
         registrationNote: registration?.fromForm && recentOutbound.length === 0
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
