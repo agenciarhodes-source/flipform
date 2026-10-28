@@ -75,12 +75,11 @@ async function tableNames() {
 }
 
 async function columnsFor(tableName: string) {
-  const rows = (await prisma.$queryRawUnsafe(
-    `select column_name, data_type, udt_name, is_nullable, column_default
-     from information_schema.columns
-     where table_schema = 'public' and table_name = $1`,
-    tableName,
-  )) as ColumnInfo[];
+  const rows = await prisma.$queryRaw<ColumnInfo[]>`
+    select column_name, data_type, udt_name, is_nullable, column_default
+    from information_schema.columns
+    where table_schema = 'public' and table_name = ${tableName}
+  `;
   return new Map((rows as ColumnInfo[]).map((row) => [row.column_name, row]));
 }
 
@@ -110,85 +109,9 @@ function enumAcceptsValue(column: ColumnInfo | undefined, enums: Map<string, Set
 }
 
 
-let allowedUsersRepairPromise: Promise<void> | null = null;
-
-async function allowedUsersLooksReady() {
-  const tables = await tableNames();
-  if (!tables.has('allowed_users')) return false;
-  const columns = await columnsFor('allowed_users');
-  const required = REQUIRED_COLUMNS.allowed_users || [];
-  if (required.some((column) => !columns.has(column))) return false;
-
-  const indexes = await prisma.$queryRaw<IndexInfo[]>`
-    select tablename, indexname, indexdef
-    from pg_indexes
-    where schemaname = 'public' and tablename = 'allowed_users'
-  `;
-  const typedIdxLocal = indexes as IndexInfo[];
-  const hasCompositeUnique = typedIdxLocal.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'tenant_id') && indexHasColumn(idx.indexdef, 'email'));
-  const hasGlobalEmailUnique = typedIdxLocal.some((idx) => idx.indexdef.toLowerCase().includes('unique') && indexHasColumn(idx.indexdef, 'email') && !indexHasColumn(idx.indexdef, 'tenant_id'));
-  return hasCompositeUnique && !hasGlobalEmailUnique && columns.get('invited_by')?.is_nullable === 'YES';
-}
-
-async function repairAllowedUsersTableForLegacyDatabases() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS allowed_users (
-      id TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),
-      email TEXT NOT NULL,
-      tenant_id TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'owner',
-      active BOOLEAN NOT NULL DEFAULT true,
-      status TEXT NOT NULL DEFAULT 'active',
-      source TEXT NOT NULL DEFAULT 'admin',
-      invited_by TEXT,
-      accepted_at TIMESTAMP WITHOUT TIME ZONE,
-      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now(),
-      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS id TEXT DEFAULT md5(random()::text || clock_timestamp()::text)`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS email TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS tenant_id TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'owner'`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'admin'`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS invited_by TEXT`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ALTER COLUMN invited_by DROP NOT NULL`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP WITHOUT TIME ZONE`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT now()`);
-  await prisma.$executeRawUnsafe(`UPDATE allowed_users SET id = md5(random()::text || clock_timestamp()::text) WHERE id IS NULL OR id = ''`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users ALTER COLUMN id SET NOT NULL`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE allowed_users DROP CONSTRAINT IF EXISTS allowed_users_email_key`);
-  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS allowed_users_email_key`);
-  await prisma.$executeRawUnsafe(`DROP INDEX IF EXISTS "AllowedUser_email_key"`);
-  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS allowed_users_id_key ON allowed_users(id)`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS allowed_users_email_idx ON allowed_users(email)`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS allowed_users_tenant_id_idx ON allowed_users(tenant_id)`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS allowed_users_active_idx ON allowed_users(active)`);
-  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS allowed_users_tenant_id_email_key ON allowed_users(tenant_id, email)`);
-}
-
-async function ensureAllowedUsersTableForLegacyDatabases() {
-  if (!allowedUsersRepairPromise) {
-    allowedUsersRepairPromise = (async () => {
-      if (await allowedUsersLooksReady()) return;
-      await repairAllowedUsersTableForLegacyDatabases();
-    })().catch((error) => {
-      allowedUsersRepairPromise = null;
-      throw error;
-    });
-  }
-  return allowedUsersRepairPromise;
-}
-
 export async function runAdminSchemaReadinessChecks(): Promise<AdminSchemaCheck[]> {
-  if (process.env.ADMIN_SCHEMA_RUNTIME_REPAIR === 'true') {
-    await ensureAllowedUsersTableForLegacyDatabases();
-  }
-
+  // Security protocol S8: the app only reads the database structure; changes go through
+  // reviewed migrations (prisma/migrations), never through a request.
   const checks: AdminSchemaCheck[] = [];
   const tables = await tableNames();
 
