@@ -1,0 +1,75 @@
+name: Security - OWASP ZAP
+
+# Security protocol T3: every week OWASP ZAP checks the running app for known web weaknesses
+# (security headers, cookies, information leaks, outdated libraries...).
+# Baseline scan only: ZAP opens and reads pages, it never submits forms, signs in or attacks.
+# Target: the staging deploy, never production.
+# Read-only: nothing here touches the database, the deploy or any integration.
+
+on:
+  schedule:
+    - cron: '0 10 * * 1' # Mondays, 07:00 Brasília
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/zap.yml'
+      - '.zap/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: ZAP baseline (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ZAP_IMAGE: ghcr.io/zaproxy/zaproxy:2.17.0
+      TARGET: https://flipform-staging.vercel.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Scan
+        run: |
+          set -euo pipefail
+          mkdir -p zap && cp .zap/rules.tsv zap/ && chmod -R 777 zap
+          # -I: warnings never fail the run; only rules marked FAIL in .zap/rules.tsv do.
+          set +e
+          docker run --rm -v "$PWD/zap:/zap/wrk:rw" "$ZAP_IMAGE" zap-baseline.py \
+            -t "$TARGET/login" -m 3 -I -c rules.tsv -a \
+            -r zap-report.html -J zap-report.json
+          code=$?
+          set -e
+          echo "ZAP exit code: $code"
+          # 0 = clean, 2 = warnings only; 1 = a FAIL rule matched; 3 = ZAP error.
+          if [ "$code" = "1" ] || [ "$code" = "3" ]; then exit "$code"; fi
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f zap/zap-report.json ]; then
+            {
+              echo "### OWASP ZAP (staging)"
+              jq -r '[.site[].alerts[]] | group_by(.riskdesc | split(" ")[0]) | map("- \(.[0].riskdesc | split(" ")[0]): \(length)") | .[]' zap/zap-report.json
+              echo
+              jq -r '.site[].alerts[] | "- **\(.riskdesc | split(" ")[0])** \(.name) (regra \(.pluginid), \(.count) ocorrências)"' zap/zap-report.json
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### OWASP ZAP: sem relatório" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: |
+            zap/zap-report.html
+            zap/zap-report.json
+          if-no-files-found: ignore
+          retention-days: 90
