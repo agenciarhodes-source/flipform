@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MetaPlatformReadinessPanel } from './meta-platform-readiness-panel';
+import { InstagramPlatformConfigCard } from './instagram-platform-config-card';
 import { TenantMetaBindingManager } from './tenant-meta-binding-manager';
 import { WhatsAppMetaTestBindingCard } from './whatsapp-meta-test-binding-card';
 import { WhatsAppPlatformPreflightCard } from './whatsapp-platform-preflight-card';
@@ -146,6 +147,8 @@ export default function AdminIntegrationsPage() {
     <StripeFoundationReadinessCard />
     <WhatsAppPlatformPreflightCard />
     <WhatsAppMetaTestBindingCard />
+    {/* Atendimento Instagram: the Instagram app is configured in its own card, saved by its own route. */}
+    <InstagramPlatformConfigCard />
     <MetaPlatformReadinessPanel />
     <TenantMetaBindingManager />
   </div>;
