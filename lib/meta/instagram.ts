@@ -13,6 +13,15 @@ const FETCH_TIMEOUT_MS = 10_000;
 
 type JsonObject = Record<string, any>;
 
+/**
+ * Meta sends some IDs as bare numbers too big for JavaScript (more than 15 digits), which would lose
+ * their last digits. Turn those into text before reading the answer so the IDs stay exact.
+ */
+export function parseMetaJson(text: string): JsonObject {
+  if (!text) return {};
+  return JSON.parse(text.replace(/([:\[,]\s*)(-?\d{16,})(?=\s*[,}\]])/g, '$1"$2"'));
+}
+
 async function fetchJson(url: string, init: RequestInit, operation: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -20,7 +29,7 @@ async function fetchJson(url: string, init: RequestInit, operation: string) {
     const response = await fetch(url, { ...init, signal: controller.signal, cache: 'no-store' });
     const text = await response.text();
     let payload: JsonObject = {};
-    try { payload = text ? JSON.parse(text) : {}; } catch { payload = {}; }
+    try { payload = parseMetaJson(text); } catch { payload = {}; }
     if (!response.ok) {
       const error = new Error(`Instagram ${operation} failed`);
       (error as any).status = response.status;

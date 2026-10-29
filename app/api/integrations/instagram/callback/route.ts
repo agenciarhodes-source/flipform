@@ -100,6 +100,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     const account = await validateInstagramProfessionalAccount({ accessToken: longLived.accessToken });
 
     // The code exchange may return either the professional or the app-scoped ID of the same person.
+    stage = 'account_match';
     if (shortLived.instagramUserId
       && shortLived.instagramUserId !== account.instagramUserId
       && shortLived.instagramUserId !== account.appScopedId) {
