@@ -24,6 +24,7 @@ import { enforceContactMoment } from '@/lib/flip-ai/contact-timing';
 import { FLIP_AI_HUMAN_CONVERSATION_POLICY_VERSION } from '@/lib/flip-ai/conversation-style';
 import { transcribeVoiceNote } from '@/lib/flip-ai/openai-transcription';
 import { chargeAudioUsage, hasCreditsForAudio } from '@/lib/flip-ai/audio-usage';
+import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
 import { FLIP_AI_VOICE_TRANSCRIPTION_OPERATION, resolveTranscriptionUsage } from '@/lib/flip-ai/audio-usage-policy';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
@@ -258,6 +259,8 @@ export async function replyToWhatsAppConversation(input: {
     : null;
   const settings = connection?.aiSettings;
   if (!connection || !settings) return { replied: false, reason: 'not_configured' };
+  // The AI answers only for Premium (or an authorized pilot); otherwise the team answers.
+  if (!(await tenantMayRunAiAttendant(input.tenantId))) return { replied: false, reason: 'plan_required' };
 
   const decision = decideWhatsAppAiAnswer({
     settings: {

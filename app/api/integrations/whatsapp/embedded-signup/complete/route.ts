@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { encryptIntegrationSecret } from '@/lib/tracking/crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
@@ -40,6 +41,7 @@ function clearSignupState(response: NextResponse) {
 }
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const rl = await rateLimit({
     key: `whatsapp-embedded-signup-complete:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,

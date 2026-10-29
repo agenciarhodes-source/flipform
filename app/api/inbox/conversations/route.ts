@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
@@ -15,6 +16,7 @@ type LatestMessageRow = {
 };
 
 export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const url = new URL(req.url);
   const rawStatus = url.searchParams.get('status')?.trim() || '';
   const rawChannel = url.searchParams.get('channel')?.trim() || '';

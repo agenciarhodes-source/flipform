@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
@@ -17,6 +18,7 @@ const bodySchema = z.object({
 // Sends an approved template: the only message Meta accepts for someone who has not written
 // in the last 24 hours. The browser only names the template; its text always comes from Meta.
 export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const rl = await rateLimit({
     key: `whatsapp-template-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 30,

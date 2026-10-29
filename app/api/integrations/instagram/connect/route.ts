@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { createMetaOAuthStateForPurpose, META_OAUTH_STATE_TTL_SECONDS } from '@/lib/meta/oauth-state';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/meta/instagram-state';
 
 export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest, session) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const rl = await rateLimit({
     key: `instagram-business-login:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 10,

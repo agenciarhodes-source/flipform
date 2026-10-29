@@ -25,6 +25,7 @@ import { isConversationAiPaused } from '@/lib/whatsapp-ai/pause';
 import { clearFirstName } from '@/lib/whatsapp-ai/name-clarity';
 import { whatsappIntroduction } from '@/lib/whatsapp-ai/reply';
 import { instagramSenderProfile } from './profile';
+import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
 import {
   INSTAGRAM_AI_QUIET_SECONDS,
   INSTAGRAM_AI_WINDOW_HOURS,
@@ -122,6 +123,8 @@ export async function replyToInstagramConversation(input: {
     : null;
   const settings = connection?.aiSettings;
   if (!connection || !settings || !settings.enabled || !settings.agentId) return { replied: false, reason: 'not_configured' };
+  // The AI answers only for Premium (or an authorized pilot); otherwise the team answers.
+  if (!(await tenantMayRunAiAttendant(input.tenantId))) return { replied: false, reason: 'plan_required' };
   if (isConversationAiPaused(conversation, settings.resumeAfterHours, now)) return { replied: false, reason: 'paused' };
 
   const send = await getInstagramSendConnection(input.tenantId);
