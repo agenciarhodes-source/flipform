@@ -82,7 +82,7 @@ export function MessageNotificationCenter({ tenantId, userId }: { tenantId: stri
 
   const announce = useCallback((fresh: MessageNotification[]) => {
     const params = new URLSearchParams(window.location.search);
-    const viewing = window.location.pathname === '/inbox' ? params.get('conversationId') : null;
+    const viewing = ['/inbox', '/direct'].includes(window.location.pathname) ? params.get('conversationId') : null;
     const toAnnounce = fresh.filter((item) => item.conversationId !== viewing);
     if (!toAnnounce.length) return;
     playChime();

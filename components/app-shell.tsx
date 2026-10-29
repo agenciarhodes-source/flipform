@@ -63,6 +63,7 @@ const NAV: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/customers", label: "Clientes", icon: Users, permission: "LEADS_VIEW" },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
+  { href: "/direct", label: "Direct", icon: Instagram, permission: "INBOX_VIEW" },
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },
   { href: "/whatsapp-ai", label: "Atendimento WhatsApp", icon: MessageCircle, permission: "FLIP_AI_MANAGE" },
