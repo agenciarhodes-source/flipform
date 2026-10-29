@@ -101,7 +101,10 @@ def test_callback_keeps_instagram_token_out_of_ads_connection_and_encrypts_befor
 
 def test_instagram_professional_account_validation_checks_basic_and_messaging_access():
     helper = read('lib/meta/instagram.ts')
-    assert "profileUrl.searchParams.set('fields', 'id,username')" in helper
+    # Meta answers /me with {"data": [{user_id, username, id}]}; user_id is the professional account ID.
+    assert "profileUrl.searchParams.set('fields', 'user_id,username,id')" in helper
+    assert "Array.isArray(payload?.data)" in helper
+    assert "asId(profile.user_id) || asId(profile.id)" in helper
     assert '/conversations' in helper
     assert "conversationsUrl.searchParams.set('platform', 'instagram')" in helper
     assert "conversationsUrl.searchParams.set('limit', '1')" in helper

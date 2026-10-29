@@ -99,7 +99,10 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     stage = 'profile_validation';
     const account = await validateInstagramProfessionalAccount({ accessToken: longLived.accessToken });
 
-    if (shortLived.instagramUserId && shortLived.instagramUserId !== account.instagramUserId) {
+    // The code exchange may return either the professional or the app-scoped ID of the same person.
+    if (shortLived.instagramUserId
+      && shortLived.instagramUserId !== account.instagramUserId
+      && shortLived.instagramUserId !== account.appScopedId) {
       throw new Error('Instagram OAuth user does not match validated professional account');
     }
 

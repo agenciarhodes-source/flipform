@@ -94,22 +94,39 @@ export async function exchangeInstagramLongLivedToken(input: {
   };
 }
 
+/**
+ * The professional account behind a token. Meta answers /me with `{ "data": [ { user_id, username, id } ] }`:
+ * `user_id` is the Instagram professional account ID (the one in webhooks and /<IG_ID>/...), `id` is
+ * the app-scoped user ID. Older or flat answers (`{ id, username }`) are still read.
+ */
+export function readInstagramProfile(payload: JsonObject) {
+  const profile: JsonObject = Array.isArray(payload?.data) && payload.data[0] && typeof payload.data[0] === 'object'
+    ? payload.data[0]
+    : payload || {};
+  const asId = (value: unknown) => (typeof value === 'string' && value.trim()) || typeof value === 'number' ? String(value).trim() : null;
+  const professionalId = asId(profile.user_id) || asId(profile.id);
+  const appScopedId = asId(profile.id);
+  const username = typeof profile.username === 'string' && profile.username.trim() ? profile.username.trim() : null;
+  return { professionalId, appScopedId, username };
+}
+
 export async function validateInstagramProfessionalAccount(input: { accessToken: string }) {
   const profileUrl = new URL(`${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/me`);
-  profileUrl.searchParams.set('fields', 'id,username');
-  const profile = await fetchJson(profileUrl.toString(), {
+  profileUrl.searchParams.set('fields', 'user_id,username,id');
+  const payload = await fetchJson(profileUrl.toString(), {
     method: 'GET',
     headers: { Authorization: `Bearer ${input.accessToken}` },
   }, 'profile_validation');
 
-  if (typeof profile.id !== 'string' && typeof profile.id !== 'number') {
+  const profile = readInstagramProfile(payload);
+  if (!profile.professionalId) {
     throw new Error('Instagram profile validation returned no professional account id');
   }
-  if (typeof profile.username !== 'string' || !profile.username) {
+  if (!profile.username) {
     throw new Error('Instagram profile validation returned no username');
   }
 
-  const instagramUserId = String(profile.id);
+  const instagramUserId = profile.professionalId;
   const conversationsUrl = new URL(`${INSTAGRAM_GRAPH_BASE_URL}/${INSTAGRAM_GRAPH_VERSION}/${instagramUserId}/conversations`);
   conversationsUrl.searchParams.set('platform', 'instagram');
   conversationsUrl.searchParams.set('limit', '1');
@@ -120,7 +137,9 @@ export async function validateInstagramProfessionalAccount(input: { accessToken:
 
   return {
     instagramUserId,
-    username: profile.username as string,
+    /** The app-scoped user ID; the authorization code exchange may return this one. */
+    appScopedId: profile.appScopedId,
+    username: profile.username,
   };
 }
 
