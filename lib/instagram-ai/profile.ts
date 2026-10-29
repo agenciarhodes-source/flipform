@@ -2,6 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { INSTAGRAM_GRAPH_VERSION } from '@/lib/meta/instagram';
+import { getInstagramSendConnection } from '@/lib/meta/instagram-send-credentials';
 import { normalizeInstagramUsername } from './rules';
 
 /**
@@ -41,4 +42,20 @@ export async function instagramSenderProfile(input: {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Reads the @ and name of who wrote as soon as the message arrives, AI on or off, so the Direct
+ * shows the person (not a number) and the AI recognizes the test profiles even in a paused chat.
+ */
+export async function learnInstagramSender(input: { tenantId: string; conversationId: string }) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, tenantId: input.tenantId, channel: 'instagram' },
+    select: { externalContactIdentity: { select: { id: true, externalUserId: true, username: true, displayName: true } } },
+  });
+  const identity = conversation?.externalContactIdentity;
+  if (!identity || identity.username) return;
+  const send = await getInstagramSendConnection(input.tenantId);
+  if (!send) return;
+  await instagramSenderProfile({ tenantId: input.tenantId, identity, accessToken: send.accessToken });
 }

@@ -12,6 +12,7 @@ import {
 import { drainInstagramCommentAutomationQueue } from '@/lib/meta/instagram-comment-automation';
 import { scheduleAfterResponse } from '@/lib/vercel-wait-until';
 import { replyToInstagramAfterQuietPeriod } from '@/lib/instagram-ai/reply';
+import { learnInstagramSender } from '@/lib/instagram-ai/profile';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,10 @@ export async function POST(req: NextRequest) {
     // every check (AI on, test profile, pause, window, limit) runs again at that moment.
     const latestByConversation = new Map(aiCandidates.map((candidate) => [candidate.conversationId, candidate]));
     for (const candidate of latestByConversation.values()) {
-      const work = replyToInstagramAfterQuietPeriod(candidate)
+      // First the @ and name of who wrote (shown in the Direct, used for test profiles), then the AI.
+      const work = learnInstagramSender(candidate)
+        .catch(() => undefined)
+        .then(() => replyToInstagramAfterQuietPeriod(candidate))
         .then((outcome) => console.info('Instagram AI reply', { conversationId: candidate.conversationId, ...outcome }))
         .catch((error) => console.error('Instagram AI reply failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
       if (!scheduleAfterResponse(work)) await work;
