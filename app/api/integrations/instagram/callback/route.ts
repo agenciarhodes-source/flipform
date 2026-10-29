@@ -22,13 +22,18 @@ import {
   INSTAGRAM_OAUTH_STATE_COOKIE,
   INSTAGRAM_OAUTH_STATE_COOKIE_PATH,
 } from '@/lib/meta/instagram-state';
+import { safeProviderCode, type InstagramConnectStage } from '@/lib/meta/instagram-connect-stages';
 
 function appBaseUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 }
 
-function redirect(result: 'connected' | 'cancelled' | 'permissions' | 'conflict' | 'error') {
-  return NextResponse.redirect(new URL(`/integrations?instagram=${result}`, appBaseUrl()));
+function redirect(result: 'connected' | 'cancelled' | 'permissions' | 'conflict' | 'error', stage?: InstagramConnectStage, code?: string | null) {
+  const url = new URL(`/integrations?instagram=${result}`, appBaseUrl());
+  // Where it stopped and Meta's numeric code, so the screen says what to fix (never a token or message).
+  if (stage) url.searchParams.set('stage', stage);
+  if (code) url.searchParams.set('code', code);
+  return NextResponse.redirect(url);
 }
 
 function clearState(response: NextResponse) {
@@ -53,14 +58,14 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     session.userId,
     META_INSTAGRAM_ONBOARDING_PURPOSE,
   );
-  if (!validState) return clearState(redirect('error'));
+  if (!validState) return clearState(redirect('error', 'state'));
 
   const rl = await rateLimit({
     key: `instagram-business-login-callback:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 20,
     windowMs: 10 * 60_000,
   });
-  if (!rl.allowed) return clearState(redirect('error'));
+  if (!rl.allowed) return clearState(redirect('error', 'rate_limit'));
 
   if (req.nextUrl.searchParams.has('error')) {
     const denied = req.nextUrl.searchParams.get('error') === 'access_denied'
@@ -69,31 +74,36 @@ export const GET = withAuth(async (req: NextRequest, session) => {
   }
 
   const code = req.nextUrl.searchParams.get('code');
-  if (!code) return clearState(redirect('error'));
+  if (!code) return clearState(redirect('error', 'no_code'));
 
+  let stage: InstagramConnectStage = 'not_ready';
   try {
     const [credentials, runtimeReady] = await Promise.all([
       getPlatformInstagramLoginCredentials(),
       isInstagramRuntimeReady(),
     ]);
-    if (!credentials || !runtimeReady) return clearState(redirect('error'));
+    if (!credentials || !runtimeReady) return clearState(redirect('error', 'not_ready'));
 
+    stage = 'authorization_code_exchange';
     const shortLived = await exchangeInstagramAuthorizationCode({
       appId: credentials.appId,
       appSecret: credentials.appSecret,
       redirectUri: getInstagramOAuthRedirectUri(),
       code,
     });
+    stage = 'long_lived_token_exchange';
     const longLived = await exchangeInstagramLongLivedToken({
       appSecret: credentials.appSecret,
       accessToken: shortLived.accessToken,
     });
+    stage = 'profile_validation';
     const account = await validateInstagramProfessionalAccount({ accessToken: longLived.accessToken });
 
     if (shortLived.instagramUserId && shortLived.instagramUserId !== account.instagramUserId) {
       throw new Error('Instagram OAuth user does not match validated professional account');
     }
 
+    stage = 'webhook_subscription';
     await subscribeInstagramWebhooks({
       instagramUserId: account.instagramUserId,
       accessToken: longLived.accessToken,
@@ -103,6 +113,7 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       ? new Date(Date.now() + longLived.expiresInSeconds * 1000)
       : null;
 
+    stage = 'save';
     await persistInstagramConnection({
       tenantId: session.tenantId,
       instagramUserId: account.instagramUserId,
@@ -128,14 +139,20 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       error.message.includes('messaging_permission_validation')
       || error.message.includes('webhook_subscription')
     );
+    // The messaging check runs inside the profile validation.
+    if (error instanceof Error && error.message.includes('messaging_permission_validation')) stage = 'messaging_permission_validation';
+    const providerCode = safeProviderCode((error as { providerCode?: unknown } | null)?.providerCode);
     console.error('Instagram Business Login callback failed', {
       tenantId: session.tenantId,
       onboardingPurpose: META_INSTAGRAM_ONBOARDING_PURPOSE,
       operation: 'callback',
+      stage,
+      httpStatus: (error as { status?: unknown } | null)?.status ?? null,
+      providerCode,
       errorType: error instanceof Error ? error.name : 'unknown',
       conflict,
       permissions,
     });
-    return clearState(redirect(conflict ? 'conflict' : permissions ? 'permissions' : 'error'));
+    return clearState(redirect(conflict ? 'conflict' : permissions ? 'permissions' : 'error', conflict ? undefined : stage, providerCode));
   }
 });

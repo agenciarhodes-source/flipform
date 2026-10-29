@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ConnectionHealthPanel, type ConnectionHealth } from './connection-health-panel';
+import { instagramConnectStageMessage, isInstagramConnectStage, safeProviderCode } from '@/lib/meta/instagram-connect-stages';
 
 type InstagramConnection = {
   id: string;
@@ -54,10 +55,16 @@ export function InstagramBusinessLoginCard() {
     if (!result) return;
     if (result === 'connected') toast.success('Instagram profissional conectado ao FlipForm.');
     if (result === 'cancelled') toast.message('Conexão com o Instagram cancelada. Nenhuma alteração foi feita.');
-    if (result === 'permissions') toast.error('Para concluir a conexão, autorize as permissões solicitadas pelo Instagram.');
+    // Where the connection stopped (and Meta's numeric code), so the message says what to fix.
+    const stage = url.searchParams.get('stage');
+    const code = url.searchParams.get('code');
+    const detail = isInstagramConnectStage(stage) ? instagramConnectStageMessage(stage, safeProviderCode(code)) : null;
+    if (result === 'permissions') toast.error(detail || 'Para concluir a conexão, autorize as permissões solicitadas pelo Instagram.', { duration: 15000 });
     if (result === 'conflict') toast.error('Esta conta do Instagram já está vinculada a outra empresa no FlipForm.');
-    if (result === 'error') toast.error('Não foi possível concluir a conexão com o Instagram agora.');
+    if (result === 'error') toast.error(detail || 'Não foi possível concluir a conexão com o Instagram agora.', { duration: 15000 });
     url.searchParams.delete('instagram');
+    url.searchParams.delete('stage');
+    url.searchParams.delete('code');
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
