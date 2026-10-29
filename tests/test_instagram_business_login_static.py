@@ -150,4 +150,4 @@ def test_connection_status_and_dormant_ui_never_return_or_store_credentials_in_b
     assert 'sessionStorage' not in ui
     assert 'token da conta profissional é armazenado criptografado no servidor' in ui
     assert 'não exige que uma Página do Facebook esteja vinculada' in ui
-    assert 'InstagramBusinessLoginCard' not in page
+    assert '<InstagramBusinessLoginCard />' in page

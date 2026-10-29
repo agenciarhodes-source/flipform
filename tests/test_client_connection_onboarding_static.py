@@ -13,8 +13,9 @@ def test_integrations_page_surfaces_guided_whatsapp_onboarding_before_technical_
     assert 'ClientConnectionOnboarding' in page
     assert page.index('<ClientConnectionOnboarding />') < page.index('<IntegrationsClient />')
     assert 'id="whatsapp-connection"' in page
-    assert 'id="instagram-connection"' not in page
-    assert 'InstagramBusinessLoginCard' not in page
+    # Instagram is back (Atendimento Instagram): its card comes after the WhatsApp sections.
+    assert 'id="instagram-connection"' in page
+    assert page.index('id="whatsapp-connection"') < page.index('<InstagramBusinessLoginCard />')
 
 
 def test_onboarding_reuses_existing_whatsapp_connection_health_endpoint_only():

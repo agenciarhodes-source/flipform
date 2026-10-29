@@ -31,4 +31,4 @@ def test_inbox_lets_the_team_take_over_and_hand_back():
     assert "findAccessibleInboxConversation(session, ctx.params.id)" in route
     inbox = read("app/(app)/inbox/inbox-client.tsx")
     assert "Pausar IA e assumir" in inbox and "Devolver para a IA" in inbox
-    assert "{whatsappAi.enabled && selected.channel === 'whatsapp' && selected.aiActive !== false ? (" in inbox
+    assert "{channelAi(selected).enabled && selected.aiActive !== false ? (" in inbox

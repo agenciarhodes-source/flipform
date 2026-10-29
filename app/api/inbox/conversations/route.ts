@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { isWhatsAppAiEnabledForTenant, whatsAppAiAudience } from '@/lib/whatsapp-ai/pause';
+import { instagramAiAudience, isInstagramAiEnabledForTenant } from '@/lib/instagram-ai/audience';
 
 const ALLOWED_STATUS = new Set(['open', 'pending', 'resolved']);
 const ALLOWED_CHANNEL = new Set(['whatsapp', 'instagram']);
@@ -63,8 +64,9 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   });
 
   const whatsappAi = await isWhatsAppAiEnabledForTenant(session.tenantId);
+  const instagramAi = await isInstagramAiEnabledForTenant(session.tenantId);
   if (baseConversations.length === 0) {
-    return NextResponse.json({ conversations: [], whatsappAi });
+    return NextResponse.json({ conversations: [], whatsappAi, instagramAi });
   }
 
   const conversationIds = baseConversations.map((conversation) => conversation.id);
@@ -141,6 +143,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
     : [];
   const pauserName = new Map(pausers.map((user) => [user.id, user.name]));
   const aiAnswers = whatsappAi.enabled ? await whatsAppAiAudience(session.tenantId) : () => false;
+  const instagramAiAnswers = instagramAi.enabled ? await instagramAiAudience(session.tenantId) : () => false;
 
   const conversations = baseConversations.map((conversation) => {
     const messageId = latestMessageIdByConversation.get(conversation.id);
@@ -149,10 +152,12 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
       ...conversation,
       aiPausedByName: conversation.aiPausedBy ? pauserName.get(conversation.aiPausedBy) || null : null,
       // False when the AI is off for this contact (only test numbers, or switched off): the team attends.
-      aiActive: conversation.channel === 'whatsapp' && aiAnswers(conversation.externalContactIdentity.externalUserId),
+      aiActive: conversation.channel === 'whatsapp'
+        ? aiAnswers(conversation.externalContactIdentity.externalUserId)
+        : conversation.channel === 'instagram' && instagramAiAnswers(conversation.externalContactIdentity.username),
       messages: message ? [message] : [],
     };
   });
 
-  return NextResponse.json({ conversations, whatsappAi });
+  return NextResponse.json({ conversations, whatsappAi, instagramAi });
 });

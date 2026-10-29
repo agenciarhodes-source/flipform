@@ -64,9 +64,9 @@ def test_instagram_is_parked_from_customer_ui_while_backend_remains_fail_closed(
     assert 'App Secret' not in card
     assert 'Super Admin' not in card
 
-    # FlipForm no longer exposes Instagram as a product surface.
-    assert 'InstagramBusinessLoginCard' not in page
-    assert 'instagram-connection' not in page
+    # Instagram is a product surface again (Atendimento Instagram); the guided onboarding stays WhatsApp-only.
+    assert '<InstagramBusinessLoginCard />' in page
+    assert 'id="instagram-connection"' in page
     assert 'Instagram' not in onboarding
     assert '/api/integrations/instagram/' not in onboarding
     assert 'payload.error' not in onboarding
