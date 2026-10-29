@@ -12,6 +12,7 @@ export const INSTAGRAM_CONNECT_STAGES = [
   'long_lived_token_exchange',
   'profile_validation',
   'messaging_permission_validation',
+  'account_match',
   'webhook_subscription',
   'save',
 ] as const;
@@ -47,6 +48,8 @@ export function instagramConnectStageMessage(stage: string | null, code: string 
       return `Não foi possível ler o perfil${suffix}. A conta precisa ser profissional (Empresa ou Criador de conteúdo).`;
     case 'messaging_permission_validation':
       return `A Meta não liberou as mensagens desta conta${suffix}. Enquanto o app não tiver aprovação da Meta, a conta precisa ser testadora do app e ter aceitado o convite.`;
+    case 'account_match':
+      return 'A conta que autorizou não é a mesma conta lida no Instagram. Saia de outras contas do Instagram no navegador e conecte de novo.';
     case 'webhook_subscription':
       return `A Meta não ativou o recebimento das mensagens desta conta${suffix}. Confira o webhook do Instagram no painel da Meta.`;
     case 'save':
