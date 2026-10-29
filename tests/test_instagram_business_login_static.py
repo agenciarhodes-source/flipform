@@ -154,3 +154,12 @@ def test_connection_status_and_dormant_ui_never_return_or_store_credentials_in_b
     assert 'token da conta profissional é armazenado criptografado no servidor' in ui
     assert 'não exige que uma Página do Facebook esteja vinculada' in ui
     assert '<InstagramBusinessLoginCard />' in page
+
+
+def test_sender_profile_is_read_when_the_message_arrives():
+    route = (ROOT / "app/api/webhooks/meta/instagram/route.ts").read_text(encoding="utf-8")
+    assert "learnInstagramSender(candidate)" in route
+    assert route.index("learnInstagramSender(candidate)") < route.index("replyToInstagramAfterQuietPeriod(candidate)")
+    profile = (ROOT / "lib/instagram-ai/profile.ts").read_text(encoding="utf-8")
+    assert "export async function learnInstagramSender" in profile
+    assert "if (!identity || identity.username) return;" in profile
