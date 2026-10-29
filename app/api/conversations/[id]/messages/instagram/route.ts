@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
@@ -11,6 +12,7 @@ const bodySchema = z.object({
 }).strict();
 
 export const POST = withPermission('INBOX_MANAGE', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const rl = await rateLimit({
     key: `instagram-conversation-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
     limit: 60,

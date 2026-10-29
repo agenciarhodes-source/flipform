@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { withPermission } from '@/lib/rbac-server';
 import { pauseConversationAi } from '@/lib/whatsapp-ai/pause';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
@@ -15,6 +16,7 @@ const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 /** A voice note recorded in the Inbox, sent to the customer on WhatsApp. */
 export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const rl = await rateLimit({ key: `whatsapp-audio-send:${session.tenantId}:${session.userId}:${getClientIp(req)}`, limit: 20, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
 

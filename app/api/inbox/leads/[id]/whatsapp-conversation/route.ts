@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { messagingPlanRequired, tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { findAccessibleInboxConversation } from '@/lib/inbox/access';
@@ -8,6 +9,7 @@ import {
 } from '@/lib/conversations/whatsapp-lead-linking';
 
 export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, session, ctx: { params: { id: string } }) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const leadId = ctx.params.id?.trim();
   if (!leadId) {
     return NextResponse.json({ error: 'Lead inválido.' }, { status: 400 });
@@ -61,6 +63,7 @@ const START_ERRORS: Record<string, { status: number; error: string }> = {
 
 // Opens the conversation for a lead that never wrote, so the first contact can be made from the Inbox.
 export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (_req: NextRequest, session, ctx: { params: { id: string } }) => {
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return messagingPlanRequired();
   const leadId = ctx.params.id?.trim();
   if (!leadId) return NextResponse.json({ error: 'Lead inválido.' }, { status: 400 });
 

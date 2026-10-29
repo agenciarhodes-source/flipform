@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
+import { tenantHasMessagingPlan } from '@/lib/billing/plan-access';
+import { MessagingPlanNotice } from '@/components/billing/messaging-plan-notice';
 import { InboxClient } from '../inbox/inbox-client';
 
 /** Direct: the Instagram conversations, apart from the WhatsApp ones in the Inbox. */
@@ -8,6 +10,7 @@ export default async function DirectPage() {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!can(session.role, 'INBOX_VIEW')) redirect('/dashboard');
+  if (!(await tenantHasMessagingPlan(session.tenantId))) return <MessagingPlanNotice channel="instagram" />;
 
   return (
     <InboxClient

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
-import { isSellablePlan, planFeatures, planIncludesAi } from '@/lib/billing/subscription-rules';
+import { isSellablePlan, planFeatures, planIncludesAi, planIncludesMessaging } from '@/lib/billing/subscription-rules';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 const checkoutHref = (slug: string) => (APP_URL ? `${APP_URL}/checkout/${slug}` : `/checkout/${slug}`);
@@ -37,7 +37,8 @@ export default async function PricingPage() {
     ['Formulários', (plan) => limit(plan.maxForms)],
     ['Pipelines', (plan) => limit(plan.maxPipelines)],
     ['Leads/mês', (plan) => limit(plan.maxLeadsPerMonth)],
-    ['Atendente de IA (Flip AI)', (plan) => yesNo(planIncludesAi(plan.slug))],
+    ['Atendimento WhatsApp e Instagram (manual)', (plan) => yesNo(planIncludesMessaging(plan.slug))],
+    ['IA no WhatsApp, Instagram e chat do site', (plan) => yesNo(planIncludesAi(plan.slug))],
     ['Relatórios', (plan) => yesNo(plan.canUseReports)],
     ['Exportação CSV', (plan) => yesNo(plan.canExportCsv)],
     ['Pixel / API de Conversões Meta', (plan) => yesNo(plan.canUseMetaPixel)],
