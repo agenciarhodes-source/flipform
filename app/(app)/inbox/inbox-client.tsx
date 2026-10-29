@@ -10,6 +10,7 @@ import {
   CheckCheck,
   Clock3,
   MessageSquareText,
+  Instagram,
   RefreshCw,
   Search,
   Send,
@@ -360,11 +361,13 @@ export function InboxClient({
   canManage,
   canAssign,
   canSendWhatsApp,
+  canSendInstagram,
   currentUserId,
 }: {
   canManage: boolean;
   canAssign: boolean;
   canSendWhatsApp: boolean;
+  canSendInstagram: boolean;
   currentUserId: string;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
@@ -377,6 +380,10 @@ export function InboxClient({
   const [onlyAi, setOnlyAi] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [whatsappAi, setWhatsappAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
+  const [instagramAi, setInstagramAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
+  // The AI switch of the conversation's channel (Atendimento WhatsApp / Atendimento Instagram).
+  const channelAi = (conversation: InboxConversation) => (conversation.channel === 'instagram' ? instagramAi
+    : conversation.channel === 'whatsapp' ? whatsappAi : { enabled: false, resumeAfterHours: null });
   const [changingAi, setChangingAi] = useState(false);
   const [leadModal, setLeadModal] = useState<{ leadId: string; stages: any[] } | null>(null);
   const [openingLead, setOpeningLead] = useState(false);
@@ -398,7 +405,8 @@ export function InboxClient({
   const templatesRequestRef = useRef<string | null>(null);
 
   const selected = conversations.find((conversation) => conversation.id === selectedId) || null;
-  const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp : false;
+  const selectedChannelCanSend = selected?.channel === 'whatsapp' ? canSendWhatsApp
+    : selected?.channel === 'instagram' ? canSendInstagram : false;
   const needsTemplate = Boolean(selected && selected.channel === 'whatsapp' && selectedChannelCanSend
     && !isServiceWindowOpen(selected.lastInboundAt));
   const chosenTemplate = templates?.find((template) => `${template.name}:${template.language}` === templateKey) || null;
@@ -440,9 +448,9 @@ export function InboxClient({
   const unreadTotal = conversations.filter((conversation) => conversation.unreadCount > 0).length;
   const unassignedTotal = conversations.filter((conversation) => conversationOwner(conversation, currentUserId).kind === 'none').length;
   const leadTotal = conversations.filter((conversation) => conversation.lead).length;
-  // With the AI: WhatsApp conversations where the AI is on and not paused by the team.
-  const withAi = (conversation: InboxConversation) => whatsappAi.enabled && conversation.channel === 'whatsapp'
-    && conversation.aiActive !== false && !aiPaused(conversation, whatsappAi.resumeAfterHours);
+  // With the AI: conversations where the AI of their channel is on and not paused by the team.
+  const withAi = (conversation: InboxConversation) => channelAi(conversation).enabled
+    && conversation.aiActive !== false && !aiPaused(conversation, channelAi(conversation).resumeAfterHours);
   const aiTotal = conversations.filter(withAi).length;
   const filteredConversations = useMemo(() => {
     const term = search.trim().toLocaleLowerCase('pt-BR');
@@ -465,7 +473,7 @@ export function InboxClient({
         .toLocaleLowerCase('pt-BR');
       return haystack.includes(term);
     });
-  }, [conversations, search, onlyUnread, onlyLeads, onlyUnassigned, onlyAi, whatsappAi, currentUserId]);
+  }, [conversations, search, onlyUnread, onlyLeads, onlyUnassigned, onlyAi, whatsappAi, instagramAi, currentUserId]);
 
   // Opens the card of the lead linked to the conversation; a conversation without a lead is
   // matched by phone first, so the attendant reaches the lead in one click.
@@ -542,8 +550,9 @@ export function InboxClient({
       if (!response.ok) throw new Error('Não foi possível carregar as conversas.');
       const data = await response.json();
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
-      let next = all.filter((conversation) => conversation.channel === 'whatsapp');
+      let next = all.filter((conversation) => conversation.channel === 'whatsapp' || conversation.channel === 'instagram');
       if (data.whatsappAi && typeof data.whatsappAi.enabled === 'boolean') setWhatsappAi(data.whatsappAi);
+      if (data.instagramAi && typeof data.instagramAi.enabled === 'boolean') setInstagramAi(data.instagramAi);
       const requestedId = requestedConversationIdRef.current;
       // A conversation just started from a lead has no message yet, so it is not among the most
       // recent ones; keep the open one on the list instead of jumping to another conversation.
@@ -555,7 +564,7 @@ export function InboxClient({
           const directData = await directResponse.json();
           const directConversation = directData.conversation as Omit<InboxConversation, 'messages'> | undefined;
           const directMessages = Array.isArray(directData.messages) ? directData.messages as InboxMessage[] : [];
-          if (directConversation?.channel === 'whatsapp') {
+          if (directConversation?.channel === 'whatsapp' || directConversation?.channel === 'instagram') {
             const latestMessage = directMessages[directMessages.length - 1];
             next = [{
               ...directConversation,
@@ -686,17 +695,23 @@ export function InboxClient({
   }, [messages.length, selectedId]);
 
   async function sendMessage() {
-    if (!selected || sending || selected.channel !== 'whatsapp' || !canSendWhatsApp) return;
+    if (!selected || sending || !selectedChannelCanSend) return;
+    if (selected.channel !== 'whatsapp' && selected.channel !== 'instagram') return;
 
     const conversationId = selected.id;
     const text = draft.trim();
     if (!text) return;
+    if (selected.channel === 'instagram' && !isServiceWindowOpen(selected.lastInboundAt)) {
+      setError('O Instagram só permite responder até 24 horas depois da última mensagem da pessoa.');
+      return;
+    }
+    const endpoint = selected.channel === 'instagram' ? 'instagram' : 'whatsapp';
 
     setSending(true);
     setError(null);
     setWarning(null);
     try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp`, {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(conversationId)}/messages/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -798,7 +813,7 @@ export function InboxClient({
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <h1 className="font-heading text-lg font-semibold">Conversas</h1>
-                <p className="text-xs text-muted-foreground">Atendimento do WhatsApp em uma única Inbox.</p>
+                <p className="text-xs text-muted-foreground">WhatsApp e Instagram em uma única Inbox.</p>
               </div>
               <Button
                 variant="ghost"
@@ -826,7 +841,7 @@ export function InboxClient({
               <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyUnread ? 'default' : 'outline'} onClick={() => setOnlyUnread((value) => !value)}>
                 Não lidas{unreadTotal ? ` (${unreadTotal})` : ''}
               </Button>
-              {whatsappAi.enabled ? (
+              {whatsappAi.enabled || instagramAi.enabled ? (
                 <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyAi ? 'default' : 'outline'} onClick={() => setOnlyAi((value) => !value)}
                   title="Conversas que a IA está atendendo agora (não pausadas pela equipe)">
                   Com a IA ({aiTotal})
@@ -851,7 +866,7 @@ export function InboxClient({
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <MessageSquareText className="h-9 w-9 opacity-40" />
                 <div className="text-sm font-medium text-foreground">{onlyUnread && !search.trim() ? 'Nenhuma conversa não lida' : 'Nenhuma conversa encontrada'}</div>
-                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : onlyLeads ? 'Nenhuma conversa com lead vinculado neste filtro.' : 'As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.'}</div>
+                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : onlyLeads ? 'Nenhuma conversa com lead vinculado neste filtro.' : 'As novas mensagens recebidas pelo WhatsApp e pelo Instagram conectados aparecerão aqui.'}</div>
               </div>
             ) : (
               filteredConversations.map((conversation) => {
@@ -896,7 +911,9 @@ export function InboxClient({
                         ) : (
                           <span className="rounded bg-muted px-1.5 py-0.5">Sem lead</span>
                         )}
-                        <span>WhatsApp</span>
+                        <span className="inline-flex items-center gap-1">
+                          {conversation.channel === 'instagram' ? <><Instagram className="h-3 w-3" aria-hidden="true" />Instagram</> : 'WhatsApp'}
+                        </span>
                         {conversation.assignee?.name && <><span>•</span><span className="truncate">{conversation.assignee.name}</span></>}
                         {conversation.status === 'resolved' && <><span>•</span><span>resolvida</span></>}
                       </div>
@@ -941,14 +958,14 @@ export function InboxClient({
                     </div>
                   </div>
                 </button>
-                {whatsappAi.enabled && selected.channel === 'whatsapp' && selected.aiActive === false ? (
+                {channelAi(selected).enabled && selected.aiActive === false ? (
                   <span className="hidden rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700 sm:inline"
                     title="A IA não atende este contato (está desligada para ele ou só atende os números de teste). A conversa é da equipe.">
                     👤 Atendimento humano
                   </span>
                 ) : null}
-                {whatsappAi.enabled && selected.channel === 'whatsapp' && selected.aiActive !== false ? (
-                  <AiStatus conversation={selected} resumeAfterHours={whatsappAi.resumeAfterHours} canManage={canManage}
+                {channelAi(selected).enabled && selected.aiActive !== false ? (
+                  <AiStatus conversation={selected} resumeAfterHours={channelAi(selected).resumeAfterHours} canManage={canManage}
                     busy={changingAi} onChange={(action) => void changeAi(selected.id, action)} />
                 ) : null}
                 {conversationOwner(selected, currentUserId).kind === 'none' && canManage ? (
@@ -1038,13 +1055,17 @@ export function InboxClient({
                     </div>
                   )}
 
-                  {selected.channel !== 'whatsapp' ? (
+                  {selected.channel !== 'whatsapp' && selected.channel !== 'instagram' ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
-                      O envio está disponível somente para o WhatsApp no FlipForm.
+                      O envio está disponível somente para o WhatsApp e o Instagram no FlipForm.
                     </div>
                   ) : !selectedChannelCanSend ? (
                     <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
                       Seu perfil possui acesso somente de leitura para esta conversa.
+                    </div>
+                  ) : selected.channel === 'instagram' && !isServiceWindowOpen(selected.lastInboundAt) ? (
+                    <div className="rounded-md border border-dashed px-4 py-3 text-center text-sm text-muted-foreground">
+                      O Instagram só permite responder até 24 horas depois da última mensagem da pessoa. Quando ela escrever de novo, você responde por aqui.
                     </div>
                   ) : needsTemplate ? (
                     <div className="rounded-md border bg-muted/30 p-3">
@@ -1105,14 +1126,14 @@ export function InboxClient({
                         className="min-h-[44px] max-h-36 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={sending}
                       />
-                      <VoiceRecorder disabled={sending || !canSendWhatsApp} onSend={sendAudio} />
+                      {selected.channel === 'whatsapp' ? <VoiceRecorder disabled={sending || !canSendWhatsApp} onSend={sendAudio} /> : null}
                       <Button
                         type="button"
                         size="icon"
                         className="h-11 w-11 shrink-0"
                         onClick={() => void sendMessage()}
                         disabled={sending || !draft.trim()}
-                        aria-label="Enviar mensagem pelo WhatsApp"
+                        aria-label={selected.channel === 'instagram' ? 'Enviar mensagem pelo Instagram' : 'Enviar mensagem pelo WhatsApp'}
                       >
                         {sending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>

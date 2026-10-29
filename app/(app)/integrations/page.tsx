@@ -6,6 +6,7 @@ import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
 import { WhatsAppTemplatesCard } from './whatsapp-templates-card';
+import { InstagramBusinessLoginCard } from './instagram-business-login-card';
 
 export default async function IntegrationsPage() {
   const session = await getSession();
@@ -22,6 +23,9 @@ export default async function IntegrationsPage() {
     </div>
     <div id="whatsapp-templates" className="scroll-mt-24">
       <WhatsAppTemplatesCard />
+    </div>
+    <div id="instagram-connection" className="scroll-mt-24">
+      <InstagramBusinessLoginCard />
     </div>
   </>;
 }

@@ -19,7 +19,7 @@ def test_inbox_permissions_and_navigation_are_explicit():
     assert 'permission: "INBOX_VIEW"' in shell
     assert "can(session.role, 'INBOX_VIEW')" in page
     assert "can(session.role, 'LEADS_CONTACT_WHATSAPP')" in page
-    assert 'canSendInstagram' not in page
+    assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
 
 
 def test_inbox_access_scope_is_tenant_safe_and_agents_are_assignment_scoped():
@@ -76,7 +76,8 @@ def test_inbox_discards_stale_message_requests_after_selection_changes():
 def test_inbox_client_sends_whatsapp_only_without_provider_authority_fields():
     client = read('app/(app)/inbox/inbox-client.tsx')
 
-    assert "/messages/whatsapp`" in client
+    assert "/messages/${endpoint}`" in client
+    assert "const endpoint = selected.channel === 'instagram' ? 'instagram' : 'whatsapp';" in client
     assert "/messages/instagram`" not in client
     assert "idempotencyKey: createIdempotencyKey()" in client
     assert "text," in client
@@ -93,16 +94,18 @@ def test_inbox_client_sends_whatsapp_only_without_provider_authority_fields():
     assert "appSecret" not in send_segment
 
 
-def test_inbox_product_surface_is_whatsapp_only():
+def test_inbox_shows_whatsapp_and_instagram():
     page = read('app/(app)/inbox/page.tsx')
     client = read('app/(app)/inbox/inbox-client.tsx')
 
-    assert 'canSendInstagram' not in page
-    assert 'canSendInstagram' not in client
-    assert 'Instagram' not in client
-    assert "all.filter((conversation) => conversation.channel === 'whatsapp')" in client
-    assert 'Atendimento do WhatsApp em uma única Inbox.' in client
-    assert 'Enviar mensagem pelo WhatsApp' in client
+    assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
+    assert "all.filter((conversation) => conversation.channel === 'whatsapp' || conversation.channel === 'instagram')" in client
+    assert 'WhatsApp e Instagram em uma única Inbox.' in client
+    assert "/messages/${endpoint}`" in client
+    # Instagram: only inside Meta's 24 h window; templates and voice notes stay WhatsApp-only.
+    assert "selected.channel === 'instagram' && !isServiceWindowOpen(selected.lastInboundAt)" in client
+    assert "{selected.channel === 'whatsapp' ? <VoiceRecorder" in client
+    assert "const needsTemplate = Boolean(selected && selected.channel === 'whatsapp'" in client
 
 
 def test_inbox_does_not_add_or_mutate_prisma_schema():

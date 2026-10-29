@@ -27,7 +27,8 @@ def test_reports_page_links_to_the_productivity_report():
 
 def test_inbox_shows_ai_only_where_the_ai_answers_the_contact():
     route = read("app/api/inbox/conversations/route.ts")
-    assert "aiActive: conversation.channel === 'whatsapp' && aiAnswers(conversation.externalContactIdentity.externalUserId)" in route
+    compact = " ".join(route.split())
+    assert "aiActive: conversation.channel === 'whatsapp' ? aiAnswers(conversation.externalContactIdentity.externalUserId)" in compact
     pause = read("lib/whatsapp-ai/pause.ts")
     assert "export async function whatsAppAiAudience(" in pause
     inbox = read("app/(app)/inbox/inbox-client.tsx")
