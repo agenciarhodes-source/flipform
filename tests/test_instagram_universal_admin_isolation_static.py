@@ -67,11 +67,12 @@ def test_global_meta_save_cannot_overwrite_instagram_configuration():
     assert 'instagramAppSecret' not in page
 
 
-def test_admin_ui_parks_instagram_configuration_without_mutating_backend_state():
+def test_admin_ui_shows_instagram_configuration_in_its_own_card():
     page = read('app/admin/(secure)/integrations/page.tsx')
     component = read('app/admin/(secure)/integrations/instagram-platform-config-card.tsx')
 
-    assert 'InstagramPlatformConfigCard' not in page
+    # Back for Atendimento Instagram, still isolated: the Ads/WhatsApp form never carries Instagram fields.
+    assert '<InstagramPlatformConfigCard />' in page
     assert 'Instagram App ID' not in page
     assert 'Instagram App Secret' not in page
     assert 'Ads e WhatsApp da plataforma' in page
