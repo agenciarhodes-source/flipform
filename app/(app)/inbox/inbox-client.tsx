@@ -357,18 +357,27 @@ function MessageStatus({ status }: { status: string }) {
   return <Clock3 className="h-3.5 w-3.5 opacity-75" aria-label="Pendente" />;
 }
 
+export type InboxChannel = 'whatsapp' | 'instagram';
+const CHANNEL_PAGE: Record<InboxChannel, string> = { whatsapp: '/inbox', instagram: '/direct' };
+function isInboxChannel(value: unknown): value is InboxChannel {
+  return value === 'whatsapp' || value === 'instagram';
+}
+
 export function InboxClient({
   canManage,
   canAssign,
   canSendWhatsApp,
   canSendInstagram,
   currentUserId,
+  channel = 'whatsapp',
 }: {
   canManage: boolean;
   canAssign: boolean;
   canSendWhatsApp: boolean;
   canSendInstagram: boolean;
   currentUserId: string;
+  /** Inbox shows the WhatsApp; Direct shows the Instagram. */
+  channel?: InboxChannel;
 }) {
   const [conversations, setConversations] = useState<InboxConversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -546,11 +555,11 @@ export function InboxClient({
   async function loadConversations(silent = false) {
     if (!silent) setLoadingConversations(true);
     try {
-      const response = await fetch('/api/inbox/conversations', { cache: 'no-store' });
+      const response = await fetch(`/api/inbox/conversations?channel=${channel}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível carregar as conversas.');
       const data = await response.json();
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
-      let next = all.filter((conversation) => conversation.channel === 'whatsapp' || conversation.channel === 'instagram');
+      let next = all.filter((conversation) => conversation.channel === channel);
       if (data.whatsappAi && typeof data.whatsappAi.enabled === 'boolean') setWhatsappAi(data.whatsappAi);
       if (data.instagramAi && typeof data.instagramAi.enabled === 'boolean') setInstagramAi(data.instagramAi);
       const requestedId = requestedConversationIdRef.current;
@@ -564,7 +573,12 @@ export function InboxClient({
           const directData = await directResponse.json();
           const directConversation = directData.conversation as Omit<InboxConversation, 'messages'> | undefined;
           const directMessages = Array.isArray(directData.messages) ? directData.messages as InboxMessage[] : [];
-          if (directConversation?.channel === 'whatsapp' || directConversation?.channel === 'instagram') {
+          // A link to a conversation of the other channel opens it on its own page (Inbox or Direct).
+          if (directConversation && directConversation.channel !== channel && isInboxChannel(directConversation.channel)) {
+            window.location.replace(`${CHANNEL_PAGE[directConversation.channel]}?conversationId=${encodeURIComponent(directConversation.id)}`);
+            return;
+          }
+          if (directConversation?.channel === channel) {
             const latestMessage = directMessages[directMessages.length - 1];
             next = [{
               ...directConversation,
@@ -812,8 +826,8 @@ export function InboxClient({
           <div className="border-b p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h1 className="font-heading text-lg font-semibold">Conversas</h1>
-                <p className="text-xs text-muted-foreground">WhatsApp e Instagram em uma única Inbox.</p>
+                <h1 className="font-heading text-lg font-semibold">{channel === 'instagram' ? 'Direct' : 'Conversas'}</h1>
+                <p className="text-xs text-muted-foreground">{channel === 'instagram' ? 'Mensagens do Direct do Instagram.' : 'Mensagens do WhatsApp.'}</p>
               </div>
               <Button
                 variant="ghost"
@@ -866,7 +880,7 @@ export function InboxClient({
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
                 <MessageSquareText className="h-9 w-9 opacity-40" />
                 <div className="text-sm font-medium text-foreground">{onlyUnread && !search.trim() ? 'Nenhuma conversa não lida' : 'Nenhuma conversa encontrada'}</div>
-                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : onlyLeads ? 'Nenhuma conversa com lead vinculado neste filtro.' : 'As novas mensagens recebidas pelo WhatsApp e pelo Instagram conectados aparecerão aqui.'}</div>
+                <div className="max-w-56 text-xs">{onlyUnread && !search.trim() ? 'Você está em dia com as mensagens.' : onlyLeads ? 'Nenhuma conversa com lead vinculado neste filtro.' : channel === 'instagram' ? 'As novas mensagens recebidas pelo Direct do Instagram conectado aparecerão aqui.' : 'As novas mensagens recebidas pelo WhatsApp conectado aparecerão aqui.'}</div>
               </div>
             ) : (
               filteredConversations.map((conversation) => {

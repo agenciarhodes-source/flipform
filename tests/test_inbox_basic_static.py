@@ -99,8 +99,15 @@ def test_inbox_shows_whatsapp_and_instagram():
     client = read('app/(app)/inbox/inbox-client.tsx')
 
     assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
-    assert "all.filter((conversation) => conversation.channel === 'whatsapp' || conversation.channel === 'instagram')" in client
-    assert 'WhatsApp e Instagram em uma única Inbox.' in client
+    # Inbox lists the WhatsApp and Direct the Instagram; a link to the other channel moves page.
+    assert "all.filter((conversation) => conversation.channel === channel)" in client
+    assert "fetch(`/api/inbox/conversations?channel=${channel}`" in client
+    assert "CHANNEL_PAGE: Record<InboxChannel, string> = { whatsapp: '/inbox', instagram: '/direct' }" in client
+    direct = read('app/(app)/direct/page.tsx')
+    assert 'channel="instagram"' in direct
+    assert "can(session.role, 'INBOX_VIEW')" in direct
+    shell = read('components/app-shell.tsx')
+    assert '{ href: "/direct", label: "Direct", icon: Instagram, permission: "INBOX_VIEW" }' in shell
     assert "/messages/${endpoint}`" in client
     # Instagram: only inside Meta's 24 h window; templates and voice notes stay WhatsApp-only.
     assert "selected.channel === 'instagram' && !isServiceWindowOpen(selected.lastInboundAt)" in client
@@ -112,7 +119,7 @@ def test_inbox_does_not_add_or_mutate_prisma_schema():
     # Inbox reuses the existing Conversation/Message core and WhatsApp outbox.
     assert not (ROOT / 'prisma/migrations/20260816_add_inbox').exists()
     client = read('app/(app)/inbox/inbox-client.tsx')
-    assert "fetch('/api/inbox/conversations'" in client
+    assert "fetch(`/api/inbox/conversations?channel=" in client
     assert "unreadCount" in client
 
 
