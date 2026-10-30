@@ -95,6 +95,14 @@ export function receivedFilesNote(role: AttendantRole | undefined) {
     + ' sequência. Não diga apenas que a equipe vai analisar enquanto ainda faltar documento.]';
 }
 
+/** Something WhatsApp does not deliver to systems (view once, poll, location, contact). */
+const UNSUPPORTED_NOTE = '[O cliente enviou algo que o WhatsApp não entrega para o sistema (por exemplo: foto de visualização única, enquete, localização ou contato). Peça, com gentileza, que envie de novo de outro jeito: foto normal, arquivo ou por escrito.]';
+
+function providerTypeOf(metadata: unknown) {
+  const value = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? (metadata as Record<string, unknown>).providerType : null;
+  return typeof value === 'string' ? value : null;
+}
+
 const MEDIA_NOTES: Record<string, string> = {
   image: '[O cliente enviou uma foto.]',
   document: '[O cliente enviou um documento.]',
@@ -357,6 +365,8 @@ export async function replyToWhatsAppConversation(input: {
       extraUserNotes.push(documentNote(checked, MEDIA_NOTES[message.type]));
     } else if (MEDIA_NOTES[message.type]) {
       extraUserNotes.push(MEDIA_NOTES[message.type]);
+    } else if (providerTypeOf(message.metadata) === 'unsupported') {
+      extraUserNotes.push(UNSUPPORTED_NOTE);
     }
   }
   if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));

@@ -202,6 +202,16 @@ const MESSAGE_TYPE_LABELS: Record<string, string> = {
   interactive: 'Resposta de botão', unknown: 'Mensagem em formato não suportado pela API (enquete, contato, localização ou similar)',
 };
 
+/** What a message without text shows: a deleted message, one WhatsApp does not deliver, or its type. */
+function messageTypeLabel(message: { type: string; metadata: unknown }) {
+  const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as Record<string, unknown> : {};
+  if (metadata.providerType === 'revoke') return 'A pessoa apagou uma mensagem.';
+  if (metadata.providerType === 'unsupported') {
+    return 'Mensagem que o WhatsApp não entrega para sistemas (por exemplo: visualização única, enquete, localização ou contato). Peça para a pessoa enviar de outro jeito.';
+  }
+  return MESSAGE_TYPE_LABELS[message.type] || 'Mensagem sem texto';
+}
+
 function messageMediaId(message: { metadata: unknown }) {
   const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as Record<string, unknown> : {};
   return typeof metadata.mediaId === 'string' ? metadata.mediaId : null;
@@ -1036,7 +1046,7 @@ export function InboxClient({
                             {message.text && !(message.type === 'audio' && message.text === '🎤 Áudio') ? (
                               <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.text}</p>
                             ) : !messageMediaId(message) ? (
-                              <p className="text-sm italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Mensagem sem texto'}</p>
+                              <p className="text-sm italic opacity-75">{messageTypeLabel(message)}</p>
                             ) : null}
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outbound ? 'text-white/75' : 'text-muted-foreground'}`}>
                               <span>{formatMessageDate(message.providerTimestamp || message.createdAt)}</span>
