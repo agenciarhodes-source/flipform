@@ -28,3 +28,13 @@ def test_owner_can_switch_the_summary_off_for_the_whole_company():
     migration = read("prisma/migrations/20261022180000_tenant_flip_briefing_switch/migration.sql")
     assert "DEFAULT true" in migration and "DROP" not in migration
     assert "Desligar o resumo para a empresa toda" in read("components/flip/daily-briefing.tsx")
+
+
+def test_briefing_is_fuller_and_keeps_the_scope_of_who_reads():
+    briefing = read("lib/flip/briefing.ts")
+    assert "seesTeam\n      ? prisma.message.findMany(" in briefing.replace("\r\n", "\n")
+    assert "maxOutputTokens: 800" in briefing
+    assert "createdAt: { gte: lastMonthStart, lt: lastMonthEnd }" in briefing
+    rules = read("lib/flip/briefing-rules.ts")
+    assert "escreva 2 ou 3 parágrafos curtos" in rules
+    assert "Não invente dados, nomes nem porcentagens." in rules

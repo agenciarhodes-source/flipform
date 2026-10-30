@@ -38,3 +38,20 @@ test('saudação só com nome de verdade', () => {
   assert.equal(greetingName('clarice'), 'Clarice');
   assert.equal(greetingName(''), '');
 });
+
+test('o resumo completo traz origem, canais, vendas e o mês comparado', () => {
+  const text = plainBriefing({
+    ...facts,
+    yesterday: {
+      ...facts.yesterday,
+      sources: [{ source: 'google_ads', leads: 12 }, { source: 'meta', leads: 7 }],
+      channels: [{ channel: 'WhatsApp', conversations: 31 }, { channel: 'Instagram', conversations: 6 }],
+      sales: { count: 2, total: 'R$ 3.200,00' },
+    },
+    month: { leads: 410, closed: 21, lastMonthLeads: 380, lastMonthClosed: 18 },
+  });
+  assert.match(text, /Origem dos leads de ontem: google_ads \(12\), meta \(7\)\./);
+  assert.match(text, /Conversas com clientes ontem: WhatsApp 31, Instagram 6\./);
+  assert.match(text, /Vendas registradas ontem: 2 \(R\$ 3\.200,00\)\./);
+  assert.match(text, /No mês até agora: 410 leads e 21 fechamentos \(no mesmo ponto do mês passado: 380 e 18\)\./);
+});
