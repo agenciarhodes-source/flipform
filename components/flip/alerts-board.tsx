@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, RefreshCw, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { FlipAlert, FlipAlertKind } from '@/lib/flip/alert-rules';
 import { DailyBriefingCard } from './daily-briefing';
@@ -59,82 +59,87 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
     .map((kind) => ({ kind, items: visible.filter((alert) => alert.kind === kind) }))
     .filter((group) => group.items.length > 0);
 
+  const updatedAt = new Date(board.generatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
   return (
-    <section className="mx-auto max-w-5xl space-y-5 p-4 md:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold"><Sparkles className="h-6 w-6 text-brand-600" aria-hidden="true" /> Flip</h1>
-          <p className="text-sm text-muted-foreground">
-            {board.seesTeam ? 'O que está ficando para trás na equipe.' : 'O que está ficando para trás com você.'} Atualizado {new Date(board.generatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
-          </p>
-        </div>
-        <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
-          <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
-        </Button>
-      </header>
-
-      <DailyBriefingCard />
-
-      <FlipSuggestionsPanel onApplied={() => void reload()} />
-
+    <section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <AskFlip />
 
-      {board.seesTeam && people.length > 0 && (
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por pessoa">
-          <Button type="button" size="sm" variant={person === 'all' ? 'default' : 'outline'} onClick={() => setPerson('all')}>Todos ({board.total})</Button>
-          {people.map(([key, value]) => (
-            <Button key={key} type="button" size="sm" variant={person === key ? 'default' : 'outline'} onClick={() => setPerson(key)}>
-              {value.name} ({value.count})
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <header className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">Pendências</h2>
+              <p className="text-sm text-muted-foreground">
+                {board.seesTeam ? 'O que está ficando para trás na equipe.' : 'O que está ficando para trás com você.'} Atualizado às {updatedAt}.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void reload()} disabled={loading}>
+              <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
             </Button>
+          </header>
+
+          {board.seesTeam && people.length > 0 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por pessoa">
+              <Button type="button" size="sm" className="rounded-full" variant={person === 'all' ? 'default' : 'outline'} onClick={() => setPerson('all')}>Todos ({board.total})</Button>
+              {people.map(([key, value]) => (
+                <Button key={key} type="button" size="sm" className="rounded-full" variant={person === key ? 'default' : 'outline'} onClick={() => setPerson(key)}>
+                  {value.name} ({value.count})
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {groups.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {groups.map((group) => (
+                <button key={group.kind} type="button" onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}
+                  className={`rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${openKind === group.kind ? 'border-indigo-500 ring-2 ring-indigo-100' : ''}`}>
+                  <span className="text-xl" aria-hidden="true">{KIND_LABELS[group.kind].icon}</span>
+                  <p className="mt-1 text-3xl font-semibold tracking-tight">{group.items.length}</p>
+                  <p className="text-xs leading-snug text-muted-foreground">{KIND_LABELS[group.kind].label}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {groups.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-white p-10 text-center">
+              <p className="text-lg font-medium">Tudo em dia 🎉</p>
+              <p className="text-sm text-muted-foreground">Nenhuma pendência no momento.</p>
+            </div>
+          ) : groups.map((group) => (
+            <article key={group.kind} className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+              <button type="button" className="flex w-full items-start gap-2 px-4 py-3 text-left hover:bg-slate-50" aria-expanded={openKind === group.kind}
+                onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}>
+                {openKind === group.kind ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
+                <span>
+                  <span className="block font-semibold">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label} ({group.items.length})</span>
+                  <span className="block text-xs text-muted-foreground">{KIND_LABELS[group.kind].hint}</span>
+                </span>
+              </button>
+              {openKind === group.kind && <ul className="divide-y border-t">
+                {group.items.map((alert) => (
+                  <li key={alert.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{alert.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {alert.detail}{board.seesTeam && alert.ownerName && alert.kind !== 'overloaded_attendant' ? ` · ${alert.ownerName}` : ''}
+                      </p>
+                    </div>
+                    <Link href={alert.href} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'shrink-0' })}>Abrir</Link>
+                  </li>
+                ))}
+              </ul>}
+            </article>
           ))}
         </div>
-      )}
 
-      {groups.length > 0 && (
-        <div>
-          <h2 className="mb-2 font-semibold">Pendências</h2>
-          <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {groups.map((group) => (
-              <button key={group.kind} type="button" onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}
-                className={`rounded-lg border bg-white p-3 text-left shadow-sm transition hover:bg-slate-50 ${openKind === group.kind ? 'border-brand-600 ring-1 ring-brand-600' : ''}`}>
-                <p className="text-2xl font-semibold">{group.items.length}</p>
-                <p className="text-xs text-muted-foreground">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {groups.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-8 text-center">
-          <p className="text-lg font-medium">Tudo em dia 🎉</p>
-          <p className="text-sm text-muted-foreground">Nenhuma pendência no momento.</p>
-        </div>
-      ) : groups.map((group) => (
-        <article key={group.kind} className="rounded-xl border bg-white shadow-sm">
-          <button type="button" className="flex w-full items-start gap-2 px-4 py-3 text-left" aria-expanded={openKind === group.kind}
-            onClick={() => setOpenKind((current) => (current === group.kind ? null : group.kind))}>
-            {openKind === group.kind ? <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" /> : <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />}
-            <span>
-              <span className="block font-semibold">{KIND_LABELS[group.kind].icon} {KIND_LABELS[group.kind].label} ({group.items.length})</span>
-              <span className="block text-xs text-muted-foreground">{KIND_LABELS[group.kind].hint}</span>
-            </span>
-          </button>
-          {openKind === group.kind && <ul className="divide-y border-t">
-            {group.items.map((alert) => (
-              <li key={alert.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{alert.title}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {alert.detail}{board.seesTeam && alert.ownerName && alert.kind !== 'overloaded_attendant' ? ` · ${alert.ownerName}` : ''}
-                  </p>
-                </div>
-                <Link href={alert.href} className={buttonVariants({ variant: 'outline', size: 'sm', className: 'shrink-0' })}>Abrir</Link>
-              </li>
-            ))}
-          </ul>}
-        </article>
-      ))}
+        <aside className="space-y-4">
+          <DailyBriefingCard />
+          <FlipSuggestionsPanel onApplied={() => void reload()} />
+        </aside>
+      </div>
     </section>
   );
 }

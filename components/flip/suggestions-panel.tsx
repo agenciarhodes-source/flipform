@@ -81,11 +81,11 @@ export function FlipSuggestionsPanel({ onApplied }: { onApplied?: () => void }) 
   const blocks = ORDER.map((key) => ({ key, list: items.filter((item) => blockOf(item) === key) })).filter((block) => block.list.length);
 
   return (
-    <article className="rounded-xl border bg-white shadow-sm">
+    <article className="rounded-2xl border bg-white shadow-sm">
       <div className="border-b px-4 py-3">
         <h2 className="font-semibold">✨ Sugestões do Flip ({items.length})</h2>
         <p className="text-xs text-muted-foreground">Nada é feito sozinho. Abra um bloco para ver as sugestões e aplicar ou dispensar.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
           {blocks.map((block) => (
             <button key={block.key} type="button" onClick={() => setOpen((current) => (current === block.key ? null : block.key))}
               className={`rounded-lg border p-3 text-left transition hover:bg-slate-50 ${open === block.key ? 'border-brand-600 ring-1 ring-brand-600' : ''}`}>

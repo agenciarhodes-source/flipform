@@ -17,3 +17,11 @@ def test_ask_flip_uses_ready_made_queries_scoped_to_who_asks():
     assert "action: 'flip.question_asked'" in route
     assert "<AskFlip />" in read("components/flip/alerts-board.tsx")
     assert "tests/flip-ask-rules.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_flip_page_starts_with_the_search_bar():
+    board = read("components/flip/alerts-board.tsx")
+    assert board.index("<AskFlip />") < board.index("<h2 className=\"text-lg font-semibold\">Pendências</h2>")
+    ask = read("components/flip/ask-flip.tsx")
+    assert 'placeholder="Pergunte ao Flip: quantos leads tivemos este mês?"' in ask
+    assert "'Como está o time de atendimento?'" in ask
