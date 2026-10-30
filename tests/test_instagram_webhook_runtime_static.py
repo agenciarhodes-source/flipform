@@ -74,7 +74,7 @@ def test_instagram_connection_subscribes_professional_account_and_marks_subscrip
     connection = read('lib/meta/instagram-connection.ts')
 
     assert '/subscribed_apps`' in helper
-    assert "INSTAGRAM_WEBHOOK_FIELDS = ['messages', 'comments', 'live_comments'] as const" in helper
+    assert "INSTAGRAM_WEBHOOK_FIELDS = ['messages'] as const" in helper
     assert 'subscribed_fields: [...INSTAGRAM_WEBHOOK_FIELDS]' in helper
     assert 'Authorization: `Bearer ${input.accessToken}`' in helper
     assert "'webhook_subscription'" in helper

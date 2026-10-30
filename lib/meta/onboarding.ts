@@ -26,10 +26,12 @@ export const META_ONBOARDING_CHANNELS = {
   [META_INSTAGRAM_ONBOARDING_PURPOSE]: {
     channel: 'instagram',
     flow: 'instagram_business_login',
+    // Profile and Direct only, the two permissions sent to Meta's App Review. Comments
+    // (instagram_business_manage_comments) come back in a later review, when the comment
+    // automations are released.
     requiredScopes: [
       'instagram_business_basic',
       'instagram_business_manage_messages',
-      'instagram_business_manage_comments',
     ],
     persistence: 'tenant_instagram_connections',
   },

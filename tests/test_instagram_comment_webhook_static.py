@@ -7,11 +7,11 @@ def read(path: str) -> str:
     return (ROOT / path).read_text(encoding='utf-8')
 
 
-def test_instagram_comment_permission_is_requested_with_business_login():
+def test_instagram_login_asks_profile_and_direct_only_until_comments_are_reviewed():
     onboarding = read('lib/meta/onboarding.ts')
     instagram = read('lib/meta/instagram.ts')
 
-    assert "'instagram_business_manage_comments'" in onboarding
+    assert "'instagram_business_manage_comments'," not in onboarding
     assert "'instagram_business_manage_messages'" in onboarding
     assert "'instagram_business_basic'" in onboarding
     assert 'INSTAGRAM_REQUIRED_SCOPES.join' in instagram

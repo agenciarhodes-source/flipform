@@ -7,7 +7,8 @@ export const INSTAGRAM_AUTHORIZATION_URL = 'https://www.instagram.com/oauth/auth
 export const INSTAGRAM_TOKEN_URL = 'https://api.instagram.com/oauth/access_token';
 export const INSTAGRAM_GRAPH_BASE_URL = 'https://graph.instagram.com';
 export const INSTAGRAM_REQUIRED_SCOPES = META_ONBOARDING_CHANNELS[META_INSTAGRAM_ONBOARDING_PURPOSE].requiredScopes;
-export const INSTAGRAM_WEBHOOK_FIELDS = ['messages', 'comments', 'live_comments'] as const;
+/** Direct only; comments return with their permission. Older connections may also have comments. */
+export const INSTAGRAM_WEBHOOK_FIELDS = ['messages'] as const;
 
 const FETCH_TIMEOUT_MS = 10_000;
 
