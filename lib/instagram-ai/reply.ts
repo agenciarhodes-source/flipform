@@ -25,6 +25,8 @@ import { isConversationAiPaused } from '@/lib/whatsapp-ai/pause';
 import { clearFirstName } from '@/lib/whatsapp-ai/name-clarity';
 import { whatsappIntroduction } from '@/lib/whatsapp-ai/reply';
 import { instagramSenderProfile } from './profile';
+import { describeInstagramImage } from './image';
+import { instagramImageNote } from './image-rules';
 import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
 import {
   INSTAGRAM_AI_QUIET_SECONDS,
@@ -168,13 +170,25 @@ export async function replyToInstagramConversation(input: {
     },
     orderBy: [{ providerTimestamp: 'asc' }, { createdAt: 'asc' }],
     take: 20,
-    select: { type: true, text: true },
+    select: { id: true, type: true, text: true, metadata: true },
   });
   const parts: string[] = [];
   const notes: string[] = [];
+  let imagesRead = 0;
   for (const message of pending) {
     if (message.text?.trim()) parts.push(message.text.trim());
-    else notes.push(INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
+    else if (message.type === 'image' && imagesRead < 3) {
+      // The attendant looks at the photo (at most 3 per turn) and reads a short description.
+      imagesRead += 1;
+      const description = await describeInstagramImage({
+        tenantId: input.tenantId,
+        agentId: runtime.id,
+        conversationId: conversation.id,
+        connectionId: connection.id,
+        message,
+      }).catch(() => null);
+      notes.push(instagramImageNote(description));
+    } else notes.push(INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
   }
   if (input.trigger === 'handback') {
     notes.push('[Nota interna, não mostre à pessoa: a equipe devolveu esta conversa para você. Responda o que a pessoa perguntou nas últimas mensagens, sem repetir o que a equipe já disse.]');
