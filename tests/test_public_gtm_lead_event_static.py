@@ -34,7 +34,7 @@ def test_public_submit_fires_gtm_only_after_successful_qualified_response():
     response_ok = view.index('if (!res.ok)')
     result_parse = view.index('const result: PublicFormSubmitResponse = await res.json();')
     qualified = view.index('if (result.qualified === true)')
-    gtm_fire = view.index('firePublicGtmLeadEvent(gtmContainerId)', qualified)
+    gtm_fire = view.index('await firePublicGtmLeadEventAndWait(gtmContainerId)', qualified)
     assert response_ok < result_parse < qualified < gtm_fire
 
 
@@ -42,7 +42,7 @@ def test_duplicate_or_failed_submission_cannot_reach_gtm_event():
     view = read(VIEW)
     error_throw = view.index('throw new Error(msg);')
     result_parse = view.index('const result: PublicFormSubmitResponse = await res.json();')
-    gtm_fire = view.index('firePublicGtmLeadEvent(gtmContainerId)')
+    gtm_fire = view.index('firePublicGtmLeadEventAndWait(gtmContainerId)')
     assert error_throw < result_parse < gtm_fire
 
 
@@ -51,6 +51,7 @@ def test_gtm_lead_payload_contains_no_pii_or_internal_lead_id():
     payload_line = "dataLayer.push({ event: FLIPFORM_LEAD_EVENT });"
     assert payload_line in gtm
     event_function = gtm[gtm.index('export function firePublicGtmLeadEvent'):]
+    assert "dataLayer.push({ event: FLIPFORM_LEAD_EVENT, eventCallback: () => finish(true), eventTimeout: timeoutMs });" in gtm
     for pii in ['email', 'phone', 'name', 'cpf', 'cnpj', 'leadId', 'lead_id']:
         assert pii not in event_function
 
@@ -67,3 +68,12 @@ def test_tracking_failures_are_non_blocking_for_form_experience():
     assert 'Tracking must never interrupt the public form experience.' in gtm
     assert 'A tracking failure must not change a successful form submission.' in gtm
     assert gtm.count('return false;') >= 4
+
+
+def test_form_waits_for_the_google_tag_before_leaving_to_whatsapp():
+    gtm = read(GTM)
+    assert "export const GTM_LEAD_WAIT_MS = 1500;" in gtm
+    assert "setTimeout(() => finish(false), timeoutMs);" in gtm
+    view = read(VIEW)
+    wait = view.index('await firePublicGtmLeadEventAndWait(gtmContainerId)')
+    assert wait < view.index('return result;')

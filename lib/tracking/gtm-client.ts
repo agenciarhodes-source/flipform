@@ -55,3 +55,33 @@ export function firePublicGtmLeadEvent(containerId: string | null | undefined) {
     return false;
   }
 }
+
+/** Most a form waits for the Google tag before going to the next page (e.g. WhatsApp). */
+export const GTM_LEAD_WAIT_MS = 1500;
+
+/**
+ * Same lead event, but waits until Google Tag Manager says its tags were sent (eventCallback),
+ * up to GTM_LEAD_WAIT_MS. Forms that open WhatsApp right after the submission would otherwise
+ * leave the page before the Google Ads conversion request goes out, and the conversion is lost.
+ */
+export function firePublicGtmLeadEventAndWait(containerId: string | null | undefined, timeoutMs = GTM_LEAD_WAIT_MS): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (sent: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(sent);
+    };
+    try {
+      if (!loadPublicGtmContainer(containerId)) return finish(false);
+      const dataLayer = ensureDataLayer();
+      if (!dataLayer) return finish(false);
+      setTimeout(() => finish(false), timeoutMs);
+      // Same PII-free payload as the plain lead event, plus GTM's standard completion callback.
+      dataLayer.push({ event: FLIPFORM_LEAD_EVENT, eventCallback: () => finish(true), eventTimeout: timeoutMs });
+    } catch {
+      // A tracking failure must not change a successful form submission.
+      finish(false);
+    }
+  });
+}

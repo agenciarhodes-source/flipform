@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { PublicTypeform } from '@/components/public-typeform';
 import { buildPublicAttribution, ensureMetaFbcCookie } from '@/lib/attribution';
 import { fireMetaLeadPixel, initializeMetaPixel, type PublicFormSubmitResponse } from '@/lib/tracking/meta-pixel-client';
-import { firePublicGtmLeadEvent, loadPublicGtmContainer } from '@/lib/tracking/gtm-client';
+import { firePublicGtmLeadEventAndWait, loadPublicGtmContainer } from '@/lib/tracking/gtm-client';
 
 export function PublicFormView({
   form,
@@ -56,11 +56,13 @@ export function PublicFormView({
       throw new Error(msg);
     }
     const result: PublicFormSubmitResponse = await res.json();
-    if (result.qualified === true) {
-      firePublicGtmLeadEvent(gtmContainerId);
-    }
     if (result.qualified === true && result.tracking?.meta) {
       fireMetaLeadPixel(result.tracking.meta);
+    }
+    if (result.qualified === true) {
+      // The form usually opens WhatsApp next: give the Google tag up to 1.5 s to send the
+      // conversion first, or leaving the page cancels it.
+      await firePublicGtmLeadEventAndWait(gtmContainerId);
     }
     return result;
   };
