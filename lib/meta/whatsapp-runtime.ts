@@ -87,6 +87,12 @@ function normalizedMessageMetadata(input: { entryId: string | null; phoneNumberI
     ...(typeof input.value?.metadata?.display_phone_number === 'string' ? { displayPhoneNumber: input.value.metadata.display_phone_number } : {}),
     ...(typeof message?.type === 'string' ? { providerType: message.type } : {}),
     ...(typeof message?.context?.id === 'string' ? { contextMessageId: message.context.id } : {}),
+    // The person deleted a message for everyone: the id of the deleted one, when Meta sends it.
+    ...(message?.type === 'revoke' && typeof (message?.revoke?.original_message_id || message?.revoke?.id) === 'string'
+      ? { revokedMessageId: message.revoke.original_message_id || message.revoke.id } : {}),
+    // Meta's numeric reason for a message it does not deliver (e.g. 131051, unsupported type).
+    ...(message?.type === 'unsupported' && Number.isSafeInteger(message?.errors?.[0]?.code)
+      ? { providerErrorCode: message.errors[0].code } : {}),
     ...(typeof media?.id === 'string' ? { mediaId: media.id } : {}),
     ...(typeof media?.mime_type === 'string' ? { mediaMimeType: media.mime_type } : {}),
     ...(typeof media?.filename === 'string' ? { mediaFileName: media.filename.slice(0, 200) } : {}),
@@ -536,7 +542,8 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             }).catch(() => undefined);
           }
           if (automationQueued) result.automationsQueued += 1;
-          if (await hasWhatsAppAiOn(connection.id)) {
+          // A deleted message is only a notice: nothing new for the AI to answer.
+          if (message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id)) {
             result.aiCandidates.push({
               tenantId: connection.tenantId,
               conversationId: persisted.conversation.id,
