@@ -104,6 +104,25 @@ const NAV: NavItem[] = [
   },
 ];
 
+/** The side menu in sections, so related pages stay together. Items not listed stay at the top. */
+const NAV_SECTIONS: Array<{ title: string; hrefs: string[] }> = [
+  { title: "Vendas", hrefs: ["/kanban", "/leads", "/customers", "/pipelines", "/sales-rotation"] },
+  { title: "Atendimento", hrefs: ["/inbox", "/direct", "/automations"] },
+  { title: "Inteligência artificial", hrefs: ["/flip-ai", "/whatsapp-ai", "/instagram-ai"] },
+  { title: "Captação", hrefs: ["/forms", "/domains"] },
+  { title: "Análise", hrefs: ["/reports"] },
+  { title: "Administração", hrefs: ["/integrations", "/users", "/billing", "/settings"] },
+];
+
+function navSections<T extends { href: string }>(items: T[]) {
+  const sectioned = new Set(NAV_SECTIONS.flatMap((section) => section.hrefs));
+  const top = items.filter((item) => !sectioned.has(item.href));
+  const groups = NAV_SECTIONS
+    .map((section) => ({ title: section.title, items: items.filter((item) => section.hrefs.includes(item.href)) }))
+    .filter((section) => section.items.length > 0);
+  return [{ title: null as string | null, items: top }, ...groups].filter((section) => section.items.length > 0);
+}
+
 const GROUP_ROLE_LABELS_PT_BR: Record<string, string> = {
   owner: "Dono do grupo",
   admin: "Administrador do grupo",
@@ -227,28 +246,35 @@ export function AppShell({
             </div>
           </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto scrollbar-thin">
-          {navItems.map((item) => {
-            const active = isNavItemActive(item.href);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                  active
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-foreground/70 hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
-                {item.label}
-                {item.href === "/flip" && <FlipNavBadge />}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 p-3 overflow-y-auto scrollbar-thin">
+          {navSections(navItems).map((section) => (
+            <div key={section.title || "top"} className={cn("space-y-0.5", section.title && "mt-4")}>
+              {section.title && (
+                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">{section.title}</p>
+              )}
+              {section.items.map((item) => {
+                const active = isNavItemActive(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                      active
+                        ? "bg-brand-50 text-brand-700"
+                        : "text-foreground/70 hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <Icon className={cn("w-4 h-4", active && "text-brand-600")} />
+                    {item.label}
+                    {item.href === "/flip" && <FlipNavBadge />}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
         <div className="p-3 border-t border-sidebar-border space-y-2">
           {activeGroup && (
