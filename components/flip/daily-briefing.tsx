@@ -90,7 +90,7 @@ export function DailyBriefingCard() {
   };
   if (briefing === undefined) return null;
   return (
-    <article className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+    <article className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 font-semibold text-violet-900"><Sparkles className="h-4 w-4" aria-hidden="true" /> Resumo de hoje</p>
         <span className="flex flex-wrap items-center gap-3">
