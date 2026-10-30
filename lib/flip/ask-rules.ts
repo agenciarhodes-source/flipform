@@ -5,7 +5,8 @@ import { z } from 'zod';
  * The AI only picks one of these and its filters; it never reaches the database. Pure, easy to test.
  */
 export const ASK_QUERIES = [
-  'leads_count', 'closed', 'sources', 'by_attendant', 'sales', 'whatsapp_ai', 'pending', 'by_stage', 'unsupported',
+  'leads_count', 'closed', 'sources', 'by_attendant', 'sales', 'whatsapp_ai', 'pending', 'by_stage',
+  'team_service', 'channels', 'compare', 'unsupported',
 ] as const;
 export type AskQuery = (typeof ASK_QUERIES)[number];
 
@@ -86,6 +87,18 @@ export function resolvePeriod(plan: Pick<AskPlan, 'period' | 'from' | 'to'>, now
     default:
       return { start: monthStart(year, month), end: tomorrow, label: 'este mês' };
   }
+}
+
+/** The period of the same length right before, to compare ("vs. o período anterior"). */
+export function previousPeriod(period: { start: Date; end: Date }) {
+  const length = period.end.getTime() - period.start.getTime();
+  return { start: new Date(period.start.getTime() - length), end: period.start };
+}
+
+/** The period in whole days (1 to 90), for the team report that works by days. */
+export function periodDays(period: { start: Date; end: Date }) {
+  const days = Math.round((period.end.getTime() - period.start.getTime()) / DAY);
+  return Math.max(1, Math.min(90, days));
 }
 
 /** Finds the one name the person meant ("mônica" → "Mônica Souza"), or null when unclear. */

@@ -25,3 +25,13 @@ def test_flip_page_starts_with_the_search_bar():
     ask = read("components/flip/ask-flip.tsx")
     assert 'placeholder="Pergunte ao Flip: quantos leads tivemos este mês?"' in ask
     assert "'Como está o time de atendimento?'" in ask
+
+
+def test_flip_answers_team_channels_and_comparison_for_managers_only():
+    ask = read("lib/flip/ask.ts")
+    for query in ["case 'team_service': {", "case 'channels': {", "case 'compare': {"]:
+        assert query in ask
+    assert "if (!seesTeam) return { filters: filtersUsed, data: { aviso: 'O retrato do time é da empresa toda; só gestores podem ver.' } };" in ask
+    assert "attendanceProductivity(session.tenantId, { days, now, onlyUserId: attendant?.id || null })" in ask
+    rules = read("lib/flip/ask-rules.ts")
+    assert "'team_service', 'channels', 'compare', 'unsupported'," in rules

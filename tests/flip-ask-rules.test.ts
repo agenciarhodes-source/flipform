@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { matchName, percent, resolvePeriod } from '../lib/flip/ask-rules';
+import { periodDays, previousPeriod } from '../lib/flip/ask-rules';
 
 const now = new Date('2026-10-21T15:00:00Z'); // quarta, 21/10 12h em Brasília
 
@@ -30,4 +31,15 @@ test('o nome citado precisa apontar para uma pessoa só', () => {
 test('percentual com vírgula', () => {
   assert.equal(percent(18, 142), '12,7%');
   assert.equal(percent(1, 0), '—');
+});
+
+test('período anterior do mesmo tamanho e período em dias', () => {
+  const start = new Date('2026-10-01T03:00:00Z');
+  const end = new Date('2026-10-31T03:00:00Z');
+  const before = previousPeriod({ start, end });
+  assert.equal(before.end.toISOString(), start.toISOString());
+  assert.equal(before.start.toISOString(), '2026-09-01T03:00:00.000Z');
+  assert.equal(periodDays({ start, end }), 30);
+  assert.equal(periodDays({ start, end: new Date(start.getTime() + 3_600_000) }), 1);
+  assert.equal(periodDays({ start: new Date('2025-01-01T03:00:00Z'), end }), 90);
 });
