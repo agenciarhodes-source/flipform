@@ -28,3 +28,12 @@ def test_account_match_has_its_own_stage_and_big_ids_stay_exact():
     assert "case 'account_match':" in stages
     helper = (ROOT / "lib/meta/instagram.ts").read_text(encoding="utf-8")
     assert "payload = parseMetaJson(text)" in helper
+
+
+def test_failures_are_kept_in_the_audit_history_without_secrets():
+    route = (ROOT / "app/api/integrations/instagram/callback/route.ts").read_text(encoding="utf-8")
+    assert "action: 'INSTAGRAM_CONNECTION_FAILED'" in route
+    assert route.count("await recordFailure(session") >= 6
+    body = route.split("async function recordFailure")[1].split("function clearState")[0]
+    for forbidden in ["accessToken", "appSecret", "error.message", "code,"]:
+        assert forbidden not in body, forbidden

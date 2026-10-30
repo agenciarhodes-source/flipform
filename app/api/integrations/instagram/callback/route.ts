@@ -23,6 +23,8 @@ import {
   INSTAGRAM_OAUTH_STATE_COOKIE_PATH,
 } from '@/lib/meta/instagram-state';
 import { safeProviderCode, type InstagramConnectStage } from '@/lib/meta/instagram-connect-stages';
+import { prisma } from '@/lib/prisma';
+import type { SessionPayload } from '@/lib/auth';
 
 function appBaseUrl() {
   return (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -34,6 +36,37 @@ function redirect(result: 'connected' | 'cancelled' | 'permissions' | 'conflict'
   if (stage) url.searchParams.set('stage', stage);
   if (code) url.searchParams.set('code', code);
   return NextResponse.redirect(url);
+}
+
+/**
+ * Keeps where a connection attempt stopped in the company's audit history, so the platform can see
+ * the cause even when the message on screen was missed. Only the stage and Meta's numeric code:
+ * never a token, secret or text from Meta.
+ */
+async function recordFailure(session: SessionPayload, details: {
+  result: string;
+  stage: string | null;
+  providerCode?: string | null;
+  httpStatus?: unknown;
+  errorType?: string;
+}) {
+  if (!session.tenantId) return;
+  await prisma.auditLog.create({
+    data: {
+      tenantId: session.tenantId,
+      userId: session.userId,
+      entityType: 'tenant_instagram_connection',
+      entityId: session.tenantId,
+      action: 'INSTAGRAM_CONNECTION_FAILED',
+      metadata: {
+        result: details.result,
+        stage: details.stage,
+        providerCode: details.providerCode || null,
+        httpStatus: typeof details.httpStatus === 'number' ? details.httpStatus : null,
+        errorType: details.errorType || null,
+      },
+    },
+  }).catch(() => undefined);
 }
 
 function clearState(response: NextResponse) {
@@ -48,7 +81,10 @@ function clearState(response: NextResponse) {
 }
 
 export const GET = withAuth(async (req: NextRequest, session) => {
-  if (!can(session.role, 'INTEGRATIONS_EDIT')) return clearState(redirect('error'));
+  if (!can(session.role, 'INTEGRATIONS_EDIT')) {
+    await recordFailure(session, { result: 'error', stage: 'role' });
+    return clearState(redirect('error'));
+  }
 
   const state = req.nextUrl.searchParams.get('state');
   const validState = verifyMetaOAuthStateForPurpose(
@@ -58,7 +94,10 @@ export const GET = withAuth(async (req: NextRequest, session) => {
     session.userId,
     META_INSTAGRAM_ONBOARDING_PURPOSE,
   );
-  if (!validState) return clearState(redirect('error', 'state'));
+  if (!validState) {
+    await recordFailure(session, { result: 'error', stage: 'state' });
+    return clearState(redirect('error', 'state'));
+  }
 
   const rl = await rateLimit({
     key: `instagram-business-login-callback:${session.tenantId}:${session.userId}:${getClientIp(req)}`,
@@ -70,11 +109,15 @@ export const GET = withAuth(async (req: NextRequest, session) => {
   if (req.nextUrl.searchParams.has('error')) {
     const denied = req.nextUrl.searchParams.get('error') === 'access_denied'
       || req.nextUrl.searchParams.get('error_reason') === 'user_denied';
+    await recordFailure(session, { result: denied ? 'cancelled' : 'error', stage: 'authorization' });
     return clearState(redirect(denied ? 'cancelled' : 'error'));
   }
 
   const code = req.nextUrl.searchParams.get('code');
-  if (!code) return clearState(redirect('error', 'no_code'));
+  if (!code) {
+    await recordFailure(session, { result: 'error', stage: 'no_code' });
+    return clearState(redirect('error', 'no_code'));
+  }
 
   let stage: InstagramConnectStage = 'not_ready';
   try {
@@ -82,7 +125,10 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       getPlatformInstagramLoginCredentials(),
       isInstagramRuntimeReady(),
     ]);
-    if (!credentials || !runtimeReady) return clearState(redirect('error', 'not_ready'));
+    if (!credentials || !runtimeReady) {
+      await recordFailure(session, { result: 'error', stage: 'not_ready' });
+      return clearState(redirect('error', 'not_ready'));
+    }
 
     stage = 'authorization_code_exchange';
     const shortLived = await exchangeInstagramAuthorizationCode({
@@ -157,6 +203,14 @@ export const GET = withAuth(async (req: NextRequest, session) => {
       conflict,
       permissions,
     });
-    return clearState(redirect(conflict ? 'conflict' : permissions ? 'permissions' : 'error', conflict ? undefined : stage, providerCode));
+    const result = conflict ? 'conflict' : permissions ? 'permissions' : 'error';
+    await recordFailure(session, {
+      result,
+      stage,
+      providerCode,
+      httpStatus: (error as { status?: unknown } | null)?.status,
+      errorType: error instanceof Error ? error.name : 'unknown',
+    });
+    return clearState(redirect(result, conflict ? undefined : stage, providerCode));
   }
 });
