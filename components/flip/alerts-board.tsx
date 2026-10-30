@@ -136,6 +136,14 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
         </div>
 
         <aside className="space-y-4">
+          {board.seesTeam && (
+            <Link href="/reports/diagnosis" className="group block overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 to-indigo-800 p-5 text-white shadow-sm transition hover:shadow-md">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-200">Diagnóstico de atendimento</p>
+              <p className="mt-1 font-semibold">Como a equipe está atendendo?</p>
+              <p className="mt-1 text-sm text-indigo-100">A IA lê as conversas da equipe e escreve o que melhorar. Dá para baixar em PDF.</p>
+              <p className="mt-3 text-sm font-medium text-white group-hover:underline">Abrir diagnóstico →</p>
+            </Link>
+          )}
           <DailyBriefingCard />
           <FlipSuggestionsPanel onApplied={() => void reload()} />
         </aside>

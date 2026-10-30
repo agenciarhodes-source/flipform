@@ -162,6 +162,7 @@ export function ReportsPageClient({ canExport }: ReportsPageClientProps) {
         </div>
         <div className="flex flex-wrap gap-2">
         <Link href="/reports/attendance" className={buttonVariants({ variant: 'outline' })}>Produtividade do atendimento</Link>
+        <Link href="/reports/diagnosis" className={buttonVariants({ variant: 'outline' })}>Diagnóstico de atendimento</Link>
         <Button variant="outline" disabled={loading} title="Abrir o relatório diagramado para imprimir ou salvar em PDF."
           onClick={() => window.open(`/report/reports?${qs}`, '_blank', 'noopener')}>
           <Printer className="w-4 h-4 mr-2" />Imprimir / PDF

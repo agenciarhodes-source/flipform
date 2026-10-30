@@ -196,7 +196,7 @@ const REVIEW_FORMAT = {
   },
 };
 
-async function transcriptFor(tenantId: string, conversationId: string, userId: string) {
+export async function transcriptFor(tenantId: string, conversationId: string, userId: string) {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
     select: { externalContactIdentity: { select: { displayName: true } }, lead: { select: { name: true } } },
