@@ -1,4 +1,5 @@
 import 'server-only';
+import { instagramMediaUrl } from '@/lib/instagram-ai/image-rules';
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -76,6 +77,8 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
   const attachmentTypes = attachments
     .map((attachment: any) => typeof attachment?.type === 'string' ? attachment.type : null)
     .filter((value: string | null): value is string => Boolean(value));
+  // The temporary address of a photo on Meta's servers, so the attendant can look at it.
+  const mediaUrl = type === 'image' ? instagramMediaUrl(attachments[0]?.payload?.url) : null;
 
   return {
     text,
@@ -84,6 +87,7 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
       instagramProfessionalAccountId,
       providerType: text !== null ? 'text' : attachmentTypes[0] || 'unknown',
       attachmentTypes,
+      ...(mediaUrl ? { mediaUrl } : {}),
       ...(typeof message?.quick_reply?.payload === 'string'
         ? { quickReplyPayload: message.quick_reply.payload }
         : {}),
