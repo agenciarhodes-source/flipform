@@ -22,6 +22,41 @@ async function collectFacts(session: Session, now: Date): Promise<BriefingFacts>
   const yesterdayStart = new Date(todayStart.getTime() - DAY);
 
   const finalStageIds = await finalStageIdsForTenant(prisma, session.tenantId);
+  const brasiliaDay = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(date);
+  const monthStart = new Date(`${day.slice(0, 8)}01T00:00:00-03:00`);
+  const lastMonthStart = new Date(`${brasiliaDay(new Date(monthStart.getTime() - DAY)).slice(0, 8)}01T00:00:00-03:00`);
+  // The same days of last month (up to the start of today), or the whole month when it was shorter.
+  const lastMonthEnd = new Date(Math.min(lastMonthStart.getTime() + (todayStart.getTime() - monthStart.getTime()), monthStart.getTime()));
+  const closedBetween = async (from: Date, to: Date) => {
+    const rows = await prisma.leadStageHistory.findMany({
+      where: { createdAt: { gte: from, lt: to }, lead: { tenantId: session.tenantId, status: { not: 'lost' }, stageId: { in: finalStageIds }, ...own } },
+      select: { leadId: true, toStageId: true, lead: { select: { stageId: true } } },
+    });
+    return new Set(rows.filter((row) => row.toStageId === row.lead.stageId).map((row) => row.leadId)).size;
+  };
+  const [sources, channels, sales, monthLeads, lastMonthLeads, monthClosed, lastMonthClosed] = await Promise.all([
+    prisma.lead.groupBy({
+      by: ['source'], where: { tenantId: session.tenantId, ...own, createdAt: { gte: yesterdayStart, lt: todayStart } },
+      _count: { _all: true }, orderBy: { _count: { source: 'desc' } }, take: 3,
+    }),
+    seesTeam
+      ? prisma.message.findMany({
+        where: { tenantId: session.tenantId, direction: 'inbound', createdAt: { gte: yesterdayStart, lt: todayStart } },
+        distinct: ['conversationId'], select: { channel: true },
+      })
+      : Promise.resolve([] as Array<{ channel: string }>),
+    prisma.leadPurchase.aggregate({
+      where: { tenantId: session.tenantId, purchaseDate: { gte: yesterdayStart, lt: todayStart }, lead: { ...own } },
+      _count: { _all: true }, _sum: { amountCents: true },
+    }),
+    prisma.lead.count({ where: { tenantId: session.tenantId, ...own, createdAt: { gte: monthStart, lt: todayStart } } }),
+    prisma.lead.count({ where: { tenantId: session.tenantId, ...own, createdAt: { gte: lastMonthStart, lt: lastMonthEnd } } }),
+    closedBetween(monthStart, todayStart),
+    closedBetween(lastMonthStart, lastMonthEnd),
+  ]);
+  const byChannel = new Map<string, number>();
+  for (const row of channels) byChannel.set(row.channel, (byChannel.get(row.channel) || 0) + 1);
+  const channelName = (channel: string) => (channel === 'instagram' ? 'Instagram' : channel === 'whatsapp' ? 'WhatsApp' : channel);
   const [board, newLeads, aiLeads, closedRows] = await Promise.all([
     computeFlipAlerts(session, now),
     prisma.lead.count({ where: { tenantId: session.tenantId, ...own, createdAt: { gte: yesterdayStart, lt: todayStart } } }),
@@ -42,7 +77,14 @@ async function collectFacts(session: Session, now: Date): Promise<BriefingFacts>
       newLeads,
       aiLeads: seesTeam ? aiLeads : 0,
       closed: new Set(closedRows.filter((row) => row.toStageId === row.lead.stageId).map((row) => row.leadId)).size,
+      sources: sources.map((row) => ({ source: row.source || 'sem origem', leads: row._count._all })),
+      channels: [...byChannel.entries()].map(([channel, conversations]) => ({ channel: channelName(channel), conversations })),
+      sales: sales._count._all
+        ? { count: sales._count._all, total: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((sales._sum.amountCents || 0) / 100) }
+        : null,
     },
+    // On the 1st there is no "month so far" yet.
+    month: todayStart > monthStart ? { leads: monthLeads, closed: monthClosed, lastMonthLeads, lastMonthClosed } : null,
     today: {
       unanswered: count('unanswered_conversation'),
       overdueTasks: count('overdue_task'),
@@ -64,7 +106,7 @@ async function writeWithAi(session: Session, facts: BriefingFacts) {
   const result = await streamOpenAiText(
     { instructions: briefingInstructions(facts), messages: [{ role: 'user', content: JSON.stringify(facts) }] },
     () => undefined,
-    { model, timeoutMs: 15_000, maxOutputTokens: 400, safetyIdentifier: session.userId },
+    { model, timeoutMs: 20_000, maxOutputTokens: 800, safetyIdentifier: session.userId },
   ).catch(() => null);
   if (!result?.text.trim()) return null;
   try {
@@ -87,7 +129,7 @@ async function writeWithAi(session: Session, facts: BriefingFacts) {
   } catch {
     // The summary is shown even if charging could not be recorded.
   }
-  return result.text.trim().slice(0, 1_500);
+  return result.text.trim().slice(0, 2_500);
 }
 
 /**
