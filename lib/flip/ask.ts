@@ -9,7 +9,9 @@ import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { computeFlipAlerts } from './alerts';
 import { finalStageIdsForTenant } from '@/lib/period-activity';
-import { ASK_PLAN_FORMAT, askPlanSchema, matchName, percent, resolvePeriod, type AskPlan } from './ask-rules';
+import { ASK_PLAN_FORMAT, askPlanSchema, matchName, percent, periodDays, previousPeriod, resolvePeriod, type AskPlan } from './ask-rules';
+import { attendanceProductivity } from '@/lib/reports/attendance-productivity';
+import { formatDuration } from '@/lib/reports/attendance-productivity-rules';
 
 type Session = { tenantId: string; userId: string; role: string };
 
@@ -50,6 +52,8 @@ async function interpret(session: Session, question: string, context: { attendan
       'leads_count: quantos leads entraram. closed: fechamentos (leads ganhos) e taxa de conversão. sources: de onde vieram os leads (origem e campanhas).',
       'by_attendant: desempenho por atendente. sales: vendas registradas (valor). whatsapp_ai: o que a IA fez no WhatsApp.',
       'pending: pendências de agora (sem resposta, tarefas atrasadas, parados). by_stage: quantos leads abertos em cada etapa.',
+      'team_service: como está o time de atendimento (tempo de resposta, conversas atendidas, clientes esperando resposta, fechamentos por pessoa).',
+      'channels: conversas e mensagens por canal (WhatsApp e Instagram). compare: comparar leads e fechamentos com o período anterior (cresceu, caiu).',
       'unsupported: quando a pergunta não cabe em nenhuma dessas.',
       `Hoje é ${context.today} (horário de Brasília). Sem período na pergunta, use this_month. Para datas específicas, use custom com from/to.`,
       `Atendentes: ${context.attendants.join(', ') || 'nenhum'}. Etapas: ${context.stages.join(', ') || 'nenhuma'}.`,
@@ -92,10 +96,10 @@ export async function runAskQuery(session: Session, plan: AskPlan, now = new Dat
 
   // A sale: the lead entered the final stage of its funnel in the period and is still there (not lost).
   // Counted by the stage, not by the "won" status, which a lead created straight in the final stage lacked.
-  const closedLeads = async (where: Prisma.LeadWhereInput) => {
+  const closedLeads = async (where: Prisma.LeadWhereInput, range: { start: Date; end: Date } = period) => {
     const finalStageIds = await finalStageIdsForTenant(prisma, session.tenantId);
     const rows = await prisma.leadStageHistory.findMany({
-      where: { createdAt: { gte: period.start, lt: period.end }, lead: { ...where, status: { not: 'lost' }, stageId: { in: finalStageIds } } },
+      where: { createdAt: { gte: range.start, lt: range.end }, lead: { ...where, status: { not: 'lost' }, stageId: { in: finalStageIds } } },
       select: { leadId: true, toStageId: true, lead: { select: { stageId: true, assignedTo: true } } },
     });
     const won = rows.filter((row) => row.toStageId === row.lead.stageId);
@@ -188,6 +192,64 @@ export async function runAskQuery(session: Session, plan: AskPlan, now = new Dat
         data: rows.map((row) => ({ etapa: nameOf.get(row.stageId) || 'Etapa arquivada', leadsAbertos: row._count._all })).sort((a, b) => b.leadsAbertos - a.leadsAbertos),
       };
     }
+    case 'team_service': {
+      if (!seesTeam) return { filters: filtersUsed, data: { aviso: 'O retrato do time é da empresa toda; só gestores podem ver.' } };
+      const days = periodDays(period);
+      const report = await attendanceProductivity(session.tenantId, { days, now, onlyUserId: attendant?.id || null });
+      return {
+        filters: { ...filtersUsed, period: `últimos ${days} dias` },
+        data: {
+          observacao: 'Tempo de resposta medido nas conversas do WhatsApp atendidas por pessoas (não conta a IA).',
+          equipe: report.rows.map((row) => ({
+            atendente: row.name,
+            conversasAtendidas: row.conversations,
+            tempoTipicoDeResposta: formatDuration(row.medianResponseMs),
+            primeiraResposta: formatDuration(row.firstResponseMedianMs),
+            respondidasEmAte15Min: row.within15MinPct === null ? '—' : `${row.within15MinPct}%`,
+            clientesEsperandoRespostaAgora: row.waitingNow,
+            leadsRecebidos: row.leadsReceived,
+            fechados: row.sales,
+            conversao: row.conversionPct === null ? '—' : `${row.conversionPct}%`,
+          })),
+        },
+      };
+    }
+    case 'channels': {
+      if (!seesTeam) return { filters: filtersUsed, data: { aviso: 'Os números por canal são da empresa toda; só gestores podem ver.' } };
+      const range = { gte: period.start, lt: period.end };
+      const [newConversations, inbound] = await Promise.all([
+        prisma.conversation.groupBy({ by: ['channel'], where: { tenantId: session.tenantId, createdAt: range }, _count: { _all: true } }),
+        prisma.message.groupBy({ by: ['channel'], where: { tenantId: session.tenantId, direction: 'inbound', createdAt: range }, _count: { _all: true } }),
+      ]);
+      const label = (channel: string) => (channel === 'instagram' ? 'Instagram' : channel === 'whatsapp' ? 'WhatsApp' : channel);
+      const channels = new Set([...newConversations.map((row) => row.channel), ...inbound.map((row) => row.channel)]);
+      return {
+        filters: filtersUsed,
+        data: [...channels].map((channel) => ({
+          canal: label(channel),
+          conversasNovas: newConversations.find((row) => row.channel === channel)?._count._all || 0,
+          mensagensRecebidas: inbound.find((row) => row.channel === channel)?._count._all || 0,
+        })),
+      };
+    }
+    case 'compare': {
+      const before = previousPeriod(period);
+      const [leadsNow, leadsBefore, closedNow, closedBefore] = await Promise.all([
+        prisma.lead.count({ where: created }),
+        prisma.lead.count({ where: { ...leadFilters, createdAt: { gte: before.start, lt: before.end } } }),
+        closedLeads(leadFilters),
+        closedLeads(leadFilters, before),
+      ]);
+      const change = (current: number, previous: number) => (previous > 0 ? `${current >= previous ? '+' : ''}${Math.round(((current - previous) / previous) * 100)}%` : '—');
+      return {
+        filters: { ...filtersUsed, comparadoCom: 'período anterior de mesmo tamanho' },
+        data: {
+          leads: { agora: leadsNow, antes: leadsBefore, variacao: change(leadsNow, leadsBefore) },
+          fechados: { agora: closedNow.total, antes: closedBefore.total, variacao: change(closedNow.total, closedBefore.total) },
+          conversao: { agora: percent(closedNow.total, leadsNow), antes: percent(closedBefore.total, leadsBefore) },
+        },
+      };
+    }
     default:
       return { filters: filtersUsed, data: null };
   }
@@ -215,7 +277,7 @@ export async function askFlip(session: Session, question: string, now = new Date
   if (plan.query === 'unsupported') {
     return {
       plan,
-      answer: 'Ainda não sei responder isso. Posso falar de leads que entraram, fechamentos e conversão, origem e campanhas, desempenho por atendente, vendas, a IA no WhatsApp, pendências e leads por etapa.',
+      answer: 'Ainda não sei responder isso. Posso falar de leads que entraram, fechamentos e conversão, origem e campanhas, desempenho por atendente, o time de atendimento (tempo de resposta e quem está esperando), conversas por canal (WhatsApp e Instagram), comparação com o período anterior, vendas, a IA no WhatsApp, pendências e leads por etapa.',
       filters: null,
     };
   }
@@ -223,7 +285,7 @@ export async function askFlip(session: Session, question: string, now = new Date
   const model = (await getActiveFlipAiTextModel()).model;
   const written = await streamOpenAiText({
     instructions: [
-      'Você é o Flip, gestor comercial do FlipForm. Responda à pergunta em português do Brasil, em 1 a 4 frases curtas.',
+      'Você é o Flip, gestor comercial do FlipForm. Responda à pergunta em português do Brasil, em 1 a 4 frases curtas (até 6 quando listar pessoas da equipe).',
       'Use somente os números do resultado. Não invente nada. Diga o período considerado.',
       'Se o resultado estiver vazio, diga que não há dados para esse filtro.',
     ].join('\n'),
