@@ -19,7 +19,7 @@
 | R7 | Prazo de guarda dos dados após o fim do contrato não definido | Baixa | Médio | Média | Definir prazo padrão e rotina de exclusão | Encarregado | 60 dias | Aberto |
 | R8 | Não verificado se a rota de login só com e-mail (removida em 28/10/2026) foi usada | Baixa | Alto | Média | Consultar logs disponíveis; trocar sessões do Super Admin ("Sair de todos os dispositivos") | Responsável | 7 dias | Aberto |
 | R9 | Política de conteúdo (CSP) permissiva nas páginas públicas (exigida pelo Pixel/login da Meta) — achado médio do OWASP ZAP | Baixa | Baixo | Baixa | Restringir aos domínios da Meta quando possível, sem quebrar integrações | Desenvolvimento | Próximo trimestre | Aceito por ora |
-| R10 | Ações do GitHub fixadas por versão, não por "impressão digital" (SHA) — 22 avisos do Semgrep | Baixa | Médio | Baixa | Fixar por SHA | Desenvolvimento | Próximo trimestre | Aberto |
+| R10 | Ações do GitHub fixadas por versão, não por "impressão digital" (SHA) — 22 avisos do Semgrep | — | — | — | Todas as 24 referências fixadas por SHA de 40 caracteres; teste automático impede voltar atrás | Desenvolvimento | 31/10/2026 | **Resolvido** |
 | R11 | npm sem espera mínima para pacotes recém-publicados (proteção contra pacote adulterado) | Baixa | Médio | Baixa | Configurar idade mínima de publicação | Desenvolvimento | Próximo trimestre | Aberto |
 | R12 | Dependências com alertas moderados (zod, Sentry/OpenTelemetry, esbuild) | Baixa | Baixo | Baixa | Atualizar em PRs dedicados | Desenvolvimento | Próximo trimestre | Aberto |
 | R13 | Teste de recuperação de backup nunca realizado | — | — | — | Primeiro teste feito em 31/10/2026 (ver 04-backup-e-recuperacao.md, seção 6); repetir a cada 3 meses | Responsável | 31/10/2026 | **Resolvido** (próximo teste até 31/01/2027) |
@@ -33,4 +33,5 @@
 | 28/10/2026 | Removida a rota que criava sessão só com e-mail (hotfix #534) |
 | 28/10/2026 | Telas do Super Admin passaram a conferir a sessão no banco; criptografia de tokens com selo de tamanho fixo |
 | 28/10/2026 | Backup do banco: histórico de 7 dias, cópia diária por 30 dias, ramo de produção protegido (R1) |
+| 31/10/2026 | Ações do GitHub fixadas pela impressão digital (SHA), com teste que impede voltar atrás (R10) |
 | 31/10/2026 | Primeiro teste de recuperação de backup: snapshot restaurado num ramo separado, dados idênticos à produção (R13) |
