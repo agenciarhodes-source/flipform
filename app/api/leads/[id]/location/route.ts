@@ -13,7 +13,7 @@ export const PATCH = withAuth(async (req, session, ctx: { params: { id: string }
 
   const body = await req.json().catch(() => ({}));
   const parsed = leadLocationSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Localização inválida.' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Localização inválida.' }, { status: 400 });
 
   const state = parsed.data.state ? normalizeBrazilState(parsed.data.state) : null;
   const city = state && parsed.data.city ? normalizeBrazilCity(state, parsed.data.city) : null;

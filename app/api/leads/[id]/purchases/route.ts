@@ -31,7 +31,7 @@ export const POST = withPermission('LEADS_EDIT_ASSIGNED', async (req, session, c
   if (!lead) return NextResponse.json({ error: 'Lead não encontrado.' }, { status: 404 });
   if (!canEditLead(session.role, lead, session.userId)) return NextResponse.json({ error: 'Sem permissão para registrar compras neste lead.' }, { status: 403 });
   const parsed = leadPurchaseSchema.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Dados inválidos.' }, { status: 400 });
   const data = parsed.data;
   const purchase = await prisma.leadPurchase.create({ data: { tenantId: session.tenantId, leadId: lead.id, amountCents: data.amountCents, currency: 'BRL', purchaseDate: dateOnlyToDate(data.purchaseDate), orderNumber: data.orderNumber || null, paymentMethod: data.paymentMethod || null, notes: data.notes || null, createdBy: session.userId, updatedBy: session.userId } });
   await logAudit({ tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: lead.id, action: 'lead.purchase_created', metadata: { purchaseId: purchase.id, amountCents: purchase.amountCents, message: `Compra de ${formatBRLFromCents(purchase.amountCents)} registrada.` } });

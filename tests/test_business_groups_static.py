@@ -114,7 +114,7 @@ def test_platform_admin_selects_registered_access_by_user_id():
     assert 'withPlatformAdmin' in update
     assert 'availableAccesses' in helper
     assert "user.globalRole !== 'platform_admin'" in helper
-    assert 'userId: z.string().uuid().optional()' in update
+    assert 'userId: z.string().guid().optional()' in update
     assert 'userId: parsed.data.member.userId' in update
     assert 'availableAccesses.map' in page
     assert "member: { userId" in page

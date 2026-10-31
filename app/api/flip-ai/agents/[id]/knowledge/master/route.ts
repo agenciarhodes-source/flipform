@@ -5,7 +5,7 @@ import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { keepApprovedLearnings } from '@/lib/flip/learning';
 export const dynamic = 'force-dynamic';
-const idSchema = z.string().uuid();
+const idSchema = z.string().guid();
 export const GET = withFlipAiSession<{ params: { id: string } }>(async (_req, session, ctx) => {
   const id = idSchema.safeParse(ctx.params.id);
   if (!id.success) throw new FlipAiError('INVALID_AGENT', 400, 'Atendente inválido.');

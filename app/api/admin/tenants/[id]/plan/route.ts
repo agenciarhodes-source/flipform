@@ -5,7 +5,7 @@ import { withPlatformAdmin } from '@/lib/auth';
 import { logPlatformAudit } from '@/lib/platform-audit';
 
 const schema = z.object({
-  planId: z.string().uuid().nullable(),
+  planId: z.string().guid().nullable(),
   nextDueDate: z.string().datetime({ offset: true }).optional().nullable(),
   internalNotes: z.string().max(2000).optional().nullable(),
 });
@@ -13,7 +13,7 @@ const schema = z.object({
 export const PUT = withPlatformAdmin(async (req, session, ctx: { params: { id: string } }) => {
   const body = await req.json().catch(() => ({}));
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   const tenant = await prisma.tenant.findUnique({ where: { id: ctx.params.id }, select: { id: true, planId: true, nextDueDate: true, name: true } });
   if (!tenant) return NextResponse.json({ error: 'Tenant não encontrado' }, { status: 404 });

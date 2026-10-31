@@ -7,7 +7,7 @@ import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { getPlatformMetaOAuthCredentials } from '@/lib/meta/platform-settings';
 import { getMetaAdsReadOnlyDiagnostics } from '@/lib/meta/ads-diagnostics';
 
-const tenantIdSchema = z.string().trim().uuid();
+const tenantIdSchema = z.string().trim().guid();
 
 export const GET = withPlatformAdmin(async (req: NextRequest, session) => {
   const rl = await rateLimit({

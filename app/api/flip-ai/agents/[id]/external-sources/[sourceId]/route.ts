@@ -4,7 +4,7 @@ import { deleteExternalSource, updateExternalSource } from '@/lib/flip-ai/extern
 import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
 import { FlipAiError } from '@/lib/flip-ai/access';
 export const dynamic = 'force-dynamic';
-const identifier = z.string().uuid();
+const identifier = z.string().guid();
 export const PATCH = withFlipAiSession<{ params: { id: string; sourceId: string } }>(async (request, session, context) => {
   const ids = z.object({ id: identifier, sourceId: identifier }).safeParse(context.params);
   if (!ids.success) throw new FlipAiError('EXTERNAL_SOURCE_NOT_FOUND', 404, 'Fonte externa não encontrada.');

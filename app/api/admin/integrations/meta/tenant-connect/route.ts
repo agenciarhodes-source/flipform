@@ -13,7 +13,7 @@ import {
   META_OAUTH_STATE_TTL_SECONDS,
 } from '@/lib/meta/oauth-state';
 
-const bodySchema = z.object({ tenantId: z.string().trim().uuid() }).strict();
+const bodySchema = z.object({ tenantId: z.string().trim().guid() }).strict();
 
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
   const rl = await rateLimit({

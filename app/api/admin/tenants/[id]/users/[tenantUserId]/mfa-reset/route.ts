@@ -15,7 +15,7 @@ const bodySchema = z.object({
  */
 export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: string; tenantUserId: string } }) => {
   const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   const target = await prisma.tenantUser.findFirst({
     where: { id: ctx.params.tenantUserId, tenantId: ctx.params.id },

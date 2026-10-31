@@ -26,8 +26,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {
-      logLogin('validation_failed', { ip, issues: parsed.error.errors.map((issue) => issue.message) });
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      logLogin('validation_failed', { ip, issues: parsed.error.issues.map((issue) => issue.message) });
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
     const { email, password } = parsed.data;
     const normalizedEmail = email.trim().toLowerCase();

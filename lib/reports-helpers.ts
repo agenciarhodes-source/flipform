@@ -41,7 +41,7 @@ export function buildReportContext(
   };
   const parsed = reportFiltersSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.errors[0]?.message || 'Filtros inválidos.' };
+    return { ok: false, error: parsed.error.issues[0]?.message || 'Filtros inválidos.' };
   }
   const filters = parsed.data;
   const { from, to } = resolveDateRange(filters);

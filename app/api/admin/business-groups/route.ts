@@ -29,7 +29,7 @@ export const GET = withPlatformAdmin(async (_req: NextRequest) => {
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
   try {
     const parsed = createSchema.safeParse(await req.json().catch(() => ({})));
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const group = await createBusinessGroup(prisma, { name: parsed.data.name, actorUserId: session.userId });
     try {

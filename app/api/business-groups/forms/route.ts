@@ -5,8 +5,8 @@ import { getVerifiedSessionFromRequest } from '@/lib/auth';
 import { BusinessGroupReadScopeError, resolveBusinessGroupReadScope } from '@/lib/business-group-read-scope';
 
 const querySchema = z.object({
-  groupId: z.string().uuid().optional(),
-  tenantId: z.string().uuid().optional(),
+  groupId: z.string().guid().optional(),
+  tenantId: z.string().guid().optional(),
   q: z.string().trim().max(120).optional(),
   status: z.enum(['active', 'inactive']).optional(),
 });
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   try {
     const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
     const scope = await resolveBusinessGroupReadScope({

@@ -5,7 +5,7 @@ import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
 import { FlipAiError } from '@/lib/flip-ai/access';
 export const dynamic = 'force-dynamic';
 function agentId(raw: string) {
-  const parsed = z.string().uuid().safeParse(raw);
+  const parsed = z.string().guid().safeParse(raw);
   if (!parsed.success) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
   return parsed.data;
 }

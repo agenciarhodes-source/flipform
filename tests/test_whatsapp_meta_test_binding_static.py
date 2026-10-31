@@ -15,7 +15,7 @@ def test_test_binding_is_platform_admin_only_and_requires_explicit_test_confirma
     route = read(ROUTE)
     assert 'withPlatformAdmin' in route
     assert "confirmTestAsset: z.literal(true)" in route
-    assert 'tenantId: z.string().trim().uuid()' in route
+    assert 'tenantId: z.string().trim().guid()' in route
     assert 'wabaId: numericId' in route
     assert 'phoneNumberId: numericId' in route
 

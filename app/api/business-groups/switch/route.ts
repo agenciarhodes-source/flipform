@@ -12,8 +12,8 @@ import {
 import { logAudit } from '@/lib/audit';
 
 const bodySchema = z.object({
-  groupId: z.string().uuid(),
-  tenantId: z.string().uuid(),
+  groupId: z.string().guid(),
+  tenantId: z.string().guid(),
 });
 
 export async function POST(req: NextRequest) {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})));
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const state = await getBusinessGroupAccessesForUser(prisma, session.userId);
     if (!state.schemaReady) {

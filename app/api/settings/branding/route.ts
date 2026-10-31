@@ -8,7 +8,7 @@ export const PUT = withPermission('BRANDING_EDIT', async (req, session) => {
   try {
     const parsed = tenantBrandingUpdateSchema.safeParse(await req.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
     const current = await prisma.tenant.findUnique({

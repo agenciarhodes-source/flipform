@@ -47,12 +47,12 @@ export const agentDraftSchema = z.object({
   sendButtonColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().default(null),
   actionCapabilities: flipAiActionCapabilitiesSchema.default(EMPTY_FLIP_AI_ACTION_CAPABILITIES),
   style: z.enum(['welcoming', 'professional', 'direct']),
-  pipelineId: z.string().uuid(),
-  initialStageId: z.string().uuid(),
-  rotationId: z.string().uuid().nullable().optional().default(null),
+  pipelineId: z.string().guid(),
+  initialStageId: z.string().guid(),
+  rotationId: z.string().guid().nullable().optional().default(null),
   slug: z.string().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
 }).strict();
-export const createAgentDraftSchema = agentDraftSchema.extend({ requestId: z.string().uuid() });
+export const createAgentDraftSchema = agentDraftSchema.extend({ requestId: z.string().guid() });
 export const updateAgentDraftSchema = agentDraftSchema.extend({ version: z.number().int().positive() });
 export const agentPublicationSchema = z.object({
   action: z.enum(['publish', 'unpublish']),
@@ -68,7 +68,7 @@ export const knowledgeMasterSchema = z.object({
   expectedRevision: z.number().int().min(0),
 }).strict();
 export const externalSourceCreateSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.string().guid(),
   label: z.string().trim().min(2).max(80),
   domain: z.string().trim().min(3).max(253),
   pathPrefix: z.string().max(4_000).nullable().optional(),

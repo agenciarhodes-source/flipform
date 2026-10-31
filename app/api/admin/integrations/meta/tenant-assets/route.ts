@@ -11,7 +11,7 @@ import {
   validateMetaAdAccountPixelSelection,
 } from '@/lib/meta/assets';
 
-const tenantIdSchema = z.string().trim().uuid();
+const tenantIdSchema = z.string().trim().guid();
 const resourceSchema = z.enum(['connection', 'ad_accounts', 'pixels']);
 const numericIdSchema = z.string().trim().regex(/^\d{1,64}$/);
 const adAccountIdSchema = z.string().trim().regex(/^(?:act_)?\d{1,64}$/);

@@ -18,7 +18,7 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session) => {
   const parsed = integrationsSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({
-      error: parsed.error.errors[0]?.message || 'Dados inválidos para salvar integrações.',
+      error: parsed.error.issues[0]?.message || 'Dados inválidos para salvar integrações.',
       issues: parsed.error.flatten(),
     }, { status: 400 });
   }

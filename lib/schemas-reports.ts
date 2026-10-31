@@ -20,10 +20,10 @@ export const reportFiltersSchema = z.object({
   range: reportRangeEnum.optional().default('30d'),
   from: dateString.optional(),
   to: dateString.optional(),
-  pipelineId: z.string().uuid().optional(),
-  formId: z.string().uuid().optional(),
+  pipelineId: z.string().guid().optional(),
+  formId: z.string().guid().optional(),
   source: z.string().optional(),
-  assignedTo: z.string().uuid().optional(),
+  assignedTo: z.string().guid().optional(),
 });
 
 export type ReportFilters = z.infer<typeof reportFiltersSchema>;

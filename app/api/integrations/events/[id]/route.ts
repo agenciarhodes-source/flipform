@@ -15,7 +15,7 @@ export const PUT = withPermission('INTEGRATIONS_EDIT', async (req, session, ctx:
   const existing = await prisma.kanbanStageTrackingEvent.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!existing) return NextResponse.json({ error: 'Evento não encontrado.' }, { status: 404 });
   const parsed = kanbanEventSchema.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Payload inválido' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Payload inválido' }, { status: 400 });
   const data = parsed.data;
   const stage = await prisma.pipelineStage.findFirst({ where: { id: data.stageId, pipelineId: data.pipelineId, pipeline: { tenantId: session.tenantId } } });
   if (!stage) return NextResponse.json({ error: 'Etapa inválida para este tenant.' }, { status: 400 });

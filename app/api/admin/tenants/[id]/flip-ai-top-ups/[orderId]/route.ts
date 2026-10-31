@@ -35,7 +35,7 @@ export const POST = withPlatformAdmin(async (
   const parsed = actionSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({
-      error: parsed.error.errors[0]?.message || 'Ação inválida.',
+      error: parsed.error.issues[0]?.message || 'Ação inválida.',
     }, { status: 400 });
   }
 

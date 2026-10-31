@@ -12,7 +12,7 @@ import { logPlatformAudit } from '@/lib/platform-audit';
 import { syncBusinessGroupMemberships } from '@/lib/business-group-memberships';
 
 const memberSchema = z.object({
-  userId: z.string().uuid().optional(),
+  userId: z.string().guid().optional(),
   email: z.string().trim().email().optional(),
   role: z.enum(['owner', 'admin', 'manager', 'viewer']),
   status: z.enum(['active', 'revoked']).default('active'),
@@ -21,7 +21,7 @@ const memberSchema = z.object({
 });
 
 const updateSchema = z.object({
-  tenantIds: z.array(z.string().uuid()).optional(),
+  tenantIds: z.array(z.string().guid()).optional(),
   member: memberSchema.optional(),
 }).refine((value) => value.tenantIds !== undefined || value.member !== undefined, {
   message: 'Nenhuma alteração informada.',
@@ -51,7 +51,7 @@ async function safeAudit(params: Parameters<typeof logPlatformAudit>[0]) {
 export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { params: { id: string } }) => {
   try {
     const parsed = updateSchema.safeParse(await req.json().catch(() => ({})));
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     if (parsed.data.tenantIds !== undefined) {
       await replaceBusinessGroupTenants(prisma, {

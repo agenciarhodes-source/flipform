@@ -6,7 +6,7 @@ import { resolveOperationalScope, TeamHierarchyError } from '@/lib/team-hierarch
 
 const querySchema = z.object({
   period: z.enum(['today', '7d', '30d']).default('30d'),
-  scopeTenantUserId: z.string().uuid().optional(),
+  scopeTenantUserId: z.string().guid().optional(),
 });
 
 function periodWindow(period: 'today' | '7d' | '30d') {
@@ -26,7 +26,7 @@ function percent(value: number, total: number) {
 export const GET = withPermission('DASHBOARD_VIEW', async (req: NextRequest, session) => {
   try {
     const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const scope = await resolveOperationalScope(prisma, {
       tenantId: session.tenantId,

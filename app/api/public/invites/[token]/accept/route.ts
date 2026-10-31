@@ -14,7 +14,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ token: string 
 
     const body = await req.json();
     const parsed = inviteAcceptSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const invite = await prisma.invite.findUnique({
       where: { token: (await ctx.params).token },

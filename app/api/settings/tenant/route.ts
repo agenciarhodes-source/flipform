@@ -21,7 +21,7 @@ export const PUT = withPermission('SETTINGS_EDIT', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = tenantUpdateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     const data = parsed.data;
 
     const current = await prisma.tenant.findUnique({ where: { id: session.tenantId } });

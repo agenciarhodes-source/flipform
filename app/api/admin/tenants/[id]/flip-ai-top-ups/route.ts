@@ -39,7 +39,7 @@ export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({
-      error: parsed.error.errors[0]?.message || 'Dados inválidos.',
+      error: parsed.error.issues[0]?.message || 'Dados inválidos.',
     }, { status: 400 });
   }
 

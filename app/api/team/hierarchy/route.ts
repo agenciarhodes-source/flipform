@@ -6,8 +6,8 @@ import { logAudit } from '@/lib/audit';
 import { getTeamHierarchySnapshot, replaceHierarchyParents, resolveOperationalScope, setHierarchyEnabled, TeamHierarchyError } from '@/lib/team-hierarchy';
 
 const hierarchyUpdateSchema = z.object({
-  subordinateTenantUserId: z.string().uuid(),
-  superiorTenantUserIds: z.array(z.string().uuid()).max(10),
+  subordinateTenantUserId: z.string().guid(),
+  superiorTenantUserIds: z.array(z.string().guid()).max(10),
 });
 const activationSchema = z.object({ enabled: z.boolean() });
 
@@ -60,7 +60,7 @@ export const PUT = withPermission('USERS_EDIT', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = hierarchyUpdateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const snapshot = await replaceHierarchyParents(prisma, {
       tenantId: session.tenantId,
@@ -92,7 +92,7 @@ export const PATCH = withPermission('USERS_EDIT', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = activationSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const snapshot = await setHierarchyEnabled(prisma, {
       tenantId: session.tenantId,

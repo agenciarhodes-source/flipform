@@ -8,7 +8,7 @@ export const GET = withPermission('DASHBOARD_VIEW', async (req: NextRequest, ses
     const { searchParams } = new URL(req.url);
     const parsed = dashboardQuerySchema.safeParse(Object.fromEntries(searchParams.entries()));
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
 
     const dashboard = await getDashboardMetrics(prisma, session.tenantId, session.userId, session.role, parsed.data);

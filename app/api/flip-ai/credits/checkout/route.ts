@@ -9,7 +9,7 @@ import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 const schema = z.object({
   packageId: z.string().trim().min(2).max(60)
     .regex(/^[a-z0-9][a-z0-9_-]*$/, 'Pacote inválido.'),
-  requestKey: z.string().uuid(),
+  requestKey: z.string().guid(),
 }).strict();
 
 export const POST = withPermission('FLIP_AI_MANAGE', async (req, session) => {
@@ -23,7 +23,7 @@ export const POST = withPermission('FLIP_AI_MANAGE', async (req, session) => {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.errors[0]?.message || 'Dados inválidos.' },
+      { error: parsed.error.issues[0]?.message || 'Dados inválidos.' },
       { status: 400 },
     );
   }

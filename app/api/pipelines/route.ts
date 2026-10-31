@@ -22,7 +22,7 @@ export const POST = withPermission('PIPELINES_CREATE', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = pipelineCreateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const pipeline = await prisma.pipeline.create({
       data: {
