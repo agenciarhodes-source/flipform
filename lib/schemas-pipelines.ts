@@ -24,5 +24,5 @@ export const stageUpdateSchema = z.object({
 });
 
 export const stagesReorderSchema = z.object({
-  stageIds: z.array(z.string().uuid()).min(1),
+  stageIds: z.array(z.string().guid()).min(1),
 });

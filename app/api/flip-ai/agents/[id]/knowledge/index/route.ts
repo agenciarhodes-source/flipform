@@ -5,10 +5,10 @@ import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
 import { getCurrentKnowledgeIndexStatus, prepareKnowledgeIndex, processNextKnowledgeIndexBatch } from '@/lib/flip-ai/indexing';
 
 export const dynamic = 'force-dynamic';
-const idSchema = z.string().uuid();
+const idSchema = z.string().guid();
 const bodySchema = z.object({
   expectedRevision: z.number().int().positive(),
-  indexId: z.string().uuid().optional(),
+  indexId: z.string().guid().optional(),
   confirmAmbiguousRetry: z.boolean().optional().default(false),
 }).strict();
 

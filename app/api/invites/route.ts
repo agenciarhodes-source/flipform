@@ -25,7 +25,7 @@ export const POST = withPermission('USERS_INVITE', async (req, session) => {
 
     const body = await req.json();
     const parsed = inviteCreateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     if (!canManageRole(session.role, parsed.data.role, session.globalRole)) {
       const message = parsed.data.role === 'owner'

@@ -8,7 +8,7 @@ export const POST = withAuth(async (req, session) => {
   const body = await req.json();
   const parsed = changePasswordSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Dados inválidos.' }, { status: 400 });
   }
 
   const { currentPassword, newPassword, confirmNewPassword } = parsed.data;

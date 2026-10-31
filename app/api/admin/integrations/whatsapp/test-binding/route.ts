@@ -14,7 +14,7 @@ import {
 
 const numericId = z.string().trim().regex(/^\d{1,64}$/);
 const bodySchema = z.object({
-  tenantId: z.string().trim().uuid(),
+  tenantId: z.string().trim().guid(),
   wabaId: numericId,
   phoneNumberId: numericId,
   confirmTestAsset: z.literal(true),

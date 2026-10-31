@@ -26,7 +26,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req, session) => 
   const rl = await rateLimit({ key: `integrations-events-post:${session.tenantId}:${getClientIp(req)}`, limit: 30, windowMs: 60_000 });
   if (!rl.allowed) return rateLimitResponse(rl);
   const parsed = kanbanEventSchema.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Payload inválido' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Payload inválido' }, { status: 400 });
   const data = parsed.data;
   const stage = await validateStage(session.tenantId, data.pipelineId, data.stageId);
   if (!stage) return NextResponse.json({ error: 'Etapa inválida para este tenant.' }, { status: 400 });

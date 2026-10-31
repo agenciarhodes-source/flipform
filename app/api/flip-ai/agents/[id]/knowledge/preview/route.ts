@@ -5,7 +5,7 @@ import { readFlipAiBody, withFlipAiSession } from '@/lib/flip-ai/http';
 import { previewKnowledgeRetrieval } from '@/lib/flip-ai/knowledge-preview';
 
 export const dynamic = 'force-dynamic';
-const idSchema = z.string().uuid();
+const idSchema = z.string().guid();
 
 export const POST = withFlipAiSession<{ params: { id: string } }>(async (request, session, context) => {
   const agentId = idSchema.safeParse(context.params.id);

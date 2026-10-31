@@ -105,7 +105,7 @@ export const POST = withPermission('LEADS_CREATE', async (req, session) => {
   try {
     const body = await req.json();
     const parsed = leadCreateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const email = normalizeEmail(parsed.data.email);
     const enteredAt = parsed.data.entryDate ? dateOnlyToDate(parsed.data.entryDate) : new Date();

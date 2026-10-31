@@ -7,7 +7,7 @@ import { getClientIp, rateLimit } from '@/lib/rate-limit';
 import { ensureConversation } from '@/lib/conversations/core';
 
 const bodySchema = z.object({
-  tenantId: z.string().trim().uuid(),
+  tenantId: z.string().trim().guid(),
   recipientPhone: z.string().trim().min(8).max(20).regex(/^\d+$/),
   displayName: z.string().trim().min(2).max(80).default('Meta Review Test'),
   confirmTestRecipient: z.literal(true),

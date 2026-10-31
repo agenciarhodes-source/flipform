@@ -9,7 +9,7 @@ import {
 } from '@/lib/flip-ai/human-action-request';
 
 const bodySchema = z.object({
-  taskId: z.string().uuid(),
+  taskId: z.string().guid(),
   action: z.enum(['confirm', 'decline', 'reopen']),
   note: z.string().trim().max(500).optional().nullable(),
 }).strict();
@@ -34,7 +34,7 @@ export const PATCH = withAuth(async (
   const body = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Dados inválidos.' }, { status: 400 });
   }
 
   const task = await prisma.task.findFirst({

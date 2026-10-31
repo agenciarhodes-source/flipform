@@ -47,7 +47,7 @@ const snapshotSchema = z.object({
     value: memoryValueSchema,
   }).strict()).max(FLIP_AI_MEMORY_MAX_PENDING),
   updatedAt: z.string().datetime(),
-  sourceMessageId: z.string().uuid(),
+  sourceMessageId: z.string().guid(),
 }).strict();
 
 function normalizeKey(value: string) {

@@ -10,7 +10,7 @@ export const taskCreateSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   dueDate: z.string().datetime({ offset: true }).optional().nullable(),
   priority: taskPriorityEnum.optional().default('medium'),
-  assignedTo: z.string().uuid().optional().nullable(),
+  assignedTo: z.string().guid().optional().nullable(),
   remindMinutesBefore: taskReminderSchema.optional(),
 });
 
@@ -19,7 +19,7 @@ export const taskUpdateSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   dueDate: z.string().datetime({ offset: true }).optional().nullable(),
   priority: taskPriorityEnum.optional(),
-  assignedTo: z.string().uuid().optional().nullable(),
+  assignedTo: z.string().guid().optional().nullable(),
   status: taskStatusEnum.optional(),
   remindMinutesBefore: taskReminderSchema.optional(),
 });

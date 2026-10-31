@@ -53,7 +53,7 @@ export const POST = withPermission('USERS_CREATE_DIRECT', async (req, session) =
   try {
     const body = await req.json();
     const parsed = userCreateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const email = parsed.data.email.trim().toLowerCase();
     const role = parsed.data.role;

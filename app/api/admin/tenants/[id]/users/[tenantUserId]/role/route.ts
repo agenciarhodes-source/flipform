@@ -11,7 +11,7 @@ const roleSchema = z.object({
 export const PUT = withPlatformAdmin(async (req, session, ctx: { params: { id: string; tenantUserId: string } }) => {
   const parsed = roleSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
   const target = await prisma.tenantUser.findFirst({

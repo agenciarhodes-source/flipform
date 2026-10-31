@@ -11,7 +11,7 @@ import { createOpenAiEmbeddings, FLIP_AI_EMBEDDING_MODEL, OpenAiEmbeddingError,
   type EmbeddingResult } from './openai-embeddings';
 
 export const knowledgePreviewSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.string().guid(),
   query: z.string().trim().min(3).max(500),
   confirmRetry: z.boolean().optional().default(false),
 }).strict();

@@ -32,7 +32,7 @@ export const GET = withPlatformAdmin(async (_req, _session, ctx: { params: { id:
 export const POST = withPlatformAdmin(async (req, session, ctx: { params: { id: string } }) => {
   const parsed = grantSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Dados inválidos.' }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Dados inválidos.' }, { status: 400 });
   }
 
   try {

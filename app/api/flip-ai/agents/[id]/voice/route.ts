@@ -7,7 +7,7 @@ import { readAgentSpeechVoice, saveAgentAudioMode, saveAgentSpeechVoice } from '
 export const dynamic = 'force-dynamic';
 
 function agentId(raw: string) {
-  const id = z.string().uuid().safeParse(raw);
+  const id = z.string().guid().safeParse(raw);
   if (!id.success) throw new FlipAiError('AGENT_NOT_FOUND', 404, 'Atendente não encontrado.');
   return id.data;
 }

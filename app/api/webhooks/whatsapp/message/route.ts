@@ -7,6 +7,6 @@ function authorized(req: Request) { const configured = process.env.INTERNAL_JOB_
 export async function POST(req: Request) {
   const rl = await rateLimit({ key: `whatsapp-message-webhook:${getClientIp(req)}`, limit: 120, windowMs: 60_000 }); if (!rl.allowed) return rateLimitResponse(rl);
   if (!authorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-  const parsed = schema.safeParse(await req.json()); if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0]?.message || 'Payload inválido' }, { status: 400 });
+  const parsed = schema.safeParse(await req.json()); if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Payload inválido' }, { status: 400 });
   const result = await processWhatsAppFunnelMessage({ ...parsed.data, email: parsed.data.email || null }); return NextResponse.json({ ok: true, result });
 }

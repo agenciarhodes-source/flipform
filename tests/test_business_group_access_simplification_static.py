@@ -47,7 +47,7 @@ def test_group_configuration_uses_registered_user_id_not_freeform_email():
     assert 'Selecione um acesso cadastrado' in page
     assert 'availableAccesses.map' in page
     assert "member: { userId" in page
-    assert 'userId: z.string().uuid().optional()' in update
+    assert 'userId: z.string().guid().optional()' in update
     assert 'where: { id: input.userId }' in helper
     assert 'passwordHash' not in helper
 

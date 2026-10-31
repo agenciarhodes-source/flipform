@@ -9,7 +9,7 @@ export const PUT = withPermission('USERS_EDIT', async (req, session, ctx: { para
   try {
     const body = await req.json();
     const parsed = userUpdateSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     // Encontra o tenant_user dentro deste tenant (id = tenantUserId)
     const target = await prisma.tenantUser.findFirst({

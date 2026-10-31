@@ -94,7 +94,7 @@ def test_pr336_checkout_request_is_idempotent_and_rate_limited():
     topups = read("lib/flip-ai/top-ups.ts")
     stripe = read("lib/stripe/top-up-checkout.ts")
 
-    assert "z.string().uuid()" in route
+    assert "z.string().guid()" in route
     assert "rateLimit" in route
     assert "tenantId_requestKey" in topups
     assert "idempotencyKey = `flip-ai-top-up:${orderId}:checkout:${reserved.attempt}`" in stripe

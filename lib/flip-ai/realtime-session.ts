@@ -28,7 +28,7 @@ const QUOTA_LIMITS = {
 } as const;
 
 export const realtimeSessionRequestSchema = z.object({
-  requestId: z.string().uuid(),
+  requestId: z.string().guid(),
 }).strict();
 
 type ClientSecretCreator = (

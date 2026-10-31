@@ -101,7 +101,7 @@ const publicAttributionSchema = z.object({
 }).strict();
 
 export const publicChatMessageSchema = z.object({
-  messageId: z.string().uuid(),
+  messageId: z.string().guid(),
   text: z.string().trim().min(1).max(2_000),
   confirmRetry: z.boolean().optional().default(false),
   inputMode: z.enum(['text', 'voice']).optional().default('text'),

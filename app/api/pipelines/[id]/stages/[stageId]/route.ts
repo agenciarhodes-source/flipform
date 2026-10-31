@@ -17,7 +17,7 @@ export const PUT = withPermission('PIPELINES_EDIT', async (req, session, ctx: { 
 
   const body = await req.json();
   const parsed = stageUpdateSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   // Antes de arquivar, validar que sobra pelo menos 1 ativa no pipeline
   if (parsed.data.isArchived === true && !stage.isArchived) {

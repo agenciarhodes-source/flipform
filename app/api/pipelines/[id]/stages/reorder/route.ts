@@ -7,7 +7,7 @@ import { stagesReorderSchema } from '@/lib/schemas-pipelines';
 export const POST = withPermission('PIPELINES_REORDER', async (req, session, ctx: { params: { id: string } }) => {
   const body = await req.json();
   const parsed = stagesReorderSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
   const pipeline = await prisma.pipeline.findFirst({ where: { id: ctx.params.id, tenantId: session.tenantId } });
   if (!pipeline) return NextResponse.json({ error: 'Não encontrado' }, { status: 404 });

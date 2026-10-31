@@ -9,11 +9,11 @@ export const dashboardQuerySchema = z.object({
   range: z.enum(['today', '7d', '30d']).optional(),
   startDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
   endDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-  pipelineId: z.string().uuid().optional(),
-  formId: z.string().uuid().optional(),
+  pipelineId: z.string().guid().optional(),
+  formId: z.string().guid().optional(),
   state: z.string().trim().min(2).max(30).optional(),
   city: z.string().trim().min(1).max(80).optional(),
-  assignedTo: z.string().uuid().optional(),
+  assignedTo: z.string().guid().optional(),
 }).superRefine((value, ctx) => {
   if (value.period !== 'custom') return;
   if (!value.startDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Data inicial obrigatória para período personalizado.' });

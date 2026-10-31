@@ -63,7 +63,7 @@ export type GoogleFunnelMappingResult =
 
 function parseInput(body: unknown): { ok: true; data: GoogleFunnelMappingInput } | { ok: false; error: string } {
   const parsed = googleFunnelMappingSchema.safeParse(body);
-  if (!parsed.success) return { ok: false, error: parsed.error.errors[0]?.message || 'Payload inválido' };
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message || 'Payload inválido' };
   return { ok: true, data: parsed.data };
 }
 

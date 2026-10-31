@@ -68,7 +68,7 @@ const snapshotSchema = z.object({
   preferredTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).nullable(),
   status: z.enum(['collecting', 'partial', 'ready_for_handoff']),
   updatedAt: z.string().datetime(),
-  sourceMessageId: z.string().uuid(),
+  sourceMessageId: z.string().guid(),
 }).strict();
 
 function normalizeText(value: string) {

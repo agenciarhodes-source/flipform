@@ -9,8 +9,8 @@ const querySchema = z.object({
   period: z.enum(['today', '7d', '30d', 'custom']).default('30d'),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  groupId: z.string().uuid().optional(),
-  tenantId: z.string().uuid().optional(),
+  groupId: z.string().guid().optional(),
+  tenantId: z.string().guid().optional(),
 }).superRefine((value, ctx) => {
   if (value.period !== 'custom') return;
   if (!value.startDate) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Data inicial obrigatória para período personalizado.' });
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const parsed = querySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams.entries()));
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
 
     const state = await getBusinessGroupAccessesForUser(prisma, session.userId);
     if (!state.schemaReady) {
