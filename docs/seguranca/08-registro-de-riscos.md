@@ -10,7 +10,7 @@
 
 | # | Risco / pendência | Prob. | Impacto | Prioridade | Plano | Dono | Prazo | Status |
 |---|---|---|---|---|---|---|---|---|
-| R1 | Backup do banco: tinha só 6 horas de histórico e nenhuma cópia agendada | — | — | — | PITR de 7 dias, snapshot diário por 30 dias e ramo `production` protegido | Responsável | 28/10/2026 | **Resolvido** (falta o teste de recuperação, R13) |
+| R1 | Backup do banco: tinha só 6 horas de histórico e nenhuma cópia agendada | — | — | — | PITR de 7 dias, snapshot diário por 30 dias e ramo `production` protegido | Responsável | 28/10/2026 | **Resolvido** (recuperação testada em 31/10/2026, R13) |
 | R2 | Repositório de código **público** | Média | Alto | Alta | Tornar privado (fase 0) | Responsável | Fase 0 | Aberto |
 | R3 | MFA não ativado nas contas (FlipForm Super Admin, GitHub, Vercel, Neon, OpenAI, Meta, Google) | Média | Muito alto | Alta | Ativar Google Authenticator em todas (fase 0) | Responsável | Fase 0 | Aberto |
 | R4 | Ramo `main` sem proteção (dá para enviar código sem PR/testes) | Baixa | Alto | Média | Ativar proteção de branch no GitHub (fase 0) | Responsável | Fase 0 | Aberto |
@@ -22,7 +22,7 @@
 | R10 | Ações do GitHub fixadas por versão, não por "impressão digital" (SHA) — 22 avisos do Semgrep | Baixa | Médio | Baixa | Fixar por SHA | Desenvolvimento | Próximo trimestre | Aberto |
 | R11 | npm sem espera mínima para pacotes recém-publicados (proteção contra pacote adulterado) | Baixa | Médio | Baixa | Configurar idade mínima de publicação | Desenvolvimento | Próximo trimestre | Aberto |
 | R12 | Dependências com alertas moderados (zod, Sentry/OpenTelemetry, esbuild) | Baixa | Baixo | Baixa | Atualizar em PRs dedicados | Desenvolvimento | Próximo trimestre | Aberto |
-| R13 | Teste de recuperação de backup nunca realizado | Média | Alto | Alta | Primeiro teste após R1 | Responsável | Após R1 | Aberto |
+| R13 | Teste de recuperação de backup nunca realizado | — | — | — | Primeiro teste feito em 31/10/2026 (ver 04-backup-e-recuperacao.md, seção 6); repetir a cada 3 meses | Responsável | 31/10/2026 | **Resolvido** (próximo teste até 31/01/2027) |
 
 ## 2. Riscos tratados (histórico)
 
@@ -33,3 +33,4 @@
 | 28/10/2026 | Removida a rota que criava sessão só com e-mail (hotfix #534) |
 | 28/10/2026 | Telas do Super Admin passaram a conferir a sessão no banco; criptografia de tokens com selo de tamanho fixo |
 | 28/10/2026 | Backup do banco: histórico de 7 dias, cópia diária por 30 dias, ramo de produção protegido (R1) |
+| 31/10/2026 | Primeiro teste de recuperação de backup: snapshot restaurado num ramo separado, dados idênticos à produção (R13) |

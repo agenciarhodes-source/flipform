@@ -67,4 +67,8 @@ Qualquer mudança nessas configurações do Neon só é feita com autorização 
 
 | Data | Tipo (teste/real) | O que foi recuperado | Tempo gasto | Resultado | Quem |
 |---|---|---|---|---|---|
-| [PREENCHER no 1º teste] | | | | | |
+| 31/10/2026 | Teste | Snapshot diário automático de 31/10/2026 03:00 (Brasília) restaurado num **ramo separado** do Neon (`r13-teste-restauracao-20261031`), sem substituir a produção | Cópia pronta em ~4 segundos; conferência em ~10 minutos | **Aprovado.** 9 tabelas com contagens idênticas à produção até o horário do snapshot (55 empresas, 118 usuários, 1.604 leads, 25 formulários, 993 conversas, 24.552 mensagens, 11.859 registros de auditoria, 4 conexões de WhatsApp, 3 atendentes de IA). Impressão digital (MD5) igual nos IDs de leads e de mensagens e no conteúdo de 1.599 leads (nome, telefone, e-mail, etapa, status); os 5 leads alterados depois do snapshot ficaram fora da comparação, como esperado. Ramo de teste apagado ao final; produção conferida intacta. | Responsável (executado com apoio do Claude) |
+
+**Próximo teste:** até 31/01/2027 (a cada 3 meses). Sugestão: testar a restauração por horário (PITR), escolhendo um momento das últimas 24 horas.
+
+**Cuidado aprendido no teste:** na restauração de snapshot do Neon, sempre usar a opção que **não finaliza** (não substitui o ramo de origem). A opção padrão pode trocar o ramo de produção pela cópia.
