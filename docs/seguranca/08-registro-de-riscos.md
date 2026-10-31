@@ -21,7 +21,7 @@
 | R9 | Política de conteúdo (CSP) permissiva nas páginas públicas (exigida pelo Pixel/login da Meta) — achado médio do OWASP ZAP | Baixa | Baixo | Baixa | Restringir aos domínios da Meta quando possível, sem quebrar integrações | Desenvolvimento | Próximo trimestre | Aceito por ora |
 | R10 | Ações do GitHub fixadas por versão, não por "impressão digital" (SHA) — 22 avisos do Semgrep | — | — | — | Todas as 24 referências fixadas por SHA de 40 caracteres; teste automático impede voltar atrás | Desenvolvimento | 31/10/2026 | **Resolvido** |
 | R11 | npm sem espera mínima para pacotes recém-publicados (proteção contra pacote adulterado) | Baixa | Médio | Baixa | Configurar idade mínima de publicação | Desenvolvimento | Próximo trimestre | Aberto |
-| R12 | Dependências com alertas moderados (zod, Sentry/OpenTelemetry, esbuild) | Baixa | Baixo | Baixa | Atualizar em PRs dedicados | Desenvolvimento | Próximo trimestre | Aberto |
+| R12 | Dependências com alertas (31/10/2026: 1 alto — zod; 48 moderados — Sentry/OpenTelemetry, ESLint, exceljs; 1 baixo — esbuild) | Baixa | Médio | Média | js-yaml (alto) corrigido em 31/10/2026. Próximos PRs: zod 3 → 4 (alto) e Sentry 8 → 11 (OpenTelemetry). ESLint e plugins: só no desenvolvimento, não vão para o site. exceljs/archiver/glob: usados só na exportação de relatórios por quem está logado; aceito até haver versão corrigida | Desenvolvimento | zod: novembro/2026; Sentry: dezembro/2026 | Em andamento |
 | R13 | Teste de recuperação de backup nunca realizado | — | — | — | Primeiro teste feito em 31/10/2026 (ver 04-backup-e-recuperacao.md, seção 6); repetir a cada 3 meses | Responsável | 31/10/2026 | **Resolvido** (próximo teste até 31/01/2027) |
 
 ## 2. Riscos tratados (histórico)
