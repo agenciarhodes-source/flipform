@@ -20,7 +20,8 @@ def test_vulnerable_transitive_packages_are_pinned_to_fixed_versions():
     assert overrides["fast-uri@3"] == "3.1.9"
     assert overrides["follow-redirects"] == "1.16.2"
     assert overrides["form-data"] == "4.0.6"
-    assert overrides["postcss"] == "$postcss"
+    # Same spec as the devDependency; "$postcss" breaks npm when a dependency brings postcss as a peer.
+    assert overrides["postcss"] == load("package.json")["devDependencies"]["postcss"] == "^8.5.32"
     lock = load("package-lock.json")["packages"]
     assert lock["node_modules/nodemailer"]["version"] == "10.2.1"
     assert lock["node_modules/postcss"]["version"] == "8.5.32"
