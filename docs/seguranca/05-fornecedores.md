@@ -17,7 +17,7 @@
 | **Google** (Ads) | Conversões de anúncios | Eventos de conversão | EUA / global | Tokens criptografados |
 | **Stripe / Asaas** | Cobrança | Dados de cobrança das empresas clientes | EUA / Brasil | Webhooks com assinatura/token conferidos |
 | **Resend / SMTP** | E-mails do sistema | E-mail e nome do destinatário | [PREENCHER] | — |
-| **Sentry** | Monitoramento de erros | Mensagens de erro (podem conter dados técnicos) | EUA | Evitar dados pessoais nas mensagens de erro |
+| **Sentry** | Monitoramento de erros | Mensagens de erro (podem conter dados técnicos) | EUA | Coleta de dados pessoais desligada no código (`sentry.privacy.ts`): não envia corpo de requisição, cabeçalhos, cookies, parâmetros de URL, dados de banco nem variáveis; só o erro e o ID interno do usuário |
 | **cron-job.org** | Dispara as rotinas a cada minuto | Nenhum dado pessoal (só chama o endereço com segredo) | Alemanha | Segredo `CRON_SECRET` |
 | **GitHub** | Código e testes | Código (sem dados de clientes) | EUA | MFA; varredura de segredos |
 
