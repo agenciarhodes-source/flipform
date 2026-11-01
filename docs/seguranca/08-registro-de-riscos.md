@@ -20,7 +20,7 @@
 | R8 | Não verificado se a rota de login só com e-mail (removida em 28/10/2026) foi usada | Baixa | Alto | Média | Consultar logs disponíveis; trocar sessões do Super Admin ("Sair de todos os dispositivos") | Responsável | 7 dias | Aberto |
 | R9 | Política de conteúdo (CSP) permissiva nas páginas públicas (exigida pelo Pixel/login da Meta) — achado médio do OWASP ZAP | Baixa | Baixo | Baixa | Restringir aos domínios da Meta quando possível, sem quebrar integrações | Desenvolvimento | Próximo trimestre | Aceito por ora |
 | R10 | Ações do GitHub fixadas por versão, não por "impressão digital" (SHA) — 22 avisos do Semgrep | — | — | — | Todas as 24 referências fixadas por SHA de 40 caracteres; teste automático impede voltar atrás | Desenvolvimento | 31/10/2026 | **Resolvido** |
-| R11 | npm sem espera mínima para pacotes recém-publicados (proteção contra pacote adulterado) | Baixa | Médio | Baixa | Configurar idade mínima de publicação | Desenvolvimento | Próximo trimestre | Aberto |
+| R11 | npm sem espera mínima para pacotes recém-publicados (proteção contra pacote adulterado) | — | — | — | `.npmrc` com `min-release-age=7`: o npm 11 só aceita versões publicadas há 7 dias ou mais. As instalações do site (`npm ci`) seguem o lockfile e não mudam. Atualizações de bibliotecas devem ser feitas com npm 11 | Desenvolvimento | 31/10/2026 | **Resolvido** |
 | R12 | Dependências com alertas (31/10/2026: 1 alto — zod; 48 moderados — Sentry/OpenTelemetry, ESLint, exceljs; 1 baixo — esbuild) | Baixa | Médio | Média | js-yaml (alto) e zod 3 → 4.6.7 (alto) corrigidos em 31/10/2026, sem alertas altos restantes. Sentry 8 → 11.8.0 em 31/10/2026: os 22 alertas do OpenTelemetry resolvidos (moderados 48 → 26), com coleta de dados pessoais desligada item por item (sentry.privacy.ts). O que sobra no Sentry vem do glob do plugin de montagem, que só roda no build. ESLint e plugins: só no desenvolvimento, não vão para o site. exceljs/archiver/glob: usados só na exportação de relatórios por quem está logado; aceito até haver versão corrigida | Desenvolvimento | 31/10/2026 | **Resolvido** (sem altos; moderados restantes aceitos e revisados a cada trimestre) |
 | R13 | Teste de recuperação de backup nunca realizado | — | — | — | Primeiro teste feito em 31/10/2026 (ver 04-backup-e-recuperacao.md, seção 6); repetir a cada 3 meses | Responsável | 31/10/2026 | **Resolvido** (próximo teste até 31/01/2027) |
 
@@ -34,5 +34,6 @@
 | 28/10/2026 | Telas do Super Admin passaram a conferir a sessão no banco; criptografia de tokens com selo de tamanho fixo |
 | 28/10/2026 | Backup do banco: histórico de 7 dias, cópia diária por 30 dias, ramo de produção protegido (R1) |
 | 31/10/2026 | Ações do GitHub fixadas pela impressão digital (SHA), com teste que impede voltar atrás (R10) |
+| 31/10/2026 | Espera mínima de 7 dias para versões novas de bibliotecas (R11) |
 | 31/10/2026 | Dependências: js-yaml, zod 4 e Sentry 11; nenhum alerta alto e coleta de dados pessoais do Sentry desligada (R12) |
 | 31/10/2026 | Primeiro teste de recuperação de backup: snapshot restaurado num ramo separado, dados idênticos à produção (R13) |
