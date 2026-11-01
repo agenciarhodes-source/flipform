@@ -31,7 +31,8 @@ const sections = [
           <li>dados de formulários, respostas, leads, contatos, pipelines, tarefas e histórico de atendimento;</li>
           <li>dados técnicos, como endereço IP, navegador, dispositivo, data e horário de acesso e logs de segurança;</li>
           <li>dados necessários para cobrança, assinatura e suporte ao cliente;</li>
-          <li>identificadores e metadados de integrações autorizadas, inclusive ativos Meta, WhatsApp Business, contas de anúncios, Pixels/Datasets e demais recursos conectados pelo cliente.</li>
+          <li>identificadores e metadados de integrações autorizadas, inclusive ativos Meta, WhatsApp Business, Instagram, contas de anúncios (Meta e Google Ads), Pixels/Datasets e demais recursos conectados pelo cliente;</li>
+          <li>mensagens de texto, áudios e imagens trocados nos canais de atendimento conectados pelo cliente (WhatsApp, Instagram Direct e chat do site).</li>
         </ul>
       </>
     ),
@@ -72,7 +73,7 @@ const sections = [
     ),
   },
   {
-    title: '6. Integrações com Meta e WhatsApp',
+    title: '6. Integrações com Meta (WhatsApp, Instagram e Facebook) e Google Ads',
     content: (
       <>
         <p>
@@ -82,13 +83,32 @@ const sections = [
           A FlipForm pode processar identificadores técnicos, dados de contas empresariais, números de telefone comerciais, eventos, mensagens e metadados necessários para executar as funcionalidades solicitadas. O tratamento desses dados também está sujeito aos termos e políticas da Meta e do WhatsApp aplicáveis ao cliente e à respectiva conta empresarial.
         </p>
         <p>
+          Quando o cliente conecta uma conta do Instagram, a FlipForm recebe as mensagens do Instagram Direct da conta empresarial conectada e permite responder a elas pela plataforma. Quando o cliente conecta o Google Ads, a FlipForm envia eventos de conversão (por exemplo, a geração de um lead) para que o cliente acompanhe o resultado de suas campanhas.
+        </p>
+        <p>
           Credenciais e segredos de integração são armazenados e processados exclusivamente no backend quando tecnicamente necessário, com controles destinados a impedir sua exposição a outros clientes da plataforma.
         </p>
       </>
     ),
   },
   {
-    title: '7. Compartilhamento de dados',
+    title: '7. Atendimento com inteligência artificial',
+    content: (
+      <>
+        <p>
+          A FlipForm oferece recursos opcionais de inteligência artificial, como assistente de atendimento no WhatsApp, no Instagram Direct e no chat do site, transcrição de áudios, leitura de imagens enviadas pelos contatos e resumos e relatórios para a equipe do cliente. Esses recursos só funcionam quando o cliente os ativa.
+        </p>
+        <p>
+          Para isso, trechos das conversas, áudios e imagens são enviados a provedores de inteligência artificial contratados pela FlipForm, como a OpenAI, que processa os dados nos Estados Unidos. Números de CPF e CNPJ escritos nas mensagens de texto são mascarados antes do envio. Pelas políticas do provedor para uso via API, esses dados não são utilizados para treinar os modelos de inteligência artificial.
+        </p>
+        <p>
+          As respostas geradas por inteligência artificial podem conter erros. A equipe do cliente pode acompanhar as conversas e assumir o atendimento a qualquer momento, pausando o assistente. O cliente é responsável por informar aos seus contatos, quando aplicável, que o atendimento pode ser feito com apoio de inteligência artificial.
+        </p>
+      </>
+    ),
+  },
+  {
+    title: '8. Compartilhamento de dados',
     content: (
       <>
         <p>
@@ -102,15 +122,20 @@ const sections = [
     ),
   },
   {
-    title: '8. Transferências internacionais',
+    title: '9. Transferências internacionais',
     content: (
+      <>
       <p>
-        Alguns fornecedores e integrações podem processar dados fora do Brasil. Nesses casos, buscamos utilizar provedores que adotem mecanismos de segurança e proteção compatíveis com a legislação aplicável e com a natureza dos dados tratados.
+        Alguns fornecedores e integrações processam dados fora do Brasil, principalmente nos Estados Unidos. É o caso da hospedagem da plataforma (Vercel), do banco de dados (Neon), do armazenamento de anexos (Cloudflare), dos provedores de inteligência artificial (OpenAI), do monitoramento de erros (Sentry) e das integrações com Meta e Google habilitadas pelo cliente.
       </p>
+      <p>
+        Essas transferências ocorrem com base no art. 33 da LGPD, apoiadas nos termos de tratamento de dados (DPA) e nas cláusulas contratuais oferecidas por esses fornecedores, que preveem obrigações de confidencialidade, segurança e uso dos dados apenas para a prestação do serviço. Sempre que possível, a FlipForm reduz os dados enviados, por exemplo mascarando CPF e CNPJ nos textos enviados à inteligência artificial e deixando de enviar dados pessoais ao monitoramento de erros.
+      </p>
+      </>
     ),
   },
   {
-    title: '9. Retenção e exclusão',
+    title: '10. Retenção e exclusão',
     content: (
       <>
         <p>
@@ -123,7 +148,7 @@ const sections = [
     ),
   },
   {
-    title: '10. Segurança',
+    title: '11. Segurança',
     content: (
       <p>
         A FlipForm adota medidas técnicas e organizacionais destinadas a proteger dados contra acesso não autorizado, perda, alteração, divulgação ou destruição indevida. Entre essas medidas estão segregação por tenant, controle de acesso, registros de auditoria, proteção de credenciais e práticas de segurança na infraestrutura. Nenhum sistema, entretanto, é totalmente imune a riscos.
@@ -131,7 +156,7 @@ const sections = [
     ),
   },
   {
-    title: '11. Direitos dos titulares',
+    title: '12. Direitos dos titulares',
     content: (
       <>
         <p>
@@ -144,7 +169,7 @@ const sections = [
     ),
   },
   {
-    title: '12. Cookies, métricas e tecnologias semelhantes',
+    title: '13. Cookies, métricas e tecnologias semelhantes',
     content: (
       <p>
         A plataforma pode utilizar cookies e tecnologias semelhantes necessários para autenticação, segurança, preferências, funcionamento técnico, medição e, quando habilitado pelo cliente ou pela FlipForm de forma legítima, recursos de análise e publicidade. O uso de integrações como Meta Pixel, Conversions API ou ferramentas equivalentes depende da configuração e do contexto aplicável.
@@ -152,7 +177,7 @@ const sections = [
     ),
   },
   {
-    title: '13. Crianças e adolescentes',
+    title: '14. Crianças e adolescentes',
     content: (
       <p>
         A FlipForm não é destinada diretamente a crianças. Clientes que utilizem a plataforma para tratar dados de crianças ou adolescentes são responsáveis por observar as exigências legais específicas aplicáveis a esse tratamento.
@@ -160,7 +185,7 @@ const sections = [
     ),
   },
   {
-    title: '14. Alterações desta política',
+    title: '15. Alterações desta política',
     content: (
       <p>
         Esta política pode ser atualizada para refletir mudanças legais, técnicas ou operacionais. A versão vigente permanecerá disponível nesta página, com indicação da data de atualização.
@@ -168,7 +193,7 @@ const sections = [
     ),
   },
   {
-    title: '15. Contato',
+    title: '16. Contato',
     content: (
       <p>
         Dúvidas, solicitações sobre privacidade ou exercício de direitos podem ser encaminhados para <a href="mailto:atendimento@flipform.com.br" className="underline font-medium">atendimento@flipform.com.br</a>.
@@ -185,9 +210,9 @@ export default function PrivacyPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">FlipForm</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Política de Privacidade</h1>
           <p className="mt-4 max-w-2xl text-slate-600">
-            Esta política explica como a FlipForm trata dados pessoais em sua plataforma, inclusive em integrações autorizadas com Meta e WhatsApp Business.
+            Esta política explica como a FlipForm trata dados pessoais em sua plataforma, inclusive em integrações autorizadas com Meta (WhatsApp, Instagram e Facebook) e Google Ads e nos recursos de inteligência artificial.
           </p>
-          <p className="mt-3 text-sm text-slate-500">Última atualização: 29 de agosto de 2026.</p>
+          <p className="mt-3 text-sm text-slate-500">Última atualização: 1º de novembro de 2026.</p>
         </header>
 
         <div className="space-y-9 text-[15px] leading-7 text-slate-700">

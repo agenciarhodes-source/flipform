@@ -25,9 +25,19 @@
 
 A maior parte dos dados é tratada **fora do Brasil (EUA)**. A LGPD permite isso com garantias (art. 33), como **cláusulas contratuais padrão** aprovadas pela ANPD (Resolução CD/ANPD nº 19/2024) ou garantias equivalentes dos fornecedores.
 
-Pendências (arquivo 08):
-1. Guardar os termos de tratamento de dados (DPA) de cada fornecedor principal (Vercel, Neon, OpenAI, Cloudflare, Meta).
-2. Informar nos termos de uso/privacidade do FlipForm que os dados são tratados nos EUA.
+Situação em 01/11/2026:
+1. **Termos do FlipForm atualizados:** a Política de Privacidade (`/legal/privacy`) informa a transferência para os EUA, a base no art. 33 da LGPD e o uso de IA; os Termos de Uso (`/legal/terms`) passaram a tratar de contas, integrações, IA e fim do contrato. Revisão por advogado recomendada antes de contratos grandes.
+2. **DPAs dos fornecedores** (termos de tratamento de dados):
+
+| Fornecedor | DPA | Como vale | O que fazer | Guardado em |
+|---|---|---|---|---|
+| Neon | https://neon.com/dpa | Faz parte dos termos de uso (com cláusulas contratuais padrão) | Baixar o PDF | [PREENCHER: data e pasta] |
+| Vercel | https://vercel.com/legal/dpa | Publicado pela Vercel para os clientes | Baixar o PDF | [PREENCHER] |
+| Cloudflare | https://www.cloudflare.com/cloudflare-customer-dpa/ | Vale para contratos self-serve e enterprise | Baixar o PDF | [PREENCHER] |
+| OpenAI | https://openai.com/policies/data-processing-addendum/ | **Precisa ser assinado** pelo formulário da OpenAI | Responsável assina e guarda a cópia | [PREENCHER] |
+| Google Ads | https://business.safety.google/adsprocessorterms | **Precisa ser aceito** na conta do Google Ads (configurações da conta) | Responsável aceita e informa os contatos pedidos | [PREENCHER] |
+| Meta | Termos do WhatsApp Business e da Cloud API | Aceitos ao criar e conectar a conta do WhatsApp Business | Registrar a data de aceite | [PREENCHER] |
+| Sentry | https://sentry.io/legal/dpa/ | Publicado pela Sentry | Baixar o PDF | [PREENCHER] |
 
 ## 3. Regras para contratar um fornecedor novo
 
