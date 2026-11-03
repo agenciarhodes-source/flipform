@@ -27,6 +27,7 @@ import { whatsappIntroduction } from '@/lib/whatsapp-ai/reply';
 import { instagramSenderProfile } from './profile';
 import { describeInstagramImage } from './image';
 import { instagramImageNote } from './image-rules';
+import { instagramShareKind, instagramShareNote, instagramShareTitle } from './share-rules';
 import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
 import {
   INSTAGRAM_AI_QUIET_SECONDS,
@@ -188,7 +189,13 @@ export async function replyToInstagramConversation(input: {
         message,
       }).catch(() => null);
       notes.push(instagramImageNote(description));
-    } else notes.push(INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
+    } else {
+      const metadata = metadataOf(message.metadata);
+      const shareKind = instagramShareKind(metadata.providerType);
+      notes.push(shareKind
+        ? instagramShareNote(shareKind, instagramShareTitle(metadata.sharedTitle))
+        : INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
+    }
   }
   if (input.trigger === 'handback') {
     notes.push('[Nota interna, não mostre à pessoa: a equipe devolveu esta conversa para você. Responda o que a pessoa perguntou nas últimas mensagens, sem repetir o que a equipe já disse.]');
@@ -281,7 +288,9 @@ export async function replyToInstagramConversation(input: {
           firstReply: aiRepliesSoFar === 0,
           firstName: clearFirstName(profile.name),
         })}`,
-        messages: notes.length && parts.length
+        // The history only has text and voice notes, so what else the person sent (a photo, a shared
+        // Reels) is always added here; without it a turn with only a photo or a Reels reached the AI empty.
+        messages: notes.length
           ? [...context.messages, { role: 'user' as const, content: notes.join('\n') }]
           : context.messages,
       },

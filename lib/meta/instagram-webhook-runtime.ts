@@ -1,5 +1,6 @@
 import 'server-only';
 import { instagramMediaUrl } from '@/lib/instagram-ai/image-rules';
+import { instagramShareKind, instagramShareTitle } from '@/lib/instagram-ai/share-rules';
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -79,6 +80,9 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
     .filter((value: string | null): value is string => Boolean(value));
   // The temporary address of a photo on Meta's servers, so the attendant can look at it.
   const mediaUrl = type === 'image' ? instagramMediaUrl(attachments[0]?.payload?.url) : null;
+  // A shared Reels, post or story mention: its caption, so the inbox and the AI know what came.
+  const shareKind = text === null ? instagramShareKind(attachmentTypes[0]) : null;
+  const sharedTitle = shareKind ? instagramShareTitle(attachments[0]?.payload?.title) : null;
 
   return {
     text,
@@ -88,6 +92,7 @@ function normalizeInstagramMessage(message: any, instagramProfessionalAccountId:
       providerType: text !== null ? 'text' : attachmentTypes[0] || 'unknown',
       attachmentTypes,
       ...(mediaUrl ? { mediaUrl } : {}),
+      ...(sharedTitle ? { sharedTitle } : {}),
       ...(typeof message?.quick_reply?.payload === 'string'
         ? { quickReplyPayload: message.quick_reply.payload }
         : {}),

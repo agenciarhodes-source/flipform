@@ -22,6 +22,7 @@ import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { VoiceRecorder } from '@/components/inbox/voice-recorder';
 import { toast } from 'sonner';
 import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
+import { instagramShareKind, instagramShareLabel, instagramShareTitle } from '@/lib/instagram-ai/share-rules';
 
 interface InboxIdentity {
   id: string;
@@ -206,6 +207,8 @@ const MESSAGE_TYPE_LABELS: Record<string, string> = {
 function messageTypeLabel(message: { type: string; metadata: unknown }) {
   const metadata = message.metadata && typeof message.metadata === 'object' ? message.metadata as Record<string, unknown> : {};
   if (metadata.providerType === 'revoke') return 'A pessoa apagou uma mensagem.';
+  const shareKind = instagramShareKind(metadata.providerType);
+  if (shareKind) return instagramShareLabel(shareKind, instagramShareTitle(metadata.sharedTitle));
   if (metadata.providerType === 'unsupported') {
     return 'Mensagem que o WhatsApp não entrega para sistemas (por exemplo: visualização única, enquete, localização ou contato). Peça para a pessoa enviar de outro jeito.';
   }
