@@ -15,7 +15,7 @@ concurrency:
 jobs:
   validate:
     name: Install, Typecheck and Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       NODE_ENV: test
@@ -109,7 +109,7 @@ jobs:
 
   smoke:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: validate
     timeout-minutes: 20
 

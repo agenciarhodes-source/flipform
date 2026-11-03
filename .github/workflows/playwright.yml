@@ -8,7 +8,7 @@ on:
 jobs:
   e2e:
     timeout-minutes: 60
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     env:
       JWT_SECRET_CURRENT: staging-local-secret
