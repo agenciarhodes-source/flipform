@@ -52,3 +52,22 @@ test('as instruções do canal focam em entender e responder, sem pedir dados ne
   // Nothing specific to one business in the global instructions.
   for (const word of ['advogado', 'escritório', 'INSS', 'benefício']) assert.equal(text.includes(word), false, word);
 });
+
+test('Reels, publicação e menção em story compartilhados no Direct são reconhecidos', async () => {
+  const { instagramShareKind, instagramShareLabel, instagramShareNote, instagramShareTitle } = await import('../lib/instagram-ai/share-rules');
+  assert.equal(instagramShareKind('ig_reel'), 'reel');
+  assert.equal(instagramShareKind('reel'), 'reel');
+  assert.equal(instagramShareKind('share'), 'post');
+  assert.equal(instagramShareKind('story_mention'), 'story_mention');
+  for (const value of ['image', 'video', 'text', 'unknown', null, 42]) assert.equal(instagramShareKind(value), null, String(value));
+  assert.equal(instagramShareTitle('  Salário   maternidade \n rural  '), 'Salário maternidade rural');
+  assert.equal(instagramShareTitle('x'.repeat(300))?.length, 200);
+  assert.equal(instagramShareTitle(''), null);
+  assert.equal(instagramShareLabel('reel'), 'Compartilhou um Reels');
+  assert.equal(instagramShareLabel('reel', 'Mães têm direito'), 'Compartilhou um Reels: “Mães têm direito”');
+  const note = instagramShareNote('reel', 'Mães têm direito');
+  assert.match(note, /Reels/);
+  assert.match(note, /Mães têm direito/);
+  assert.match(note, /Não finja que viu/);
+  assert.match(instagramShareNote('story_mention'), /story/);
+});
