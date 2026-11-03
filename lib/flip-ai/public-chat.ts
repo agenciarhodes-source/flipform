@@ -81,6 +81,7 @@ import {
   type FlipAiAvailabilitySnapshot,
 } from './availability-policy';
 import { loadLatestConversationAvailability } from './availability';
+import { extractFixedRules, fixedRulesPrompt } from './fixed-rules';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const QUOTA_WINDOW_MS = 60_000;
@@ -817,6 +818,30 @@ export async function preparePublicChatTurn(
   }
 }
 
+// The fixed rules of a knowledge index never change (a new file makes a new index), so they are kept here.
+const fixedRulesCache = new Map<string, string | null>();
+
+/** The "Regras fixas do atendimento" of the published knowledge file, or null. */
+async function loadFixedRules(tenantId: string, knowledgeIndexId: string | null | undefined) {
+  if (!knowledgeIndexId) return null;
+  if (fixedRulesCache.has(knowledgeIndexId)) return fixedRulesCache.get(knowledgeIndexId) ?? null;
+  const index = await prisma.flipAiKnowledgeIndex.findFirst({
+    where: { id: knowledgeIndexId, tenantId },
+    select: { documentId: true, revision: true },
+  }).catch(() => null);
+  const revision = index
+    ? await prisma.flipAiKnowledgeRevision.findFirst({
+      where: { tenantId, documentId: index.documentId, revision: index.revision },
+      select: { content: true },
+    }).catch(() => null)
+    : null;
+  if (!revision) return null;
+  const rules = extractFixedRules(revision.content);
+  if (fixedRulesCache.size > 500) fixedRulesCache.clear();
+  fixedRulesCache.set(knowledgeIndexId, rules);
+  return rules;
+}
+
 function safeReference(value: string) {
   return value.replaceAll('<', '‹').replaceAll('>', '›').slice(0, 6_000);
 }
@@ -886,6 +911,7 @@ export function buildPublicChatInstructions(
   knownIdentity: { name: string | null; phone: string | null } | null = null,
   availabilitySnapshot: FlipAiAvailabilitySnapshot | null = null,
   assistantMessages: string[] = [],
+  fixedRules: string | null = null,
 ) {
   const style = runtime.style === 'direct' ? 'direta e objetiva'
     : runtime.style === 'professional' ? 'profissional e clara' : 'acolhedora e natural';
@@ -927,6 +953,7 @@ export function buildPublicChatInstructions(
   return [
     `Você é ${runtime.name}, assistente virtual de ${runtime.tenantName}.`,
     runtime.description ? `Contexto autorizado do agente: ${safeReference(runtime.description)}` : '',
+    fixedRulesPrompt(fixedRules ? safeReference(fixedRules) : null),
     `Converse de forma ${style}, em português do Brasil, adaptando-se à linguagem da pessoa.`,
     ...buildHumanConversationGuidance(inputMode, runtime.attendantRole),
     'Ouça antes de perguntar. Faça somente uma pergunta por vez. Não repita o que a pessoa já informou.',
@@ -1332,7 +1359,7 @@ export async function buildPublicChatContext(
           completedTurns: state?.turnCount || 0,
           inboundMessages,
         }, decision, turn.inputMode, memorySnapshot, knownIdentity, availabilitySnapshot,
-        assistantMessages),
+        assistantMessages, await loadFixedRules(turn.tenantId, turn.knowledgeIndexId)),
     contactMoment,
     messages,
     evidenceMessageIds,
