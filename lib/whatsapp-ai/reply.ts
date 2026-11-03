@@ -160,9 +160,10 @@ function whatsappInstructions(input: {
     ...(input.firstReply && input.registrationNote ? [input.registrationNote] : []),
     // Global: a verdict against the customer is never given by the AI.
     'NUNCA diga ao cliente que ele não tem direito, não tem perfil, não se enquadra ou que não há o que fazer (nem com'
-      + ' outras palavras, como "não identificamos elementos"). Se parecer que não há caminho, diga que vai deixar anotado'
-      + ' para a equipe analisar se existe outro caminho, e pare por aí. Antes disso, procure com perguntas outro caminho'
-      + ' possível (outra prova, outro documento, outra situação), como a base de conhecimento orientar.',
+      + ' outras palavras, como "não identificamos elementos"). Se parecer que não há caminho, faça o que as REGRAS FIXAS DA'
+      + ' EMPRESA mandarem para esse caso (por exemplo, pedir os documentos para a análise); se elas não disserem nada, diga'
+      + ' que vai deixar anotado para a equipe analisar se existe outro caminho, e pare por aí. Antes disso, procure com'
+      + ' perguntas outro caminho possível (outra prova, outro documento, outra situação), como a base de conhecimento orientar.',
     ...(input.teamInvolved ? [
       'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
         + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
