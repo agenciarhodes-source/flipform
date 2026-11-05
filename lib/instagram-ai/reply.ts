@@ -27,7 +27,10 @@ import { whatsappIntroduction } from '@/lib/whatsapp-ai/reply';
 import { instagramSenderProfile } from './profile';
 import { describeInstagramImage } from './image';
 import { instagramImageNote } from './image-rules';
-import { instagramShareKind, instagramShareNote, instagramShareTitle } from './share-rules';
+import {
+  INSTAGRAM_TAG_THANKS, instagramIsThankOnly, instagramOtherNote, instagramShareKind, instagramShareNote,
+  instagramShareTitle, instagramWantsNoReply,
+} from './share-rules';
 import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
 import {
   INSTAGRAM_AI_QUIET_SECONDS,
@@ -173,6 +176,20 @@ export async function replyToInstagramConversation(input: {
     take: 20,
     select: { id: true, type: true, text: true, metadata: true },
   });
+
+  // A tag in a story (or a message Instagram does not show): a short fixed thank-you, no AI and no question.
+  if (pending.length && pending.every(instagramIsThankOnly)) {
+    const thanked = await enqueueAndDispatchInstagramTextMessage({
+      tenantId: input.tenantId,
+      conversationId: conversation.id,
+      requestedByUserId: '',
+      text: INSTAGRAM_TAG_THANKS,
+      idempotencyKey: `ig-tag-thanks-${latestInbound.id}`,
+      aiSender: { agentId: runtime.id, agentName: runtime.name },
+    });
+    return thanked.status === 'failed' ? { replied: false, reason: 'send_failed' } : { replied: true, reason: 'tag_thanks' };
+  }
+
   const parts: string[] = [];
   const notes: string[] = [];
   let imagesRead = 0;
@@ -194,7 +211,7 @@ export async function replyToInstagramConversation(input: {
       const shareKind = instagramShareKind(metadata.providerType);
       notes.push(shareKind
         ? instagramShareNote(shareKind, instagramShareTitle(metadata.sharedTitle))
-        : INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
+        : instagramOtherNote(metadata.providerType) || INSTAGRAM_MEDIA_NOTES[message.type] || INSTAGRAM_MEDIA_NOTES.unknown);
     }
   }
   if (input.trigger === 'handback') {
@@ -298,6 +315,11 @@ export async function replyToInstagramConversation(input: {
       timeoutMs: 40_000,
     });
     const parsed = parsePublicChatDecision(raw.text);
+    // Not about the company (a bingo, a raffle, a request to share a post): nothing is sent.
+    if (instagramWantsNoReply(parsed.reply)) {
+      await failPublicChatTurn(turn, { kind: 'definitive', code: 'INSTAGRAM_AI_OFF_TOPIC' }, 'response');
+      return { replied: false, reason: 'off_topic' };
+    }
     const reply = toInstagramText(parsed.reply);
     if (!reply) throw new OpenAiResponseError('definitive', 'INSTAGRAM_AI_EMPTY_REPLY');
 

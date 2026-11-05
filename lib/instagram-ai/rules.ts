@@ -1,3 +1,4 @@
+import { INSTAGRAM_NO_REPLY } from './share-rules';
 /**
  * Pure rules of the Flip AI on the Instagram Direct (no database, no network). Global for every
  * company: what is specific to a business (what to answer, which WhatsApp for each subject) is in
@@ -95,5 +96,11 @@ export function instagramInstructions(input: {
     'NUNCA diga que a pessoa não tem direito, não se enquadra ou que não há o que fazer. Se parecer que não há caminho, diga que'
       + ' a equipe pode analisar com calma e, se houver, indique o canal da base de conhecimento.',
     'Não cite fontes nem coloque links de sites que não estejam na base de conhecimento.',
+    `SÓ ASSUNTOS DA EMPRESA: você responde apenas o que tem a ver com os serviços de ${input.companyName}. Se a mensagem, a`
+      + ' imagem ou o pedido for sobre outra coisa (jogos, bingo, rifa, sorteio, corrente, pedido para compartilhar, curtir ou'
+      + ' divulgar algo, propaganda de terceiros, piada, figurinha, assunto pessoal sem relação com a empresa), NÃO responda:'
+      + ` escreva no campo da resposta somente ${INSTAGRAM_NO_REPLY}. Isso vale também para as mensagens seguintes sobre o mesmo`
+      + ' assunto. Cumprimentos e pedidos vagos ("oi", "boa noite", "preciso de ajuda") não são fora do assunto: responda e'
+      + ' pergunte, em poucas palavras, como pode ajudar.',
   ].join('\n');
 }
