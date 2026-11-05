@@ -22,7 +22,7 @@ import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { VoiceRecorder } from '@/components/inbox/voice-recorder';
 import { toast } from 'sonner';
 import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
-import { instagramShareKind, instagramShareLabel, instagramShareTitle } from '@/lib/instagram-ai/share-rules';
+import { instagramOtherLabel, instagramShareKind, instagramShareLabel, instagramShareTitle } from '@/lib/instagram-ai/share-rules';
 
 interface InboxIdentity {
   id: string;
@@ -209,6 +209,11 @@ function messageTypeLabel(message: { type: string; metadata: unknown }) {
   if (metadata.providerType === 'revoke') return 'A pessoa apagou uma mensagem.';
   const shareKind = instagramShareKind(metadata.providerType);
   if (shareKind) return instagramShareLabel(shareKind, instagramShareTitle(metadata.sharedTitle));
+  // Only Instagram messages carry the professional account id.
+  if (typeof metadata.instagramProfessionalAccountId === 'string') {
+    const other = instagramOtherLabel({ type: message.type, text: null, metadata });
+    if (other) return other;
+  }
   if (metadata.providerType === 'unsupported') {
     return 'Mensagem que o WhatsApp não entrega para sistemas (por exemplo: visualização única, enquete, localização ou contato). Peça para a pessoa enviar de outro jeito.';
   }

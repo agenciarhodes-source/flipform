@@ -71,3 +71,34 @@ test('Reels, publicação e menção em story compartilhados no Direct são reco
   assert.match(note, /Não finja que viu/);
   assert.match(instagramShareNote('story_mention'), /story/);
 });
+
+test('marcação em story ou mensagem vazia do Instagram recebe só o agradecimento', async () => {
+  const { INSTAGRAM_TAG_THANKS, instagramIsThankOnly, instagramOtherLabel } = await import('../lib/instagram-ai/share-rules');
+  const empty = { type: 'unknown', text: null, metadata: { providerType: 'unknown', attachmentTypes: [], instagramProfessionalAccountId: '1' } };
+  const mention = { type: 'unknown', text: null, metadata: { providerType: 'story_mention', attachmentTypes: ['story_mention'] } };
+  assert.equal(instagramIsThankOnly(empty), true);
+  assert.equal(instagramIsThankOnly(mention), true);
+  for (const other of [
+    { type: 'text', text: 'oi', metadata: { providerType: 'text' } },
+    { type: 'image', text: null, metadata: { providerType: 'image', attachmentTypes: ['image'] } },
+    { type: 'unknown', text: null, metadata: { providerType: 'ig_reel', attachmentTypes: ['ig_reel'] } },
+    { type: 'unknown', text: null, metadata: { providerType: 'ephemeral', attachmentTypes: ['ephemeral'] } },
+  ]) assert.equal(instagramIsThankOnly(other), false, JSON.stringify(other.metadata));
+  assert.doesNotMatch(INSTAGRAM_TAG_THANKS, /\?/);
+  assert.match(instagramOtherLabel(empty) || '', /marcação/i);
+  assert.match(instagramOtherLabel({ type: 'unknown', text: null, metadata: { providerType: 'ephemeral' } }) || '', /visualização única/);
+  assert.match(instagramOtherLabel({ type: 'unknown', text: null, metadata: { providerType: 'template' } }) || '', /loja/);
+});
+
+test('assunto fora da empresa: a IA devolve [SEM_RESPOSTA] e nada é enviado', async () => {
+  const { instagramWantsNoReply } = await import('../lib/instagram-ai/share-rules');
+  const { instagramInstructions } = await import('../lib/instagram-ai/rules');
+  assert.equal(instagramWantsNoReply('[SEM_RESPOSTA]'), true);
+  assert.equal(instagramWantsNoReply(' [sem_resposta] '), true);
+  assert.equal(instagramWantsNoReply('Olá! Como podemos ajudar?'), false);
+  const text = instagramInstructions({ companyName: 'Junqueira Advogados', introduction: 'assistente', firstReply: false, firstName: null });
+  assert.match(text, /SÓ ASSUNTOS DA EMPRESA/);
+  assert.match(text, /bingo/);
+  assert.match(text, /\[SEM_RESPOSTA\]/);
+  assert.match(text, /Cumprimentos e pedidos vagos/);
+});
