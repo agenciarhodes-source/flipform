@@ -116,6 +116,8 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
                         <td className="px-4 py-3">
                           {u.accessStatus === 'authorized' ? (
                             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Liberado</Badge>
+                          ) : u.accessStatus === 'group' ? (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200" title="Entra pelo grupo empresarial">Liberado pelo grupo</Badge>
                           ) : u.accessStatus === 'blocked' ? (
                             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Bloqueado</Badge>
                           ) : (
