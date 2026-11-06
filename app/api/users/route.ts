@@ -5,6 +5,7 @@ import { withPermission } from '@/lib/rbac-server';
 import { canManageRole } from '@/lib/rbac';
 import { logAudit } from '@/lib/audit';
 import { userCreateSchema } from '@/lib/schemas-users';
+import { GROUP_MEMBERSHIP_GRANTED } from '@/lib/business-group-memberships';
 
 const BLOCKED_TENANT_STATUSES = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 const OTHER_TENANT_ERROR = 'Este e-mail já possui acesso em outra empresa. Utilize o fluxo de vínculo ou redefinição de senha.';
@@ -29,6 +30,12 @@ export const GET = withPermission('USERS_VIEW', async (_req, session) => {
     select: { email: true, active: true, status: true },
   });
   const allowedByEmail = new Map(allowedUsers.map((allowed) => [allowed.email.trim().toLowerCase(), allowed]));
+  // Gestores of a business group enter through the group, not through this company's list of allowed e-mails.
+  const groupGrants = await prisma.auditLog.findMany({
+    where: { tenantId: session.tenantId, action: GROUP_MEMBERSHIP_GRANTED, entityId: { in: tenantUsers.map((tu) => tu.id) } },
+    select: { entityId: true },
+  });
+  const fromGroup = new Set(groupGrants.map((grant) => grant.entityId));
 
   return NextResponse.json({
     users: tenantUsers.map((tu: {id: string; userId: string; role: string; status: string; createdAt: Date; user: {id: string; name: string; email: string; avatarUrl?: string | null; createdAt: Date}}) => {
@@ -42,7 +49,7 @@ export const GET = withPermission('USERS_VIEW', async (_req, session) => {
         role: tu.role,
         status: tu.status,
         accessAuthorized: !!allowed && allowed.active && allowed.status === 'active',
-        accessStatus: accessStatus(allowed),
+        accessStatus: !allowed && fromGroup.has(tu.id) && tu.status === 'active' ? 'group' : accessStatus(allowed),
         createdAt: tu.createdAt,
       };
     }),
