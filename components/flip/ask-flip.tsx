@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { ArrowUp, Loader2, Search, Sparkles } from 'lucide-react';
+import { LEAD_ASSISTANT_EXAMPLES } from '@/lib/lead-assistant/rules';
+import { FLIP_DAILY_REQUEST_LIMIT, FLIP_LIMIT_REACHED_MESSAGE } from '@/lib/flip/daily-limit';
+import { LeadCommandCard, type LeadCommandPreview } from './lead-command-card';
 
 const EXAMPLES = [
   'Quantos leads tivemos este mês?',
@@ -12,22 +15,26 @@ const EXAMPLES = [
   'O que está pendente agora?',
 ];
 
-type Answer = { question: string; answer: string; filters: Record<string, string> | null };
+type Answer = { question: string; answer: string; filters: Record<string, string> | null; command?: LeadCommandPreview };
 
 /**
  * The Flip search: a question in Portuguese about the company's numbers, answered from the
- * system's own data. Shown at the top of the Flip page, like a search bar.
+ * system's own data. Shown at the top of the Flip page, like a search bar. Managers can also give
+ * commands about leads ("distribua os leads..."): the answer is a preview to confirm.
  */
-export function AskFlip() {
+export function AskFlip({ canCommandLeads = false, requestsLeft = FLIP_DAILY_REQUEST_LIMIT }: { canCommandLeads?: boolean; requestsLeft?: number }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [left, setLeft] = useState(requestsLeft);
+  const exhausted = left <= 0;
 
   async function ask(text: string) {
     const clean = text.trim();
     if (!clean || busy) return;
+    if (exhausted) { setError(FLIP_LIMIT_REACHED_MESSAGE); return; }
     setBusy(true);
     setPending(clean);
     setError(null);
@@ -36,8 +43,11 @@ export function AskFlip() {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: clean }),
       });
       const data = await response.json().catch(() => ({}));
+      if (typeof data.remaining === 'number') setLeft(data.remaining);
       if (!response.ok) throw new Error(data.error || 'Não foi possível responder agora.');
-      setAnswers((current) => [{ question: clean, answer: data.answer, filters: data.filters || null }, ...current].slice(0, 5));
+      setAnswers((current) => [{
+        question: clean, answer: data.answer || '', filters: data.filters || null, command: data.command || undefined,
+      }, ...current].slice(0, 5));
       setQuestion('');
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível responder agora.');
@@ -56,8 +66,13 @@ export function AskFlip() {
           <p className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-medium tracking-wide">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Flip
           </p>
-          <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">O que você quer saber da sua operação?</h1>
-          <p className="mt-1 text-sm text-white/80">Leads, fechamentos, origem, equipe, vendas e pendências, com os números do próprio sistema.</p>
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {canCommandLeads ? 'O que você quer saber ou fazer na sua operação?' : 'O que você quer saber da sua operação?'}
+          </h1>
+          <p className="mt-1 text-sm text-white/80">
+            Leads, fechamentos, origem, equipe, vendas e pendências, com os números do próprio sistema.
+            {canCommandLeads ? ' E também distribuir leads entre os atendentes: você vê a prévia e confirma.' : ''}
+          </p>
 
           <form className="mt-6" onSubmit={(event) => { event.preventDefault(); void ask(question); }}>
             <label htmlFor="flip-question" className="sr-only">Pergunte ao Flip</label>
@@ -65,18 +80,24 @@ export function AskFlip() {
               <Search className="h-5 w-5 shrink-0 text-slate-400" aria-hidden="true" />
               <input id="flip-question" className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none placeholder:text-slate-400"
                 value={question} maxLength={300} autoComplete="off"
-                placeholder="Pergunte ao Flip: quantos leads tivemos este mês?"
+                placeholder={canCommandLeads ? 'Pergunte ou peça ao Flip: distribua os leads sem responsável...' : 'Pergunte ao Flip: quantos leads tivemos este mês?'}
                 onChange={(event) => setQuestion(event.target.value)} />
-              <button type="submit" disabled={busy || !question.trim()} aria-label="Perguntar"
+              <button type="submit" disabled={busy || exhausted || !question.trim()} aria-label="Perguntar"
                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:opacity-40">
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-5 w-5" aria-hidden="true" />}
               </button>
             </div>
           </form>
 
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {EXAMPLES.map((example) => (
-              <button key={example} type="button" disabled={busy} onClick={() => void ask(example)}
+          <p className="mt-3 text-xs text-white/80" aria-live="polite">
+            {exhausted
+              ? FLIP_LIMIT_REACHED_MESSAGE
+              : `Você pode fazer ${FLIP_DAILY_REQUEST_LIMIT} solicitações por dia. ${left === 1 ? 'Resta 1' : `Restam ${left}`} hoje.`}
+          </p>
+
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            {[...(canCommandLeads ? LEAD_ASSISTANT_EXAMPLES : []), ...EXAMPLES].map((example) => (
+              <button key={example} type="button" disabled={busy} onClick={() => setQuestion(example)}
                 className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-white/25 transition hover:bg-white/25 disabled:opacity-50">
                 {example}
               </button>
@@ -92,7 +113,7 @@ export function AskFlip() {
           {pending && (
             <div className="flex items-center gap-3 rounded-2xl border bg-white p-4 shadow-sm">
               <Loader2 className="h-4 w-4 animate-spin text-indigo-600" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">Consultando os números para “{pending}”…</p>
+              <p className="text-sm text-muted-foreground">Trabalhando em “{pending}”…</p>
             </div>
           )}
           {answers.map((item, index) => (
@@ -100,7 +121,9 @@ export function AskFlip() {
               <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-indigo-600">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {item.question}
               </p>
-              <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">{item.answer}</p>
+              {item.command ? <LeadCommandCard command={item.question} preview={item.command} /> : (
+                <p className="mt-2 whitespace-pre-line text-[15px] leading-relaxed text-slate-800">{item.answer}</p>
+              )}
               {item.filters && (
                 <p className="mt-3 flex flex-wrap gap-1.5">
                   {Object.entries(item.filters).map(([key, value]) => (
