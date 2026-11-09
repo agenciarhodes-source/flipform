@@ -13,9 +13,9 @@ import { flipRequestsLeftToday } from '@/lib/flip/daily-usage';
 const bodySchema = z.object({ question: z.string().trim().min(3).max(300) }).strict();
 
 /**
- * The Flip bar. A question about the numbers is answered ("Pergunte ao Flip"); for managers, a
+ * The Flip bar. A question about the numbers is answered ("Pergunte ao Flip"); for the owner, a
  * command about leads ("distribua os leads...") becomes a preview of the lead assistant. Nothing
- * changes here: a distribution is applied only after the manager confirms it.
+ * changes here: a change is applied only after the owner confirms it.
  * Each person has 3 requests a day (questions and commands together); a failed request does not count.
  * The question is kept in the audit log; the answer is not stored.
  */
@@ -28,7 +28,7 @@ export const POST = withPermission('LEADS_VIEW', async (req: NextRequest, sessio
   const left = await flipRequestsLeftToday(session);
   if (left <= 0) return NextResponse.json({ error: FLIP_LIMIT_REACHED_MESSAGE, remaining: 0 }, { status: 429 });
 
-  if (can(session.role, 'LEADS_EDIT_ALL') && looksLikeLeadCommand(question)) {
+  if (can(session.role, 'LEAD_ASSISTANT_COMMAND') && looksLikeLeadCommand(question)) {
     try {
       const preview = await previewLeadCommand(session, question);
       if (preview.kind !== 'unsupported') {

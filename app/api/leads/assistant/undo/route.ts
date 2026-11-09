@@ -6,7 +6,7 @@ import { LeadAssistantError, undoLeadBatch } from '@/lib/lead-assistant/service'
 const bodySchema = z.object({ batchId: z.string().trim().min(1).max(128) }).strict();
 
 /** Undoes one change of the assistant: each lead goes back to who had it, unless it was changed again. */
-export const POST = withPermission('LEADS_EDIT_ALL', async (req: NextRequest, session) => {
+export const POST = withPermission('LEAD_ASSISTANT_COMMAND', async (req: NextRequest, session) => {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Mudança inválida.' }, { status: 400 });
   try {

@@ -9,25 +9,25 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_only_managers_use_it():
+def test_only_the_owner_uses_it():
     for path in ["app/api/leads/assistant/apply/route.ts", "app/api/leads/assistant/undo/route.ts"]:
-        assert "withPermission('LEADS_EDIT_ALL'" in read(path)
+        assert "withPermission('LEAD_ASSISTANT_COMMAND'" in read(path)
     # In the Flip bar, only managers' commands go to the assistant; everything else is "Pergunte ao Flip".
     route = read("app/api/flip/ask/route.ts")
-    assert "can(session.role, 'LEADS_EDIT_ALL') && looksLikeLeadCommand(question)" in route
+    assert "can(session.role, 'LEAD_ASSISTANT_COMMAND') && looksLikeLeadCommand(question)" in route
     assert "previewLeadCommand(session, question)" in route
     assert "applyLead" not in route
 
 
 def test_preview_never_writes():
-    preview = SERVICE.split("export async function previewLeadCommand", 1)[1].split("export async function applyLeadPlan", 1)[0]
+    preview = SERVICE.split("export async function previewLeadCommand", 1)[1].split("const STALE_PREVIEW", 1)[0]
     for write in ["update(", "updateMany(", "create(", "createMany(", "delete"]:
         assert f"lead.{write}" not in preview
         assert f"auditLog.{write}" not in preview
 
 
 def test_apply_recomputes_and_only_touches_open_lead_owner():
-    apply = SERVICE.split("export async function applyLeadPlan", 1)[1].split("function batchChanges", 1)[0]
+    apply = SERVICE.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
     assert "distribution.changes.length !== expectedMoves" in apply
     assert "data: { assignedTo: to }" in apply
     assert "status: 'open'" in apply
@@ -53,7 +53,7 @@ def test_the_ai_sees_no_customer_data():
 
 
 def test_commands_live_in_the_flip_bar_with_confirm_and_undo():
-    assert "canCommandLeads={can(session.role, 'LEADS_EDIT_ALL')}" in read("app/(app)/flip/page.tsx")
+    assert "canCommandLeads={can(session.role, 'LEAD_ASSISTANT_COMMAND')}" in read("app/(app)/flip/page.tsx")
     bar = read("components/flip/ask-flip.tsx")
     assert "<LeadCommandCard command={item.question} preview={item.command} />" in bar
     card = read("components/flip/lead-command-card.tsx")
@@ -74,3 +74,25 @@ def test_flip_bar_has_three_requests_a_day_per_person():
     # Examples only fill the bar; they do not spend a request.
     assert "onClick={() => setQuestion(example)}" in read("components/flip/ask-flip.tsx")
     assert "tests/flip-daily-limit.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_bulk_stage_moves_send_nothing_to_the_ads_and_never_mark_won():
+    for call in ["dispatchKanbanStageTracking", "enqueueGoogleConversionEvents", "scheduleGoogleConversionDelivery", "lib/tracking"]:
+        assert call not in SERVICE
+    assert "é a etapa final (lead ganho)" in SERVICE
+    assert "leadStageHistory.createMany" in SERVICE
+    card = read("components/flip/lead-command-card.tsx")
+    assert "não envia eventos de conversão para a Meta nem para o Google Ads" in card
+
+
+def test_stage_and_tag_changes_can_be_undone():
+    undo = SERVICE.split("export async function undoLeadBatch", 1)[1]
+    assert "kind === 'stage'" in undo and "lead.stageId === change.ts" in undo
+    assert "kind === 'tag'" in undo and "sameTags(lead.tags, change.n)" in undo
+    # Tags are written only for leads of this company.
+    assert "WHERE l.id = v.id AND l.tenant_id = ${tenantId}" in SERVICE
+
+
+def test_lead_commands_are_owner_only():
+    rbac = read("lib/rbac.ts")
+    assert "LEAD_ASSISTANT_COMMAND: ['owner']," in rbac

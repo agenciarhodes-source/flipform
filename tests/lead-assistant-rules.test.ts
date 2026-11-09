@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  describeScope, findByName, leadAssistantPlanSchema, looksLikeLeadCommand, planDistribution, resolvedLeadAssistantPlanSchema,
+  describeScope, findByName, leadAssistantPlanSchema, looksLikeLeadCommand, planDistribution, planStageMoves, planTagChanges,
+  resolvedLeadAssistantPlanSchema, statusForStage,
 } from '../lib/lead-assistant/rules';
 
 const leads = (owners: Array<string | null>) => owners.map((assignedTo, index) => ({ id: `l${index + 1}`, assignedTo }));
@@ -54,11 +55,13 @@ test('nomes: exato, sem acento, primeiro nome único; ambíguo não escolhe ning
 test('o plano da IA e o plano confirmado têm formato fechado', () => {
   assert.equal(leadAssistantPlanSchema.safeParse({ action: 'delete' }).success, false);
   const ok = resolvedLeadAssistantPlanSchema.safeParse({
-    scope: 'unassigned', mode: 'equal_split', fromUserIds: [], toUserIds: ['u1'], stageIds: [], stageName: null, source: null, tag: null, limit: null,
+    action: 'distribute', scope: 'unassigned', mode: 'equal_split', fromUserIds: [], toUserIds: ['u1'], stageIds: [], stageName: null, source: null, tag: null,
+    city: null, staleDays: null, limit: null, toStageName: null, tagOperation: null, tagName: null,
   });
   assert.equal(ok.success, true);
   const noTarget = resolvedLeadAssistantPlanSchema.safeParse({
-    scope: 'unassigned', mode: 'equal_split', fromUserIds: [], toUserIds: [], stageIds: [], stageName: null, source: null, tag: null, limit: null,
+    action: 'distribute', scope: 'unassigned', mode: 'equal_split', fromUserIds: [], toUserIds: [], stageIds: [], stageName: null, source: null, tag: null,
+    city: null, staleDays: null, limit: null, toStageName: null, tagOperation: null, tagName: null,
   });
   assert.equal(noTarget.success, false);
 });
@@ -78,6 +81,9 @@ test('a barra do Flip reconhece comandos sobre leads e deixa as perguntas para o
     'equilibre os leads entre os atendentes',
     'desfaça a última distribuição',
     'Quantos leads cada atendente tem?',
+    'Mova os leads parados há 30 dias em Não retorna para Perdido',
+    'Coloque a etiqueta rural nos leads de Picos',
+    'tire a etiqueta urgente dos clientes da Ana',
   ];
   for (const text of commands) assert.equal(looksLikeLeadCommand(text), true, text);
   const questions = [
@@ -88,4 +94,38 @@ test('a barra do Flip reconhece comandos sobre leads e deixa as perguntas para o
     'O que aconteceu na semana passada?',
   ];
   for (const text of questions) assert.equal(looksLikeLeadCommand(text), false, text);
+});
+
+test('mudar de etapa: cada lead vai para a etapa com esse nome no próprio funil; Perdido fecha como perdido', () => {
+  const target = new Map([['p1', { id: 's-lost', name: 'Perdido' }]]);
+  const result = planStageMoves([
+    { id: 'a', pipelineId: 'p1', stageId: 's1', status: 'open' },
+    { id: 'b', pipelineId: 'p1', stageId: 's-lost', status: 'open' },
+    { id: 'c', pipelineId: 'p2', stageId: 's9', status: 'open' },
+  ], target);
+  assert.deepEqual(result.changes, [{ leadId: 'a', fromStageId: 's1', toStageId: 's-lost', fromStatus: 'open', toStatus: 'lost' }]);
+  assert.equal(result.already, 1);
+  assert.equal(result.noStage, 1);
+  assert.equal(statusForStage('Em andamento'), 'open');
+  assert.equal(statusForStage('perdido'), 'lost');
+});
+
+test('etiquetas: coloca ou tira uma só vez, sem duplicar por maiúscula', () => {
+  const leads = [{ id: 'a', tags: ['Rural'] }, { id: 'b', tags: [] }, { id: 'c', tags: ['outra'] }];
+  assert.deepEqual(planTagChanges(leads, 'add', 'rural'), [
+    { leadId: 'b', tags: ['rural'] },
+    { leadId: 'c', tags: ['outra', 'rural'] },
+  ]);
+  assert.deepEqual(planTagChanges(leads, 'remove', 'RURAL'), [{ leadId: 'a', tags: [] }]);
+});
+
+test('o plano confirmado exige o que cada ação precisa', () => {
+  const plan = {
+    scope: 'all_open', mode: 'equal_split', fromUserIds: [], toUserIds: [], stageIds: [], stageName: null, source: null, tag: null,
+    city: null, staleDays: null, limit: null, toStageName: null, tagOperation: null, tagName: null,
+  };
+  assert.equal(resolvedLeadAssistantPlanSchema.safeParse({ ...plan, action: 'move_stage' }).success, false);
+  assert.equal(resolvedLeadAssistantPlanSchema.safeParse({ ...plan, action: 'move_stage', toStageName: 'Perdido' }).success, true);
+  assert.equal(resolvedLeadAssistantPlanSchema.safeParse({ ...plan, action: 'tag', tagName: 'rural' }).success, false);
+  assert.equal(resolvedLeadAssistantPlanSchema.safeParse({ ...plan, action: 'tag', tagName: 'rural', tagOperation: 'add' }).success, true);
 });

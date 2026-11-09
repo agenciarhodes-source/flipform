@@ -3,12 +3,17 @@ import { z } from 'zod';
 /**
  * "Assistente de leads": in the Flip search bar a manager writes a command ("distribua os leads
  * sem responsável entre os novos atendentes") and the AI only turns it into one of these plans.
- * The system computes a preview and nothing changes before the manager confirms. Only the
- * responsible person of open leads in the Kanban changes; conversations keep their attendant.
+ * The system computes a preview and nothing changes before the manager confirms. It can split
+ * leads among attendants, move them to another stage, and add or remove a tag. Bulk stage moves
+ * never send conversion events to Meta or Google and never mark leads as won.
  * Pure rules, easy to test.
  */
 
-export const LEAD_ASSISTANT_ACTIONS = ['distribute', 'report', 'undo_last', 'unsupported'] as const;
+export const LEAD_ASSISTANT_ACTIONS = ['distribute', 'move_stage', 'tag', 'report', 'undo_last', 'unsupported'] as const;
+/** The actions that change leads (each one is confirmed and can be undone). */
+export const LEAD_ASSISTANT_CHANGE_ACTIONS = ['distribute', 'move_stage', 'tag'] as const;
+export type LeadAssistantChangeAction = (typeof LEAD_ASSISTANT_CHANGE_ACTIONS)[number];
+export const LEAD_ASSISTANT_TAG_OPERATIONS = ['add', 'remove'] as const;
 /** Which open leads a command is about. */
 export const LEAD_ASSISTANT_SCOPES = ['unassigned', 'all_open', 'from_attendants'] as const;
 /**
@@ -26,10 +31,15 @@ export const leadAssistantPlanSchema = z.object({
   mode: z.enum(LEAD_ASSISTANT_MODES),
   fromAttendants: z.array(z.string().max(120)).max(30),
   toAttendants: z.array(z.string().max(120)).max(30),
-  stage: z.string().max(120).nullable(),
+  stages: z.array(z.string().max(120)).max(20),
   source: z.string().max(120).nullable(),
   tag: z.string().max(120).nullable(),
+  city: z.string().max(120).nullable(),
+  staleDays: z.number().int().nullable(),
   limit: z.number().int().nullable(),
+  toStage: z.string().max(120).nullable(),
+  tagOperation: z.enum(LEAD_ASSISTANT_TAG_OPERATIONS).nullable(),
+  tagName: z.string().max(60).nullable(),
 });
 export type LeadAssistantPlan = z.infer<typeof leadAssistantPlanSchema>;
 
@@ -40,33 +50,49 @@ export const LEAD_ASSISTANT_PLAN_FORMAT = {
   schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['action', 'scope', 'mode', 'fromAttendants', 'toAttendants', 'stage', 'source', 'tag', 'limit'],
+    required: ['action', 'scope', 'mode', 'fromAttendants', 'toAttendants', 'stages', 'source', 'tag', 'city', 'staleDays', 'limit',
+      'toStage', 'tagOperation', 'tagName'],
     properties: {
       action: { type: 'string', enum: [...LEAD_ASSISTANT_ACTIONS] },
       scope: { type: 'string', enum: [...LEAD_ASSISTANT_SCOPES] },
       mode: { type: 'string', enum: [...LEAD_ASSISTANT_MODES] },
       fromAttendants: { type: 'array', items: { type: 'string' }, description: 'Names, only with scope from_attendants' },
       toAttendants: { type: 'array', items: { type: 'string' }, description: 'Names; empty means every active attendant' },
-      stage: { type: ['string', 'null'] },
+      stages: { type: 'array', items: { type: 'string' }, description: 'Filter: the stages the leads are in now' },
       source: { type: ['string', 'null'] },
-      tag: { type: ['string', 'null'] },
+      tag: { type: ['string', 'null'], description: 'Filter: leads that already have this tag' },
+      city: { type: ['string', 'null'] },
+      staleDays: { type: ['integer', 'null'], description: 'Filter: leads stopped in their stage for at least this many days' },
       limit: { type: ['integer', 'null'], description: 'Only when the command gives a number of leads' },
+      toStage: { type: ['string', 'null'], description: 'move_stage: the stage to move the leads to' },
+      tagOperation: { type: ['string', 'null'], enum: [...LEAD_ASSISTANT_TAG_OPERATIONS, null] },
+      tagName: { type: ['string', 'null'], description: 'tag: the tag to add or remove' },
     },
   },
 };
 
 /** A plan with names already turned into ids; this is what the confirmation sends back. */
 export const resolvedLeadAssistantPlanSchema = z.object({
+  action: z.enum(LEAD_ASSISTANT_CHANGE_ACTIONS),
   scope: z.enum(LEAD_ASSISTANT_SCOPES),
   mode: z.enum(LEAD_ASSISTANT_MODES),
   fromUserIds: z.array(z.string().min(1).max(128)).max(30),
-  toUserIds: z.array(z.string().min(1).max(128)).min(1).max(30),
-  stageIds: z.array(z.string().min(1).max(128)).max(50),
-  stageName: z.string().max(120).nullable(),
+  toUserIds: z.array(z.string().min(1).max(128)).max(30),
+  stageIds: z.array(z.string().min(1).max(128)).max(100),
+  stageName: z.string().max(400).nullable(),
   source: z.string().max(120).nullable(),
   tag: z.string().max(120).nullable(),
+  city: z.string().max(120).nullable(),
+  staleDays: z.number().int().min(1).max(3650).nullable(),
   limit: z.number().int().min(1).max(LEAD_ASSISTANT_MAX_LEADS).nullable(),
-}).strict();
+  toStageName: z.string().max(120).nullable(),
+  tagOperation: z.enum(LEAD_ASSISTANT_TAG_OPERATIONS).nullable(),
+  tagName: z.string().min(1).max(60).nullable(),
+}).strict().superRefine((plan, ctx) => {
+  if (plan.action === 'distribute' && !plan.toUserIds.length) ctx.addIssue({ code: 'custom', message: 'toUserIds' });
+  if (plan.action === 'move_stage' && !plan.toStageName) ctx.addIssue({ code: 'custom', message: 'toStageName' });
+  if (plan.action === 'tag' && (!plan.tagOperation || !plan.tagName)) ctx.addIssue({ code: 'custom', message: 'tag' });
+});
 export type ResolvedLeadAssistantPlan = z.infer<typeof resolvedLeadAssistantPlanSchema>;
 
 export function normalizeName(value: string) {
@@ -146,20 +172,66 @@ export function planDistribution(input: {
   };
 }
 
+export type StageLead = { id: string; pipelineId: string; stageId: string; status: string };
+export type StageChange = { leadId: string; fromStageId: string; toStageId: string; fromStatus: string; toStatus: string };
+
+/** The status a lead gets in a stage, like the Kanban: "Perdido" closes it as lost; other stages keep it open. */
+export function statusForStage(stageName: string) {
+  return normalizeName(stageName) === 'perdido' ? 'lost' : 'open';
+}
+
+/**
+ * Moves leads to the stage with the given name in their own pipeline. Leads whose pipeline has no
+ * such stage, or that are already there, stay as they are.
+ */
+export function planStageMoves(leads: StageLead[], targetByPipeline: Map<string, { id: string; name: string }>) {
+  const changes: StageChange[] = [];
+  let already = 0;
+  let noStage = 0;
+  for (const lead of leads) {
+    const target = targetByPipeline.get(lead.pipelineId);
+    if (!target) { noStage += 1; continue; }
+    if (target.id === lead.stageId) { already += 1; continue; }
+    changes.push({ leadId: lead.id, fromStageId: lead.stageId, toStageId: target.id, fromStatus: lead.status, toStatus: statusForStage(target.name) });
+  }
+  return { changes, already, noStage };
+}
+
+export type TagLead = { id: string; tags: string[] };
+export type TagChange = { leadId: string; tags: string[] };
+
+/** A tag as stored: trimmed, single spaces, at most 60 characters. */
+export function cleanTag(value: string) {
+  return value.replace(/\s+/g, ' ').trim().slice(0, 60);
+}
+
+/** Adds or removes one tag (ignoring upper and lower case); leads that would not change are left out. */
+export function planTagChanges(leads: TagLead[], operation: (typeof LEAD_ASSISTANT_TAG_OPERATIONS)[number], tag: string) {
+  const wanted = normalizeName(tag);
+  const changes: TagChange[] = [];
+  for (const lead of leads) {
+    const has = lead.tags.some((item) => normalizeName(item) === wanted);
+    if (operation === 'add' && !has) changes.push({ leadId: lead.id, tags: [...lead.tags, tag] });
+    if (operation === 'remove' && has) changes.push({ leadId: lead.id, tags: lead.tags.filter((item) => normalizeName(item) !== wanted) });
+  }
+  return changes;
+}
+
 /** Command examples the Flip bar shows to managers. */
 export const LEAD_ASSISTANT_EXAMPLES = [
   'Distribua os leads sem responsável entre os atendentes',
-  'Equilibre os leads em aberto entre todos os atendentes',
+  'Mova os leads parados há 30 dias em Não retorna para Perdido',
+  'Coloque a etiqueta rural nos leads de Picos',
   'Quantos leads cada atendente tem?',
 ];
 
-const COMMAND_VERBS = /\b(distribu|redistribu|divid|repart|pass[ae]r?\b|passe\b|transfer|atribu|equilibr|nivel|desfa[cz]|desfaz)/;
-const ABOUT_LEADS = /\b(leads?|carteiras?|atendentes?|distribuic\w*|clientes?)\b/;
+const COMMAND_VERBS = /\b(distribu|redistribu|divid|repart|pass[ae]r?\b|passe\b|transfer|atribu|equilibr|nivel|desfa[cz]|desfaz|mov[ae]r?\b|move\b|mude\b|mudar\b|coloqu|colocar|adicion|acrescent|inclu[ai]|tir[ae]r?\b|remov|retir|marqu|marcar|etiquet)/;
+const ABOUT_LEADS = /\b(leads?|carteiras?|atendentes?|distribuic\w*|clientes?|etiquetas?|tags?)\b/;
 const OWNERSHIP_REPORT = /\bquant[oa]s?\b.*\bleads?\b.*\b(cada|por)\s+(atendente|vendedor|pessoa)/;
 
 /**
- * Whether a text typed in the Flip bar is a command for the lead assistant (distribute, pass,
- * balance, undo, or how many leads each attendant holds) instead of a question about the numbers.
+ * Whether a text typed in the Flip bar is a command for the lead assistant (distribute, move,
+ * tag, undo, or how many leads each attendant holds) instead of a question about the numbers.
  */
 export function looksLikeLeadCommand(text: string) {
   const clean = normalizeName(text);
@@ -168,14 +240,19 @@ export function looksLikeLeadCommand(text: string) {
 }
 
 /** The short sentence that says, in plain words, which leads the plan is about. */
-export function describeScope(plan: Pick<ResolvedLeadAssistantPlan, 'scope' | 'stageName' | 'source' | 'tag' | 'limit'>, fromNames: string[]) {
+export function describeScope(
+  plan: Pick<ResolvedLeadAssistantPlan, 'scope' | 'stageName' | 'source' | 'tag' | 'limit'> & Partial<Pick<ResolvedLeadAssistantPlan, 'city' | 'staleDays'>>,
+  fromNames: string[],
+) {
   const who = plan.scope === 'unassigned' ? 'leads em aberto sem responsável'
     : plan.scope === 'from_attendants' ? `leads em aberto de ${joinNames(fromNames)}`
       : 'todos os leads em aberto';
   const filters = [
-    plan.stageName ? `na etapa "${plan.stageName}"` : null,
+    plan.stageName ? `${plan.stageName.includes('", "') ? 'nas etapas' : 'na etapa'} "${plan.stageName}"` : null,
     plan.source ? `com origem "${plan.source}"` : null,
     plan.tag ? `com a etiqueta "${plan.tag}"` : null,
+    plan.city ? `de ${plan.city}` : null,
+    plan.staleDays ? `parados na etapa há ${plan.staleDays} dias ou mais` : null,
   ].filter(Boolean).join(', ');
   const limit = plan.limit ? ` (no máximo ${plan.limit}, os mais antigos primeiro)` : '';
   return `${who}${filters ? ` ${filters}` : ''}${limit}`;
