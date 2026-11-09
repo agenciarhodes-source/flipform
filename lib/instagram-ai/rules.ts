@@ -1,4 +1,5 @@
 import { INSTAGRAM_NO_REPLY } from './share-rules';
+import { INSTAGRAM_HANDOFF_INSTRUCTION } from './handoff-rules';
 /**
  * Pure rules of the Flip AI on the Instagram Direct (no database, no network). Global for every
  * company: what is specific to a business (what to answer, which WhatsApp for each subject) is in
@@ -88,8 +89,7 @@ export function instagramInstructions(input: {
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, em poucas palavras.`
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se perguntarem se é um robô, diga com naturalidade que é uma assistente automática.',
-    'Se a pessoa pedir para falar com alguém da equipe, diga que vai avisar a equipe ou, se a base de conhecimento indicar um'
-      + ' canal para isso, envie o link.',
+    INSTAGRAM_HANDOFF_INSTRUCTION,
     input.firstName
       ? `NOME: o perfil da pessoa indica o nome "${input.firstName}". Pode usá-lo, com moderação (no máximo uma vez a cada 3 ou 4 mensagens). Não pergunte o nome.`
       : 'NOME: você não sabe o nome da pessoa e não precisa perguntar. Não use nenhum nome.',
