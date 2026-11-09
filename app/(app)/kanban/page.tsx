@@ -152,6 +152,9 @@ export default function KanbanPage() {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   });
   const [loading, setLoading] = useState(true);
+  // "Atendente" filter: all, "none" (without anyone) or one person. Only managers get the list.
+  const [assignee, setAssignee] = useState('all');
+  const [assignees, setAssignees] = useState<Array<{ id: string; name: string; active: boolean }> | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -185,6 +188,7 @@ export default function KanbanPage() {
     const params = new URLSearchParams({ pipelineId, period });
     params.set('basis', basis);
     if (search) params.set('q', search);
+    if (assignee !== 'all') params.set('assignedTo', assignee);
     if (period === 'custom') {
       params.set('startDate', startDate);
       params.set('endDate', endDate);
@@ -200,7 +204,16 @@ export default function KanbanPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [pipelineId, period, search, startDate, endDate, basis]);
+  }, [pipelineId, period, search, startDate, endDate, basis, assignee]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/leads/assignees', { cache: 'no-store' })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { if (!cancelled && Array.isArray(data?.assignees)) setAssignees(data.assignees); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   const openWhatsAppConversation = async (leadId: string) => {
     try {
@@ -326,6 +339,20 @@ export default function KanbanPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {assignees && assignees.length > 0 && (
+            <Select value={assignee} onValueChange={setAssignee}>
+              <SelectTrigger className="w-[200px]" aria-label="Filtrar por atendente">
+                <div className="flex items-center gap-2 min-w-0"><UserIcon className="w-4 h-4 shrink-0 text-muted-foreground" /><SelectValue /></div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os atendentes</SelectItem>
+                <SelectItem value="none">Sem responsável</SelectItem>
+                {assignees.map((person) => (
+                  <SelectItem key={person.id} value={person.id}>{person.name}{person.active ? '' : ' (inativo)'}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <div className="flex items-center gap-2">
             <Select value={basis} onValueChange={(value) => setBasis(value as 'moved' | 'entered' | 'open')}>
               <SelectTrigger className="w-[210px]" aria-label="Base do filtro do Kanban">
