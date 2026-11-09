@@ -41,21 +41,6 @@ async function stages(tenantId: string) {
   });
 }
 
-/** The attendants with how many open leads each holds, and the leads without anyone. */
-export async function leadAssistantContext(session: Session) {
-  const [people, counts, recent] = await Promise.all([
-    attendants(session.tenantId),
-    prisma.lead.groupBy({ by: ['assignedTo'], where: { tenantId: session.tenantId, status: 'open' }, _count: { _all: true } }),
-    recentBatches(session.tenantId),
-  ]);
-  const open = new Map(counts.map((row) => [row.assignedTo, row._count._all]));
-  return {
-    attendants: people.map((person) => ({ id: person.id, name: person.name, active: person.active, openLeads: open.get(person.id) || 0 })),
-    unassigned: open.get(null) || 0,
-    recent,
-  };
-}
-
 async function charge(session: Session, result: { model: string; inputTokens: number; outputTokens: number; responseId: string }) {
   try {
     const event = await prisma.flipAiUsageEvent.create({
@@ -90,7 +75,7 @@ async function interpret(session: Session, command: string, context: {
   const result = await streamOpenAiText({
     instructions: [
       'Você converte um comando de um gestor sobre a distribuição de leads (clientes em potencial) num plano. Você não executa nada.',
-      'action: distribute (dividir, distribuir, passar, transferir, redistribuir ou equilibrar leads entre atendentes); report (quantos leads cada atendente tem); unsupported (qualquer outra coisa, como apagar leads, mudar etapa, mandar mensagem).',
+      'action: distribute (dividir, distribuir, passar, transferir, redistribuir ou equilibrar leads entre atendentes); report (quantos leads cada atendente tem); undo_last (desfazer a última distribuição); unsupported (qualquer outra coisa, como apagar leads, mudar etapa, mandar mensagem ou uma pergunta sobre resultados).',
       'scope: unassigned (leads sem responsável); from_attendants (leads de atendentes citados como origem, em fromAttendants); all_open (todos os leads em aberto). Sem indicação, use unassigned para "distribuir" e all_open para "redistribuir", "equilibrar" ou "todos os leads".',
       'mode: equal_split (dividir os leads escolhidos em partes iguais: "de igual modo", "igualmente", "dividir"); balance_totals (deixar todos com a mesma quantidade no total: "equilibrar", "nivelar", "quem tem menos recebe mais").',
       'toAttendants: nomes de quem vai receber. Vazio quer dizer todos os atendentes ativos. "Novos atendentes" são os que entraram por último (veja a data em que cada um entrou; pegue os que entraram na data mais recente ou nos últimos dias, separados dos antigos). Nunca coloque atendente inativo em toAttendants.',
@@ -235,11 +220,12 @@ export async function previewLeadCommand(session: Session, command: string) {
     tags: tagRows.map((row) => row.tag).filter(Boolean),
   });
 
-  if (plan.action === 'unsupported') {
-    return {
-      kind: 'unsupported' as const,
-      message: 'Por enquanto eu distribuo leads entre atendentes e mostro quantos leads cada um tem. Para outros números, use o "Pergunte ao Flip".',
-    };
+  if (plan.action === 'unsupported') return { kind: 'unsupported' as const };
+
+  if (plan.action === 'undo_last') {
+    const last = (await recentBatches(session.tenantId)).find((batch) => !batch.undone);
+    if (!last) return { kind: 'message' as const, message: 'Não há nenhuma distribuição recente do assistente para desfazer.' };
+    return { kind: 'undo' as const, batch: last };
   }
 
   if (plan.action === 'report') {
@@ -331,7 +317,7 @@ function batchChanges(metadata: unknown): BatchChange[] {
     && ((change as BatchChange).f === null || typeof (change as BatchChange).f === 'string'));
 }
 
-/** The last changes made by the assistant, newest first, to show and undo. */
+/** The last changes made by the assistant (30 days), newest first. */
 export async function recentBatches(tenantId: string) {
   const batches = await prisma.auditLog.findMany({
     where: { tenantId, action: LEAD_ASSISTANT_BATCH_ACTION, createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } },

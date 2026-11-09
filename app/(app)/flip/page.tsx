@@ -10,5 +10,5 @@ export default async function FlipPage() {
   const session = await getSession();
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'LEADS_VIEW')) redirect('/dashboard');
-  return <FlipAlertsBoard initial={await computeFlipAlerts(session)} />;
+  return <FlipAlertsBoard initial={await computeFlipAlerts(session)} canCommandLeads={can(session.role, 'LEADS_EDIT_ALL')} />;
 }

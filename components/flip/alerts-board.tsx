@@ -23,7 +23,7 @@ const KIND_LABELS: Record<FlipAlertKind, { icon: string; label: string; hint: st
 };
 
 /** The Flip: what is falling behind, by kind, with a link to act on each item. */
-export function FlipAlertsBoard({ initial }: { initial: Board }) {
+export function FlipAlertsBoard({ initial, canCommandLeads = false }: { initial: Board; canCommandLeads?: boolean }) {
   const [board, setBoard] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [person, setPerson] = useState<string>('all');
@@ -63,7 +63,7 @@ export function FlipAlertsBoard({ initial }: { initial: Board }) {
 
   return (
     <section className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
-      <AskFlip />
+      <AskFlip canCommandLeads={canCommandLeads} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">

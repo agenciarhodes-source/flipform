@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  describeScope, findByName, leadAssistantPlanSchema, planDistribution, resolvedLeadAssistantPlanSchema,
+  describeScope, findByName, leadAssistantPlanSchema, looksLikeLeadCommand, planDistribution, resolvedLeadAssistantPlanSchema,
 } from '../lib/lead-assistant/rules';
 
 const leads = (owners: Array<string | null>) => owners.map((assignedTo, index) => ({ id: `l${index + 1}`, assignedTo }));
@@ -68,4 +68,24 @@ test('a prévia diz em palavras simples quais leads entram', () => {
     describeScope({ scope: 'from_attendants', stageName: 'Novo', source: null, tag: null, limit: 30 }, ['Ana', 'Bia']),
     'leads em aberto de Ana e Bia na etapa "Novo" (no máximo 30, os mais antigos primeiro)',
   );
+});
+
+test('a barra do Flip reconhece comandos sobre leads e deixa as perguntas para o Pergunte ao Flip', () => {
+  const commands = [
+    'distribua todos os leads de igual modo para os novos atendentes',
+    'Passe os leads da Maria para o João',
+    'redistribua a carteira da Ana',
+    'equilibre os leads entre os atendentes',
+    'desfaça a última distribuição',
+    'Quantos leads cada atendente tem?',
+  ];
+  for (const text of commands) assert.equal(looksLikeLeadCommand(text), true, text);
+  const questions = [
+    'Quantos leads tivemos este mês?',
+    'Como está o time de atendimento?',
+    'De onde vieram os leads da semana passada?',
+    'Quantos leads fecharam nos últimos 30 dias?',
+    'O que aconteceu na semana passada?',
+  ];
+  for (const text of questions) assert.equal(looksLikeLeadCommand(text), false, text);
 });

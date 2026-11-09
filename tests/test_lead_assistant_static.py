@@ -10,8 +10,13 @@ def read(path):
 
 
 def test_only_managers_use_it():
-    for path in ["app/api/leads/assistant/route.ts", "app/api/leads/assistant/apply/route.ts", "app/api/leads/assistant/undo/route.ts"]:
+    for path in ["app/api/leads/assistant/apply/route.ts", "app/api/leads/assistant/undo/route.ts"]:
         assert "withPermission('LEADS_EDIT_ALL'" in read(path)
+    # In the Flip bar, only managers' commands go to the assistant; everything else is "Pergunte ao Flip".
+    route = read("app/api/flip/ask/route.ts")
+    assert "can(session.role, 'LEADS_EDIT_ALL') && looksLikeLeadCommand(question)" in route
+    assert "previewLeadCommand(session, question)" in route
+    assert "applyLead" not in route
 
 
 def test_preview_never_writes():
@@ -47,6 +52,12 @@ def test_the_ai_sees_no_customer_data():
     assert "messages: [{ role: 'user', content: command }]" in interpret
 
 
-def test_button_on_the_leads_page():
-    assert "<LeadAssistantDialog onDone={load} />" in read("app/(app)/leads/page.tsx")
+def test_commands_live_in_the_flip_bar_with_confirm_and_undo():
+    assert "canCommandLeads={can(session.role, 'LEADS_EDIT_ALL')}" in read("app/(app)/flip/page.tsx")
+    bar = read("components/flip/ask-flip.tsx")
+    assert "<LeadCommandCard command={item.question} preview={item.command} />" in bar
+    card = read("components/flip/lead-command-card.tsx")
+    assert "'/api/leads/assistant/apply'" in card and "Confirmar" in card
+    assert "'/api/leads/assistant/undo'" in card and "Desfazer" in card
+    assert "LeadAssistantDialog" not in read("app/(app)/leads/page.tsx")
     assert "tests/lead-assistant-rules.test.ts" in read(".github/workflows/ci.yml")

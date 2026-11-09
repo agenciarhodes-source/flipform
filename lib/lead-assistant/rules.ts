@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 /**
- * "Assistente de leads": a manager writes a command ("distribua os leads sem responsável entre os
- * novos atendentes") and the AI only turns it into one of these plans. The system then computes a
- * preview, and nothing changes before the manager confirms. Only the responsible person of open
- * leads in the Kanban changes; conversations keep their attendant. Pure rules, easy to test.
+ * "Assistente de leads": in the Flip search bar a manager writes a command ("distribua os leads
+ * sem responsável entre os novos atendentes") and the AI only turns it into one of these plans.
+ * The system computes a preview and nothing changes before the manager confirms. Only the
+ * responsible person of open leads in the Kanban changes; conversations keep their attendant.
+ * Pure rules, easy to test.
  */
 
-export const LEAD_ASSISTANT_ACTIONS = ['distribute', 'report', 'unsupported'] as const;
+export const LEAD_ASSISTANT_ACTIONS = ['distribute', 'report', 'undo_last', 'unsupported'] as const;
 /** Which open leads a command is about. */
 export const LEAD_ASSISTANT_SCOPES = ['unassigned', 'all_open', 'from_attendants'] as const;
 /**
@@ -145,14 +146,26 @@ export function planDistribution(input: {
   };
 }
 
-/** What the examples in the assistant show. */
+/** Command examples the Flip bar shows to managers. */
 export const LEAD_ASSISTANT_EXAMPLES = [
-  'Distribua os leads sem responsável igualmente entre os atendentes',
-  'Distribua todos os leads de igual modo para os novos atendentes',
-  'Passe os leads da Maria para o João e a Ana',
+  'Distribua os leads sem responsável entre os atendentes',
   'Equilibre os leads em aberto entre todos os atendentes',
   'Quantos leads cada atendente tem?',
 ];
+
+const COMMAND_VERBS = /\b(distribu|redistribu|divid|repart|pass[ae]r?\b|passe\b|transfer|atribu|equilibr|nivel|desfa[cz]|desfaz)/;
+const ABOUT_LEADS = /\b(leads?|carteiras?|atendentes?|distribuic\w*|clientes?)\b/;
+const OWNERSHIP_REPORT = /\bquant[oa]s?\b.*\bleads?\b.*\b(cada|por)\s+(atendente|vendedor|pessoa)/;
+
+/**
+ * Whether a text typed in the Flip bar is a command for the lead assistant (distribute, pass,
+ * balance, undo, or how many leads each attendant holds) instead of a question about the numbers.
+ */
+export function looksLikeLeadCommand(text: string) {
+  const clean = normalizeName(text);
+  if (OWNERSHIP_REPORT.test(clean)) return true;
+  return COMMAND_VERBS.test(clean) && ABOUT_LEADS.test(clean);
+}
 
 /** The short sentence that says, in plain words, which leads the plan is about. */
 export function describeScope(plan: Pick<ResolvedLeadAssistantPlan, 'scope' | 'stageName' | 'source' | 'tag' | 'limit'>, fromNames: string[]) {

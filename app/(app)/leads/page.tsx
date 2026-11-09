@@ -11,7 +11,6 @@ import { formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ManualLeadDialog } from '@/components/manual-lead-dialog';
 import { PortfolioTransferDialog } from '@/components/portfolio-transfer-dialog';
-import { LeadAssistantDialog } from '@/components/lead-assistant-dialog';
 import { formatLeadSource } from '@/lib/leads';
 import { formatLeadLocation } from '@/lib/brazil-locations';
 
@@ -50,7 +49,6 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-sm">{leads.length} leads encontrados</p>
         </div>
         <div className="flex items-center gap-2">
-          <LeadAssistantDialog onDone={load} />
           <PortfolioTransferDialog onDone={load} />
           <Button type="button" onClick={() => setManualOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
           <div className="relative w-72">
