@@ -82,6 +82,7 @@ import {
 } from './availability-policy';
 import { loadLatestConversationAvailability } from './availability';
 import { extractFixedRules, fixedRulesPrompt } from './fixed-rules';
+import { contactDataGiven, contactGivenNote, groupConsecutiveTurns } from './conversation-recall';
 
 const SESSION_TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const QUOTA_WINDOW_MS = 60_000;
@@ -1268,7 +1269,7 @@ export async function buildPublicChatContext(
     hits: currentQueryHits,
   }).catch(() => null);
 
-  const [state, history, identity, storedIdentity] = await Promise.all([
+  const [state, history, identity, storedIdentity, personTexts] = await Promise.all([
     prisma.flipAiConversationState.findFirst({
       where: { tenantId: turn.tenantId, agentId: turn.agentId, conversationId: turn.conversationId },
       select: { summary: true, turnCount: true },
@@ -1277,7 +1278,7 @@ export async function buildPublicChatContext(
     prisma.message.findMany({
       where: { tenantId: turn.tenantId, conversationId: turn.conversationId, type: { in: ['text', 'audio'] } },
       orderBy: [{ providerTimestamp: 'desc' }, { createdAt: 'desc' }],
-      take: 20,
+      take: 60,
       select: { id: true, direction: true, type: true, text: true, metadata: true, sentByUserId: true },
     }),
     prisma.conversation.findFirst({
@@ -1288,15 +1289,25 @@ export async function buildPublicChatContext(
       tenantId: turn.tenantId,
       conversationId: turn.conversationId,
     }),
+    // What the person wrote in the whole conversation, to know if a phone or CPF was already sent.
+    prisma.message.findMany({
+      where: { tenantId: turn.tenantId, conversationId: turn.conversationId, direction: 'inbound', type: 'text' },
+      orderBy: { createdAt: 'desc' },
+      take: 300,
+      select: { text: true },
+    }),
   ]);
-  const chronological = history.reverse().flatMap((message) => {
+  // Messages in a row from the same side count as one turn, so a burst of short messages does not
+  // push older facts (name, phone, CPF already sent) out of the history.
+  const chronological = groupConsecutiveTurns(history.reverse().flatMap((message) => {
     const content = historyContent(message);
     return content ? [{
       id: message.id,
       role: message.direction === 'outbound' ? 'assistant' as const : 'user' as const,
       content,
     }] : [];
-  }).slice(-14);
+  })).slice(-14);
+  const contactGiven = contactDataGiven(personTexts.map((message) => message.text || ''));
   const budgetedHistory = contextSteeringEnabled
     ? buildBudgetedHistory(
       chronological,
@@ -1349,7 +1360,7 @@ export async function buildPublicChatContext(
     && isValidBrazilianPhone(identity.lead.phone));
   const assistantMessages = chronological.flatMap((message) => message.role === 'assistant' ? [message.content] : []);
   // The same moment that shapes the guidance is returned, so the reply can be held to it.
-  const contactMoment = identityVerified
+  const contactMoment = identityVerified || contactGiven.phone
     ? null
     : resolveContactMoment({ inboundMessages, assistantMessages, decision });
 
@@ -1359,7 +1370,8 @@ export async function buildPublicChatContext(
           completedTurns: state?.turnCount || 0,
           inboundMessages,
         }, decision, turn.inputMode, memorySnapshot, knownIdentity, availabilitySnapshot,
-        assistantMessages, await loadFixedRules(turn.tenantId, turn.knowledgeIndexId)),
+        assistantMessages, await loadFixedRules(turn.tenantId, turn.knowledgeIndexId))
+      + (contactGivenNote(contactGiven) ? `\n\n${contactGivenNote(contactGiven)}` : ''),
     contactMoment,
     messages,
     evidenceMessageIds,
