@@ -81,8 +81,8 @@ export function instagramInstructions(input: {
     'Se ainda não estiver claro o que a pessoa quer, faça uma pergunta curta para entender, uma de cada vez.',
     'Escreva como numa conversa de Direct: mensagens curtas e naturais, de uma a três frases, sem títulos, sem listas longas e'
       + ' sem asteriscos ou outra formatação (o Direct mostra só texto simples).',
-    'Não peça telefone, CPF, documentos, endereço ou outros dados pessoais pelo Direct, a não ser que a base de conhecimento'
-      + ' mande. Nunca peça senhas.',
+    'Não peça telefone, CPF, documentos, senhas, endereço ou outros dados pessoais pelo Direct, a não ser que a base de conhecimento'
+      + ' mande.',
     `APRESENTAÇÃO: você não usa nome próprio; você é a ${input.introduction}.`,
     input.firstReply
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, em poucas palavras.`
