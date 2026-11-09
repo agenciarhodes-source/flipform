@@ -6,6 +6,22 @@ import { Button } from '@/components/ui/button';
 
 const MAX_SECONDS = 180;
 
+/**
+ * How the microphone is opened for a voice note. The browser's call filters (noise suppression and
+ * echo cancellation) are made for video calls and leave a recorded voice metallic, "robotic", on
+ * the customer's phone, so they are turned off. Mono, like a WhatsApp voice note. "ideal" values
+ * never fail: a browser or microphone that cannot follow one just records as before.
+ */
+export const VOICE_NOTE_AUDIO: MediaTrackConstraints = {
+  channelCount: { ideal: 1 },
+  noiseSuppression: { ideal: false },
+  echoCancellation: { ideal: false },
+  autoGainControl: { ideal: true },
+};
+
+/** Clear voice quality for Opus, and a fixed size: about 360 KB per minute. */
+export const VOICE_NOTE_BITS_PER_SECOND = 48_000;
+
 /** The best format this browser can record that WhatsApp (after the server step) accepts. */
 function pickMimeType() {
   if (typeof MediaRecorder === 'undefined') return null;
@@ -47,9 +63,9 @@ export function VoiceRecorder({ disabled, onSend }: { disabled?: boolean; onSend
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE_NOTE_AUDIO });
       streamRef.current = stream;
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = new MediaRecorder(stream, { mimeType, audioBitsPerSecond: VOICE_NOTE_BITS_PER_SECOND });
       recorderRef.current = recorder;
       chunksRef.current = [];
       cancelledRef.current = false;
