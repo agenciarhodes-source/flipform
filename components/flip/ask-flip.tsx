@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ArrowUp, Loader2, Search, Sparkles } from 'lucide-react';
 import { LEAD_ASSISTANT_EXAMPLES } from '@/lib/lead-assistant/rules';
+import { FLIP_DAILY_REQUEST_LIMIT, FLIP_LIMIT_REACHED_MESSAGE } from '@/lib/flip/daily-limit';
 import { LeadCommandCard, type LeadCommandPreview } from './lead-command-card';
 
 const EXAMPLES = [
@@ -21,16 +22,19 @@ type Answer = { question: string; answer: string; filters: Record<string, string
  * system's own data. Shown at the top of the Flip page, like a search bar. Managers can also give
  * commands about leads ("distribua os leads..."): the answer is a preview to confirm.
  */
-export function AskFlip({ canCommandLeads = false }: { canCommandLeads?: boolean }) {
+export function AskFlip({ canCommandLeads = false, requestsLeft = FLIP_DAILY_REQUEST_LIMIT }: { canCommandLeads?: boolean; requestsLeft?: number }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [left, setLeft] = useState(requestsLeft);
+  const exhausted = left <= 0;
 
   async function ask(text: string) {
     const clean = text.trim();
     if (!clean || busy) return;
+    if (exhausted) { setError(FLIP_LIMIT_REACHED_MESSAGE); return; }
     setBusy(true);
     setPending(clean);
     setError(null);
@@ -39,6 +43,7 @@ export function AskFlip({ canCommandLeads = false }: { canCommandLeads?: boolean
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: clean }),
       });
       const data = await response.json().catch(() => ({}));
+      if (typeof data.remaining === 'number') setLeft(data.remaining);
       if (!response.ok) throw new Error(data.error || 'Não foi possível responder agora.');
       setAnswers((current) => [{
         question: clean, answer: data.answer || '', filters: data.filters || null, command: data.command || undefined,
@@ -77,16 +82,22 @@ export function AskFlip({ canCommandLeads = false }: { canCommandLeads?: boolean
                 value={question} maxLength={300} autoComplete="off"
                 placeholder={canCommandLeads ? 'Pergunte ou peça ao Flip: distribua os leads sem responsável...' : 'Pergunte ao Flip: quantos leads tivemos este mês?'}
                 onChange={(event) => setQuestion(event.target.value)} />
-              <button type="submit" disabled={busy || !question.trim()} aria-label="Perguntar"
+              <button type="submit" disabled={busy || exhausted || !question.trim()} aria-label="Perguntar"
                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-700 disabled:opacity-40">
                 {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> : <ArrowUp className="h-5 w-5" aria-hidden="true" />}
               </button>
             </div>
           </form>
 
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <p className="mt-3 text-xs text-white/80" aria-live="polite">
+            {exhausted
+              ? FLIP_LIMIT_REACHED_MESSAGE
+              : `Você pode fazer ${FLIP_DAILY_REQUEST_LIMIT} solicitações por dia. ${left === 1 ? 'Resta 1' : `Restam ${left}`} hoje.`}
+          </p>
+
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
             {[...(canCommandLeads ? LEAD_ASSISTANT_EXAMPLES : []), ...EXAMPLES].map((example) => (
-              <button key={example} type="button" disabled={busy} onClick={() => void ask(example)}
+              <button key={example} type="button" disabled={busy} onClick={() => setQuestion(example)}
                 className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium text-white ring-1 ring-white/25 transition hover:bg-white/25 disabled:opacity-50">
                 {example}
               </button>
