@@ -11,8 +11,8 @@ def test_resolving_pauses_the_ai_for_good():
     actions = read("lib/inbox/actions.ts")
     assert "aiPausedAt: now, aiPausedBy: input.session.userId, aiPauseReason: 'resolved' }" in actions
     pause = read("lib/whatsapp-ai/pause.ts")
-    assert "'human_reply_phone', 'resolved'] as const;" in pause
-    assert "if (conversation.aiPauseReason === 'resolved') return true;" in pause
+    assert "'human_reply_phone', 'resolved', 'ai_handoff'] as const;" in pause
+    assert "if (conversation.aiPauseReason === 'resolved' || conversation.aiPauseReason === 'ai_handoff') return true;" in pause
 
 
 def test_the_ai_reply_reads_the_pause_reason():
@@ -29,7 +29,7 @@ def test_no_reactivation_for_resolved_or_paused_conversations():
 
 def test_the_inbox_shows_the_resolved_pause():
     inbox = read("app/(app)/inbox/inbox-client.tsx")
-    assert "if (conversation.aiPauseReason === 'resolved') return true;" in inbox
+    assert "if (conversation.aiPauseReason === 'resolved' || conversation.aiPauseReason === 'ai_handoff') return true;" in inbox
     assert "resolved: 'resolvida (atendimento humano)'," in inbox
 
 
