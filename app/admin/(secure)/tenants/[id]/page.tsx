@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, ArrowLeft, Power, RotateCcw, ShieldOff, Ban, Save, Coins } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/status-badge';
+import { PasswordResetDialog } from '@/components/password-reset-dialog';
 
 const number = new Intl.NumberFormat('pt-BR');
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -341,6 +342,9 @@ export default function TenantDetailPage() {
     }
   };
 
+  // Forgotten password: the Super Admin types a new one after confirming the identity.
+  const [passwordUser, setPasswordUser] = useState<any>(null);
+
   // Lost phone and recovery codes: turn the two-step verification off after confirming the identity.
   const resetUserMfa = async (tenantUser: any) => {
     const reason = window.prompt(`Desligar a verificação em duas etapas de ${tenantUser.user.email}?
@@ -366,6 +370,15 @@ Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-m
 
   return (
     <div className="p-8 space-y-5">
+      {passwordUser ? (
+        <PasswordResetDialog
+          name={passwordUser.user.name}
+          email={passwordUser.user.email}
+          endpoint={`/api/admin/tenants/${id}/users/${passwordUser.id}/password-reset`}
+          askReason
+          onClose={() => setPasswordUser(null)}
+        />
+      ) : null}
       <Link href="/admin/tenants" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"><ArrowLeft className="w-3.5 h-3.5" />Voltar</Link>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -458,6 +471,7 @@ Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-m
                         {tu.user.mfaEnabledAt ? (
                           <Button size="sm" variant="ghost" onClick={() => resetUserMfa(tu)}>Desligar 2 etapas</Button>
                         ) : null}
+                        <Button size="sm" variant="ghost" onClick={() => setPasswordUser(tu)}>Redefinir senha</Button>
                         <Button
                           size="sm"
                           variant="outline"

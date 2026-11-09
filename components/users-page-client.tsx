@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { UserPlus, MoreHorizontal, Copy, Trash2, Mail, Shield, ShieldCheck, Eye, User as UserIcon, UserCog } from 'lucide-react';
+import { UserPlus, MoreHorizontal, Copy, Trash2, Mail, Shield, ShieldCheck, Eye, User as UserIcon, UserCog, KeyRound } from 'lucide-react';
+import { PasswordResetDialog } from '@/components/password-reset-dialog';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { can, canManageRole, ROLE_DESCRIPTIONS_PT_BR, ROLE_LABELS_PT_BR, ROLE_SHORT_DESCRIPTIONS_PT_BR, type RoleName } from '@/lib/rbac';
 import type { SessionPayload } from '@/lib/auth';
@@ -33,6 +34,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
+  const [passwordUser, setPasswordUser] = useState<any>(null);
   const [origin, setOrigin] = useState('');
 
   useEffect(() => { setOrigin(window.location.origin); }, []);
@@ -133,6 +135,7 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => setEditUser(u)}><UserCog className="w-3.5 h-3.5 mr-2" />Editar papel/status</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => setPasswordUser(u)}><KeyRound className="w-3.5 h-3.5 mr-2" />Redefinir senha</DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem className="text-destructive" onClick={async () => {
                                   if (!confirm(`Remover ${u.name}?`)) return;
@@ -230,6 +233,14 @@ export function UsersPageClient({ session }: { session: SessionPayload }) {
             toast.success('Convite criado! Link copiado para clipboard.');
             load();
           }}
+        />
+      )}
+      {passwordUser && (
+        <PasswordResetDialog
+          name={passwordUser.name}
+          email={passwordUser.email}
+          endpoint={`/api/users/${passwordUser.tenantUserId}/password`}
+          onClose={() => setPasswordUser(null)}
         />
       )}
       {editUser && (
