@@ -11,7 +11,7 @@ def test_every_reply_gets_the_fixed_rules_of_the_published_file():
     chat = read("lib/flip-ai/public-chat.ts")
     assert "import { extractFixedRules, fixedRulesPrompt } from './fixed-rules';" in chat
     assert "fixedRulesPrompt(fixedRules ? safeReference(fixedRules) : null)," in chat
-    assert "assistantMessages, await loadFixedRules(turn.tenantId, turn.knowledgeIndexId))," in chat
+    assert "assistantMessages, await loadFixedRules(turn.tenantId, turn.knowledgeIndexId))" in chat
     # Read from the revision of the published index, of the same company.
     assert "where: { id: knowledgeIndexId, tenantId }" in chat
     assert "where: { tenantId, documentId: index.documentId, revision: index.revision }" in chat
