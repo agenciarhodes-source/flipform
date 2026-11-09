@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { getLeadScopeForRole } from '@/lib/rbac';
+import { can, getLeadScopeForRole } from '@/lib/rbac';
 import { leadCreateSchema } from '@/lib/schemas';
 import { normalizeBrazilCity, normalizeBrazilState } from '@/lib/brazil-locations';
 import { normalizeBrazilianLeadPhone, normalizeEmail } from '@/lib/leads';
@@ -35,6 +35,14 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
   }
 
   const where: any = { tenantId: session.tenantId, ...getLeadScopeForRole(session) };
+  // "Atendente" filter of the Kanban: owners, admins and managers only (an attendant always sees
+  // only their own leads). "none" means the leads without anyone responsible.
+  const assignee = searchParams.get('assignedTo');
+  if (assignee && can(session.role, 'DASHBOARD_FILTER_BY_ASSIGNEE')) {
+    if (assignee === 'none') where.assignedTo = null;
+    else if (/^[A-Za-z0-9_-]{1,128}$/.test(assignee)) where.assignedTo = assignee;
+    else return NextResponse.json({ error: 'Atendente inválido.' }, { status: 400 });
+  }
   if (period) {
     if (!['7d', '30d', 'custom'].includes(period)) {
       return NextResponse.json({ error: 'Período inválido.' }, { status: 400 });
