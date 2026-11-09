@@ -268,7 +268,7 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
 /** Whether the AI is paused in a conversation now, counting the automatic return set for the number. */
 function aiPaused(conversation: InboxConversation, resumeAfterHours: number | null) {
   if (!conversation.aiPausedAt) return false;
-  if (conversation.aiPauseReason === 'resolved') return true;
+  if (conversation.aiPauseReason === 'resolved' || conversation.aiPauseReason === 'ai_handoff') return true;
   if (!resumeAfterHours) return true;
   return Date.now() - new Date(conversation.aiPausedAt).getTime() < resumeAfterHours * 3_600_000;
 }
@@ -278,6 +278,7 @@ const AI_PAUSE_REASON_LABELS: Record<string, string> = {
   human_reply_system: 'respondida pela equipe no FlipForm',
   human_reply_phone: 'respondida pelo celular',
   resolved: 'resolvida (atendimento humano)',
+  ai_handoff: 'passada pela IA para a equipe',
 };
 
 function AiStatus({ conversation, resumeAfterHours, canManage, busy, onChange }: {

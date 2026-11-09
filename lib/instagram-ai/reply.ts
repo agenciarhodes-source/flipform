@@ -32,6 +32,8 @@ import {
   instagramShareTitle, instagramWantsNoReply,
 } from './share-rules';
 import { tenantMayRunAiAttendant } from '@/lib/billing/plan-access';
+import { handOffInstagramConversation } from './handoff';
+import { INSTAGRAM_HANDOFF_REPLY, instagramWantsTeam, withoutTeamMarker } from './handoff-rules';
 import {
   INSTAGRAM_AI_QUIET_SECONDS,
   INSTAGRAM_AI_WINDOW_HOURS,
@@ -320,7 +322,9 @@ export async function replyToInstagramConversation(input: {
       await failPublicChatTurn(turn, { kind: 'definitive', code: 'INSTAGRAM_AI_OFF_TOPIC' }, 'response');
       return { replied: false, reason: 'off_topic' };
     }
-    const reply = toInstagramText(parsed.reply);
+    // A case for a person (complaint, a specific lawyer, a threat to sue): the team is called for real.
+    const callTeam = instagramWantsTeam(parsed.reply);
+    const reply = toInstagramText(callTeam ? withoutTeamMarker(parsed.reply) || INSTAGRAM_HANDOFF_REPLY : parsed.reply);
     if (!reply) throw new OpenAiResponseError('definitive', 'INSTAGRAM_AI_EMPTY_REPLY');
 
     // A person may have answered (or paused the AI) while it was thinking: then it stays quiet.
@@ -363,6 +367,11 @@ export async function replyToInstagramConversation(input: {
       context.actionPermission,
       { recordOutbound: false },
     );
+    if (callTeam) {
+      await handOffInstagramConversation({ tenantId: input.tenantId, conversationId: conversation.id, label: profile?.username ? `@${profile.username}` : null })
+        .catch((error) => console.error('Instagram AI hand-off failed', { tenantId: input.tenantId, conversationId: conversation.id, errorType: error instanceof Error ? error.name : 'unknown' }));
+      return { replied: true, reason: 'handed_off' };
+    }
     return { replied: true, reason: 'sent' };
   } catch (error) {
     const failure = error instanceof OpenAiResponseError || error instanceof FlipAiConversationRuntimeError

@@ -11,7 +11,7 @@ import { isTestPhoneNumber } from './eligibility';
  * the customer writes again the conversation comes back to the team (human attendance), until
  * someone hands it back to the AI.
  */
-export const AI_PAUSE_REASONS = ['manual', 'human_reply_system', 'human_reply_phone', 'resolved'] as const;
+export const AI_PAUSE_REASONS = ['manual', 'human_reply_system', 'human_reply_phone', 'resolved', 'ai_handoff'] as const;
 export type AiPauseReason = (typeof AI_PAUSE_REASONS)[number];
 
 export async function pauseConversationAi(input: {
@@ -72,8 +72,8 @@ export function isConversationAiPaused(
   now = new Date(),
 ) {
   if (!conversation.aiPausedAt) return false;
-  // Resolved: never comes back by itself.
-  if (conversation.aiPauseReason === 'resolved') return true;
+  // Resolved, or handed to the team by the AI: never comes back by itself.
+  if (conversation.aiPauseReason === 'resolved' || conversation.aiPauseReason === 'ai_handoff') return true;
   if (!resumeAfterHours) return true;
   return now.getTime() - conversation.aiPausedAt.getTime() < resumeAfterHours * 3_600_000;
 }
