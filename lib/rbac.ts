@@ -51,6 +51,8 @@ export function hasRole(session: { role?: string | null } | null | undefined, ro
 
 export const PERMISSIONS = {
   FLIP_AI_MANAGE: ['owner', 'admin'],
+  // Lead assistant commands in the Flip bar (distribute, move stage, tags, undo): the owner only.
+  LEAD_ASSISTANT_COMMAND: ['owner'],
   DASHBOARD_VIEW_ALL: ['owner', 'admin', 'manager'],
   DASHBOARD_VIEW_OWN: ['agent'],
   DASHBOARD_VIEW_READONLY: ['viewer'],

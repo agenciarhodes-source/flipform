@@ -11,7 +11,7 @@ const bodySchema = z.object({
 }).strict();
 
 /** Applies a plan the manager confirmed in the preview. Only the responsible person of open leads changes. */
-export const POST = withPermission('LEADS_EDIT_ALL', async (req: NextRequest, session) => {
+export const POST = withPermission('LEAD_ASSISTANT_COMMAND', async (req: NextRequest, session) => {
   const parsed = bodySchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: 'Gere a prévia de novo antes de confirmar.' }, { status: 400 });
   try {

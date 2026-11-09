@@ -12,5 +12,5 @@ export default async function FlipPage() {
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'LEADS_VIEW')) redirect('/dashboard');
   const [initial, requestsLeft] = await Promise.all([computeFlipAlerts(session), flipRequestsLeftToday(session)]);
-  return <FlipAlertsBoard initial={initial} canCommandLeads={can(session.role, 'LEADS_EDIT_ALL')} requestsLeft={requestsLeft} />;
+  return <FlipAlertsBoard initial={initial} canCommandLeads={can(session.role, 'LEAD_ASSISTANT_COMMAND')} requestsLeft={requestsLeft} />;
 }
