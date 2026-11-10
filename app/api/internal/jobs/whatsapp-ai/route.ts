@@ -5,6 +5,7 @@ import { sweepWhatsAppReactivations } from '@/lib/whatsapp-ai/reactivation';
 import { sweepDailyAiReviews } from '@/lib/whatsapp-ai/reviews';
 import { sweepWhatsAppWelcomes } from '@/lib/whatsapp-ai/welcome';
 import { sweepUnansweredInstagramConversations } from '@/lib/instagram-ai/reply';
+import { sweepUnsignedContracts } from '@/lib/contracts/zapsign-signed';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,8 @@ async function handle(req: Request) {
   const welcome = await sweepWhatsAppWelcomes().catch(() => ({ companies: 0, sent: 0, failed: true }));
   const reviews = await sweepDailyAiReviews().catch(() => ({ tenants: 0, reviewed: 0, failed: true }));
   const instagram = await sweepUnansweredInstagramConversations().catch(() => ({ companies: 0, replied: 0, failed: true }));
-  return NextResponse.json({ ok: true, ...result, reactivation, welcome, reviews, instagram });
+  const contracts = await sweepUnsignedContracts().catch(() => ({ checked: 0, reminded: 0, failed: true }));
+  return NextResponse.json({ ok: true, ...result, reactivation, welcome, reviews, instagram, contracts });
 }
 
 export const GET = handle;

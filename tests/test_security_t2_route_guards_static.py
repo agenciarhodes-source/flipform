@@ -61,6 +61,7 @@ GUARDED = {
     "webhooks/meta/instagram/route.ts": "x-hub-signature",
     "webhooks/stripe/route.ts": "constructEvent(",
     "webhooks/asaas/route.ts": "validateWebhookToken(",
+    "webhooks/zapsign/[tenantId]/route.ts": "zapSignWebhookAuthorized(",
     # Public pages (forms, site chat, checkout): published content only, with attempt limits.
     "public/forms/[slug]/route.ts": "slug",
     "public/forms/[slug]/submit/route.ts": "rateLimit(",

@@ -81,7 +81,8 @@ export async function saveZapSignSettings(input: {
   });
 }
 
-async function apiToken(tenantId: string) {
+/** The company's ZapSign API token, only while contracts are released and switched on. */
+export async function zapSignApiToken(tenantId: string) {
   const rows = await prisma.$queryRaw<SettingsRow[]>`
     SELECT allowed, enabled, api_token_encrypted FROM tenant_zapsign_settings WHERE tenant_id = ${tenantId}`.catch(() => []);
   const row = rows[0];
@@ -124,10 +125,10 @@ async function failContract(tenantId: string, contractId: string, conversationId
  * on WhatsApp. One contract at a time per conversation; it does nothing when the company did not
  * switch contracts on, the case has no model, or a document is still missing.
  */
-export async function sendContractIfReady(input: { tenantId: string; conversationId: string; agent: { id: string; name: string } }) {
+export async function sendContractIfReady(input: { tenantId: string; conversationId: string; agent: { id: string; name: string } | null }) {
   const ready = await contractReadiness(input.tenantId, input.conversationId);
   if (!ready) return { sent: false as const, reason: 'not_ready' };
-  const token = await apiToken(input.tenantId);
+  const token = await zapSignApiToken(input.tenantId);
   if (!token) return { sent: false as const, reason: 'no_token' };
 
   // Claims the conversation: a second run at the same time finds this row and stops.
@@ -190,7 +191,7 @@ export async function sendContractIfReady(input: { tenantId: string; conversatio
     requestedByUserId: '',
     text: contractLinkMessage(firstName, created.signUrl),
     idempotencyKey: `contract-${contractId}`,
-    aiSender: { agentId: input.agent.id, agentName: input.agent.name },
+    ...(input.agent ? { aiSender: { agentId: input.agent.id, agentName: input.agent.name } } : { systemSender: { label: 'Contratos' } }),
   });
   await prisma.auditLog.create({
     data: {

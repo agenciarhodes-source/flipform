@@ -57,7 +57,7 @@ export function ZapSignSettingsCard() {
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Não foi possível salvar.');
       setToken('');
-      toast.success('Contratos salvos.');
+      if (body.warning) toast.warning(body.warning); else toast.success('Contratos salvos.');
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar.');

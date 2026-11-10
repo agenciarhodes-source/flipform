@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { saveZapSignSettings, zapSignSettings, zapSignTemplates } from '@/lib/contracts/zapsign';
+import { registerZapSignWebhook } from '@/lib/contracts/zapsign-signed';
 
 const bodySchema = z.object({
   enabled: z.boolean(),
@@ -31,6 +32,13 @@ export const PUT = withPermission('CONTRACTS_MANAGE', async (req: NextRequest, s
   }
   try {
     await saveZapSignSettings({ tenantId: session.tenantId, userId: session.userId, ...parsed.data });
+    // A new token: ZapSign is told where to warn FlipForm about signatures.
+    if (parsed.data.apiToken) {
+      const webhook = await registerZapSignWebhook(session.tenantId, parsed.data.apiToken).catch(() => ({ registered: false }));
+      if (!webhook.registered) {
+        return NextResponse.json({ ok: true, warning: 'Salvo, mas o ZapSign não aceitou o aviso de assinatura. Confira se o token está certo e se o plano tem API.' });
+      }
+    }
   } catch (error) {
     console.error('ZapSign settings failed', { errorType: error instanceof Error ? error.message : 'unknown' });
     return NextResponse.json({ error: 'Não foi possível salvar.' }, { status: 500 });
