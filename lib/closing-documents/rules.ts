@@ -7,7 +7,7 @@ import { z } from 'zod';
  * when the company's text says so. Global for every company. Pure rules, easy to test.
  */
 
-export const CLOSING_MAX_TEMPLATES = 3;
+export const CLOSING_MAX_TEMPLATES = 6;
 export const CLOSING_MAX_BYTES = 2 * 1024 * 1024;
 export const CLOSING_SEND_WHEN_MAX = 2000;
 
@@ -29,6 +29,14 @@ export const CLOSING_FIELDS: ClosingField[] = [
   { key: 'CEP', label: 'CEP', aliases: [], example: '74000-000' },
   { key: 'TELEFONE', label: 'Telefone', aliases: ['CELULAR', 'WHATSAPP'], example: '(62) 99999-0000' },
   { key: 'EMAIL', label: 'E-mail', aliases: ['E MAIL'], example: 'maria@email.com' },
+  { key: 'IDADE', label: 'Idade', aliases: [], example: '36 anos' },
+  { key: 'NOME DO RESPONSAVEL', label: 'Responsável (menor): nome', aliases: ['REPRESENTANTE', 'NOME DO REPRESENTANTE'], example: 'Joana da Silva' },
+  { key: 'CPF DO RESPONSAVEL', label: 'Responsável: CPF', aliases: ['CPF DO REPRESENTANTE'], example: '987.654.321-00' },
+  { key: 'RG DO RESPONSAVEL', label: 'Responsável: RG', aliases: ['RG DO REPRESENTANTE'], example: '98.765.432-1' },
+  { key: 'ESTADO CIVIL DO RESPONSAVEL', label: 'Responsável: estado civil', aliases: [], example: 'solteira' },
+  { key: 'PROFISSAO DO RESPONSAVEL', label: 'Responsável: profissão', aliases: [], example: 'auxiliar administrativa' },
+  { key: 'PARENTESCO', label: 'Responsável: parentesco (mãe, pai, tutor…)', aliases: ['VINCULO'], example: 'mãe' },
+  { key: 'REPRESENTACAO', label: '“representado(a)” (até 15 anos) ou “assistido(a)” (16 e 17)', aliases: ['FORMA DE REPRESENTACAO'], example: 'representada' },
   { key: 'TESE', label: 'Tese (tipo de caso)', aliases: ['TIPO DE CASO'], example: 'Auxílio-maternidade' },
   { key: 'DATA', label: 'Data de hoje', aliases: ['DATA DE HOJE', 'DATA ATUAL'], example: '10 de novembro de 2026' },
 ];
@@ -138,6 +146,20 @@ export function fillWordXml(xml: string, value: (name: string) => string | null)
 export function isWordTextPart(name: string) {
   return /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(name);
 }
+
+/**
+ * Who signs, which decides the model. Age alone never decides it: an elderly person who reads and
+ * signs is an adult like any other; "a rogo" is for whoever cannot read or sign (a third person
+ * signs for them, with two witnesses and the fingerprint).
+ */
+export const CLOSING_SITUATIONS = [
+  { key: 'all', label: 'Todos os clientes' },
+  { key: 'adult', label: 'Maior de 18 que assina' },
+  { key: 'minor', label: 'Menor de 18 (assina o responsável)' },
+  { key: 'rogo', label: 'Não sabe ou não consegue assinar (a rogo + digital)' },
+] as const;
+export type ClosingSituation = (typeof CLOSING_SITUATIONS)[number]['key'];
+export const closingSituationSchema = z.enum(['all', 'adult', 'minor', 'rogo']);
 
 export const closingSettingsSchema = z.object({
   enabled: z.boolean(),

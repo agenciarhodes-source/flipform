@@ -5,9 +5,9 @@ import { Download, FileText, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { CLOSING_MAX_TEMPLATES } from '@/lib/closing-documents/rules';
+import { CLOSING_MAX_TEMPLATES, CLOSING_SITUATIONS } from '@/lib/closing-documents/rules';
 
-type Template = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[] };
+type Template = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[]; situation: string };
 type Field = { key: string; label: string };
 type State = { enabled: boolean; sendWhen: string; templates: Template[]; storageReady: boolean; fields: Field[] };
 
@@ -22,6 +22,7 @@ export function ClosingDocumentsManager() {
   const [state, setState] = useState<State | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [situation, setSituation] = useState('adult');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
@@ -38,6 +39,7 @@ export function ClosingDocumentsManager() {
     try {
       const body = new FormData();
       body.append('file', file);
+      body.append('situation', situation);
       const response = await fetch('/api/whatsapp-ai/closing-documents/templates', { method: 'POST', body });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Não foi possível enviar o modelo.');
@@ -56,6 +58,14 @@ export function ClosingDocumentsManager() {
     if (!window.confirm(`Apagar o modelo “${template.name}”?`)) return;
     const response = await fetch(`/api/whatsapp-ai/closing-documents/templates/${template.id}`, { method: 'DELETE' });
     if (!response.ok) toast.error('Não foi possível apagar.');
+    load();
+  }
+
+  async function changeSituation(template: Template, value: string) {
+    const response = await fetch(`/api/whatsapp-ai/closing-documents/templates/${template.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ situation: value }),
+    });
+    if (!response.ok) toast.error('Não foi possível mudar.');
     load();
   }
 
@@ -84,8 +94,9 @@ export function ClosingDocumentsManager() {
         <div>
           <h2 className="text-lg font-semibold">Documentos para finalizar o atendimento</h2>
           <p className="text-sm text-muted-foreground">
-            Até {CLOSING_MAX_TEMPLATES} modelos em Word, iguais para todos os clientes. O sistema preenche com os dados que o cliente
-            mandou (nome, CPF, endereço…) e envia na hora que vocês explicarem abaixo.
+            Até {CLOSING_MAX_TEMPLATES} modelos em Word (procurações, contratos). O texto é o mesmo para todos; o sistema preenche com
+            os dados que o cliente mandou (nome, CPF, endereço…) e envia na conversa, na hora que vocês explicarem abaixo. Diga para
+            quem é cada modelo: maior de 18, menor (assina o responsável) ou quem não sabe ou não consegue assinar (a rogo, com digital).
           </p>
         </div>
         <Switch
@@ -122,6 +133,16 @@ export function ClosingDocumentsManager() {
                 </Button>
               </div>
             </div>
+            <label className="mt-2 flex items-center gap-2 text-xs">
+              <span className="text-muted-foreground">Para:</span>
+              <select
+                className="rounded-md border px-2 py-1 text-xs"
+                value={template.situation}
+                onChange={(event) => changeSituation(template, event.target.value)}
+              >
+                {CLOSING_SITUATIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+              </select>
+            </label>
             <p className="mt-2 text-xs text-muted-foreground">
               {template.known.length
                 ? <>Preenche: {template.known.map((name) => `{{${name}}}`).join(', ')}</>
@@ -141,9 +162,19 @@ export function ClosingDocumentsManager() {
           className="hidden"
           onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }}
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="rounded-md border px-2 py-1.5 text-sm"
+            value={situation}
+            onChange={(event) => setSituation(event.target.value)}
+            aria-label="Para quem é o modelo"
+          >
+            {CLOSING_SITUATIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+          </select>
         <Button size="sm" variant="outline" disabled={full || uploading || !state.storageReady} onClick={() => fileInput.current?.click()}>
           <Upload className="mr-1 h-4 w-4" /> {uploading ? 'Enviando…' : full ? `Limite de ${CLOSING_MAX_TEMPLATES} modelos` : 'Enviar modelo (.docx)'}
         </Button>
+        </div>
       </div>
 
       <details className="rounded-lg bg-slate-50 p-3 text-sm">

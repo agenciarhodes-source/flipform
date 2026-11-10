@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS "closing_document_templates" (
   "object_key" TEXT NOT NULL,
   "size_bytes" INTEGER NOT NULL,
   "placeholders" JSONB NOT NULL DEFAULT '{}',
+  "situation" TEXT NOT NULL DEFAULT 'all',
   "position" INTEGER NOT NULL DEFAULT 0,
   "created_by" TEXT,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

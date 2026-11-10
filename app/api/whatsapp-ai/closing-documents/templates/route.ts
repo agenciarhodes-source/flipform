@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
-import { CLOSING_MAX_BYTES } from '@/lib/closing-documents/rules';
+import { CLOSING_MAX_BYTES, closingSituationSchema } from '@/lib/closing-documents/rules';
 import { addClosingTemplate, ClosingDocumentError } from '@/lib/closing-documents/store';
 
 export const maxDuration = 60;
@@ -16,6 +16,7 @@ export const POST = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, se
     const result = await addClosingTemplate({
       tenantId: session.tenantId, userId: session.userId, fileName: file.name || 'Documento.docx',
       bytes: new Uint8Array(await file.arrayBuffer()),
+      situation: closingSituationSchema.catch('all').parse(form?.get('situation')),
     });
     await prisma.auditLog.create({
       data: {

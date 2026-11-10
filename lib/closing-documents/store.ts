@@ -8,20 +8,21 @@ import {
   readAttachmentObject,
   resolveAttachmentStorage,
 } from '@/lib/storage/attachment-storage';
-import { CLOSING_MAX_BYTES, CLOSING_MAX_TEMPLATES, cleanTemplateName } from './rules';
+import { CLOSING_MAX_BYTES, CLOSING_MAX_TEMPLATES, cleanTemplateName, type ClosingSituation } from './rules';
 import { docxPlaceholders } from './docx';
 
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 type SettingsRow = { enabled: boolean; send_when: string };
-type TemplateRow = { id: string; name: string; object_key: string; size_bytes: number; placeholders: unknown; created_at: Date };
+type TemplateRow = { id: string; name: string; object_key: string; size_bytes: number; placeholders: unknown; situation: string; created_at: Date };
 
-export type ClosingTemplate = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[]; createdAt: string };
+export type ClosingTemplate = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[]; situation: ClosingSituation; createdAt: string };
 
 function toTemplate(row: TemplateRow): ClosingTemplate {
   const found = (row.placeholders && typeof row.placeholders === 'object' ? row.placeholders : {}) as { known?: unknown; unknown?: unknown };
   const list = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
-  return { id: row.id, name: row.name, sizeBytes: row.size_bytes, known: list(found.known), unknown: list(found.unknown), createdAt: row.created_at.toISOString() };
+  const situation = (['adult', 'minor', 'rogo'].includes(row.situation) ? row.situation : 'all') as ClosingSituation;
+  return { id: row.id, name: row.name, sizeBytes: row.size_bytes, known: list(found.known), unknown: list(found.unknown), situation, createdAt: row.created_at.toISOString() };
 }
 
 /** Settings and models of a company. `ready: false` while the tables do not exist yet. */
@@ -30,7 +31,7 @@ export async function closingDocuments(tenantId: string) {
     SELECT enabled, send_when FROM closing_document_settings WHERE tenant_id = ${tenantId}`.catch(() => null);
   if (!settings) return { ready: false as const };
   const templates = await prisma.$queryRaw<TemplateRow[]>`
-    SELECT id, name, object_key, size_bytes, placeholders, created_at FROM closing_document_templates
+    SELECT id, name, object_key, size_bytes, placeholders, situation, created_at FROM closing_document_templates
     WHERE tenant_id = ${tenantId} ORDER BY position ASC, created_at ASC`;
   return {
     ready: true as const,
@@ -52,7 +53,7 @@ export async function saveClosingSettings(input: { tenantId: string; userId: str
 export class ClosingDocumentError extends Error {}
 
 /** Keeps one Word model in the private storage. */
-export async function addClosingTemplate(input: { tenantId: string; userId: string; fileName: string; bytes: Uint8Array }) {
+export async function addClosingTemplate(input: { tenantId: string; userId: string; fileName: string; bytes: Uint8Array; situation: ClosingSituation }) {
   const storage = resolveAttachmentStorage();
   if (!storage.ready) throw new ClosingDocumentError('O armazenamento de arquivos não está configurado.');
   if (!/\.docx$/i.test(input.fileName)) throw new ClosingDocumentError('Envie o modelo em Word (.docx).');
@@ -79,15 +80,15 @@ export async function addClosingTemplate(input: { tenantId: string; userId: stri
   if (!uploaded?.ok) throw new ClosingDocumentError('Não foi possível guardar o arquivo. Tente de novo.');
 
   await prisma.$executeRaw`
-    INSERT INTO closing_document_templates (id, tenant_id, name, object_key, size_bytes, placeholders, position, created_by, created_at)
+    INSERT INTO closing_document_templates (id, tenant_id, name, object_key, size_bytes, placeholders, situation, position, created_by, created_at)
     VALUES (${id}, ${input.tenantId}, ${cleanTemplateName(input.fileName)}, ${objectKey}, ${input.bytes.byteLength},
-      ${JSON.stringify(placeholders)}::jsonb, ${total}, ${input.userId}, NOW())`;
+      ${JSON.stringify(placeholders)}::jsonb, ${input.situation}, ${total}, ${input.userId}, NOW())`;
   return { id, ...placeholders };
 }
 
 async function templateRow(tenantId: string, id: string) {
   const rows = await prisma.$queryRaw<TemplateRow[]>`
-    SELECT id, name, object_key, size_bytes, placeholders, created_at FROM closing_document_templates
+    SELECT id, name, object_key, size_bytes, placeholders, situation, created_at FROM closing_document_templates
     WHERE tenant_id = ${tenantId} AND id = ${id}`;
   return rows[0] || null;
 }
@@ -99,6 +100,13 @@ export async function readClosingTemplate(tenantId: string, id: string) {
   if (!row || !storage.ready) return null;
   const bytes = await readAttachmentObject(storage.config, { key: row.object_key, maxBytes: CLOSING_MAX_BYTES });
   return bytes ? { name: row.name, bytes } : null;
+}
+
+/** Which customers one model is for. */
+export async function setClosingTemplateSituation(tenantId: string, id: string, situation: ClosingSituation) {
+  const changed = await prisma.$executeRaw`
+    UPDATE closing_document_templates SET situation = ${situation} WHERE tenant_id = ${tenantId} AND id = ${id}`;
+  return changed > 0;
 }
 
 export async function deleteClosingTemplate(tenantId: string, id: string) {

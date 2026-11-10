@@ -2146,7 +2146,7 @@ model ClosingDocumentSettings {
   @@map("closing_document_settings")
 }
 
-/// One Word model (.docx, up to 3 per company), kept in the private storage. placeholders: {known, unknown}.
+/// One Word model (.docx, up to 6 per company), kept in the private storage. placeholders: {known, unknown}.
 model ClosingDocumentTemplate {
   id           String   @id @default(uuid())
   tenantId     String   @map("tenant_id")
@@ -2154,6 +2154,8 @@ model ClosingDocumentTemplate {
   objectKey    String   @unique(map: "closing_document_templates_object_key_key") @map("object_key")
   sizeBytes    Int      @map("size_bytes")
   placeholders Json     @default("{}")
+  /// all | adult | minor | rogo: which customers this model is for.
+  situation    String   @default("all")
   position     Int      @default(0)
   createdBy    String?  @map("created_by")
   createdAt    DateTime @default(now()) @map("created_at")
