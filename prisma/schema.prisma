@@ -2133,3 +2133,31 @@ model WhatsAppFollowupSend {
   @@index([tenantId, createdAt])
   @@map("whatsapp_followup_sends")
 }
+
+/// "Documentos para finalizar o atendimento": when the AI sends the company's models (text written by the company).
+model ClosingDocumentSettings {
+  tenantId  String   @id @map("tenant_id")
+  enabled   Boolean  @default(false)
+  sendWhen  String   @default("") @map("send_when")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("closing_document_settings")
+}
+
+/// One Word model (.docx, up to 3 per company), kept in the private storage. placeholders: {known, unknown}.
+model ClosingDocumentTemplate {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  name         String
+  objectKey    String   @unique(map: "closing_document_templates_object_key_key") @map("object_key")
+  sizeBytes    Int      @map("size_bytes")
+  placeholders Json     @default("{}")
+  position     Int      @default(0)
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("closing_document_templates")
+}

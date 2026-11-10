@@ -14,6 +14,7 @@ import { ZapSignSettingsCard } from '@/components/zapsign-settings-card';
 import { PostSaleManager } from '@/components/whatsapp-ai/post-sale-manager';
 import { WelcomeManager } from '@/components/whatsapp-ai/welcome-manager';
 import { FollowupManager } from '@/components/whatsapp-ai/followup-manager';
+import { ClosingDocumentsManager } from '@/components/whatsapp-ai/closing-documents-manager';
 import { prisma } from '@/lib/prisma';
 import { checklistItemsToText, type ChecklistItem } from '@/lib/whatsapp-ai/document-rules';
 
@@ -40,6 +41,7 @@ export default async function WhatsAppAiPage() {
         <div className="mx-auto max-w-4xl space-y-5 px-4 pb-6 md:px-6">
           <StageRulesManager initialPipelines={pipelines} />
           <DocumentChecklistsManager initial={checklists} />
+          <ClosingDocumentsManager />
           <ZapSignSettingsCard />
           <WelcomeManager />
           <FollowupManager />
