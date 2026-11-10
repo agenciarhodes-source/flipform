@@ -22,7 +22,22 @@ def test_reactivation_runs_with_the_scheduler_once_per_silence_and_as_the_ai():
     assert "sweepWhatsAppReactivations()" in job
     sweep = read("lib/whatsapp-ai/reactivation.ts")
     assert "reactivationEnabled: true" in sweep
-    assert "const requestKey = reactivationKey(conversation.id, conversation.lastInboundAt!);" in sweep
+    assert "? reactivationKey(conversation.id, conversation.lastInboundAt!)" in sweep
+    assert ": earlyReactivationKey(conversation.id, conversation.lastInboundAt!);" in sweep
     assert "idempotencyKey: requestKey," in sweep
     assert "aiSender: { agentId: agent.id, agentName: agent.name }," in sweep
     assert "isTestPhoneNumber(number.testPhoneNumbers" in sweep
+
+
+def test_reminders_use_documents_jev_moment_and_memory():
+    sweep = (ROOT / "lib/whatsapp-ai/reactivation.ts").read_text(encoding="utf-8")
+    assert "conversationDocumentContext(number.tenantId, conversation.id)" in sweep
+    assert "loadLatestConversationMemory(" in sweep
+    assert "metadata?.decisionSnapshot" in sweep
+    assert "earlyReactivationDue(candidate, now)" in sweep
+
+
+def test_never_forward_to_an_attendant_wording():
+    voice = (ROOT / "lib/flip-ai/team-voice.ts").read_text(encoding="utf-8")
+    assert "PROIBIDO dizer \"vou encaminhar\"" in voice
+    assert "TEAM_VOICE_RULE" in (ROOT / "lib/instagram-ai/rules.ts").read_text(encoding="utf-8")
