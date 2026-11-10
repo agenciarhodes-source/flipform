@@ -2051,3 +2051,53 @@ model AttendantProfile {
   @@index([tenantId])
   @@map("ai_attendant_profiles")
 }
+
+/// Contracts by ZapSign (electronic signature), per company. Released by the Super Admin (allowed)
+/// and switched on by the company (enabled). The API token is stored encrypted and never shown.
+model TenantZapSignSettings {
+  tenantId          String   @id @map("tenant_id")
+  allowed           Boolean  @default(false)
+  enabled           Boolean  @default(false)
+  apiTokenEncrypted String?  @map("api_token_encrypted")
+  updatedBy         String?  @map("updated_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("tenant_zapsign_settings")
+}
+
+/// The ZapSign model (DOCX template) sent for each case (document checklist = the case's thesis).
+model ZapSignTemplate {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  checklistId String   @unique @map("checklist_id")
+  templateId  String   @map("template_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@map("zapsign_templates")
+}
+
+/// A contract sent to a customer for signature. status: creating, sent, signed, refused, error.
+model LeadContract {
+  id               String    @id @default(cuid())
+  tenantId         String    @map("tenant_id")
+  conversationId   String    @map("conversation_id")
+  leadId           String?   @map("lead_id")
+  checklistId      String?   @map("checklist_id")
+  provider         String    @default("zapsign")
+  providerDocToken String?   @unique @map("provider_doc_token")
+  signUrl          String?   @map("sign_url")
+  status           String    @default("creating")
+  error            String?
+  sentAt           DateTime? @map("sent_at")
+  signedAt         DateTime? @map("signed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([conversationId])
+  @@index([leadId])
+  @@map("lead_contracts")
+}

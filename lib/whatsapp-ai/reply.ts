@@ -40,6 +40,8 @@ import { CLOSER_TAKEOVER_NOTE } from './closer-takeover-rules';
 import { askedForName, clearFirstName, nameQuestion } from './name-clarity';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
+import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
+import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -371,6 +373,11 @@ export async function replyToWhatsAppConversation(input: {
     }
   }
   if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));
+  // The last document arrived and the company sends contracts by ZapSign: the link follows the reply.
+  const contractDue = receivedFiles
+    ? await contractReadiness(input.tenantId, conversation.id).catch(() => null)
+    : null;
+  if (contractDue) extraUserNotes.push(CONTRACT_COMING_NOTE);
   const turnText = (parts.join('\n') || extraUserNotes.join('\n') || (takeover ? latestInbound.text?.trim() : '') || 'Olá').slice(0, 2_000);
   if (takeover) extraUserNotes.push(CLOSER_TAKEOVER_NOTE);
   if (input.trigger === 'handback') {
@@ -598,6 +605,10 @@ export async function replyToWhatsAppConversation(input: {
       agentId: runtime.id,
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    if (contractDue) {
+      await sendContractIfReady({ tenantId: input.tenantId, conversationId: conversation.id, agent: { id: runtime.id, name: runtime.name } })
+        .catch((error) => console.error('Contract sending failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    }
     return { replied: true, reason: 'sent' };
   } catch (error) {
     const failure = error instanceof OpenAiResponseError || error instanceof FlipAiConversationRuntimeError
