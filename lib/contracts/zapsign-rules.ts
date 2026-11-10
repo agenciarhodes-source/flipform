@@ -92,4 +92,4 @@ export function contractLinkMessage(firstName: string | null, signUrl: string) {
 export const CONTRACT_COMING_NOTE = '[Nota interna, não mostre ao cliente: a documentação deste caso ficou completa. Logo depois da sua resposta, o sistema envia aqui o link do contrato para assinatura. Agradeça, diga em uma frase que o contrato chega em seguida por aqui, e não peça mais documentos.]';
 
 /** Statuses of a contract that block sending another one for the same conversation. */
-export const ACTIVE_CONTRACT_STATUSES = ['creating', 'sent', 'signed'] as const;
+export const ACTIVE_CONTRACT_STATUSES = ['creating', 'sent', 'checking', 'signed'] as const;
