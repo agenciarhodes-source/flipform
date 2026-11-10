@@ -41,6 +41,7 @@ import { askedForName, clearFirstName, nameQuestion } from './name-clarity';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
 import { extractTeamTask, TEAM_TASK_INSTRUCTION } from './team-task-rules';
+import { TEAM_VOICE_RULE } from '@/lib/flip-ai/team-voice';
 import { createWhatsAppTeamTask } from './team-task';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
@@ -150,7 +151,8 @@ function whatsappInstructions(input: {
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
-    'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente e crie a TAREFA PARA A EQUIPE.',
+    'Se o cliente pedir para falar com alguém, responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE.',
+    TEAM_VOICE_RULE,
     TEAM_TASK_INSTRUCTION,
     input.knownName
       ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
@@ -173,7 +175,7 @@ function whatsappInstructions(input: {
       'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
         + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
         + ' passos, caminho encontrado). Não refaça a triagem, não repita perguntas que a equipe já fez e nunca contradiga a'
-        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que vai passar para a equipe, sem decidir'
+        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que o nosso time vai avaliar, sem decidir'
         + ' sozinho.',
     ] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
@@ -612,7 +614,7 @@ export async function replyToWhatsAppConversation(input: {
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     if (teamTask.task) {
-      await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task })
+      await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task, urgent: teamTask.urgent })
         .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     }
     if (contractDue) {

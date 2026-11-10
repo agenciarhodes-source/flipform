@@ -10,8 +10,9 @@ test('a IA chama a equipe só com a marca, e a marca nunca vai para o cliente', 
   assert.equal(instagramWantsTeam('Posso ajudar em algo mais?'), false);
   assert.equal(withoutTeamMarker('Entendo. Já avisei a equipe.\n[CHAMAR_EQUIPE]'), 'Entendo. Já avisei a equipe.');
   assert.equal(withoutTeamMarker('[chamar equipe]'), '');
-  assert.match(INSTAGRAM_HANDOFF_REPLY, /avisei a nossa equipe/);
-  assert.match(INSTAGRAM_HANDOFF_INSTRUCTION, /Nunca diga que avisou ou encaminhou para a equipe sem escrever/);
+  assert.match(INSTAGRAM_HANDOFF_REPLY, /nosso time já está cuidando disso/);
+  assert.doesNotMatch(INSTAGRAM_HANDOFF_REPLY, /atendente|uma pessoa/);
+  assert.match(INSTAGRAM_HANDOFF_INSTRUCTION, /Nunca diga que o nosso time está cuidando sem escrever/);
 });
 
 test('quem recebe: o atendente da conversa; senão os gestores; senão os proprietários', () => {
