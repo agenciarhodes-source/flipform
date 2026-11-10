@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Loader2, ArrowLeft, Power, RotateCcw, ShieldOff, Ban, Save, Coins } from 'lucide-react';
 import { StatusBadge } from '@/components/admin/status-badge';
 import { PasswordResetDialog } from '@/components/password-reset-dialog';
+import { ZapSignRelease } from '@/components/admin/zapsign-release';
 
 const number = new Intl.NumberFormat('pt-BR');
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -414,6 +415,7 @@ Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-m
           <TabsTrigger value="notes">Notas internas</TabsTrigger>
         </TabsList>
         <TabsContent value="plan">
+          <ZapSignRelease tenantId={id as string} />
           <Card className="p-5 space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
