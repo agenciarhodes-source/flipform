@@ -2101,3 +2101,35 @@ model LeadContract {
   @@index([leadId])
   @@map("lead_contracts")
 }
+
+/// "Sequência de retomada" on WhatsApp: approved templates on the chosen days after the customer's
+/// last message, and a call task after the chosen step. steps = [{ days, template: "name:language" }].
+model WhatsAppFollowupSettings {
+  tenantId      String    @id @map("tenant_id")
+  enabled       Boolean   @default(false)
+  steps         Json      @default("[]")
+  callAfterStep Int       @default(2) @map("call_after_step")
+  enabledAt     DateTime? @map("enabled_at")
+  updatedBy     String?   @map("updated_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("whatsapp_followup_settings")
+}
+
+/// One template of the sequence for one silence (cycle_at = the customer's last message). status: pending, sent, failed, skipped.
+model WhatsAppFollowupSend {
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  cycleAt        DateTime @map("cycle_at")
+  step           Int
+  status         String
+  reason         String?
+  messageId      String?  @map("message_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([conversationId, cycleAt, step], map: "whatsapp_followup_sends_cycle_key")
+  @@index([tenantId, createdAt])
+  @@map("whatsapp_followup_sends")
+}
