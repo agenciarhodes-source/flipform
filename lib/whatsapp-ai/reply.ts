@@ -40,6 +40,8 @@ import { CLOSER_TAKEOVER_NOTE } from './closer-takeover-rules';
 import { askedForName, clearFirstName, nameQuestion } from './name-clarity';
 import { suggestStageFromConversation } from './stage-suggestions';
 import { conversationDocumentContext, documentNote, readWhatsAppDocument } from './documents';
+import { extractTeamTask, TEAM_TASK_INSTRUCTION } from './team-task-rules';
+import { createWhatsAppTeamTask } from './team-task';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -148,7 +150,8 @@ function whatsappInstructions(input: {
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
-    'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente.',
+    'Se o cliente pedir para falar com alguém da equipe, diga que vai chamar um atendente e crie a TAREFA PARA A EQUIPE.',
+    TEAM_TASK_INSTRUCTION,
     input.knownName
       ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
       : input.nameAsked
@@ -539,6 +542,9 @@ export async function replyToWhatsAppConversation(input: {
       timeoutMs: 40_000,
     });
     const parsed = parsePublicChatDecision(raw.text);
+    // A task for the team never reaches the customer: it is taken out of the reply here.
+    const teamTask = extractTeamTask(parsed.reply);
+    parsed.reply = teamTask.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
     parsed.reply = enforceContactMoment(parsed.reply, context.contactMoment);
     const reply = withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources);
@@ -605,6 +611,10 @@ export async function replyToWhatsAppConversation(input: {
       agentId: runtime.id,
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    if (teamTask.task) {
+      await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task })
+        .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    }
     if (contractDue) {
       await sendContractIfReady({ tenantId: input.tenantId, conversationId: conversation.id, agent: { id: runtime.id, name: runtime.name } })
         .catch((error) => console.error('Contract sending failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
