@@ -60,7 +60,7 @@ export function FollowupManager() {
         <p className="text-sm text-muted-foreground">
           Quando o cliente para de responder e passam as 24 horas do WhatsApp, o sistema envia os modelos aprovados abaixo nos dias
           escolhidos (contados da última mensagem do cliente), um de cada vez. Se ele responder, a IA continua o atendimento e a sequência
-          para. Não vai para quem pediu para não receber mensagens, leads ganhos ou perdidos, "Não qualificado", "Já é cliente",
+          para. Não vai para quem pediu para não receber mensagens, leads ganhos ou perdidos, “Não qualificado”, “Já é cliente”,
           conversas resolvidas ou assumidas pela equipe.
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
