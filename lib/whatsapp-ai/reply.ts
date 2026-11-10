@@ -45,6 +45,8 @@ import { TEAM_VOICE_RULE } from '@/lib/flip-ai/team-voice';
 import { createWhatsAppTeamTask } from './team-task';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
+import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
+import { extractSendDocuments } from '@/lib/closing-documents/send-rules';
 import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -505,6 +507,8 @@ export async function replyToWhatsAppConversation(input: {
       knownNames,
     );
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
+    // Documents that finish the attendance (procuração, contrato): when the company's text says, the AI sends them.
+    const closing = await closingDocumentsContext(input.tenantId, conversation.id).catch(() => null);
     // Someone of the team (in FlipForm or on the phone) already talked to this customer.
     const teamInvolved = await prisma.message.count({
       where: {
@@ -529,7 +533,7 @@ export async function replyToWhatsAppConversation(input: {
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
           : null,
         teamInvolved,
-      })}${documents ? `\n\n${documents.text}` : ''}`,
+      })}${documents ? `\n\n${documents.text}` : ''}${closing ? `\n\n${closing.instruction}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
         : context.messages,
@@ -547,6 +551,8 @@ export async function replyToWhatsAppConversation(input: {
     // A task for the team never reaches the customer: it is taken out of the reply here.
     const teamTask = extractTeamTask(parsed.reply);
     parsed.reply = teamTask.reply;
+    const closingSend = extractSendDocuments(parsed.reply);
+    parsed.reply = closingSend.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
     parsed.reply = enforceContactMoment(parsed.reply, context.contactMoment);
     const reply = withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources);
@@ -616,6 +622,12 @@ export async function replyToWhatsAppConversation(input: {
     if (teamTask.task) {
       await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task, urgent: teamTask.urgent })
         .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    }
+    if (closing && closingSend.send) {
+      await sendClosingDocuments({
+        tenantId: input.tenantId, conversationId: conversation.id, agent: { id: runtime.id, name: runtime.name },
+        situation: closingSend.send, requestKey: event.id,
+      }).catch((error) => console.error('Closing documents sending failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     }
     if (contractDue) {
       await sendContractIfReady({ tenantId: input.tenantId, conversationId: conversation.id, agent: { id: runtime.id, name: runtime.name } })

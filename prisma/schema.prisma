@@ -2156,6 +2156,10 @@ model ClosingDocumentTemplate {
   placeholders Json     @default("{}")
   /// all | adult | minor | rogo: which customers this model is for.
   situation    String   @default("all")
+  /// pdf: sent as it is; docx: Word model.
+  kind         String   @default("docx")
+  /// Case types (document lists) this file is for; empty = every case.
+  checklistIds Json     @default("[]") @map("checklist_ids")
   position     Int      @default(0)
   createdBy    String?  @map("created_by")
   createdAt    DateTime @default(now()) @map("created_at")

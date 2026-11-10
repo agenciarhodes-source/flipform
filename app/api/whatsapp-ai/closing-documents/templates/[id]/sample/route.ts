@@ -11,6 +11,7 @@ export const maxDuration = 30;
 export const GET = withPermission('FLIP_AI_MANAGE', async (_req: NextRequest, session, ctx: { params: { id: string } }) => {
   const template = await readClosingTemplate(session.tenantId, ctx.params.id);
   if (!template) return NextResponse.json({ error: 'Documento não encontrado.' }, { status: 404 });
+  if (template.kind !== 'docx') return NextResponse.json({ error: 'O exemplo preenchido é só para modelos em Word.' }, { status: 400 });
   const filled = fillDocx(template.bytes, sampleValues(new Date()));
   return new NextResponse(Buffer.from(filled.bytes), {
     headers: {

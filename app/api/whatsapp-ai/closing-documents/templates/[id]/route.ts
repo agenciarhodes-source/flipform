@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
 import { closingSituationSchema } from '@/lib/closing-documents/rules';
-import { deleteClosingTemplate, setClosingTemplateSituation } from '@/lib/closing-documents/store';
+import { deleteClosingTemplate, setClosingTemplateChecklists, setClosingTemplateSituation } from '@/lib/closing-documents/store';
 
-/** Which customers the model is for (adult, minor, a rogo or everyone). */
+/** Which case types the file is for, or which customers (adult, minor, a rogo or everyone). */
 export const PATCH = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, session, ctx: { params: { id: string } }) => {
   const body = await req.json().catch(() => null);
+  if (Array.isArray(body?.checklistIds)) {
+    const ids = body.checklistIds.filter((value: unknown): value is string => typeof value === 'string');
+    const changed = await setClosingTemplateChecklists(session.tenantId, ctx.params.id, ids);
+    if (!changed) return NextResponse.json({ error: 'Documento não encontrado.' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  }
   const parsed = closingSituationSchema.safeParse(body?.situation);
   if (!parsed.success) return NextResponse.json({ error: 'Situação inválida.' }, { status: 400 });
   const changed = await setClosingTemplateSituation(session.tenantId, ctx.params.id, parsed.data);

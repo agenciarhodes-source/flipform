@@ -8,7 +8,8 @@ import { z } from 'zod';
  */
 
 export const CLOSING_MAX_TEMPLATES = 6;
-export const CLOSING_MAX_BYTES = 2 * 1024 * 1024;
+/** Under the 4.5 MB a request may carry. */
+export const CLOSING_MAX_BYTES = 4 * 1024 * 1024;
 export const CLOSING_SEND_WHEN_MAX = 2000;
 
 export type ClosingField = { key: string; label: string; aliases: string[]; example: string };

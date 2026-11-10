@@ -5,30 +5,54 @@ import { Download, FileText, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { CLOSING_MAX_TEMPLATES, CLOSING_SITUATIONS } from '@/lib/closing-documents/rules';
+import { CLOSING_MAX_TEMPLATES } from '@/lib/closing-documents/rules';
 
-type Template = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[]; situation: string };
-type Field = { key: string; label: string };
-type State = { enabled: boolean; sendWhen: string; templates: Template[]; storageReady: boolean; fields: Field[] };
+type Template = { id: string; name: string; sizeBytes: number; kind: 'pdf' | 'docx'; checklistIds: string[] };
+type Checklist = { id: string; name: string };
+type State = { enabled: boolean; sendWhen: string; templates: Template[]; storageReady: boolean; checklists: Checklist[] };
 
 const SEND_WHEN_EXAMPLE = 'Envie quando o cliente já tiver mandado o RG ou CNH, o CPF e o comprovante de residência, '
   + 'e tiver confirmado que quer seguir com o processo. Explique que são os documentos para formalizar o atendimento.';
 
+function sizeLabel(bytes: number) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** Case types a file is for, as checkboxes (none checked = every case). */
+function CaseChoice(props: { checklists: Checklist[]; value: string[]; onChange: (ids: string[]) => void }) {
+  if (!props.checklists.length) return null;
+  const toggle = (id: string) => props.onChange(props.value.includes(id) ? props.value.filter((item) => item !== id) : [...props.value, id]);
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1">
+      {props.checklists.map((checklist) => (
+        <label key={checklist.id} className="flex items-center gap-1 text-xs">
+          <input type="checkbox" checked={props.value.includes(checklist.id)} onChange={() => toggle(checklist.id)} />
+          {checklist.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 /**
- * "Documentos para finalizar o atendimento": up to 3 Word models, the same for every customer,
- * filled with the customer's data, and the text that says when they are sent.
+ * "Documentos para finalizar o atendimento": the files the customer fills in and signs
+ * (procuração, contrato, declarações), one set per case type, and the text that says when
+ * the AI sends them. The files go as they are, with how to fill and sign them.
  */
 export function ClosingDocumentsManager() {
   const [state, setState] = useState<State | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [situation, setSituation] = useState('adult');
+  const [newCases, setNewCases] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     fetch('/api/whatsapp-ai/closing-documents', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((data) => {
       if (!data?.ready) return;
-      setState({ enabled: data.enabled, sendWhen: data.sendWhen, templates: data.templates, storageReady: data.storageReady, fields: data.fields });
+      setState({
+        enabled: data.enabled, sendWhen: data.sendWhen, templates: data.templates, storageReady: data.storageReady,
+        checklists: Array.isArray(data.checklists) ? data.checklists : [],
+      });
     }).catch(() => undefined);
   }, []);
   useEffect(load, [load]);
@@ -39,15 +63,15 @@ export function ClosingDocumentsManager() {
     try {
       const body = new FormData();
       body.append('file', file);
-      body.append('situation', situation);
+      newCases.forEach((id) => body.append('checklistId', id));
       const response = await fetch('/api/whatsapp-ai/closing-documents/templates', { method: 'POST', body });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Não foi possível enviar o modelo.');
-      if (data.unknown?.length) toast.warning(`O sistema não sabe preencher: ${data.unknown.map((n: string) => `{{${n}}}`).join(', ')}.`);
-      else toast.success('Modelo enviado.');
+      if (!response.ok) throw new Error(data.error || 'Não foi possível enviar o arquivo.');
+      toast.success('Documento enviado.');
+      setNewCases([]);
       load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível enviar o modelo.');
+      toast.error(error instanceof Error ? error.message : 'Não foi possível enviar o arquivo.');
     } finally {
       setUploading(false);
       if (fileInput.current) fileInput.current.value = '';
@@ -55,18 +79,20 @@ export function ClosingDocumentsManager() {
   }
 
   async function remove(template: Template) {
-    if (!window.confirm(`Apagar o modelo “${template.name}”?`)) return;
+    if (!window.confirm(`Apagar o documento “${template.name}”?`)) return;
     const response = await fetch(`/api/whatsapp-ai/closing-documents/templates/${template.id}`, { method: 'DELETE' });
     if (!response.ok) toast.error('Não foi possível apagar.');
     load();
   }
 
-  async function changeSituation(template: Template, value: string) {
+  async function changeCases(template: Template, checklistIds: string[]) {
+    setState((current) => (current
+      ? { ...current, templates: current.templates.map((item) => (item.id === template.id ? { ...item, checklistIds } : item)) }
+      : current));
     const response = await fetch(`/api/whatsapp-ai/closing-documents/templates/${template.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ situation: value }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ checklistIds }),
     });
-    if (!response.ok) toast.error('Não foi possível mudar.');
-    load();
+    if (!response.ok) { toast.error('Não foi possível mudar.'); load(); }
   }
 
   async function save(next: { enabled: boolean; sendWhen: string }) {
@@ -87,6 +113,7 @@ export function ClosingDocumentsManager() {
   }
 
   const full = state.templates.length >= CLOSING_MAX_TEMPLATES;
+  const caseName = (id: string) => state.checklists.find((item) => item.id === id)?.name;
 
   return (
     <section className="space-y-4 rounded-xl border bg-white p-5 shadow-sm">
@@ -94,9 +121,9 @@ export function ClosingDocumentsManager() {
         <div>
           <h2 className="text-lg font-semibold">Documentos para finalizar o atendimento</h2>
           <p className="text-sm text-muted-foreground">
-            Até {CLOSING_MAX_TEMPLATES} modelos em Word (procurações, contratos). O texto é o mesmo para todos; o sistema preenche com
-            os dados que o cliente mandou (nome, CPF, endereço…) e envia na conversa, na hora que vocês explicarem abaixo. Diga para
-            quem é cada modelo: maior de 18, menor (assina o responsável) ou quem não sabe ou não consegue assinar (a rogo, com digital).
+            Os documentos que o cliente preenche e assina (procuração, contrato, declarações), em PDF. A IA manda na própria
+            conversa, na hora que vocês explicarem abaixo, junto com o passo a passo para preencher e assinar (à mão ou pelo
+            gov.br; menor de idade: assina o responsável; quem não sabe ou não consegue assinar: a rogo, com digital e 2 testemunhas).
           </p>
         </div>
         <Switch
@@ -112,83 +139,53 @@ export function ClosingDocumentsManager() {
       )}
 
       <div className="space-y-2">
-        <p className="text-sm font-medium">Modelos</p>
-        {state.templates.length === 0 && <p className="text-sm text-muted-foreground">Nenhum modelo enviado ainda.</p>}
+        <p className="text-sm font-medium">Documentos</p>
+        {state.templates.length === 0 && <p className="text-sm text-muted-foreground">Nenhum documento enviado ainda.</p>}
         {state.templates.map((template) => (
-          <div key={template.id} className="rounded-lg border p-3">
+          <div key={template.id} className="space-y-2 rounded-lg border p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <FileText className="h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" />
                 <span className="truncate text-sm font-medium">{template.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{template.kind.toUpperCase()} · {sizeLabel(template.sizeBytes)}</span>
               </div>
               <div className="flex shrink-0 gap-1">
-                <a
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
-                  href={`/api/whatsapp-ai/closing-documents/templates/${template.id}/sample`}
-                >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" /> Baixar exemplo preenchido
-                </a>
+                {template.kind === 'docx' && (
+                  <a
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
+                    href={`/api/whatsapp-ai/closing-documents/templates/${template.id}/sample`}
+                  >
+                    <Download className="h-3.5 w-3.5" aria-hidden="true" /> Baixar exemplo
+                  </a>
+                )}
                 <Button size="sm" variant="ghost" onClick={() => remove(template)} aria-label={`Apagar ${template.name}`}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-            <label className="mt-2 flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">Para:</span>
-              <select
-                className="rounded-md border px-2 py-1 text-xs"
-                value={template.situation}
-                onChange={(event) => changeSituation(template, event.target.value)}
-              >
-                {CLOSING_SITUATIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-              </select>
-            </label>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {template.known.length
-                ? <>Preenche: {template.known.map((name) => `{{${name}}}`).join(', ')}</>
-                : 'Nenhum campo {{ }} encontrado: o documento vai do jeito que está.'}
+            <p className="text-xs text-muted-foreground">
+              {template.checklistIds.length
+                ? `Vai para: ${template.checklistIds.map(caseName).filter(Boolean).join(', ')}`
+                : 'Vai para: todas as teses que não tiverem um documento próprio'}
             </p>
-            {template.unknown.length > 0 && (
-              <p className="mt-1 text-xs text-amber-700">
-                Não sei preencher: {template.unknown.map((name) => `{{${name}}}`).join(', ')}. Use um dos nomes da lista abaixo.
-              </p>
-            )}
+            <CaseChoice checklists={state.checklists} value={template.checklistIds} onChange={(ids) => changeCases(template, ids)} />
           </div>
         ))}
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-          className="hidden"
-          onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            className="rounded-md border px-2 py-1.5 text-sm"
-            value={situation}
-            onChange={(event) => setSituation(event.target.value)}
-            aria-label="Para quem é o modelo"
-          >
-            {CLOSING_SITUATIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
-          </select>
-        <Button size="sm" variant="outline" disabled={full || uploading || !state.storageReady} onClick={() => fileInput.current?.click()}>
-          <Upload className="mr-1 h-4 w-4" /> {uploading ? 'Enviando…' : full ? `Limite de ${CLOSING_MAX_TEMPLATES} modelos` : 'Enviar modelo (.docx)'}
-        </Button>
+        <div className="space-y-2 rounded-lg border border-dashed p-3">
+          <p className="text-xs text-muted-foreground">Para quais teses é o próximo documento? (nenhuma marcada = todas)</p>
+          <CaseChoice checklists={state.checklists} value={newCases} onChange={setNewCases} />
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="hidden"
+            onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }}
+          />
+          <Button size="sm" variant="outline" disabled={full || uploading || !state.storageReady} onClick={() => fileInput.current?.click()}>
+            <Upload className="mr-1 h-4 w-4" /> {uploading ? 'Enviando…' : full ? `Limite de ${CLOSING_MAX_TEMPLATES} documentos` : 'Enviar documento (PDF, até 4 MB)'}
+          </Button>
         </div>
       </div>
-
-      <details className="rounded-lg bg-slate-50 p-3 text-sm">
-        <summary className="cursor-pointer font-medium">Como marcar os dados do cliente no modelo</summary>
-        <p className="mt-2 text-muted-foreground">
-          No Word, escreva o nome do campo entre chaves duplas onde o dado deve entrar, por exemplo: “Eu, {'{{NOME COMPLETO}}'},
-          inscrita no CPF {'{{CPF}}'}, residente em {'{{ENDEREÇO}}'}…”.
-        </p>
-        <ul className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-          {state.fields.map((field) => (
-            <li key={field.key}><code className="rounded bg-white px-1">{`{{${field.key}}}`}</code> <span className="text-muted-foreground">{field.label}</span></li>
-          ))}
-        </ul>
-      </details>
 
       <div className="space-y-2">
         <label htmlFor="closing-send-when" className="text-sm font-medium">Quando enviar</label>
@@ -201,8 +198,8 @@ export function ClosingDocumentsManager() {
           onChange={(event) => setState({ ...state, sendWhen: event.target.value })}
         />
         <p className="text-xs text-muted-foreground">
-          A IA lê este texto para decidir o momento. Se faltar algum dado do cliente (por exemplo, o CPF), ela pede antes de enviar.
-          Nada sai com campo em branco.
+          A IA lê este texto para decidir o momento e manda os documentos da tese do cliente. Quando o cliente devolver os
+          documentos assinados, ela cria uma tarefa para a equipe conferir.
         </p>
         <Button size="sm" disabled={saving} onClick={() => save({ enabled: state.enabled, sendWhen: state.sendWhen })}>
           {saving ? 'Salvando…' : 'Salvar'}

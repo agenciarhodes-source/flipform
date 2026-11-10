@@ -7,7 +7,10 @@ import { closingDocuments, saveClosingSettings } from '@/lib/closing-documents/s
 /** "Documentos para finalizar o atendimento": the models and when to send them. */
 export const GET = withPermission('FLIP_AI_MANAGE', async (_req: NextRequest, session) => {
   const data = await closingDocuments(session.tenantId);
-  return NextResponse.json({ ...data, fields: CLOSING_FIELDS.map((field) => ({ key: field.key, label: field.label })) });
+  const checklists = await prisma.documentChecklist.findMany({
+    where: { tenantId: session.tenantId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true },
+  });
+  return NextResponse.json({ ...data, checklists, fields: CLOSING_FIELDS.map((field) => ({ key: field.key, label: field.label })) });
 });
 
 export const PUT = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, session) => {
