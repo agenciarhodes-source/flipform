@@ -12,17 +12,35 @@ import { CLOSING_MAX_BYTES, CLOSING_MAX_TEMPLATES, cleanTemplateName, type Closi
 import { docxPlaceholders } from './docx';
 
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+export const PDF_MIME = 'application/pdf';
 
 type SettingsRow = { enabled: boolean; send_when: string };
-type TemplateRow = { id: string; name: string; object_key: string; size_bytes: number; placeholders: unknown; situation: string; created_at: Date };
+type TemplateRow = {
+  id: string; name: string; object_key: string; size_bytes: number; placeholders: unknown; situation: string;
+  kind: string | null; checklist_ids: unknown; created_at: Date;
+};
 
-export type ClosingTemplate = { id: string; name: string; sizeBytes: number; known: string[]; unknown: string[]; situation: ClosingSituation; createdAt: string };
+export type ClosingTemplate = {
+  id: string; name: string; sizeBytes: number; kind: 'pdf' | 'docx'; checklistIds: string[];
+  known: string[]; unknown: string[]; situation: ClosingSituation; createdAt: string;
+};
+
+const list = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
 
 function toTemplate(row: TemplateRow): ClosingTemplate {
   const found = (row.placeholders && typeof row.placeholders === 'object' ? row.placeholders : {}) as { known?: unknown; unknown?: unknown };
-  const list = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []);
   const situation = (['adult', 'minor', 'rogo'].includes(row.situation) ? row.situation : 'all') as ClosingSituation;
-  return { id: row.id, name: row.name, sizeBytes: row.size_bytes, known: list(found.known), unknown: list(found.unknown), situation, createdAt: row.created_at.toISOString() };
+  return {
+    id: row.id, name: row.name, sizeBytes: row.size_bytes, kind: row.kind === 'pdf' ? 'pdf' : 'docx',
+    checklistIds: list(row.checklist_ids), known: list(found.known), unknown: list(found.unknown), situation,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+async function templateRows(tenantId: string) {
+  return prisma.$queryRaw<TemplateRow[]>`
+    SELECT id, name, object_key, size_bytes, placeholders, situation, kind, checklist_ids, created_at
+    FROM closing_document_templates WHERE tenant_id = ${tenantId} ORDER BY position ASC, created_at ASC`;
 }
 
 /** Settings and models of a company. `ready: false` while the tables do not exist yet. */
@@ -30,9 +48,8 @@ export async function closingDocuments(tenantId: string) {
   const settings = await prisma.$queryRaw<SettingsRow[]>`
     SELECT enabled, send_when FROM closing_document_settings WHERE tenant_id = ${tenantId}`.catch(() => null);
   if (!settings) return { ready: false as const };
-  const templates = await prisma.$queryRaw<TemplateRow[]>`
-    SELECT id, name, object_key, size_bytes, placeholders, situation, created_at FROM closing_document_templates
-    WHERE tenant_id = ${tenantId} ORDER BY position ASC, created_at ASC`;
+  const templates = await templateRows(tenantId).catch(() => null);
+  if (!templates) return { ready: false as const };
   return {
     ready: true as const,
     enabled: settings[0]?.enabled ?? false,
@@ -52,44 +69,65 @@ export async function saveClosingSettings(input: { tenantId: string; userId: str
 
 export class ClosingDocumentError extends Error {}
 
-/** Keeps one Word model in the private storage. */
-export async function addClosingTemplate(input: { tenantId: string; userId: string; fileName: string; bytes: Uint8Array; situation: ClosingSituation }) {
+function isPdf(bytes: Uint8Array) {
+  return Buffer.from(bytes.subarray(0, 5)).toString('latin1') === '%PDF-';
+}
+
+/** Keeps one model (PDF as it is, or Word) in the private storage. */
+export async function addClosingTemplate(input: {
+  tenantId: string; userId: string; fileName: string; bytes: Uint8Array; checklistIds: string[];
+}) {
   const storage = resolveAttachmentStorage();
   if (!storage.ready) throw new ClosingDocumentError('O armazenamento de arquivos não está configurado.');
-  if (!/\.docx$/i.test(input.fileName)) throw new ClosingDocumentError('Envie o modelo em Word (.docx).');
-  if (input.bytes.byteLength > CLOSING_MAX_BYTES) throw new ClosingDocumentError('O modelo pode ter até 2 MB.');
-  let placeholders: { known: string[]; unknown: string[] };
-  try {
-    placeholders = docxPlaceholders(input.bytes);
-  } catch {
-    throw new ClosingDocumentError('Não consegui abrir este arquivo. Salve de novo no Word como .docx e tente outra vez.');
+  const kind = /\.pdf$/i.test(input.fileName) ? 'pdf' : /\.docx$/i.test(input.fileName) ? 'docx' : null;
+  if (!kind) throw new ClosingDocumentError('Envie o documento em PDF ou em Word (.docx).');
+  if (input.bytes.byteLength > CLOSING_MAX_BYTES) throw new ClosingDocumentError('O arquivo pode ter até 4 MB.');
+  let placeholders: { known: string[]; unknown: string[] } = { known: [], unknown: [] };
+  if (kind === 'pdf') {
+    if (!isPdf(input.bytes)) throw new ClosingDocumentError('Este arquivo não é um PDF válido.');
+  } else {
+    try {
+      placeholders = docxPlaceholders(input.bytes);
+    } catch {
+      throw new ClosingDocumentError('Não consegui abrir este arquivo. Salve de novo no Word como .docx e tente outra vez.');
+    }
   }
   const count = await prisma.$queryRaw<Array<{ total: bigint }>>`
     SELECT COUNT(*)::bigint AS total FROM closing_document_templates WHERE tenant_id = ${input.tenantId}`;
   const total = Number(count[0]?.total || 0);
   if (total >= CLOSING_MAX_TEMPLATES) throw new ClosingDocumentError(`São até ${CLOSING_MAX_TEMPLATES} documentos. Apague um para enviar outro.`);
+  const checklistIds = await knownChecklists(input.tenantId, input.checklistIds);
 
   const id = randomUUID();
+  const mime = kind === 'pdf' ? PDF_MIME : DOCX_MIME;
   const objectKey = `tenants/${input.tenantId.replace(/[^A-Za-z0-9_-]/g, '')}/closing-documents/${id}`;
-  const uploaded = await fetch(createAttachmentUploadUrl(storage.config, { key: objectKey, contentType: DOCX_MIME, contentLength: input.bytes.byteLength }), {
+  const uploaded = await fetch(createAttachmentUploadUrl(storage.config, { key: objectKey, contentType: mime, contentLength: input.bytes.byteLength }), {
     method: 'PUT',
-    headers: { 'Content-Type': DOCX_MIME, 'Content-Length': String(input.bytes.byteLength) },
+    headers: { 'Content-Type': mime, 'Content-Length': String(input.bytes.byteLength) },
     body: Buffer.from(input.bytes),
     signal: AbortSignal.timeout(30_000),
   }).catch(() => null);
   if (!uploaded?.ok) throw new ClosingDocumentError('Não foi possível guardar o arquivo. Tente de novo.');
 
+  const name = cleanTemplateName(input.fileName.replace(/\.pdf$/i, ''));
   await prisma.$executeRaw`
-    INSERT INTO closing_document_templates (id, tenant_id, name, object_key, size_bytes, placeholders, situation, position, created_by, created_at)
-    VALUES (${id}, ${input.tenantId}, ${cleanTemplateName(input.fileName)}, ${objectKey}, ${input.bytes.byteLength},
-      ${JSON.stringify(placeholders)}::jsonb, ${input.situation}, ${total}, ${input.userId}, NOW())`;
-  return { id, ...placeholders };
+    INSERT INTO closing_document_templates (id, tenant_id, name, object_key, size_bytes, placeholders, situation, kind, checklist_ids, position, created_by, created_at)
+    VALUES (${id}, ${input.tenantId}, ${name}, ${objectKey}, ${input.bytes.byteLength},
+      ${JSON.stringify(placeholders)}::jsonb, 'all', ${kind}, ${JSON.stringify(checklistIds)}::jsonb, ${total}, ${input.userId}, NOW())`;
+  return { id, kind, ...placeholders };
+}
+
+/** Only document lists (case types) of the company itself. */
+async function knownChecklists(tenantId: string, ids: string[]) {
+  if (!ids.length) return [];
+  const rows = await prisma.documentChecklist.findMany({ where: { tenantId, id: { in: ids.slice(0, 50) } }, select: { id: true } });
+  return rows.map((row) => row.id);
 }
 
 async function templateRow(tenantId: string, id: string) {
   const rows = await prisma.$queryRaw<TemplateRow[]>`
-    SELECT id, name, object_key, size_bytes, placeholders, situation, created_at FROM closing_document_templates
-    WHERE tenant_id = ${tenantId} AND id = ${id}`;
+    SELECT id, name, object_key, size_bytes, placeholders, situation, kind, checklist_ids, created_at
+    FROM closing_document_templates WHERE tenant_id = ${tenantId} AND id = ${id}`;
   return rows[0] || null;
 }
 
@@ -99,7 +137,17 @@ export async function readClosingTemplate(tenantId: string, id: string) {
   const storage = resolveAttachmentStorage();
   if (!row || !storage.ready) return null;
   const bytes = await readAttachmentObject(storage.config, { key: row.object_key, maxBytes: CLOSING_MAX_BYTES });
-  return bytes ? { name: row.name, bytes } : null;
+  if (!bytes) return null;
+  const template = toTemplate(row);
+  return { name: row.name, kind: template.kind, mime: template.kind === 'pdf' ? PDF_MIME : DOCX_MIME, bytes };
+}
+
+/** Which case types (document lists) one model is for; none = every case. */
+export async function setClosingTemplateChecklists(tenantId: string, id: string, checklistIds: string[]) {
+  const ids = await knownChecklists(tenantId, checklistIds);
+  const changed = await prisma.$executeRaw`
+    UPDATE closing_document_templates SET checklist_ids = ${JSON.stringify(ids)}::jsonb WHERE tenant_id = ${tenantId} AND id = ${id}`;
+  return changed > 0;
 }
 
 /** Which customers one model is for. */

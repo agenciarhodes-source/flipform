@@ -69,11 +69,14 @@ type OutboxMetadata = {
   mediaId?: string;
   mediaMimeType?: string;
   audioVoice?: boolean;
+  /** A file (PDF, Word) sent as a document: the name the customer sees. */
+  documentFileName?: string;
 };
 
 /** What the Inbox shows for a voice note sent by the team. */
 export const OUTBOUND_AUDIO_TEXT = '🎤 Áudio';
 export type WhatsAppOutboundAudio = { mediaId: string; mimeType: string; voice: boolean; contentHash: string };
+export type WhatsAppOutboundDocument = { mediaId: string; mimeType: string; fileName: string; contentHash: string };
 
 export type WhatsAppOutboundTemplate = { name: string; language: string; parameters?: string[] };
 
@@ -252,9 +255,11 @@ async function enqueueWhatsAppTextMessage(input: {
   aiSender?: WhatsAppAiSender;
   systemSender?: WhatsAppSystemSender;
   audio?: WhatsAppOutboundAudio;
+  document?: WhatsAppOutboundDocument;
 }) {
   const template = normalizeOutboundTemplate(input.template);
   const audio = input.audio || null;
+  const document = input.document || null;
   const tenantId = input.tenantId.trim();
   const conversationId = input.conversationId.trim();
   const requestedByUserId = input.requestedByUserId.trim();
@@ -276,7 +281,9 @@ async function enqueueWhatsAppTextMessage(input: {
   const textFingerprint = requestFingerprint(conversationId,
     template ? `template\u0000${template.name}\u0000${template.language}\u0000${(template.parameters || []).join('\u0001')}` : text);
   // A voice note is bound to its audio content, so a retry with another recording is a conflict.
-  const fingerprint = audio ? sha256(`${textFingerprint}\u0000audio\u0000${audio.contentHash}`) : textFingerprint;
+  const fingerprint = audio
+    ? sha256(`${textFingerprint}\u0000audio\u0000${audio.contentHash}`)
+    : document ? sha256(`${textFingerprint}\u0000document\u0000${document.contentHash}`) : textFingerprint;
   const idempotencyKeyHash = sha256(idempotencyKey);
 
   const existing = await findExistingOutboxMessage(tenantId, externalMessageId);
@@ -308,7 +315,7 @@ async function enqueueWhatsAppTextMessage(input: {
   ]);
   // The AI never signs as an attendant: it introduces itself as the virtual assistant instead.
   // A voice note has no caption, so it carries no signature either.
-  const signature = authorization.sender && !audio
+  const signature = authorization.sender && !audio && !document
     ? buildPublicAgentSignature({
       mode: signatureSettings.mode,
       senderUserId: authorization.sender.id,
@@ -331,6 +338,7 @@ async function enqueueWhatsAppTextMessage(input: {
     ...(signature.signature && !template ? { agentSignature: signature.signature } : {}),
     ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
     ...(audio ? { mediaId: audio.mediaId, mediaMimeType: audio.mimeType, audioVoice: audio.voice } : {}),
+    ...(document ? { mediaId: document.mediaId, mediaMimeType: document.mimeType, documentFileName: document.fileName.slice(0, 120) } : {}),
     ...(template ? { template } : {}),
     ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
     ...(systemSender ? { systemSenderLabel: systemSender.label.slice(0, 60) } : {}),
@@ -345,7 +353,7 @@ async function enqueueWhatsAppTextMessage(input: {
         channel: 'whatsapp',
         externalMessageId,
         direction: 'outbound',
-        type: audio ? 'audio' : 'text',
+        type: audio ? 'audio' : document ? 'document' : 'text',
         text,
         status: 'queued',
         sentByUserId: aiSender || systemSender ? null : requestedByUserId,
@@ -571,6 +579,7 @@ async function sendMetaWhatsAppText(input: {
   text: string;
   template?: WhatsAppOutboundTemplate;
   audio?: { id: string; voice: boolean };
+  document?: { id: string; fileName: string };
   accessToken: string;
 }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`);
@@ -578,9 +587,11 @@ async function sendMetaWhatsAppText(input: {
   const content = input.template
     ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language },
       ...(parameters.length ? { components: [{ type: 'body', parameters: parameters.map(value => ({ type: 'text', text: value })) }] } : {}) } }
-    : input.audio
-      ? { type: 'audio', audio: { id: input.audio.id, ...(input.audio.voice ? { voice: true } : {}) } }
-      : { type: 'text', text: { preview_url: false, body: input.text } };
+    : input.document
+      ? { type: 'document', document: { id: input.document.id, filename: input.document.fileName } }
+      : input.audio
+        ? { type: 'audio', audio: { id: input.audio.id, ...(input.audio.voice ? { voice: true } : {}) } }
+        : { type: 'text', text: { preview_url: false, body: input.text } };
   let response: Response;
   try {
     response = await fetch(url, {
@@ -668,6 +679,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
   systemSender?: WhatsAppSystemSender;
   /** When set, a voice note already uploaded to Meta is sent; `text` is only what the Inbox shows. */
   audio?: WhatsAppOutboundAudio;
+  /** When set, a file already uploaded to Meta is sent as a document; `text` is only what the Inbox shows. */
+  document?: WhatsAppOutboundDocument;
 }): Promise<WhatsAppOutboundResult> {
   const queued = await enqueueWhatsAppTextMessage(input);
   const begun = await beginDispatch(input.tenantId, queued.message.id);
@@ -731,7 +744,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     recipientWaId: begun.metadata.recipientWaId,
     text: providerText,
     template: begun.metadata.template,
-    audio: begun.metadata.mediaId ? { id: begun.metadata.mediaId, voice: Boolean(begun.metadata.audioVoice) } : undefined,
+    audio: begun.metadata.mediaId && !begun.metadata.documentFileName ? { id: begun.metadata.mediaId, voice: Boolean(begun.metadata.audioVoice) } : undefined,
+    document: begun.metadata.mediaId && begun.metadata.documentFileName ? { id: begun.metadata.mediaId, fileName: begun.metadata.documentFileName } : undefined,
     accessToken,
   });
   if (provider.kind === 'unknown') {
@@ -821,5 +835,53 @@ export async function enqueueAndDispatchWhatsAppAudioMessage(input: {
     text: OUTBOUND_AUDIO_TEXT,
     idempotencyKey: input.idempotencyKey,
     audio: { mediaId, mimeType: input.audio.mimeType, voice: input.audio.voice, contentHash },
+  });
+}
+
+/**
+ * A file (PDF or Word) sent by the AI or the system, for example the documents that finish the
+ * attendance. It goes to Meta first, then the message is queued and sent like a text.
+ */
+export async function enqueueAndDispatchWhatsAppDocumentMessage(input: {
+  tenantId: string;
+  conversationId: string;
+  idempotencyKey: string;
+  aiSender?: WhatsAppAiSender;
+  systemSender?: WhatsAppSystemSender;
+  file: { bytes: Uint8Array; mimeType: string; fileName: string };
+}): Promise<WhatsAppOutboundResult> {
+  const tenantId = input.tenantId.trim();
+  if (!input.aiSender && !input.systemSender) throw new WhatsAppOutboundError('INVALID_REQUEST', 'Document sender missing');
+  const contentHash = createHash('sha256').update(input.file.bytes).digest('hex');
+  const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
+  let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
+  if (!mediaId) {
+    const connection = await prisma.tenantWhatsAppConnection.findFirst({
+      where: { tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'desc' },
+      select: { phoneNumberId: true, accessTokenEncrypted: true },
+    });
+    if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
+    const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
+    const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
+    const accessToken = ownToken || credentials?.systemUserAccessToken;
+    if (!accessToken) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp credentials missing');
+    mediaId = await uploadWhatsAppMedia({
+      phoneNumberId: connection.phoneNumberId,
+      accessToken,
+      bytes: input.file.bytes,
+      mimeType: input.file.mimeType,
+      fileName: input.file.fileName,
+    });
+  }
+  return enqueueAndDispatchWhatsAppTextMessage({
+    tenantId,
+    conversationId: input.conversationId,
+    requestedByUserId: '',
+    text: `📄 ${input.file.fileName}`,
+    idempotencyKey: input.idempotencyKey,
+    aiSender: input.aiSender,
+    systemSender: input.systemSender,
+    document: { mediaId, mimeType: input.file.mimeType, fileName: input.file.fileName, contentHash },
   });
 }
