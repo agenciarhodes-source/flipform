@@ -41,3 +41,15 @@ def test_reminder_runs_with_the_ai_jobs_and_webhook_is_registered_on_new_token()
     assert "sweepUnsignedContracts()" in read("app/api/internal/jobs/whatsapp-ai/route.ts")
     assert "registerZapSignWebhook(session.tenantId, parsed.data.apiToken)" in read("app/api/contracts/zapsign/route.ts")
     assert "tests/zapsign-signed-rules.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_plain_route_handlers_take_params_as_a_promise():
+    # Next.js 15: a route handler that is not wrapped receives `params` as a Promise; the build fails otherwise.
+    import re
+    api = ROOT / "app" / "api"
+    wrong = []
+    for path in api.rglob("route.ts"):
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"export async function (GET|POST|PUT|PATCH|DELETE)\([^)]*params: \{", text):
+            wrong.append(str(path.relative_to(api)))
+    assert not wrong, wrong

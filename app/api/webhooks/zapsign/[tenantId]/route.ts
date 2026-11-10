@@ -5,14 +5,14 @@ import { zapSignEvent, zapSignWebhookAuthorized } from '@/lib/contracts/zapsign-
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 120;
+export const maxDuration = 60;
 
 /**
  * ZapSign warns FlipForm that a document changed. The call must carry the company's secret; the
  * event only says which document, and its state is asked to ZapSign again before anything changes.
  */
-export async function POST(req: Request, ctx: { params: { tenantId: string } }) {
-  const tenantId = ctx.params.tenantId;
+export async function POST(req: Request, ctx: { params: Promise<{ tenantId: string }> }) {
+  const { tenantId } = await ctx.params;
   const secret = /^[A-Za-z0-9_-]{1,64}$/.test(tenantId) ? webhookSecretFor(tenantId) : null;
   if (!secret || !zapSignWebhookAuthorized(req.headers.get('authorization'), secret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
