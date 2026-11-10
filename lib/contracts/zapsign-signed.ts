@@ -8,7 +8,7 @@ import { getActiveFlipAiTextModel } from '@/lib/flip-ai/text-model-setting';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { createAttachmentUploadUrl, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
-import { handoffRecipients } from '@/lib/instagram-ai/handoff-rules';
+import { createUrgentTeamTask } from '@/lib/tasks/team-task';
 import { ZAPSIGN_API_BASE } from './zapsign-rules';
 import { sendContractIfReady, zapSignApiToken } from './zapsign';
 import {
@@ -69,25 +69,9 @@ async function customerOf(tenantId: string, conversationId: string) {
   return { conversation, name, assignee: conversation?.lead?.assignedTo || conversation?.assignedTo || null };
 }
 
-async function createTeamTask(input: { tenantId: string; leadId: string | null; assignee: string | null; title: string; description: string; dueInMinutes: number }) {
-  const members = await prisma.tenantUser.findMany({
-    where: { tenantId: input.tenantId },
-    select: { userId: true, role: true, status: true },
-  });
-  const recipients = handoffRecipients({
-    conversationAssignee: input.assignee,
-    members: members.map((member) => ({ userId: member.userId, role: member.role, active: member.status === 'active' })),
-  });
-  if (!recipients.length) return 0;
-  const due = new Date(Date.now() + input.dueInMinutes * 60_000);
-  await prisma.task.createMany({
-    data: recipients.map((userId) => ({
-      tenantId: input.tenantId, leadId: input.leadId, assignedTo: userId, createdBy: null,
-      title: input.title, description: input.description, dueDate: due,
-      remindMinutesBefore: Math.min(60, Math.max(5, input.dueInMinutes)), priority: 'high' as const,
-    })),
-  });
-  return recipients.length;
+/** An urgent task for the lead's attendant (or the managers, or the owners). */
+function createTeamTask(input: { tenantId: string; leadId: string | null; assignee: string | null; title: string; description: string; dueInMinutes: number }) {
+  return createUrgentTeamTask(input);
 }
 
 async function sayToCustomer(input: { tenantId: string; conversationId: string; text: string; key: string }) {
