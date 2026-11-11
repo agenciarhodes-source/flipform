@@ -14,7 +14,7 @@ def test_reactivation_is_an_option_off_by_default():
     settings = read("lib/whatsapp-ai/settings.ts")
     assert "reactivationEnabled: z.boolean().optional().default(false)," in settings
     ui = read("components/whatsapp-ai/settings-manager.tsx")
-    assert "Mensagem de reativação (23h)" in ui
+    assert "Mensagem de reativação" in ui
 
 
 def test_reactivation_runs_with_the_scheduler_once_per_silence_and_as_the_ai():

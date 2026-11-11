@@ -75,7 +75,8 @@ async function lastMoment(tenantId: string, conversationId: string): Promise<Rea
 /**
  * "Mensagem de reativação": for each number with the option on, conversations where the company
  * spoke last and the customer went silent get, inside the free 24-hour window, a same-day reminder
- * (after 3 hours, in business hours) and a last one at 23 hours. Each is written by the AI from
+ * (after 10 hours, in business hours) or, when that time fell outside business hours, one at 23 hours
+ * (never both: one reminder per conversation in 18 hours). Each is written by the AI from
  * where the conversation stopped: the documents still missing, the moment the conversation engine
  * read and what is pending. Called by the scheduler.
  */
