@@ -1,3 +1,4 @@
+import { leadStory } from '@/lib/leads/lead-story';
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -139,7 +140,10 @@ export const GET = withPermission('LEADS_VIEW', async (_req, session, ctx: { par
     }
     : null;
 
-  return NextResponse.json({ lead: { ...lead, answers: lead.answers.map(publicLeadAnswer), flipAiAgentName, whatsappConsentAt,
+  // "Resumo do cliente": what happened, from the facts already recorded (no AI call).
+  const story = await leadStory(session.tenantId, lead.id).catch(() => null);
+
+  return NextResponse.json({ lead: { ...lead, answers: lead.answers.map(publicLeadAnswer), flipAiAgentName, whatsappConsentAt, story,
     flipAiQualifications: qualificationSchemaReady ? (lead as any).flipAiQualifications || [] : [],
     flipAiLiveIntelligence,
     flipAiConversation,
