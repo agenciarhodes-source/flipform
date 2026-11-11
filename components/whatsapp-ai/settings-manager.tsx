@@ -244,9 +244,10 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
         <span>
           <span className="font-medium">Mensagem de reativação</span>
           <span className="block text-xs text-muted-foreground">
-            Se o cliente ficar 10 horas sem responder depois da última mensagem da empresa, a IA manda um lembrete do ponto em que a
-            conversa parou (em horário comercial; se cair fora dele, sai com 23 horas). Uma mensagem só a cada 18 horas, respeitando o prazo
-            que o cliente combinou. Sai dentro da janela gratuita de 24h do WhatsApp (sem modelo pago) e usa poucos créditos do Flip AI.
+            Se o cliente ficar sem responder depois da última mensagem da empresa, a IA manda um lembrete do ponto em que a conversa parou
+            com 12 horas (em horário comercial) e outro com 23 horas, respeitando o prazo que o cliente combinou. Depois disso, entra a
+            sequência de retomada com os modelos aprovados. Sai dentro da janela gratuita de 24h do WhatsApp (sem modelo pago) e usa poucos
+            créditos do Flip AI.
             Não vale para leads ganhos ou perdidos.
           </span>
         </span>
