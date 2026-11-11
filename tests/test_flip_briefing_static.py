@@ -33,7 +33,7 @@ def test_owner_can_switch_the_summary_off_for_the_whole_company():
 def test_briefing_is_fuller_and_keeps_the_scope_of_who_reads():
     briefing = read("lib/flip/briefing.ts")
     assert "seesTeam\n      ? prisma.message.findMany(" in briefing.replace("\r\n", "\n")
-    assert "maxOutputTokens: 800" in briefing
+    assert "maxOutputTokens: 2_000" in briefing
     assert "createdAt: { gte: lastMonthStart, lt: lastMonthEnd }" in briefing
     rules = read("lib/flip/briefing-rules.ts")
     assert "escreva 2 ou 3 parágrafos curtos" in rules

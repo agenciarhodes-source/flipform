@@ -106,7 +106,7 @@ async function writeWithAi(session: Session, facts: BriefingFacts) {
   const result = await streamOpenAiText(
     { instructions: briefingInstructions(facts), messages: [{ role: 'user', content: JSON.stringify(facts) }] },
     () => undefined,
-    { model, timeoutMs: 20_000, maxOutputTokens: 800, safetyIdentifier: session.userId },
+    { model, timeoutMs: 20_000, maxOutputTokens: 2_000, safetyIdentifier: session.userId },
   ).catch(() => null);
   if (!result?.text.trim()) return null;
   try {

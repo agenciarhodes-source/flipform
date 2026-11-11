@@ -124,7 +124,7 @@ async function checkSignedContract(input: { tenantId: string; conversationId: st
         { type: 'input_text', text: 'Confira este contrato assinado.' },
         { type: 'input_file', filename: 'contrato-assinado.pdf', file_data: `data:application/pdf;base64,${Buffer.from(input.bytes).toString('base64')}` },
       ] }],
-    }, () => undefined, { model, textFormat: CONTRACT_CHECK_FORMAT, timeoutMs: 40_000, maxOutputTokens: 600, safetyIdentifier: input.conversationId });
+    }, () => undefined, { model, textFormat: CONTRACT_CHECK_FORMAT, timeoutMs: 40_000, maxOutputTokens: 2_000, safetyIdentifier: input.conversationId });
     try {
       const event = await prisma.flipAiUsageEvent.create({
         data: {

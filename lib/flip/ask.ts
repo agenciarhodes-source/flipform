@@ -60,7 +60,7 @@ async function interpret(session: Session, question: string, context: { attendan
       'Preencha campaign, source, attendant e stage só quando a pergunta citar; senão null.',
     ].join('\n'),
     messages: [{ role: 'user', content: question }],
-  }, () => undefined, { model, textFormat: ASK_PLAN_FORMAT, timeoutMs: 15_000, maxOutputTokens: 200, safetyIdentifier: session.userId });
+  }, () => undefined, { model, textFormat: ASK_PLAN_FORMAT, timeoutMs: 15_000, maxOutputTokens: 1_000, safetyIdentifier: session.userId });
   await charge(session, result);
   const parsed = askPlanSchema.safeParse(JSON.parse(result.text));
   if (!parsed.success) throw new AskFlipError(422, 'Não entendi a pergunta. Tente de outro jeito.');
@@ -290,7 +290,7 @@ export async function askFlip(session: Session, question: string, now = new Date
       'Se o resultado estiver vazio, diga que não há dados para esse filtro.',
     ].join('\n'),
     messages: [{ role: 'user', content: `Pergunta: ${question}\nResultado: ${JSON.stringify(result)}` }],
-  }, () => undefined, { model, timeoutMs: 15_000, maxOutputTokens: 300, safetyIdentifier: session.userId });
+  }, () => undefined, { model, timeoutMs: 15_000, maxOutputTokens: 1_000, safetyIdentifier: session.userId });
   await charge(session, written);
   return { plan, answer: written.text.trim().slice(0, 1_200), filters: result.filters };
 }
