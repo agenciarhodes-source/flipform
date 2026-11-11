@@ -47,7 +47,10 @@ import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign'
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
 import { extractSendDocuments } from '@/lib/closing-documents/send-rules';
-import { decideWhatsAppAiAnswer, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
+import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
+import { shouldSendVoice } from './voice-rules';
+import { decideWhatsAppAiAnswer, isTestPhoneNumber, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -574,7 +577,21 @@ export async function replyToWhatsAppConversation(input: {
       return { replied: false, reason: 'team_answered_meanwhile' };
     }
 
-    const sent = await enqueueAndDispatchWhatsAppTextMessage({
+    // Voice note instead of text when the company turned it on (first only for the test numbers).
+    const voice = await whatsappVoiceSettings(input.tenantId).catch(() => null);
+    const voiceWanted = voice && voice.mode !== 'off' && shouldSendVoice({
+      mode: voice.mode,
+      testNumber: isTestPhoneNumber(settings.testPhoneNumbers, conversation.externalContactIdentity.externalUserId),
+      prefersAudio: prefersAudioReplies(context.memorySnapshot?.facts, parsed.memoryPatch?.facts),
+      reply,
+    });
+    const voiceSent = voiceWanted && voice
+      ? await sendWhatsAppVoiceReply({
+        tenantId: input.tenantId, conversationId: conversation.id, idempotencyKey: `flipai-voice-${event.id}`,
+        agent: { id: runtime.id, name: runtime.name }, settings: voice, reply,
+      })
+      : null;
+    const sent = voiceSent || await enqueueAndDispatchWhatsAppTextMessage({
       tenantId: input.tenantId,
       conversationId: conversation.id,
       requestedByUserId: '',

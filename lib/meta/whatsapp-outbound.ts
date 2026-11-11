@@ -885,3 +885,49 @@ export async function enqueueAndDispatchWhatsAppDocumentMessage(input: {
     document: { mediaId, mimeType: input.file.mimeType, fileName: input.file.fileName, contentHash },
   });
 }
+
+/**
+ * A voice note made by the AI (its reply spoken). The file goes to Meta first, then the message is
+ * queued and sent like a text; `text` is what the Inbox shows (the words that were spoken).
+ */
+export async function enqueueAndDispatchWhatsAppAiAudioMessage(input: {
+  tenantId: string;
+  conversationId: string;
+  idempotencyKey: string;
+  aiSender: WhatsAppAiSender;
+  text: string;
+  audio: { bytes: Uint8Array; mimeType: string; voice: boolean; extension: string };
+}): Promise<WhatsAppOutboundResult> {
+  const tenantId = input.tenantId.trim();
+  const contentHash = createHash('sha256').update(input.audio.bytes).digest('hex');
+  const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
+  let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
+  if (!mediaId) {
+    const connection = await prisma.tenantWhatsAppConnection.findFirst({
+      where: { tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'desc' },
+      select: { phoneNumberId: true, accessTokenEncrypted: true },
+    });
+    if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
+    const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
+    const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
+    const accessToken = ownToken || credentials?.systemUserAccessToken;
+    if (!accessToken) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp credentials missing');
+    mediaId = await uploadWhatsAppMedia({
+      phoneNumberId: connection.phoneNumberId,
+      accessToken,
+      bytes: input.audio.bytes,
+      mimeType: input.audio.mimeType,
+      fileName: `audio-${Date.now()}.${input.audio.extension}`,
+    });
+  }
+  return enqueueAndDispatchWhatsAppTextMessage({
+    tenantId,
+    conversationId: input.conversationId,
+    requestedByUserId: '',
+    text: input.text,
+    idempotencyKey: input.idempotencyKey,
+    aiSender: input.aiSender,
+    audio: { mediaId, mimeType: input.audio.mimeType, voice: input.audio.voice, contentHash },
+  });
+}

@@ -2169,3 +2169,16 @@ model ClosingDocumentTemplate {
   @@index([tenantId])
   @@map("closing_document_templates")
 }
+
+/// WhatsApp answers in voice. mode: off | test (only test numbers) | on_request | auto. provider: elevenlabs | openai.
+model WhatsAppVoiceSettings {
+  tenantId  String   @id @map("tenant_id")
+  mode      String   @default("off")
+  provider  String   @default("elevenlabs")
+  voiceId   String?  @map("voice_id")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("whatsapp_voice_settings")
+}

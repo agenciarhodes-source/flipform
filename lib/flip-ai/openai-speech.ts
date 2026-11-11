@@ -38,6 +38,8 @@ export async function synthesizeReplySpeech(input: {
   apiKey?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** opus: Ogg/Opus, what WhatsApp shows as a voice note. */
+  format?: 'mp3' | 'opus';
 }) {
   const apiKey = input.apiKey || process.env.OPENAI_API_KEY;
   if (!apiKey) throw new OpenAiSpeechError('OPENAI_API_KEY_MISSING');
@@ -55,14 +57,14 @@ export async function synthesizeReplySpeech(input: {
         voice: resolveSpeechVoice(input.voice ?? process.env.OPENAI_FLIP_AI_TTS_VOICE),
         input: speechText,
         instructions: FLIP_AI_SPEECH_STYLE,
-        response_format: 'mp3',
+        response_format: input.format || 'mp3',
       }),
       signal: controller.signal,
     });
     if (!response.ok) throw new OpenAiSpeechError(`OPENAI_SPEECH_HTTP_${response.status}`);
     const audio = new Uint8Array(await response.arrayBuffer());
     if (audio.byteLength === 0) throw new OpenAiSpeechError('OPENAI_SPEECH_EMPTY_AUDIO');
-    return { audio, contentType: 'audio/mpeg', characters: speechText.length, model: FLIP_AI_SPEECH_MODEL };
+    return { audio, contentType: input.format === 'opus' ? 'audio/ogg' : 'audio/mpeg', characters: speechText.length, model: FLIP_AI_SPEECH_MODEL };
   } catch (error) {
     if (error instanceof OpenAiSpeechError) throw error;
     throw new OpenAiSpeechError('OPENAI_SPEECH_FAILED');
