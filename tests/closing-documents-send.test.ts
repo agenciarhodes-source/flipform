@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   closingInstruction,
   extractSendDocuments,
+  shouldMoveAfterSending,
   signingInstructions,
   templatesForCase,
 } from '../lib/closing-documents/send-rules';
@@ -52,4 +53,12 @@ test('how to sign: gov.br or by hand; the guardian for a minor; a rogo with fing
   assert.match(rogo, /digital/);
   assert.match(rogo, /2 testemunhas/);
   assert.doesNotMatch(rogo, /gov\.br/);
+});
+
+test('stage after sending: forward only, in the funnel of the lead', () => {
+  const target = { pipelineId: 'p1', orderIndex: 8 };
+  assert.equal(shouldMoveAfterSending({ lead: { pipelineId: 'p1', stageOrderIndex: 7 }, target }), true);
+  assert.equal(shouldMoveAfterSending({ lead: { pipelineId: 'p1', stageOrderIndex: 8 }, target }), false);
+  assert.equal(shouldMoveAfterSending({ lead: { pipelineId: 'p1', stageOrderIndex: 9 }, target }), false);
+  assert.equal(shouldMoveAfterSending({ lead: { pipelineId: 'p2', stageOrderIndex: 1 }, target }), false);
 });

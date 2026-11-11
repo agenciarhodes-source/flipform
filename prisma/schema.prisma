@@ -2139,6 +2139,8 @@ model ClosingDocumentSettings {
   tenantId  String   @id @map("tenant_id")
   enabled   Boolean  @default(false)
   sendWhen  String   @default("") @map("send_when")
+  /// Stage the lead goes to when the documents are sent (never backwards); null = no move.
+  stageId   String?  @map("stage_id")
   updatedBy String?  @map("updated_by")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
