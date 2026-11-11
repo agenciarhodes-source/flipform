@@ -15,6 +15,7 @@ import { conversationDocumentContext } from './documents';
 import {
   cleanReactivationText,
   isReactivationSkip,
+  reminderTooSoon,
   earlyReactivationDue,
   earlyReactivationKey,
   REACTIVATION_AFTER_HOURS,
@@ -129,6 +130,17 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
       if (!kind) continue;
       // A person is handling it (AI paused or the conversation was resolved): the AI stays quiet.
       if (isConversationAiPaused(conversation, number.resumeAfterHours, now)) continue;
+      // One reminder per conversation in 18 hours, even when the customer answered and went quiet again.
+      const lastReminder = await prisma.flipAiUsageEvent.findFirst({
+        where: {
+          tenantId: number.tenantId, conversationId: conversation.id, operation: OPERATION, status: 'confirmed',
+          createdAt: { gte: new Date(now.getTime() - 24 * 3_600_000) },
+          NOT: { metadata: { path: ['delivery'], equals: 'skipped' } },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }).catch(() => null);
+      if (reminderTooSoon(lastReminder?.createdAt ?? null, now)) continue;
       // Only conversations of this number, and only customers the AI may talk to.
       const inboundMeta = conversation.messages[0]?.metadata as Record<string, unknown> | null;
       if (inboundMeta?.phoneNumberId && inboundMeta.phoneNumberId !== number.connection.phoneNumberId) continue;

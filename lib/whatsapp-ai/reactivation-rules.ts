@@ -57,6 +57,13 @@ export function cleanReactivationText(value: string) {
 export const REACTIVATION_EARLY_AFTER_HOURS = 3;
 /** The early reminder is not sent this close to the 23-hour one. */
 export const REACTIVATION_EARLY_LAST_HOUR = 20;
+/** At most one reminder per conversation in this time, whatever the silences in between. */
+export const REACTIVATION_MIN_GAP_HOURS = 18;
+
+/** A reminder already went out to this conversation too recently. */
+export function reminderTooSoon(lastReminderAt: Date | null, now: Date) {
+  return Boolean(lastReminderAt && now.getTime() - lastReminderAt.getTime() < REACTIVATION_MIN_GAP_HOURS * 3_600_000);
+}
 /** Business hours in Brasília, Monday to Saturday. */
 export const REACTIVATION_BUSINESS_HOURS = { start: 8, end: 18 } as const;
 

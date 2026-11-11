@@ -61,7 +61,12 @@ test('retomada no mesmo dia: depois de 3 horas, em horário comercial, antes da 
   assert.match(text, /NÃO REPITA/);
   assert.match(text, /só se a empresa ainda não disse isso/);
   assert.doesNotMatch(text, /SEMPRE dê o motivo/);
-  const { isReactivationSkip } = await import('../lib/whatsapp-ai/reactivation-rules');
+  const { isReactivationSkip, reminderTooSoon } = await import('../lib/whatsapp-ai/reactivation-rules');
+  const at = new Date('2026-11-11T16:16:00Z');
+  assert.equal(reminderTooSoon(null, at), false);
+  assert.equal(reminderTooSoon(new Date('2026-11-11T13:16:00Z'), at), true);
+  assert.equal(reminderTooSoon(new Date('2026-11-11T00:00:00Z'), at), true);
+  assert.equal(reminderTooSoon(new Date('2026-11-10T16:00:00Z'), at), false);
   assert.equal(isReactivationSkip('PULAR'), true);
   assert.equal(isReactivationSkip('*PULAR*'), true);
   assert.equal(isReactivationSkip('pular.'), true);
