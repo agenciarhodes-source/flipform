@@ -6,6 +6,7 @@ import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { LeadStoryCard } from '@/components/lead-story-card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -384,6 +385,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </TabsList>
 
           <TabsContent value="info" className="pb-6 space-y-4">
+            <LeadStoryCard story={lead.story} />
             <section className="space-y-3 rounded-xl border bg-white p-4">
               <h3 className="font-heading text-sm font-semibold">Informações do lead</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
