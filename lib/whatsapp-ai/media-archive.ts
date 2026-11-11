@@ -4,11 +4,15 @@ import { createHash, randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { createAttachmentUploadUrl, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
 import { sniffAttachmentMimeType } from '@/lib/flip-ai/chat-attachment';
-import { FLIP_AI_ATTACHMENT_RETENTION_DAYS } from '@/lib/flip-ai/chat-attachment-upload';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 
+/**
+ * Documents the customer sent are part of the case: the copy is kept for 5 years (as the signed
+ * contracts), even if the customer deletes the message on WhatsApp.
+ */
+export const WHATSAPP_MEDIA_RETENTION_DAYS = 5 * 365;
 /** WhatsApp files are larger than the ones sent in the site chat; the R2 copy accepts up to this. */
 const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
 const EXTENSIONS: Record<string, string> = {
@@ -21,8 +25,8 @@ export type WhatsAppMediaToArchive = { tenantId: string; connectionId: string; c
 
 /**
  * Keeps a copy of a photo, PDF or voice message the customer sent on WhatsApp in the same private
- * storage (R2) as the files of the site chat, for the same 7 days. It then shows on the lead card
- * with the chat files, and the same daily cleanup removes it when it expires.
+ * storage (R2) as the files of the site chat, kept for 5 years. It shows on the lead card with the
+ * chat files; the copy is made when the file arrives, so deleting it on WhatsApp later changes nothing.
  */
 export async function archiveWhatsAppMedia(input: WhatsAppMediaToArchive) {
   const storage = resolveAttachmentStorage();
@@ -79,7 +83,7 @@ export async function archiveWhatsAppMedia(input: WhatsAppMediaToArchive) {
       mimeType,
       sizeBytes: media.bytes.byteLength,
       status: 'pending',
-      expiresAt: new Date(now.getTime() + FLIP_AI_ATTACHMENT_RETENTION_DAYS * 86_400_000),
+      expiresAt: new Date(now.getTime() + WHATSAPP_MEDIA_RETENTION_DAYS * 86_400_000),
     },
   });
 
