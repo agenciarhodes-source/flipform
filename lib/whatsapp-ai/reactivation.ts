@@ -9,6 +9,7 @@ import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { loadLatestConversationMemory } from '@/lib/flip-ai/conversation-memory';
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isTestPhoneNumber } from './eligibility';
+import { registrationFirstName } from './registration-rules';
 import { isConversationAiPaused } from './pause';
 import { conversationDocumentContext } from './documents';
 import {
@@ -25,10 +26,11 @@ import {
 } from './reactivation-rules';
 
 const OPERATION = 'whatsapp_reactivation';
+const REACTIVATION_MAX_OUTPUT_TOKENS = 1_000;
 
+/** First name written normally ("EURI SILVA" -> "Euri"). */
 function firstName(value: string | null | undefined) {
-  const name = (value || '').replace(/[^\p{L}\s'-]/gu, ' ').trim().split(/\s+/)[0] || '';
-  return name.length >= 2 ? name : null;
+  return registrationFirstName(value);
 }
 
 async function transcript(tenantId: string, conversationId: string) {
@@ -162,7 +164,8 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
             pending: (memory?.pending || []).map((item) => item.value).slice(0, 6),
           }),
           messages: [{ role: 'user', content: history || 'Sem histórico de texto.' }],
-        }, () => undefined, { model, timeoutMs: 25_000, maxOutputTokens: 250, safetyIdentifier: conversation.id });
+        // The model may think before writing: the budget covers that too (only tokens used are billed).
+        }, () => undefined, { model, timeoutMs: 30_000, maxOutputTokens: REACTIVATION_MAX_OUTPUT_TOKENS, safetyIdentifier: conversation.id });
         const text = cleanReactivationText(result.text);
         if (!text) throw new Error('empty');
 
@@ -193,7 +196,10 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
           }).catch(() => undefined);
         }
       } catch {
-        await prisma.flipAiUsageEvent.update({ where: { id: eventId }, data: { status: 'failed' } }).catch(() => undefined);
+        // One more try on the next round: the failed record gives its lock back once (a second
+        // failure keeps the lock, because the retry key already exists).
+        await prisma.flipAiUsageEvent.update({ where: { id: eventId }, data: { status: 'failed', requestKey: `${requestKey}:retry` } })
+          .catch(() => prisma.flipAiUsageEvent.update({ where: { id: eventId }, data: { status: 'failed' } }).catch(() => undefined));
       }
     }
   }
