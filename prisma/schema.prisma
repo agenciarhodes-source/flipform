@@ -2183,18 +2183,18 @@ model WhatsAppVoiceSettings {
   @@map("whatsapp_voice_settings")
 }
 
-/// A call the team made to a lead (from the attendant's phone or WhatsApp) and how it went.
-/// outcome: answered | no_answer | voicemail | callback | wrong_number.
-model LeadCall {
-  id         String    @id @default(uuid())
-  tenantId   String    @map("tenant_id")
-  leadId     String    @map("lead_id")
-  userId     String?   @map("user_id")
-  outcome    String
-  note       String?
-  callbackAt DateTime? @map("callback_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
+/// A correction of a message the team sent on WhatsApp: the text before and after, who and when.
+/// The customer got a new message quoting the wrong one (correction_message_id).
+model MessageEdit {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  messageId           String   @map("message_id")
+  correctionMessageId String?  @map("correction_message_id")
+  previousText        String   @map("previous_text")
+  newText             String   @map("new_text")
+  editedBy            String?  @map("edited_by")
+  createdAt           DateTime @default(now()) @map("created_at")
 
-  @@index([tenantId, leadId, createdAt])
-  @@map("lead_calls")
+  @@index([tenantId, messageId, createdAt])
+  @@map("message_edits")
 }

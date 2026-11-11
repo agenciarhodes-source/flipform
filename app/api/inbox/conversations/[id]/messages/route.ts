@@ -72,8 +72,21 @@ export const GET = withPermission('INBOX_VIEW', async (_req: NextRequest, sessio
       return left.id.localeCompare(right.id);
     });
 
+  // Corrections of messages the team sent: the bubble shows the latest text, marked "editada".
+  const ids = messages.map((message) => message.id);
+  const edits = ids.length
+    ? await prisma.$queryRaw<Array<{ message_id: string; new_text: string; total: bigint }>>(Prisma.sql`
+      SELECT DISTINCT ON (message_id) message_id, new_text, COUNT(*) OVER (PARTITION BY message_id) AS total
+      FROM message_edits WHERE tenant_id = ${session.tenantId} AND message_id IN (${Prisma.join(ids)})
+      ORDER BY message_id, created_at DESC`).catch(() => [])
+    : [];
+  const editOf = new Map(edits.map((edit) => [edit.message_id, { text: edit.new_text, count: Number(edit.total) }]));
+
   return NextResponse.json({
     conversation,
-    messages,
+    messages: messages.map((message) => {
+      const edit = editOf.get(message.id);
+      return edit ? { ...message, originalText: message.text, text: edit.text, editCount: edit.count } : message;
+    }),
   });
 });

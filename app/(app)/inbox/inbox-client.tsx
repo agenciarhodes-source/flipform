@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/input';
 import { ConversationActions } from './conversation-actions';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { VoiceRecorder } from '@/components/inbox/voice-recorder';
+import { MessageCorrectionDialog, MessageEditHistoryDialog } from '@/components/inbox/message-correction';
+import { isCorrectionText } from '@/lib/inbox/correction-rules';
 import { toast } from 'sonner';
 import { contactAvatarColorIndex, contactInitials } from '@/lib/inbox/contact-avatar';
 import { instagramOtherLabel, instagramShareKind, instagramShareLabel, instagramShareTitle } from '@/lib/instagram-ai/share-rules';
@@ -88,6 +90,8 @@ interface InboxMessage extends InboxMessageSummary {
   sentByUserId: string | null;
   sentByUser: InboxAssignee | null;
   metadata: unknown;
+  /** Set when the team corrected this message: how many times. */
+  editCount?: number;
 }
 
 const AVATAR_COLORS = [
@@ -633,6 +637,9 @@ export function InboxClient({
     }
   }
 
+  const [correcting, setCorrecting] = useState<{ id: string; text: string } | null>(null);
+  const [historyOf, setHistoryOf] = useState<string | null>(null);
+
   async function loadMessages(conversationId: string, silent = false) {
     if (!silent) setLoadingMessages(true);
     try {
@@ -1058,6 +1065,22 @@ export function InboxClient({
                               <p className="text-sm italic opacity-75">{messageTypeLabel(message)}</p>
                             ) : null}
                             <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${outbound ? 'text-white/75' : 'text-muted-foreground'}`}>
+                              {message.editCount ? (
+                                <button type="button" className="rounded bg-black/10 px-1 italic hover:bg-black/20" onClick={() => setHistoryOf(message.id)} title="Ver o histórico de edições">
+                                  editada
+                                </button>
+                              ) : null}
+                              {outbound && message.sentByUserId && message.type === 'text' && selected.channel === 'whatsapp'
+                                && message.status !== 'failed' && selectedChannelCanSend && !isCorrectionText(message.text) ? (
+                                <button
+                                  type="button"
+                                  className="rounded px-1 hover:bg-white/15"
+                                  onClick={() => setCorrecting({ id: message.id, text: message.text || '' })}
+                                  title="Corrigir esta mensagem"
+                                >
+                                  Corrigir
+                                </button>
+                              ) : null}
                               <span>{formatMessageDate(message.providerTimestamp || message.createdAt)}</span>
                               {outbound && <MessageStatus status={message.status} />}
                             </div>
@@ -1071,6 +1094,15 @@ export function InboxClient({
                     <div ref={endRef} />
                   </div>
                 )}
+                {correcting && (
+                  <MessageCorrectionDialog
+                    messageId={correcting.id}
+                    currentText={correcting.text}
+                    onDone={() => { if (selected) void loadMessages(selected.id, true); }}
+                    onClose={() => setCorrecting(null)}
+                  />
+                )}
+                {historyOf && <MessageEditHistoryDialog messageId={historyOf} onClose={() => setHistoryOf(null)} />}
               </div>
 
               <footer className="border-t bg-card p-3 md:p-4">
