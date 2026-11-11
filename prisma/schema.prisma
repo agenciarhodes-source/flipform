@@ -2182,3 +2182,19 @@ model WhatsAppVoiceSettings {
 
   @@map("whatsapp_voice_settings")
 }
+
+/// A call the team made to a lead (from the attendant's phone or WhatsApp) and how it went.
+/// outcome: answered | no_answer | voicemail | callback | wrong_number.
+model LeadCall {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  leadId     String    @map("lead_id")
+  userId     String?   @map("user_id")
+  outcome    String
+  note       String?
+  callbackAt DateTime? @map("callback_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, leadId, createdAt])
+  @@map("lead_calls")
+}

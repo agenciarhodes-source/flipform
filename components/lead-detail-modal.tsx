@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LeadStoryCard } from '@/components/lead-story-card';
+import { LeadCallDialog } from '@/components/lead-call-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -292,6 +293,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
     onClose();
   };
 
+  const [calling, setCalling] = useState(false);
   const openWhatsAppConversation = async () => {
     try {
       const response = await fetch(`/api/inbox/leads/${encodeURIComponent(leadId)}/whatsapp-conversation`, {
@@ -353,6 +355,18 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                 )}
+                {lead.phone && (
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    title="Ligar e registrar a ligação"
+                    className="h-8 w-8"
+                    onClick={() => setCalling(true)}
+                    aria-label={`Ligar para ${lead.name}`}
+                  >
+                    <Phone className="h-4 w-4" />
+                  </Button>
+                )}
               </DialogTitle>
               <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mt-2">
                 {lead.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
@@ -365,6 +379,15 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
           </div>
         </DialogHeader>
 
+        {calling && (
+          <LeadCallDialog
+            leadId={leadId}
+            leadName={lead.name}
+            phone={lead.phone}
+            onSaved={() => { load(); onChange(); }}
+            onClose={() => setCalling(false)}
+          />
+        )}
         <div className="space-y-2 px-6 pt-3">
           <StageSuggestionBanner leadId={leadId} onDecided={() => { load(); onChange(); }} />
           <AutomaticMessagesSwitch leadId={leadId} />
