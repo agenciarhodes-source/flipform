@@ -71,6 +71,8 @@ type OutboxMetadata = {
   audioVoice?: boolean;
   /** A file (PDF, Word) sent as a document: the name the customer sees. */
   documentFileName?: string;
+  /** Sent as a reply that quotes this WhatsApp message (a correction of it). */
+  replyToProviderMessageId?: string;
 };
 
 /** What the Inbox shows for a voice note sent by the team. */
@@ -256,6 +258,7 @@ async function enqueueWhatsAppTextMessage(input: {
   systemSender?: WhatsAppSystemSender;
   audio?: WhatsAppOutboundAudio;
   document?: WhatsAppOutboundDocument;
+  replyToProviderMessageId?: string;
 }) {
   const template = normalizeOutboundTemplate(input.template);
   const audio = input.audio || null;
@@ -339,6 +342,7 @@ async function enqueueWhatsAppTextMessage(input: {
     ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
     ...(audio ? { mediaId: audio.mediaId, mediaMimeType: audio.mimeType, audioVoice: audio.voice } : {}),
     ...(document ? { mediaId: document.mediaId, mediaMimeType: document.mimeType, documentFileName: document.fileName.slice(0, 120) } : {}),
+    ...(input.replyToProviderMessageId && !template ? { replyToProviderMessageId: input.replyToProviderMessageId } : {}),
     ...(template ? { template } : {}),
     ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
     ...(systemSender ? { systemSenderLabel: systemSender.label.slice(0, 60) } : {}),
@@ -580,6 +584,7 @@ async function sendMetaWhatsAppText(input: {
   template?: WhatsAppOutboundTemplate;
   audio?: { id: string; voice: boolean };
   document?: { id: string; fileName: string };
+  replyToProviderMessageId?: string;
   accessToken: string;
 }) {
   const url = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`);
@@ -606,6 +611,7 @@ async function sendMetaWhatsAppText(input: {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: input.recipientWaId,
+        ...(input.replyToProviderMessageId ? { context: { message_id: input.replyToProviderMessageId } } : {}),
         ...content,
       }),
     });
@@ -681,6 +687,8 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
   audio?: WhatsAppOutboundAudio;
   /** When set, a file already uploaded to Meta is sent as a document; `text` is only what the Inbox shows. */
   document?: WhatsAppOutboundDocument;
+  /** When set, the text goes as a reply that quotes this WhatsApp message. */
+  replyToProviderMessageId?: string;
 }): Promise<WhatsAppOutboundResult> {
   const queued = await enqueueWhatsAppTextMessage(input);
   const begun = await beginDispatch(input.tenantId, queued.message.id);
@@ -746,6 +754,7 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     template: begun.metadata.template,
     audio: begun.metadata.mediaId && !begun.metadata.documentFileName ? { id: begun.metadata.mediaId, voice: Boolean(begun.metadata.audioVoice) } : undefined,
     document: begun.metadata.mediaId && begun.metadata.documentFileName ? { id: begun.metadata.mediaId, fileName: begun.metadata.documentFileName } : undefined,
+    replyToProviderMessageId: begun.metadata.replyToProviderMessageId,
     accessToken,
   });
   if (provider.kind === 'unknown') {
