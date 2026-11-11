@@ -75,8 +75,8 @@ async function lastMoment(tenantId: string, conversationId: string): Promise<Rea
 /**
  * "Mensagem de reativação": for each number with the option on, conversations where the company
  * spoke last and the customer went silent get, inside the free 24-hour window, a same-day reminder
- * (after 10 hours, in business hours) or, when that time fell outside business hours, one at 23 hours
- * (never both: one reminder per conversation in 18 hours). Each is written by the AI from
+ * (after 12 hours, in business hours) and a last one at 23 hours, still in the free window; after that
+ * the approved templates of the follow-up sequence take over. Each is written by the AI from
  * where the conversation stopped: the documents still missing, the moment the conversation engine
  * read and what is pending. Called by the scheduler.
  */
@@ -131,7 +131,8 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
       if (!kind) continue;
       // A person is handling it (AI paused or the conversation was resolved): the AI stays quiet.
       if (isConversationAiPaused(conversation, number.resumeAfterHours, now)) continue;
-      // One reminder per conversation in 18 hours, even when the customer answered and went quiet again.
+      // Per silence: one at 12 hours and one at 23 hours. A new silence (the customer answered and went
+      // quiet again) gets nothing while a reminder of another silence went out in the last 18 hours.
       const lastReminder = await prisma.flipAiUsageEvent.findFirst({
         where: {
           tenantId: number.tenantId, conversationId: conversation.id, operation: OPERATION, status: 'confirmed',
@@ -139,9 +140,10 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
           NOT: { metadata: { path: ['delivery'], equals: 'skipped' } },
         },
         orderBy: { createdAt: 'desc' },
-        select: { createdAt: true },
+        select: { createdAt: true, requestKey: true },
       }).catch(() => null);
-      if (reminderTooSoon(lastReminder?.createdAt ?? null, now)) continue;
+      const sameSilence = Boolean(lastReminder?.requestKey.includes(`:${conversation.id}:${conversation.lastInboundAt!.getTime()}`));
+      if (!sameSilence && reminderTooSoon(lastReminder?.createdAt ?? null, now)) continue;
       // Only conversations of this number, and only customers the AI may talk to.
       const inboundMeta = conversation.messages[0]?.metadata as Record<string, unknown> | null;
       if (inboundMeta?.phoneNumberId && inboundMeta.phoneNumberId !== number.connection.phoneNumberId) continue;

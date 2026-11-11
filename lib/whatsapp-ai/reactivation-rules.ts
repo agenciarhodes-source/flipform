@@ -54,10 +54,10 @@ export function cleanReactivationText(value: string) {
 // ---------------------------------------------------------------- Same-day reminder (free)
 
 /** The first reminder: after this many hours of silence, inside business hours, still in the free window. */
-export const REACTIVATION_EARLY_AFTER_HOURS = 10;
+export const REACTIVATION_EARLY_AFTER_HOURS = 12;
 /** The early reminder is not sent this close to the 23-hour one. */
 export const REACTIVATION_EARLY_LAST_HOUR = 20;
-/** At most one reminder per conversation in this time, whatever the silences in between. */
+/** A new silence gets no reminder while one of another silence went out in this time. */
 export const REACTIVATION_MIN_GAP_HOURS = 18;
 
 /** A reminder already went out to this conversation too recently. */
@@ -75,7 +75,7 @@ export function withinBusinessHours(now: Date) {
 }
 
 /**
- * The first reminder: the company spoke last, the customer has been silent for 10 hours (and
+ * The first reminder: the company spoke last, the customer has been silent for 12 hours (and
  * less than 20), nobody of the company wrote in the last 2 hours, and it is business time. Written
  * by the AI, sent inside the free 24-hour window (no paid template).
  */
