@@ -10,7 +10,12 @@ export const GET = withPermission('FLIP_AI_MANAGE', async (_req: NextRequest, se
   const checklists = await prisma.documentChecklist.findMany({
     where: { tenantId: session.tenantId }, orderBy: { createdAt: 'asc' }, select: { id: true, name: true },
   });
-  return NextResponse.json({ ...data, checklists, fields: CLOSING_FIELDS.map((field) => ({ key: field.key, label: field.label })) });
+  const pipelines = await prisma.pipeline.findMany({
+    where: { tenantId: session.tenantId, isArchived: false },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, name: true, stages: { where: { isArchived: false }, orderBy: { orderIndex: 'asc' }, select: { id: true, name: true } } },
+  });
+  return NextResponse.json({ ...data, checklists, pipelines, fields: CLOSING_FIELDS.map((field) => ({ key: field.key, label: field.label })) });
 });
 
 export const PUT = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, session) => {
@@ -25,7 +30,7 @@ export const PUT = withPermission('FLIP_AI_MANAGE', async (req: NextRequest, ses
   await prisma.auditLog.create({
     data: {
       tenantId: session.tenantId, userId: session.userId, entityType: 'closing_documents', entityId: session.tenantId,
-      action: 'closing_documents.settings_updated', metadata: { enabled: parsed.data.enabled },
+      action: 'closing_documents.settings_updated', metadata: { enabled: parsed.data.enabled, stageId: parsed.data.stageId ?? null },
     },
   }).catch(() => undefined);
   return NextResponse.json({ ok: true });

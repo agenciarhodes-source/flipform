@@ -9,7 +9,11 @@ import { CLOSING_MAX_TEMPLATES } from '@/lib/closing-documents/rules';
 
 type Template = { id: string; name: string; sizeBytes: number; kind: 'pdf' | 'docx'; checklistIds: string[] };
 type Checklist = { id: string; name: string };
-type State = { enabled: boolean; sendWhen: string; templates: Template[]; storageReady: boolean; checklists: Checklist[] };
+type Pipeline = { id: string; name: string; stages: Array<{ id: string; name: string }> };
+type State = {
+  enabled: boolean; sendWhen: string; stageId: string | null; templates: Template[]; storageReady: boolean;
+  checklists: Checklist[]; pipelines: Pipeline[];
+};
 
 const SEND_WHEN_EXAMPLE = 'Envie quando o cliente já tiver mandado o RG ou CNH, o CPF e o comprovante de residência, '
   + 'e tiver confirmado que quer seguir com o processo. Explique que são os documentos para formalizar o atendimento.';
@@ -50,8 +54,9 @@ export function ClosingDocumentsManager() {
     fetch('/api/whatsapp-ai/closing-documents', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((data) => {
       if (!data?.ready) return;
       setState({
-        enabled: data.enabled, sendWhen: data.sendWhen, templates: data.templates, storageReady: data.storageReady,
-        checklists: Array.isArray(data.checklists) ? data.checklists : [],
+        enabled: data.enabled, sendWhen: data.sendWhen, stageId: data.stageId ?? null, templates: data.templates,
+        storageReady: data.storageReady, checklists: Array.isArray(data.checklists) ? data.checklists : [],
+        pipelines: Array.isArray(data.pipelines) ? data.pipelines : [],
       });
     }).catch(() => undefined);
   }, []);
@@ -95,7 +100,7 @@ export function ClosingDocumentsManager() {
     if (!response.ok) { toast.error('Não foi possível mudar.'); load(); }
   }
 
-  async function save(next: { enabled: boolean; sendWhen: string }) {
+  async function save(next: { enabled: boolean; sendWhen: string; stageId?: string | null }) {
     setSaving(true);
     try {
       const response = await fetch('/api/whatsapp-ai/closing-documents', {
@@ -201,7 +206,25 @@ export function ClosingDocumentsManager() {
           A IA lê este texto para decidir o momento e manda os documentos da tese do cliente. Quando o cliente devolver os
           documentos assinados, ela cria uma tarefa para a equipe conferir.
         </p>
-        <Button size="sm" disabled={saving} onClick={() => save({ enabled: state.enabled, sendWhen: state.sendWhen })}>
+        <label htmlFor="closing-stage" className="block pt-2 text-sm font-medium">Depois de enviar, mover o lead para a etapa</label>
+        <select
+          id="closing-stage"
+          className="w-full rounded-lg border px-3 py-2 text-sm"
+          value={state.stageId ?? ''}
+          onChange={(event) => setState({ ...state, stageId: event.target.value || null })}
+        >
+          <option value="">Não mover</option>
+          {state.pipelines.map((pipeline) => (
+            <optgroup key={pipeline.id} label={pipeline.name}>
+              {pipeline.stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Só para a frente, no mesmo funil do lead. As conversões do Meta e do Google seguem o que estiver configurado
+          para essa etapa no Kanban.
+        </p>
+        <Button size="sm" disabled={saving} onClick={() => save({ enabled: state.enabled, sendWhen: state.sendWhen, stageId: state.stageId })}>
           {saving ? 'Salvando…' : 'Salvar'}
         </Button>
       </div>

@@ -165,6 +165,8 @@ export const closingSituationSchema = z.enum(['all', 'adult', 'minor', 'rogo']);
 export const closingSettingsSchema = z.object({
   enabled: z.boolean(),
   sendWhen: z.string().trim().max(CLOSING_SEND_WHEN_MAX, `O texto pode ter até ${CLOSING_SEND_WHEN_MAX} caracteres.`),
+  /** Stage the lead goes to when the documents are sent; null = none; absent = keep as it is. */
+  stageId: z.string().trim().min(1).max(64).nullable().optional(),
 }).refine((value) => !value.enabled || value.sendWhen.length >= 20, {
   message: 'Explique em pelo menos uma frase quando os documentos devem ser enviados.',
   path: ['sendWhen'],

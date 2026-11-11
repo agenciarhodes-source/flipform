@@ -1,11 +1,13 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { moveLeadToStage } from '@/lib/leads/move-stage';
 import { enqueueAndDispatchWhatsAppDocumentMessage, enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { closingDocuments, readClosingTemplate } from './store';
 import {
   CLOSING_RESEND_GAP_MS,
   closingInstruction,
+  shouldMoveAfterSending,
   signingInstructions,
   templatesForCase,
   type SigningSituation,
@@ -36,6 +38,7 @@ export async function closingDocumentsContext(tenantId: string, conversationId: 
   const sentAt = await lastSent(tenantId, conversationId);
   return {
     templates,
+    stageId: settings.stageId,
     instruction: closingInstruction({ sendWhen: settings.sendWhen, fileNames: templates.map((template) => template.name), sentAt }),
     sentAt,
   };
@@ -86,5 +89,32 @@ export async function sendClosingDocuments(input: {
       action: SENT_ACTION, metadata: { situation: input.situation, files: context.templates.map((template) => template.name), sent },
     },
   }).catch(() => undefined);
+  await moveAfterSending({ tenantId: input.tenantId, conversationId: input.conversationId, stageId: context.stageId })
+    .catch((error) => console.error('Closing documents stage move failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
   return { sent, reason: 'sent' as const };
+}
+
+/** "Contrato enviado": the lead goes to the stage the company chose, forward only. */
+async function moveAfterSending(input: { tenantId: string; conversationId: string; stageId: string | null }) {
+  if (!input.stageId) return;
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: input.conversationId, tenantId: input.tenantId },
+    select: { lead: { select: { id: true, pipelineId: true, stage: { select: { orderIndex: true } } } } },
+  });
+  const lead = conversation?.lead;
+  if (!lead) return;
+  const target = await prisma.pipelineStage.findFirst({
+    where: { id: input.stageId, isArchived: false, pipeline: { tenantId: input.tenantId, isArchived: false } },
+    select: { id: true, pipelineId: true, orderIndex: true },
+  });
+  if (!target) return;
+  if (!shouldMoveAfterSending({ lead: { pipelineId: lead.pipelineId, stageOrderIndex: lead.stage.orderIndex }, target })) return;
+  await moveLeadToStage({
+    tenantId: input.tenantId,
+    leadId: lead.id,
+    stageId: target.id,
+    changedBy: null,
+    auditAction: 'lead.moved_by_closing_documents',
+    auditMetadata: { conversationId: input.conversationId },
+  });
 }

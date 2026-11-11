@@ -14,7 +14,7 @@ import { docxPlaceholders } from './docx';
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export const PDF_MIME = 'application/pdf';
 
-type SettingsRow = { enabled: boolean; send_when: string };
+type SettingsRow = { enabled: boolean; send_when: string; stage_id: string | null };
 type TemplateRow = {
   id: string; name: string; object_key: string; size_bytes: number; placeholders: unknown; situation: string;
   kind: string | null; checklist_ids: unknown; created_at: Date;
@@ -46,7 +46,7 @@ async function templateRows(tenantId: string) {
 /** Settings and models of a company. `ready: false` while the tables do not exist yet. */
 export async function closingDocuments(tenantId: string) {
   const settings = await prisma.$queryRaw<SettingsRow[]>`
-    SELECT enabled, send_when FROM closing_document_settings WHERE tenant_id = ${tenantId}`.catch(() => null);
+    SELECT enabled, send_when, stage_id FROM closing_document_settings WHERE tenant_id = ${tenantId}`.catch(() => null);
   if (!settings) return { ready: false as const };
   const templates = await templateRows(tenantId).catch(() => null);
   if (!templates) return { ready: false as const };
@@ -54,17 +54,30 @@ export async function closingDocuments(tenantId: string) {
     ready: true as const,
     enabled: settings[0]?.enabled ?? false,
     sendWhen: settings[0]?.send_when ?? '',
+    stageId: settings[0]?.stage_id ?? null,
     templates: templates.map(toTemplate),
     storageReady: resolveAttachmentStorage().ready,
   };
 }
 
-export async function saveClosingSettings(input: { tenantId: string; userId: string; enabled: boolean; sendWhen: string }) {
+export async function saveClosingSettings(input: {
+  tenantId: string; userId: string; enabled: boolean; sendWhen: string; stageId?: string | null;
+}) {
   await prisma.$executeRaw`
     INSERT INTO closing_document_settings (tenant_id, enabled, send_when, updated_by, created_at, updated_at)
     VALUES (${input.tenantId}, ${input.enabled}, ${input.sendWhen}, ${input.userId}, NOW(), NOW())
     ON CONFLICT (tenant_id) DO UPDATE SET enabled = EXCLUDED.enabled, send_when = EXCLUDED.send_when,
       updated_by = EXCLUDED.updated_by, updated_at = NOW()`;
+  if (input.stageId === undefined) return;
+  // Only a stage of this company's own funnels.
+  const stage = input.stageId
+    ? await prisma.pipelineStage.findFirst({
+      where: { id: input.stageId, isArchived: false, pipeline: { tenantId: input.tenantId, isArchived: false } },
+      select: { id: true },
+    })
+    : null;
+  await prisma.$executeRaw`
+    UPDATE closing_document_settings SET stage_id = ${stage?.id ?? null} WHERE tenant_id = ${input.tenantId}`;
 }
 
 export class ClosingDocumentError extends Error {}

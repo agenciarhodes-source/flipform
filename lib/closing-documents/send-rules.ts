@@ -29,6 +29,14 @@ export function extractSendDocuments(reply: string): { reply: string; send: Sign
   return { reply: cleaned, send };
 }
 
+/** The lead goes to the chosen stage only forward, in its own funnel, and never out of the final one. */
+export function shouldMoveAfterSending(input: {
+  lead: { pipelineId: string; stageOrderIndex: number };
+  target: { pipelineId: string; orderIndex: number };
+}) {
+  return input.lead.pipelineId === input.target.pipelineId && input.lead.stageOrderIndex < input.target.orderIndex;
+}
+
 /** Models for the case of this conversation: those of its case type, or those for every case. */
 export function templatesForCase<T extends { checklistIds: string[] }>(templates: T[], checklistId: string | null) {
   const own = checklistId ? templates.filter((template) => template.checklistIds.includes(checklistId)) : [];
