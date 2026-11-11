@@ -14,6 +14,7 @@ import { isConversationAiPaused } from './pause';
 import { conversationDocumentContext } from './documents';
 import {
   cleanReactivationText,
+  isReactivationSkip,
   earlyReactivationDue,
   earlyReactivationKey,
   REACTIVATION_AFTER_HOURS,
@@ -28,6 +29,13 @@ import {
 const OPERATION = 'whatsapp_reactivation';
 const REACTIVATION_MAX_OUTPUT_TOKENS = 1_000;
 
+/** "11/11 15:09", in Brasília time. */
+function brasiliaLabel(date: Date) {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).format(date).replace(',', '');
+}
+
 /** First name written normally ("EURI SILVA" -> "Euri"). */
 function firstName(value: string | null | undefined) {
   return registrationFirstName(value);
@@ -38,12 +46,12 @@ async function transcript(tenantId: string, conversationId: string) {
     where: { tenantId, conversationId },
     orderBy: { createdAt: 'desc' },
     take: 20,
-    select: { direction: true, type: true, text: true },
+    select: { direction: true, type: true, text: true, createdAt: true },
   });
   return messages.reverse().map((message) => {
     const who = message.direction === 'inbound' ? 'Cliente' : 'Empresa';
     const body = message.text?.trim() || (message.type !== 'text' ? `[${message.type}]` : '');
-    return body ? `${who}: ${body.slice(0, 400)}` : '';
+    return body ? `[${brasiliaLabel(message.createdAt)}] ${who}: ${body.slice(0, 400)}` : '';
   }).filter(Boolean).join('\n');
 }
 
@@ -156,6 +164,7 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
         const result = await streamOpenAiText({
           instructions: reactivationInstructions({
             companyName: agent.tenant.name,
+            nowLabel: brasiliaLabel(now),
             name,
             kind,
             stageName: conversation.lead?.stage?.name ?? null,
@@ -168,6 +177,18 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
         }, () => undefined, { model, timeoutMs: 30_000, maxOutputTokens: REACTIVATION_MAX_OUTPUT_TOKENS, safetyIdentifier: conversation.id });
         const text = cleanReactivationText(result.text);
         if (!text) throw new Error('empty');
+        // A time was agreed with the customer, or nothing is pending: nothing goes out now.
+        if (isReactivationSkip(text)) {
+          await prisma.flipAiUsageEvent.update({
+            where: { id: eventId },
+            data: {
+              model: result.model, status: 'confirmed', inputTokens: result.inputTokens, outputTokens: result.outputTokens,
+              metadata: { channel: 'whatsapp', kind, delivery: 'skipped' } as Prisma.InputJsonValue,
+            },
+          });
+          await settleFlipAiUsageCharge({ tenantId: number.tenantId, eventId }).catch(() => undefined);
+          continue;
+        }
 
         const delivery = await enqueueAndDispatchWhatsAppTextMessage({
           tenantId: number.tenantId,

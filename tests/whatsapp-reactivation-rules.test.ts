@@ -57,6 +57,13 @@ test('retomada no mesmo dia: depois de 3 horas, em horário comercial, antes da 
   assert.match(text, /faltam: extrato do INSS/);
   assert.match(text, /objeção: trust/);
   assert.match(text, /vi que ficou faltando/);
-  assert.match(text, /SEMPRE dê o motivo para não deixar para depois/);
-  assert.match(text, /quanto antes você mandar a documentação, mais rápido o nosso time avalia/);
+  assert.match(text, /PRAZO COMBINADO/);
+  assert.match(text, /NÃO REPITA/);
+  assert.match(text, /só se a empresa ainda não disse isso/);
+  assert.doesNotMatch(text, /SEMPRE dê o motivo/);
+  const { isReactivationSkip } = await import('../lib/whatsapp-ai/reactivation-rules');
+  assert.equal(isReactivationSkip('PULAR'), true);
+  assert.equal(isReactivationSkip('*PULAR*'), true);
+  assert.equal(isReactivationSkip('pular.'), true);
+  assert.equal(isReactivationSkip('Fernanda, vi que ficou faltando a declaração.'), false);
 });

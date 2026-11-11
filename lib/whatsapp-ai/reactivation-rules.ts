@@ -99,8 +99,18 @@ export type ReactivationMoment = {
  * generic. It uses the documents still missing, what the conversation engine (JEV) read of the
  * moment and what the memory says is pending.
  */
+/** What the reminder writer answers when it must not write now (a time was agreed, nothing pending). */
+export const REACTIVATION_SKIP = 'PULAR';
+
+/** The writer decided not to send now. */
+export function isReactivationSkip(text: string) {
+  return /^[\s*_"'.]*PULAR[\s*_"'.!]*$/i.test(text) || /^\s*PULAR\b/i.test(text.trim());
+}
+
 export function reactivationInstructions(input: {
   companyName: string;
+  /** Now, in Brasília time, to judge an agreed time ("amanhã"). */
+  nowLabel?: string;
   name: string | null;
   kind: 'early' | 'last';
   stageName: string | null;
@@ -121,12 +131,16 @@ export function reactivationInstructions(input: {
     input.kind === 'early'
       ? 'Ele parou de responder há algumas horas, hoje. Escreva UMA mensagem curta (até 3 frases, até 350 caracteres), leve e próxima, como quem esperou um pouco e voltou para ajudar.'
       : 'Ele está sem responder há quase um dia. Escreva UMA mensagem curta (até 3 frases, até 350 caracteres) que traga a pessoa de volta.',
+    input.nowLabel ? `Agora é ${input.nowLabel} (horário de Brasília). Cada mensagem do histórico tem a data e a hora.` : '',
     input.name ? `Chame o cliente de ${input.name}.` : 'Não use nome.',
     'COMO RETOMAR (obrigatório):',
     '- Retome o ponto EXATO em que a conversa parou e o próximo passo combinado, mostrando que você lembra ("vi que ficou faltando...", "vi que você ia me mandar...", "vi que a gente parou em..."). Nunca mande mensagem genérica, nunca pergunte "ainda tem interesse?".',
     '- Mostre que você entende que pode ter surgido alguma dificuldade e pergunte, com cuidado, o que travou ou como pode ajudar.',
     '- Se faltam documentos: diga quais faltam (no máximo os 2 ou 3 mais importantes) e ofereça ajuda concreta para conseguir um deles (por exemplo: "quer que eu te explique como tirar o extrato do INSS pelo celular?").',
-    '- SEMPRE dê o motivo para não deixar para depois, ligado ao ponto em que parou: com documentos pendentes, "quanto antes você mandar a documentação, mais rápido o nosso time avalia o seu caso e dá entrada no pedido do seu benefício"; antes dos documentos, "quanto antes a gente entender a sua situação, mais rápido o nosso time avalia o seu caso". Diga com as suas palavras, numa frase.',
+    `- PRAZO COMBINADO: se o cliente disse que vai mandar ou responder depois (amanhã, quando a escola entregar, quando receber, semana que vem, depois do trabalho...) e a empresa concordou, NÃO retome antes desse prazo: responda só a palavra ${REACTIVATION_SKIP}. Só retome quando o prazo combinado já passou (por exemplo, disse "amanhã" e já é outro dia), lembrando do que ele combinou.`,
+    `- Se o cliente só agradeceu ou confirmou e não ficou nada pendente com ele, ou se a equipe já retomou a conversa depois da última mensagem dele, responda só ${REACTIVATION_SKIP}.`,
+    '- NÃO REPITA: leia as mensagens da empresa no histórico e não use de novo as mesmas frases, pedidos ou explicações. Diga algo novo e útil (uma ajuda concreta, uma dúvida respondida).',
+    '- Dê o motivo para não deixar para depois ("quanto antes você mandar a documentação, mais rápido o nosso time avalia o seu caso e dá entrada no pedido") só se a empresa ainda não disse isso nas últimas mensagens; com as suas palavras, numa frase.',
     '- Se havia uma dúvida, um receio ou uma objeção, responda a ela primeiro, com segurança e confiança, antes de pedir qualquer coisa.',
     '- Fale sempre em "nosso time" (o nosso time avalia, o nosso time cuida disso). PROIBIDO dizer "vou encaminhar", "vou chamar um atendente", "um atendente vai falar com você" ou "vou transferir".',
     '- Não se apresente de novo, não pressione, não prometa resultado, prazo nem valor, não invente nada que não está na conversa e não use listas.',
