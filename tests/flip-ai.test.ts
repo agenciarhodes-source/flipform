@@ -85,6 +85,7 @@ import {
   sanitizeExternalSearchQuery,
   searchOpenAiWeb,
   shouldSearchExternalKnowledge,
+  looksLikeInformationQuestion,
   OpenAiWebSearchError,
 } from '../lib/flip-ai/external-web-search';
 import {
@@ -849,6 +850,38 @@ test('external search trigger preserves internal priority and detects freshness'
   const sanitized = sanitizeExternalSearchQuery('Meu email é pessoa@example.com e telefone +55 (86) 99999-8877. Qual o valor atual?');
   assert.doesNotMatch(sanitized, /pessoa@example\.com|99999/);
   assert.match(sanitized, /valor atual/);
+});
+
+test('external search runs only for a real request for information', () => {
+  const weak = [{ id: '1', heading: null, content: 'interno', score: 0.3 }];
+  // Replies to the attendant: never a search, even with weak internal hits or a "fresh" word.
+  for (const reply of [
+    'Ok', 'Sim, sim', 'Boa tarde', 'Oi bom dia', '❤️', '👁️👁️💙', '6 meses', 'Dia 03/09/2023', 'Plantio',
+    'Eu moro na roça', 'Já tive minha filha', 'estou grávida agora', 'Pode ser', 'Como meus pais',
+    'Trabalho na roça desde criança com meus pais', 'https://www.instagram.com/reel/abc/?x=1',
+  ]) {
+    assert.equal(shouldSearchExternalKnowledge(reply, weak), false, reply);
+    assert.equal(shouldSearchExternalKnowledge(reply, []), false, reply);
+  }
+  // Questions, with or without the question mark.
+  for (const question of [
+    'Qual o valor atual do salário maternidade', 'vcs cobram quanto?', 'E quanto tempo demora pra sair',
+    'Bom dia, qual o prazo do INSS', 'Eu tenho direito ao benefício', 'Como funciona o pedido',
+    'Quando sai o pagamento', 'Me explica mais sobre esse extrato', 'Esse cadunico n entendi o que significa',
+    'Será que dá certo mesmo',
+  ]) {
+    assert.equal(looksLikeInformationQuestion(question), true, question);
+    assert.equal(shouldSearchExternalKnowledge(question, weak), true, question);
+  }
+  // A strong internal answer still wins over the web, unless the question asks for something current.
+  const strong = [{ id: '1', heading: null, content: 'interno', score: 0.8 }];
+  assert.equal(shouldSearchExternalKnowledge('Como funciona o pedido', strong), false);
+  assert.equal(shouldSearchExternalKnowledge('Qual o valor atual do salário maternidade', strong), true);
+});
+
+test('web search keeps room for the model to think and still answer', () => {
+  const web = readFileSync(new URL('../lib/flip-ai/external-web-search.ts', import.meta.url), 'utf8');
+  assert.match(web, /max_output_tokens: 1_500,/);
 });
 
 test('OpenAI web search uses only the server allowlist, exposes verified sources and never retries', async () => {

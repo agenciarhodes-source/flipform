@@ -135,8 +135,24 @@ export function sanitizeExternalSearchQuery(raw: string) {
     .replace(/(?:\+?\d[\s().-]*){8,}/g, '[telefone removido]')
     .replace(/\s+/g, ' ').trim().slice(0, 500);
 }
+// Words that open a request for information ("qual o prazo", "e quanto custa", "bom dia, posso...").
+const QUESTION_START = /^(?:(?:e|mas|ai|aí|então|entao|oi|olá|ola|bom dia|boa tarde|boa noite|doutor|doutora|dra|dr)[\s,.!:;-]+)*(?:qual|quais|quanto|quanta|quantos|quantas|por que|existe|tem como|é possível|e possivel|será que|sera que|como (?:funciona|faço|faco|faz|fica|é que|e que)|quando (?:sai|vai|vou|recebo|começa|comeca|cai|fica)|onde (?:fica|faço|faco|vou|tem))(?=$|[^\p{L}\p{N}_])/iu;
+// Asking anywhere in the message.
+const QUESTION_ANYWHERE = /(?:^|[^\p{L}\p{N}_])(?:tenho direito|tem direito|teria direito|terei direito|quero saber|queria saber|gostaria de saber|preciso saber|me explica|me explique|não entendi|nao entendi|n entendi|o que significa|oque significa|o que é|oque é|dúvida|duvida)(?=$|[^\p{L}\p{N}_])/iu;
+
+/**
+ * Only a real request for information is worth a web search. Greetings, "ok", "sim", emojis, dates
+ * and short answers to the attendant's questions never are: the search finds nothing and is paid anyway.
+ */
+export function looksLikeInformationQuestion(query: string) {
+  // A shared link is not a question, even with a "?" in it.
+  const text = query.replace(/https?:\/\/\S+/gi, ' ').replace(/\s+/g, ' ').trim();
+  if ((text.match(/\p{L}/gu) || []).length < 8) return false;
+  return text.includes('?') || QUESTION_START.test(text) || QUESTION_ANYWHERE.test(text);
+}
+
 export function shouldSearchExternalKnowledge(query: string, hits: PublicKnowledgeHit[]) {
-  if (query.trim().length < 4) return false;
+  if (!looksLikeInformationQuestion(query)) return false;
   return FRESHNESS.test(query) || !hits.length || Math.max(...hits.map((hit) => hit.score)) < 0.45;
 }
 
@@ -165,7 +181,8 @@ export async function searchOpenAiWeb(
         tools: [{ type: 'web_search', filters: { allowed_domains: filterDomains } }],
         tool_choice: 'required',
         include: ['web_search_call.action.sources'],
-        max_output_tokens: 500,
+        // The model reasons before it writes; a tight budget cuts the answer (status 'incomplete').
+        max_output_tokens: 1_500,
         store: false,
         ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
       }),
