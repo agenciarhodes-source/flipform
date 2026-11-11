@@ -39,7 +39,7 @@ def test_one_contract_per_conversation_and_only_when_complete():
 def test_whatsapp_reply_sends_the_link_after_the_answer():
     reply = read("lib/whatsapp-ai/reply.ts")
     assert "if (contractDue) extraUserNotes.push(CONTRACT_COMING_NOTE);" in reply
-    assert reply.index("const sent = await enqueueAndDispatchWhatsAppTextMessage({") < reply.index("await sendContractIfReady(")
+    assert reply.index("const sent = voiceSent || await enqueueAndDispatchWhatsAppTextMessage({") < reply.index("await sendContractIfReady(")
 
 
 def test_release_and_settings_screens():
