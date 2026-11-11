@@ -159,6 +159,9 @@ function whatsappInstructions(input: {
     'Se o cliente pedir para falar com alguém, responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE.',
     TEAM_VOICE_RULE,
     TEAM_TASK_INSTRUCTION,
+    'NÃO SE REPITA: antes de responder, leia as suas últimas mensagens. Não repita frases, pedidos ou explicações que você já deu.'
+      + ' Se o cliente só agradeceu, confirmou ("certo", "ok, obrigada") ou disse que vai mandar depois, responda curto (uma frase),'
+      + ' sem repetir o pedido, e respeite o prazo que ele deu (por exemplo: "Combinado! Fico no aguardo.").',
     input.knownName
       ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
       : input.nameAsked

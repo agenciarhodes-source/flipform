@@ -37,7 +37,7 @@ test('um lembrete por silêncio e texto limpo para o WhatsApp', () => {
   assert.equal(cleanReactivationText('   '), '');
 });
 
-test('retomada no mesmo dia: depois de 3 horas, em horário comercial, antes da de 23 horas', async () => {
+test('primeira retomada: depois de 10 horas, em horário comercial, antes da de 23 horas', async () => {
   const { earlyReactivationDue, withinBusinessHours, reactivationInstructions } = await import('../lib/whatsapp-ai/reactivation-rules');
   // Tuesday 15:00 in Brasília = 18:00 UTC.
   const now = new Date('2026-11-10T18:00:00Z');
@@ -46,17 +46,30 @@ test('retomada no mesmo dia: depois de 3 horas, em horário comercial, antes da 
   assert.equal(withinBusinessHours(now), true);
   assert.equal(withinBusinessHours(new Date('2026-11-10T23:30:00Z')), false); // 20:30 in Brasília
   assert.equal(withinBusinessHours(new Date('2026-11-15T15:00:00Z')), false); // Sunday
-  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(4), lastOutboundAt: hoursAgo(3.5) }, now), true);
-  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(2), lastOutboundAt: hoursAgo(1.9) }, now), false);
-  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(4), lastOutboundAt: hoursAgo(1) }, now), false);
+  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(11), lastOutboundAt: hoursAgo(10.5) }, now), true);
+  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(4), lastOutboundAt: hoursAgo(3.5) }, now), false);
+  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(9), lastOutboundAt: hoursAgo(8.9) }, now), false);
+  assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(11), lastOutboundAt: hoursAgo(1) }, now), false);
   assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(21), lastOutboundAt: hoursAgo(20) }, now), false);
-  assert.equal(earlyReactivationDue({ ...base, leadStageName: 'Não qualificado', lastInboundAt: hoursAgo(4), lastOutboundAt: hoursAgo(3.5) }, now), false);
+  assert.equal(earlyReactivationDue({ ...base, leadStageName: 'Não qualificado', lastInboundAt: hoursAgo(11), lastOutboundAt: hoursAgo(10.5) }, now), false);
   const text = reactivationInstructions({ companyName: 'X', name: 'Ana', kind: 'early', stageName: null, documents: 'faltam: extrato do INSS', moment: { intent: 'objection', objection: 'trust' }, pending: ['enviar RG'] });
   assert.match(text, /Nunca mande mensagem genérica, nunca pergunte "ainda tem interesse\?"/);
   assert.match(text, /PROIBIDO dizer "vou encaminhar"/);
   assert.match(text, /faltam: extrato do INSS/);
   assert.match(text, /objeção: trust/);
   assert.match(text, /vi que ficou faltando/);
-  assert.match(text, /SEMPRE dê o motivo para não deixar para depois/);
-  assert.match(text, /quanto antes você mandar a documentação, mais rápido o nosso time avalia/);
+  assert.match(text, /PRAZO COMBINADO/);
+  assert.match(text, /NÃO REPITA/);
+  assert.match(text, /só se a empresa ainda não disse isso/);
+  assert.doesNotMatch(text, /SEMPRE dê o motivo/);
+  const { isReactivationSkip, reminderTooSoon } = await import('../lib/whatsapp-ai/reactivation-rules');
+  const at = new Date('2026-11-11T16:16:00Z');
+  assert.equal(reminderTooSoon(null, at), false);
+  assert.equal(reminderTooSoon(new Date('2026-11-11T13:16:00Z'), at), true);
+  assert.equal(reminderTooSoon(new Date('2026-11-11T00:00:00Z'), at), true);
+  assert.equal(reminderTooSoon(new Date('2026-11-10T16:00:00Z'), at), false);
+  assert.equal(isReactivationSkip('PULAR'), true);
+  assert.equal(isReactivationSkip('*PULAR*'), true);
+  assert.equal(isReactivationSkip('pular.'), true);
+  assert.equal(isReactivationSkip('Fernanda, vi que ficou faltando a declaração.'), false);
 });

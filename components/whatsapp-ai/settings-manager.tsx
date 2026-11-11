@@ -242,11 +242,12 @@ function NumberCard({ row, agents, onSaved }: { row: NumberRow; agents: Workspac
       <label className="flex items-start gap-2 text-sm">
         <Switch checked={form.reactivationEnabled} onCheckedChange={(checked) => update({ reactivationEnabled: checked })} aria-label="Mensagem de reativação" />
         <span>
-          <span className="font-medium">Mensagem de reativação (23h)</span>
+          <span className="font-medium">Mensagem de reativação</span>
           <span className="block text-xs text-muted-foreground">
-            Se o cliente ficar 23 horas sem responder depois da última mensagem da empresa, a IA manda um lembrete cordial do ponto em que a
-            conversa parou, convidando-o a retomar. Sai dentro da janela gratuita de 24h do WhatsApp (sem modelo pago), uma vez por conversa
-            parada, e usa poucos créditos do Flip AI. Não vale para leads ganhos ou perdidos.
+            Se o cliente ficar 10 horas sem responder depois da última mensagem da empresa, a IA manda um lembrete do ponto em que a
+            conversa parou (em horário comercial; se cair fora dele, sai com 23 horas). Uma mensagem só a cada 18 horas, respeitando o prazo
+            que o cliente combinou. Sai dentro da janela gratuita de 24h do WhatsApp (sem modelo pago) e usa poucos créditos do Flip AI.
+            Não vale para leads ganhos ou perdidos.
           </span>
         </span>
       </label>
