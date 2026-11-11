@@ -56,4 +56,7 @@ test('retomada no mesmo dia: depois de 3 horas, em horário comercial, antes da 
   assert.match(text, /PROIBIDO dizer "vou encaminhar"/);
   assert.match(text, /faltam: extrato do INSS/);
   assert.match(text, /objeção: trust/);
+  assert.match(text, /vi que ficou faltando/);
+  assert.match(text, /SEMPRE dê o motivo para não deixar para depois/);
+  assert.match(text, /quanto antes você mandar a documentação, mais rápido o nosso time avalia/);
 });
