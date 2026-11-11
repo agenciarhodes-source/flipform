@@ -20,7 +20,7 @@ export async function leadStory(tenantId: string, leadId: string): Promise<LeadS
   if (!lead) return null;
   const ids = lead.conversations.map((conversation) => conversation.id);
 
-  const [assigned, documents, arrivals, moves, tasks, audits, followups, lastInbound] = await Promise.all([
+  const [assigned, documents, arrivals, moves, tasks, audits, followups, lastInbound, calls] = await Promise.all([
     lead.assignedTo ? prisma.user.findUnique({ where: { id: lead.assignedTo }, select: { name: true } }).catch(() => null) : null,
     leadDocumentsView(tenantId, leadId).catch(() => ({ cases: [] as Awaited<ReturnType<typeof leadDocumentsView>>['cases'] })),
     ids.length
@@ -60,6 +60,9 @@ export async function leadStory(tenantId: string, leadId: string): Promise<LeadS
         select: { createdAt: true, text: true, type: true },
       }).catch(() => null)
       : null,
+    prisma.$queryRaw<Array<{ created_at: Date; outcome: string; note: string | null; user_name: string | null }>>`
+      SELECT c.created_at, c.outcome, c.note, u.name AS user_name FROM lead_calls c LEFT JOIN users u ON u.id = c.user_id
+      WHERE c.tenant_id = ${tenantId} AND c.lead_id = ${leadId} ORDER BY c.created_at DESC LIMIT 20`.catch(() => []),
   ]);
 
   const firstCase = documents.cases[0] || null;
@@ -101,5 +104,6 @@ export async function leadStory(tenantId: string, leadId: string): Promise<LeadS
       ? { at: lastInbound.createdAt, text: lastInbound.text?.trim() || mediaWord[lastInbound.type] || `[${lastInbound.type}]` }
       : null,
     lastOutboundAt,
+    calls: calls.map((call) => ({ at: call.created_at, outcome: call.outcome, userName: call.user_name, note: call.note })),
   });
 }

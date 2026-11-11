@@ -1,3 +1,5 @@
+import { callStoryText } from './call-rules';
+
 /**
  * "Resumo do cliente": what happened with this lead, from the facts the system already has
  * (no AI call): who, which case, where it came from, documents received and missing, the main
@@ -20,6 +22,7 @@ export type LeadStoryInput = {
   stageMoves: Array<{ at: Date; stage: string; by: string | null }>;
   tasks: Array<{ at: Date; title: string; done: boolean }>;
   events: Array<{ at: Date; action: string }>;
+  calls?: Array<{ at: Date; outcome: string; userName: string | null; note: string | null }>;
   lastInbound: { at: Date; text: string } | null;
   lastOutboundAt: Date | null;
 };
@@ -105,6 +108,7 @@ export function buildLeadStory(input: LeadStoryInput): LeadStory {
     ...input.stageMoves.map((move) => ({ at: move.at, text: `Foi para a etapa "${move.stage}"${move.by ? ` (${move.by})` : ''}` })),
     ...input.tasks.map((task) => ({ at: task.at, text: `Tarefa: ${short(task.title, 110)}${task.done ? ' (concluída)' : ''}` })),
     ...input.events.filter((event) => EVENT_TEXT[event.action]).map((event) => ({ at: event.at, text: EVENT_TEXT[event.action]! })),
+    ...(input.calls || []).map((call) => ({ at: call.at, text: callStoryText(call) })),
   ].sort((a, b) => a.at.getTime() - b.at.getTime());
   // The first contact and the most recent events.
   const timeline = events.length > 12 ? [events[0]!, ...events.slice(-11)] : events;
