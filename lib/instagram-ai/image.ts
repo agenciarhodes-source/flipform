@@ -79,7 +79,7 @@ export async function describeInstagramImage(input: {
         { type: 'input_text', text: 'Descreva esta imagem enviada pelo cliente.' },
         { type: 'input_image', image_url: dataUrl },
       ] }],
-    }, () => undefined, { model, timeoutMs: 30_000, maxOutputTokens: 200, safetyIdentifier: input.conversationId });
+    }, () => undefined, { model, timeoutMs: 30_000, maxOutputTokens: 800, safetyIdentifier: input.conversationId });
     usage = result;
     description = result.text.replace(/\s+/g, ' ').trim().slice(0, 400) || null;
   } catch {

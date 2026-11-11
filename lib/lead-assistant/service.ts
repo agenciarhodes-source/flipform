@@ -93,7 +93,7 @@ async function interpret(session: Session, command: string, context: {
       `Etiquetas: ${context.tags.slice(0, 60).join(', ') || 'nenhuma'}.`,
     ].join('\n'),
     messages: [{ role: 'user', content: command }],
-  }, () => undefined, { model, textFormat: LEAD_ASSISTANT_PLAN_FORMAT, timeoutMs: 20_000, maxOutputTokens: 500, safetyIdentifier: session.userId });
+  }, () => undefined, { model, textFormat: LEAD_ASSISTANT_PLAN_FORMAT, timeoutMs: 20_000, maxOutputTokens: 1_500, safetyIdentifier: session.userId });
   await charge(session, result);
   let raw: unknown = null;
   try { raw = JSON.parse(result.text); } catch { raw = null; }
