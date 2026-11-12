@@ -10,6 +10,7 @@ import { loadLatestConversationMemory } from '@/lib/flip-ai/conversation-memory'
 import { enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { isTestPhoneNumber } from './eligibility';
 import { registrationFirstName } from './registration-rules';
+import { cleanChatStyle } from '@/lib/flip-ai/chat-style';
 import { isConversationAiPaused } from './pause';
 import { conversationDocumentContext } from './documents';
 import {
@@ -190,7 +191,7 @@ export async function sweepWhatsAppReactivations(now = new Date()) {
           messages: [{ role: 'user', content: history || 'Sem histórico de texto.' }],
         // The model may think before writing: the budget covers that too (only tokens used are billed).
         }, () => undefined, { model, timeoutMs: 30_000, maxOutputTokens: REACTIVATION_MAX_OUTPUT_TOKENS, safetyIdentifier: conversation.id });
-        const text = cleanReactivationText(result.text);
+        const text = cleanChatStyle(cleanReactivationText(result.text));
         if (!text) throw new Error('empty');
         // A time was agreed with the customer, or nothing is pending: nothing goes out now.
         if (isReactivationSkip(text)) {

@@ -48,6 +48,7 @@ import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
 import { extractSendDocuments } from '@/lib/closing-documents/send-rules';
 import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
+import { CHAT_STYLE_RULE, cleanChatStyle, replyLengthRule, splitIntoBubbles } from '@/lib/flip-ai/chat-style';
 import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
 import { shouldSendVoice } from './voice-rules';
 import { decideWhatsAppAiAnswer, isTestPhoneNumber, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
@@ -147,7 +148,8 @@ function whatsappInstructions(input: {
   const analyst = input.role === 'analyst';
   return [
     `CANAL WHATSAPP: você está respondendo pelo WhatsApp oficial de ${input.companyName}.`,
-    'Escreva como numa conversa de WhatsApp: mensagens curtas e naturais, no máximo um ou dois parágrafos,',
+    CHAT_STYLE_RULE,
+    'Mensagens curtas e naturais, no máximo dois parágrafos curtos,',
     'sem títulos nem listas longas. Para destacar algo, use *texto* (um asterisco de cada lado).',
     'O telefone do cliente já é conhecido, porque ele está falando por este WhatsApp: nunca peça o número de telefone.',
     'Não cite fontes nem coloque links de sites na resposta (nada de "Fonte:"). Só mande um link se o cliente pedir.',
@@ -515,6 +517,16 @@ export async function replyToWhatsAppConversation(input: {
     const documents = await conversationDocumentContext(input.tenantId, conversation.id).catch(() => null);
     // Documents that finish the attendance (procuração, contrato): when the company's text says, the AI sends them.
     const closing = await closingDocumentsContext(input.tenantId, conversation.id).catch(() => null);
+    // The moment the conversation engine (JEV) read in the last answer: guides the length.
+    const lastJourneyStage = await prisma.flipAiUsageEvent.findFirst({
+      where: { tenantId: input.tenantId, conversationId: conversation.id, operation: 'chat_response', status: 'confirmed' },
+      orderBy: { createdAt: 'desc' },
+      select: { metadata: true },
+    }).then((row) => {
+      const meta = row?.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata) ? row.metadata as Record<string, unknown> : {};
+      const decision = meta.decisionSnapshot && typeof meta.decisionSnapshot === 'object' ? meta.decisionSnapshot as Record<string, unknown> : {};
+      return typeof decision.journeyStage === 'string' ? decision.journeyStage : null;
+    }).catch(() => null);
     // Someone of the team (in FlipForm or on the phone) already talked to this customer.
     const teamInvolved = await prisma.message.count({
       where: {
@@ -539,7 +551,7 @@ export async function replyToWhatsAppConversation(input: {
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
           : null,
         teamInvolved,
-      })}${documents ? `\n\n${documents.text}` : ''}${closing ? `\n\n${closing.instruction}` : ''}`,
+      })}\n${replyLengthRule({ customerText: turnText, journeyStage: lastJourneyStage })}${documents ? `\n\n${documents.text}` : ''}${closing ? `\n\n${closing.instruction}` : ''}`,
       messages: extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
         : context.messages,
@@ -561,7 +573,8 @@ export async function replyToWhatsAppConversation(input: {
     parsed.reply = closingSend.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
     parsed.reply = enforceContactMoment(parsed.reply, context.contactMoment);
-    const reply = withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources);
+    // Without the marks of a machine text (dashes, semicolons), whatever the model wrote.
+    const reply = cleanChatStyle(withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources));
     if (!reply) throw new OpenAiResponseError('definitive', 'WHATSAPP_AI_EMPTY_REPLY');
 
     // A person may have answered while the AI was thinking: then the AI stays quiet. Compared by the
@@ -594,17 +607,30 @@ export async function replyToWhatsAppConversation(input: {
         agent: { id: runtime.id, name: runtime.name }, settings: voice, reply,
       })
       : null;
+    // A long reply goes as two messages, as a person types (the first keeps the usual key).
+    const bubbles = voiceSent ? [reply] : splitIntoBubbles(reply);
     const sent = voiceSent || await enqueueAndDispatchWhatsAppTextMessage({
       tenantId: input.tenantId,
       conversationId: conversation.id,
       requestedByUserId: '',
-      text: reply,
+      text: bubbles[0]!,
       idempotencyKey: `flipai-${event.id}`,
       aiSender: { agentId: runtime.id, agentName: runtime.name },
     });
     if (sent.status === 'failed') {
       await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_SEND_FAILED' }, 'response');
       return { replied: false, reason: 'send_failed' };
+    }
+    if (bubbles[1]) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await enqueueAndDispatchWhatsAppTextMessage({
+        tenantId: input.tenantId,
+        conversationId: conversation.id,
+        requestedByUserId: '',
+        text: bubbles[1],
+        idempotencyKey: `flipai-${event.id}-2`,
+        aiSender: { agentId: runtime.id, agentName: runtime.name },
+      }).catch((error) => console.error('WhatsApp AI second message failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     }
 
     await completePublicChatTurn(
