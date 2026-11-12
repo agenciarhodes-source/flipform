@@ -245,23 +245,42 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   if (failed) {
     return <p className="mb-1 text-xs italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Arquivo'} indisponível (a Meta guarda os arquivos por 30 dias).</p>;
   }
+  // A plain link (no new tab): phones save the file with its name.
+  const save = (
+    <a href={`${src}?download=1`} download className={`mb-1 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
+      <span aria-hidden="true">⬇</span> Baixar
+    </a>
+  );
   if (message.type === 'image' || message.type === 'sticker') {
     return (
-      <a href={src} target="_blank" rel="noreferrer" className="mb-1 block">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={message.type === 'sticker' ? 'Figurinha' : 'Foto enviada'} loading="lazy" onError={() => setFailed(true)}
-          className={`${message.type === 'sticker' ? 'h-28 w-28 object-contain' : 'max-h-72 w-auto max-w-full rounded-lg object-cover'}`} />
-      </a>
+      <div className="mb-1">
+        <a href={src} target="_blank" rel="noreferrer" className="block">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={src} alt={message.type === 'sticker' ? 'Figurinha' : 'Foto enviada'} loading="lazy" onError={() => setFailed(true)}
+            className={`${message.type === 'sticker' ? 'h-28 w-28 object-contain' : 'max-h-72 w-auto max-w-full rounded-lg object-cover'}`} />
+        </a>
+        {message.type === 'image' && <div className="mt-1">{save}</div>}
+      </div>
     );
   }
   if (message.type === 'audio') {
-    return <audio controls preload="none" src={src} onError={() => setFailed(true)} className="mb-1 h-10 w-64 max-w-full" />;
+    return (
+      <div className="mb-1">
+        <audio controls preload="none" src={src} onError={() => setFailed(true)} className="h-10 w-64 max-w-full" />
+        <div className="mt-1">{save}</div>
+      </div>
+    );
   }
   if (message.type === 'video') {
-    return <video controls preload="none" src={src} onError={() => setFailed(true)} className="mb-1 max-h-72 max-w-full rounded-lg" />;
+    return (
+      <div className="mb-1">
+        <video controls preload="none" src={src} onError={() => setFailed(true)} className="max-h-72 max-w-full rounded-lg" />
+        <div className="mt-1">{save}</div>
+      </div>
+    );
   }
   return (
-    <a href={`${src}?download=1`} className={`mb-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
+    <a href={`${src}?download=1`} download className={`mb-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
       <span aria-hidden="true">📄</span>
       <span className="min-w-0 flex-1 truncate">{fileName}</span>
       <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium">Baixar</span>

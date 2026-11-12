@@ -40,7 +40,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
                   <span className="font-medium">{item.label}</span>
                   <span className="text-xs text-muted-foreground">{LABEL[item.status] || item.status}{item.rule ? ` · ${item.rule}` : ''}</span>
                   {item.files.map((file, index) => (
-                    <a key={file.messageId} href={file.href} target="_blank" rel="noreferrer"
+                    <a key={file.messageId} href={file.href} target="_blank" rel="noreferrer" download
                       className={buttonVariants({ variant: 'outline', size: 'sm', className: 'h-7 px-2' })} title={file.note || undefined}>
                       arquivo {index + 1}{file.status !== 'received' ? ` (${LABEL[file.status] || file.status})` : ''}
                     </a>
