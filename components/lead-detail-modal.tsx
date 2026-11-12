@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { LeadStoryCard } from '@/components/lead-story-card';
 import { LeadCallDialog } from '@/components/lead-call-dialog';
+
+/** The phone button stays hidden until the internet telephony (Api4Com) is ready. */
+const LEAD_CALL_BUTTON_VISIBLE = false;
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -355,7 +358,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
                     <MessageCircle className="h-4 w-4" />
                   </Button>
                 )}
-                {lead.phone && (
+                {LEAD_CALL_BUTTON_VISIBLE && lead.phone && (
                   <Button
                     size="icon"
                     variant="outline"
