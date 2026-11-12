@@ -3,7 +3,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { createAttachmentUploadUrl, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
-import { sniffAttachmentMimeType } from '@/lib/flip-ai/chat-attachment';
+import { archiveMimeType } from './media-type-rules';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
@@ -16,7 +16,7 @@ export const WHATSAPP_MEDIA_RETENTION_DAYS = 5 * 365;
 /** WhatsApp files are larger than the ones sent in the site chat; the R2 copy accepts up to this. */
 const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
 const EXTENSIONS: Record<string, string> = {
-  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf',
+  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',
   'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/webm': 'webm',
 };
 const LABELS: Record<string, string> = { image: 'foto', document: 'documento', audio: 'audio' };
@@ -59,8 +59,8 @@ export async function archiveWhatsAppMedia(input: WhatsAppMediaToArchive) {
 
   const media = await downloadWhatsAppMedia({ mediaId, accessToken });
   if (media.bytes.byteLength > MAX_ARCHIVE_BYTES) return { archived: false, reason: 'too_large' };
-  // Only the types the chat already serves; anything else stays only on WhatsApp.
-  const mimeType = sniffAttachmentMimeType(media.bytes);
+  // Photos (also HEIC from iPhones), PDFs and audio, read from the file itself; anything else stays only on WhatsApp.
+  const mimeType = archiveMimeType(media.bytes, message.type);
   if (!mimeType) return { archived: false, reason: 'type_not_kept' };
 
   const id = randomUUID();
