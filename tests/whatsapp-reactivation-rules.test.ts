@@ -54,11 +54,13 @@ test('primeira retomada: depois de 12 horas, em horário comercial, antes da de 
   assert.equal(earlyReactivationDue({ ...base, lastInboundAt: hoursAgo(21), lastOutboundAt: hoursAgo(20) }, now), false);
   assert.equal(earlyReactivationDue({ ...base, leadStageName: 'Não qualificado', lastInboundAt: hoursAgo(13), lastOutboundAt: hoursAgo(12.5) }, now), false);
   const text = reactivationInstructions({ companyName: 'X', name: 'Ana', kind: 'early', stageName: null, documents: 'faltam: extrato do INSS', moment: { intent: 'objection', objection: 'trust' }, pending: ['enviar RG'] });
-  assert.match(text, /Nunca mande mensagem genérica, nunca pergunte "ainda tem interesse\?"/);
+  assert.match(text, /Nunca pergunte "ainda tem interesse\?"/);
+  assert.match(text, /Podemos dar continuidade\?/);
+  assert.match(text, /até 160 caracteres/);
   assert.match(text, /PROIBIDO dizer "vou encaminhar"/);
   assert.match(text, /faltam: extrato do INSS/);
   assert.match(text, /objeção: trust/);
-  assert.match(text, /vi que ficou faltando/);
+  assert.doesNotMatch(text, /vi que ficou faltando/);
   assert.match(text, /PRAZO COMBINADO/);
   assert.match(text, /NÃO REPITA/);
   assert.match(text, /só se a empresa ainda não disse isso/);

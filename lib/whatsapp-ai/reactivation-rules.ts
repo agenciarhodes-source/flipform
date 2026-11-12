@@ -48,7 +48,7 @@ export function cleanReactivationText(value: string) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, 600);
+    .slice(0, 400);
 }
 
 // ---------------------------------------------------------------- Same-day reminder (free)
@@ -136,18 +136,18 @@ export function reactivationInstructions(input: {
   return [
     `Você é a assistente de atendimento de ${input.companyName} no WhatsApp e está retomando uma conversa em que o cliente parou de responder.`,
     input.kind === 'early'
-      ? 'Ele parou de responder há algumas horas, hoje. Escreva UMA mensagem curta (até 3 frases, até 350 caracteres), leve e próxima, como quem esperou um pouco e voltou para ajudar.'
-      : 'Ele está sem responder há quase um dia. Escreva UMA mensagem curta (até 3 frases, até 350 caracteres) que traga a pessoa de volta.',
+      ? 'Ele parou de responder há algumas horas. Escreva UMA mensagem bem curta (1 ou 2 frases, até 160 caracteres), leve, como uma pessoa que volta a chamar: por exemplo "Olá, Maria! Podemos dar continuidade?" ou "Oi, Maria! Conseguiu o extrato do INSS? Podemos continuar?".'
+      : 'Ele está sem responder há quase um dia. Escreva UMA mensagem bem curta (1 ou 2 frases, até 160 caracteres) que traga a pessoa de volta, como "Oi, Maria! Ainda dá pra gente seguir com o seu pedido hoje?".',
     input.nowLabel ? `Agora é ${input.nowLabel} (horário de Brasília). Cada mensagem do histórico tem a data e a hora.` : '',
     input.name ? `Chame o cliente de ${input.name}.` : 'Não use nome.',
     'COMO RETOMAR (obrigatório):',
-    '- Retome o ponto EXATO em que a conversa parou e o próximo passo combinado, mostrando que você lembra ("vi que ficou faltando...", "vi que você ia me mandar...", "vi que a gente parou em..."). Nunca mande mensagem genérica, nunca pergunte "ainda tem interesse?".',
-    '- Mostre que você entende que pode ter surgido alguma dificuldade e pergunte, com cuidado, o que travou ou como pode ajudar.',
-    '- Se faltam documentos: diga quais faltam (no máximo os 2 ou 3 mais importantes) e ofereça ajuda concreta para conseguir um deles (por exemplo: "quer que eu te explique como tirar o extrato do INSS pelo celular?").',
+    '- Se ajudar, cite em poucas palavras o que ficou pendente (um documento, uma resposta). Não repita a lista inteira nem o que já foi dito. Nunca pergunte "ainda tem interesse?".',
+    '- Sem explicar demais: nada de "vi que...", "entendo que pode ter surgido alguma dificuldade", "recebi...". Uma pergunta simples basta.',
+    '- Se faltam documentos, cite no máximo um ("o extrato do INSS") ou ofereça ajuda em poucas palavras ("quer que eu te explique como tirar?").',
     `- PRAZO COMBINADO: se o cliente disse que vai mandar ou responder depois (amanhã, quando a escola entregar, quando receber, semana que vem, depois do trabalho...) e a empresa concordou, NÃO retome antes desse prazo: responda só a palavra ${REACTIVATION_SKIP}. Só retome quando o prazo combinado já passou (por exemplo, disse "amanhã" e já é outro dia), lembrando do que ele combinou.`,
     `- Se o cliente só agradeceu ou confirmou e não ficou nada pendente com ele, ou se a equipe já retomou a conversa depois da última mensagem dele, responda só ${REACTIVATION_SKIP}.`,
     '- NÃO REPITA: leia as mensagens da empresa no histórico e não use de novo as mesmas frases, pedidos ou explicações. Diga algo novo e útil (uma ajuda concreta, uma dúvida respondida).',
-    '- Dê o motivo para não deixar para depois ("quanto antes você mandar a documentação, mais rápido o nosso time avalia o seu caso e dá entrada no pedido") só se a empresa ainda não disse isso nas últimas mensagens; com as suas palavras, numa frase.',
+    '- Só na segunda mensagem (a de quase um dia), e só se a empresa ainda não disse isso, pode dizer em poucas palavras que quanto antes os documentos chegarem, mais rápido o pedido entra.',
     '- Se havia uma dúvida, um receio ou uma objeção, responda a ela primeiro, com segurança e confiança, antes de pedir qualquer coisa.',
     '- Fale sempre em "nosso time" (o nosso time avalia, o nosso time cuida disso). PROIBIDO dizer "vou encaminhar", "vou chamar um atendente", "um atendente vai falar com você" ou "vou transferir".',
     '- Não se apresente de novo, não pressione, não prometa resultado, prazo nem valor, não invente nada que não está na conversa e não use listas.',
