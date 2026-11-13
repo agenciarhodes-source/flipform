@@ -65,6 +65,8 @@ interface InboxMessageSummary {
 
 interface InboxConversation {
   id: string;
+  /** Name of the WhatsApp number (shown when the company has several numbers). */
+  whatsappNumberName?: string | null;
   aiPausedAt?: string | null;
   aiPausedByName?: string | null;
   aiPauseReason?: string | null;
@@ -431,6 +433,10 @@ export function InboxClient({
   const [onlyAi, setOnlyAi] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [whatsappAi, setWhatsappAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
+  // Several WhatsApp numbers: the ones this person sees, and the one chosen in the filter.
+  const [numbers, setNumbers] = useState<Array<{ id: string; name: string }>>([]);
+  const [numberFilter, setNumberFilter] = useState('');
+  const numberFilterRef = useRef('');
   const [instagramAi, setInstagramAi] = useState<{ enabled: boolean; resumeAfterHours: number | null }>({ enabled: false, resumeAfterHours: null });
   // The AI switch of the conversation's channel (Atendimento WhatsApp / Atendimento Instagram).
   const channelAi = (conversation: InboxConversation) => (conversation.channel === 'instagram' ? instagramAi
@@ -597,9 +603,11 @@ export function InboxClient({
   async function loadConversations(silent = false) {
     if (!silent) setLoadingConversations(true);
     try {
-      const response = await fetch(`/api/inbox/conversations?channel=${channel}`, { cache: 'no-store' });
+      const numberParam = numberFilterRef.current ? `&number=${encodeURIComponent(numberFilterRef.current)}` : '';
+      const response = await fetch(`/api/inbox/conversations?channel=${channel}${numberParam}`, { cache: 'no-store' });
       if (!response.ok) throw new Error('Não foi possível carregar as conversas.');
       const data = await response.json();
+      if (Array.isArray(data.numbers)) setNumbers(data.numbers);
       const all = Array.isArray(data.conversations) ? data.conversations as InboxConversation[] : [];
       let next = all.filter((conversation) => conversation.channel === channel);
       if (data.whatsappAi && typeof data.whatsappAi.enabled === 'boolean') setWhatsappAi(data.whatsappAi);
@@ -893,6 +901,21 @@ export function InboxClient({
                 className="pl-9"
               />
             </div>
+            {channel === 'whatsapp' && numbers.length > 1 && (
+              <select
+                className="mt-2 h-8 w-full rounded-md border bg-background px-2 text-sm"
+                value={numberFilter}
+                onChange={(event) => {
+                  numberFilterRef.current = event.target.value;
+                  setNumberFilter(event.target.value);
+                  void loadConversations();
+                }}
+                aria-label="Filtrar por número de WhatsApp"
+              >
+                <option value="">Todos os números</option>
+                {numbers.map((number) => <option key={number.id} value={number.id}>{number.name}</option>)}
+              </select>
+            )}
             {/* Compact chips that wrap to a second line instead of being cut off. */}
             <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Filtrar conversas">
               <Button type="button" size="sm" className="h-7 rounded-full px-3" variant={onlyUnread || onlyLeads || onlyUnassigned || onlyAi ? 'outline' : 'default'}
@@ -971,7 +994,7 @@ export function InboxClient({
                           <span className="rounded bg-muted px-1.5 py-0.5">Sem lead</span>
                         )}
                         <span className="inline-flex items-center gap-1">
-                          {conversation.channel === 'instagram' ? <><Instagram className="h-3 w-3" aria-hidden="true" />Instagram</> : 'WhatsApp'}
+                          {conversation.channel === 'instagram' ? <><Instagram className="h-3 w-3" aria-hidden="true" />Instagram</> : (conversation.whatsappNumberName || 'WhatsApp')}
                         </span>
                         {conversation.assignee?.name && <><span>•</span><span className="truncate">{conversation.assignee.name}</span></>}
                         {conversation.status === 'resolved' && <><span>•</span><span>resolvida</span></>}

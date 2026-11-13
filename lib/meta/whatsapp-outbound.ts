@@ -11,6 +11,8 @@ import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { WhatsAppNumberError, whatsappNumberForConversation } from '@/lib/meta/whatsapp-conversation-number';
+import { loadNumberScope } from '@/lib/inbox/number-access';
+import { mayUseNumber } from '@/lib/inbox/number-access-rules';
 import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
 import { uploadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
@@ -186,6 +188,10 @@ async function assertRequesterCanSend(input: {
     },
   });
   if (!conversation) throw new WhatsAppOutboundError('NOT_FOUND', 'Conversation not found');
+  // Several numbers in the company: only someone who sees this number answers through it.
+  if (!mayUseNumber(await loadNumberScope({ tenantId: input.tenantId, userId: input.userId, role }), conversation)) {
+    throw new WhatsAppOutboundError('FORBIDDEN', 'User cannot send through this WhatsApp number');
+  }
 
   if (role === 'agent') {
     const ownsConversation = conversation.assignedTo === input.userId;

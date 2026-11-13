@@ -3,6 +3,8 @@ import 'server-only';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { seesUnassignedConversations } from '@/lib/inbox/unassigned-viewers';
+import { loadNumberScope } from '@/lib/inbox/number-access';
+import { numberScopeWhere, type NumberScope } from '@/lib/inbox/number-access-rules';
 
 export type InboxSessionScope = {
   tenantId: string;
@@ -10,6 +12,8 @@ export type InboxSessionScope = {
   role: string;
   /** Chosen in Integrações to also see the conversations nobody has yet. */
   seesUnassigned?: boolean;
+  /** WhatsApp numbers this person sees (several numbers in the company). */
+  numberScope?: NumberScope;
 };
 
 /** A conversation nobody has: not given to anyone and without a lead that is someone's. */
@@ -19,13 +23,18 @@ export const UNASSIGNED_CONVERSATION_WHERE: Prisma.ConversationWhereInput = {
 };
 
 /** The session with whether this attendant also sees the conversations nobody has. */
-export async function withInboxScope<T extends InboxSessionScope>(session: T): Promise<T> {
-  if (session.role !== 'agent' || session.seesUnassigned !== undefined) return session;
-  return { ...session, seesUnassigned: await seesUnassignedConversations(session) } as T;
+export async function withInboxScope<T extends InboxSessionScope>(session: T): Promise<T & { numberScope: NumberScope }> {
+  const numberScope = session.numberScope ?? await loadNumberScope(session);
+  if (session.role !== 'agent' || session.seesUnassigned !== undefined) return { ...session, numberScope };
+  return { ...session, numberScope, seesUnassigned: await seesUnassignedConversations(session) };
 }
 
 export function getInboxConversationWhere(session: InboxSessionScope): Prisma.ConversationWhereInput {
-  const tenantScope: Prisma.ConversationWhereInput = { tenantId: session.tenantId };
+  // Only the conversations of the WhatsApp numbers this person sees (every number by default).
+  const numbers = numberScopeWhere(session.numberScope);
+  const tenantScope: Prisma.ConversationWhereInput = numbers
+    ? { tenantId: session.tenantId, AND: [numbers as Prisma.ConversationWhereInput] }
+    : { tenantId: session.tenantId };
 
   if (session.role !== 'agent') return tenantScope;
 

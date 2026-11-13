@@ -2242,3 +2242,17 @@ model BusinessGroupPlan {
   @@index([payerTenantId])
   @@map("business_group_plans")
 }
+
+/// Who sees which WhatsApp number of the company in the Inbox. A person with no row sees every
+/// number; the owner always sees every number. Read with raw SQL.
+model WhatsAppNumberAccess {
+  tenantId     String   @map("tenant_id")
+  connectionId String   @map("connection_id")
+  userId       String   @map("user_id")
+  createdBy    String?  @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@id([connectionId, userId])
+  @@index([tenantId, userId])
+  @@map("whatsapp_number_access")
+}
