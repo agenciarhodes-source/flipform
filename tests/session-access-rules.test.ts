@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { decideSessionAccess, permissionWorksWhenBlocked } from '../lib/session-access-rules';
+import { decideSessionAccess, permissionWorksWhenBlocked, strongerRole } from '../lib/session-access-rules';
 
 const base = {
   tokenVersion: 0,
@@ -47,4 +47,17 @@ test('empresa bloqueada continua podendo ver e pagar a cobrança', () => {
   assert.equal(permissionWorksWhenBlocked('BILLING_MANAGE'), true);
   assert.equal(permissionWorksWhenBlocked('BILLING_VIEW'), true);
   assert.equal(permissionWorksWhenBlocked('LEADS_VIEW'), false);
+});
+
+test('a group owner or admin keeps the group role inside each company of the group', () => {
+  // Their own user in the company is a Gestor (manager), created by the group.
+  assert.deepEqual(decideSessionAccess({ ...base, groupRole: 'owner' }), { ok: true, role: 'owner', globalRole: null });
+  assert.deepEqual(decideSessionAccess({ ...base, groupRole: 'admin' }), { ok: true, role: 'admin', globalRole: null });
+  // A group Gestor or viewer never lowers nor raises the company role.
+  assert.deepEqual(decideSessionAccess({ ...base, groupRole: 'manager' }), { ok: true, role: 'manager', globalRole: null });
+  assert.deepEqual(decideSessionAccess({ ...base, groupRole: 'viewer' }), { ok: true, role: 'manager', globalRole: null });
+  // A company owner stays owner.
+  assert.deepEqual(decideSessionAccess({ ...base, membership: { role: 'owner', status: 'active' }, groupRole: 'admin' }), { ok: true, role: 'owner', globalRole: null });
+  assert.equal(strongerRole('agent', null), 'agent');
+  assert.equal(strongerRole('agent', 'admin'), 'admin');
 });
