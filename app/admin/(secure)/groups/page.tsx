@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { GroupPlanCard } from '@/components/admin/group-plan-card';
 
 const GROUP_ROLES = ['owner', 'admin', 'manager', 'viewer'] as const;
 const GROUP_ROLE_LABELS: Record<string, string> = {
@@ -393,6 +394,10 @@ export default function BusinessGroupsAdminPage() {
                           ))}
                         </div>
                       )}
+                    </div>
+
+                    <div className="border-t pt-5">
+                      <GroupPlanCard key={group.tenants.map((tenant) => tenant.id).join(',')} groupId={group.id} />
                     </div>
                   </div>
                 )}
