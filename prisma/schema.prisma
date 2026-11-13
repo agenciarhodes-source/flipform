@@ -2222,6 +2222,9 @@ model BusinessGroupPlan {
   payerTenantId        String   @map("payer_tenant_id")
   basePrice            Decimal  @default(997) @map("base_price") @db.Decimal(10, 2)
   additionalStorePrice Decimal  @default(297) @map("additional_store_price") @db.Decimal(10, 2)
+  /// Monthly price agreed with the customer; when set it replaces the table price.
+  negotiatedPrice      Decimal? @map("negotiated_price") @db.Decimal(10, 2)
+  notes                String?
   status               String   @default("active")
   createdBy            String?  @map("created_by")
   createdAt            DateTime @default(now()) @map("created_at")

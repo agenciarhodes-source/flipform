@@ -23,6 +23,19 @@ export function groupPlanTotalCents(storeCount: number, basePrice: number, addit
   return cents(basePrice) + (stores - 1) * cents(additionalStorePrice);
 }
 
+/** What the paying store is charged: the negotiated price when there is one, otherwise the table price. */
+export function groupPlanChargeCents(input: { storeCount: number; basePrice: number; additionalStorePrice: number; negotiatedPrice: number | null }) {
+  if (input.negotiatedPrice !== null && Number.isFinite(input.negotiatedPrice) && input.negotiatedPrice > 0) {
+    return cents(input.negotiatedPrice);
+  }
+  return groupPlanTotalCents(input.storeCount, input.basePrice, input.additionalStorePrice);
+}
+
+/** A negotiated price is optional; when given it is above zero. */
+export function validNegotiatedPrice(value: number | null) {
+  return value === null || (Number.isFinite(value) && value > 0 && value <= 1000000);
+}
+
 /** "R$ 1.591,00" */
 export function formatBrlCents(value: number) {
   return (value / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });

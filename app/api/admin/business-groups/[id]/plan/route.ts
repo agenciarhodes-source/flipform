@@ -12,15 +12,19 @@ import {
   GROUP_PLAN_ADDITIONAL_STORE_PRICE,
   GROUP_PLAN_BASE_PRICE,
   GROUP_PLAN_PROVIDER,
+  groupPlanChargeCents,
   groupPlanTotalCents,
   hasOwnPaidSubscription,
   validGroupPlanPrices,
+  validNegotiatedPrice,
 } from '@/lib/billing/group-plan-rules';
 
 const activateSchema = z.object({
   payerTenantId: z.string().guid(),
   basePrice: z.number().default(GROUP_PLAN_BASE_PRICE),
   additionalStorePrice: z.number().default(GROUP_PLAN_ADDITIONAL_STORE_PRICE),
+  negotiatedPrice: z.number().nullable().default(null),
+  notes: z.string().trim().max(1000).nullable().default(null),
 });
 
 const SCHEMA_NOT_READY = { error: 'Estrutura do Plano Grupo ainda não instalada no banco.', code: 'GROUP_PLAN_SCHEMA_NOT_READY' };
@@ -63,7 +67,8 @@ async function snapshot(groupId: string) {
     schemaReady,
     plan,
     stores,
-    totalCents: plan ? groupPlanTotalCents(stores.length, plan.basePrice, plan.additionalStorePrice) : 0,
+    tableCents: plan ? groupPlanTotalCents(stores.length, plan.basePrice, plan.additionalStorePrice) : 0,
+    totalCents: plan ? groupPlanChargeCents({ storeCount: stores.length, ...plan }) : 0,
     payer: payer?.tenant ? {
       id: payer.tenant.id,
       name: payer.tenant.name,
@@ -85,8 +90,11 @@ export const PUT = withPlatformAdmin(async (req: NextRequest, session, ctx: { pa
   const groupId = ctx.params.id;
   const parsed = activateSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
-  const { payerTenantId, basePrice, additionalStorePrice } = parsed.data;
-  if (!validGroupPlanPrices(basePrice, additionalStorePrice)) return NextResponse.json({ error: 'Valores inválidos.' }, { status: 400 });
+  const { payerTenantId, basePrice, additionalStorePrice, negotiatedPrice } = parsed.data;
+  const notes = parsed.data.notes || null;
+  if (!validGroupPlanPrices(basePrice, additionalStorePrice) || !validNegotiatedPrice(negotiatedPrice)) {
+    return NextResponse.json({ error: 'Valores inválidos.' }, { status: 400 });
+  }
   if (!await groupExists(groupId)) return NextResponse.json({ error: 'Grupo empresarial não encontrado.' }, { status: 404 });
   const { schemaReady, plan: before } = await loadGroupPlan(groupId);
   if (!schemaReady) return NextResponse.json(SCHEMA_NOT_READY, { status: 503 });
@@ -99,12 +107,14 @@ export const PUT = withPlatformAdmin(async (req: NextRequest, session, ctx: { pa
   }
 
   await prisma.$executeRaw(Prisma.sql`
-    INSERT INTO business_group_plans (group_id, payer_tenant_id, base_price, additional_store_price, status, created_by, created_at, updated_at)
-    VALUES (${groupId}, ${payerTenantId}, ${basePrice}, ${additionalStorePrice}, 'active', ${session.userId}, NOW(), NOW())
+    INSERT INTO business_group_plans (group_id, payer_tenant_id, base_price, additional_store_price, negotiated_price, notes, status, created_by, created_at, updated_at)
+    VALUES (${groupId}, ${payerTenantId}, ${basePrice}, ${additionalStorePrice}, ${negotiatedPrice}, ${notes}, 'active', ${session.userId}, NOW(), NOW())
     ON CONFLICT (group_id) DO UPDATE SET
       payer_tenant_id = EXCLUDED.payer_tenant_id,
       base_price = EXCLUDED.base_price,
       additional_store_price = EXCLUDED.additional_store_price,
+      negotiated_price = EXCLUDED.negotiated_price,
+      notes = EXCLUDED.notes,
       status = 'active',
       updated_at = NOW()
   `);
@@ -119,7 +129,7 @@ export const PUT = withPlatformAdmin(async (req: NextRequest, session, ctx: { pa
   await logPlatformAudit({
     tenantId: payerTenantId, userId: session.userId, entityType: 'business_group', entityId: groupId,
     action: before?.status === 'active' ? 'business_group.plan_updated' : 'business_group.plan_activated',
-    metadata: { payerTenantId, basePrice, additionalStorePrice, previous: before, billing: result.billing, sync: result.sync },
+    metadata: { payerTenantId, basePrice, additionalStorePrice, negotiatedPrice, notes, previous: before, billing: result.billing, sync: result.sync },
   }).catch(() => undefined);
   return NextResponse.json({ ok: true, ...result, ...(await snapshot(groupId)) });
 });

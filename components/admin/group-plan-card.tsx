@@ -9,6 +9,7 @@ import {
   formatBrlCents,
   GROUP_PLAN_ADDITIONAL_STORE_PRICE,
   GROUP_PLAN_BASE_PRICE,
+  groupPlanChargeCents,
   groupPlanTotalCents,
 } from '@/lib/billing/group-plan-rules';
 
@@ -23,7 +24,7 @@ type Store = {
 };
 type Snapshot = {
   schemaReady: boolean;
-  plan: { payerTenantId: string; basePrice: number; additionalStorePrice: number; status: 'active' | 'ended' } | null;
+  plan: { payerTenantId: string; basePrice: number; additionalStorePrice: number; negotiatedPrice: number | null; notes: string | null; status: 'active' | 'ended' } | null;
   stores: Store[];
   totalCents: number;
   payer: { id: string; name: string; planName: string | null; premium: boolean; billingProvider: string; subscriptionStatus: string | null } | null;
@@ -55,6 +56,8 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
   const [payerId, setPayerId] = useState('');
   const [basePrice, setBasePrice] = useState(String(GROUP_PLAN_BASE_PRICE));
   const [additionalPrice, setAdditionalPrice] = useState(String(GROUP_PLAN_ADDITIONAL_STORE_PRICE));
+  const [negotiated, setNegotiated] = useState('');
+  const [notes, setNotes] = useState('');
 
   function apply(next: Snapshot) {
     setData(next);
@@ -62,6 +65,8 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
       setPayerId(next.plan.payerTenantId);
       setBasePrice(String(next.plan.basePrice));
       setAdditionalPrice(String(next.plan.additionalStorePrice));
+      setNegotiated(next.plan.negotiatedPrice === null ? '' : String(next.plan.negotiatedPrice));
+      setNotes(next.plan.notes || '');
     } else if (!payerId && next.stores[0]) {
       setPayerId(next.stores[0].id);
     }
@@ -98,7 +103,7 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Falha ao salvar o Plano Grupo.');
       apply(result);
-      const parts = [method === 'DELETE' ? 'Plano Grupo encerrado.' : 'Plano Grupo aplicado às lojas.'];
+      const parts = [method === 'DELETE' ? 'Plano Personalizado encerrado.' : 'Plano Personalizado aplicado às lojas.'];
       if (result.billing && BILLING_TEXT[result.billing]) parts.push(BILLING_TEXT[result.billing]);
       if (result.sync?.skipped?.length) parts.push(`${result.sync.skipped.length} loja(s) ficaram de fora: veja abaixo.`);
       setNotice(parts.join(' '));
@@ -111,11 +116,18 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
 
   const stores = data?.stores || [];
   const active = data?.plan?.status === 'active';
-  const previewCents = useMemo(
-    () => groupPlanTotalCents(stores.length || 1, Number(basePrice.replace(',', '.')) || 0, Number(additionalPrice.replace(',', '.')) || 0),
+  // "1.297,50" (Brazilian) or "1297.5": both read as 1297.5.
+  const toNumber = (value: string) => Number(value.includes(',') ? value.replace(/\./g, '').replace(',', '.') : value) || 0;
+  const negotiatedValue = negotiated.trim() ? toNumber(negotiated) : null;
+  const tableCents = useMemo(
+    () => groupPlanTotalCents(stores.length || 1, toNumber(basePrice), toNumber(additionalPrice)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [stores.length, basePrice, additionalPrice],
   );
-  const aloneCents = Math.round((Number(basePrice.replace(',', '.')) || 0) * 100) * (stores.length || 1);
+  const previewCents = groupPlanChargeCents({
+    storeCount: stores.length || 1, basePrice: toNumber(basePrice), additionalStorePrice: toNumber(additionalPrice), negotiatedPrice: negotiatedValue,
+  });
+  const aloneCents = Math.round(toNumber(basePrice) * 100) * (stores.length || 1);
 
   if (loading) {
     return <div className="py-6 flex justify-center text-sm text-muted-foreground"><Loader2 className="w-4 h-4 mr-2 animate-spin" />Carregando Plano Grupo...</div>;
@@ -129,10 +141,10 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
       <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="font-medium text-sm flex items-center gap-2">
-            <CreditCard className="w-4 h-4" />Plano Grupo
+            <CreditCard className="w-4 h-4" />Plano Personalizado
             {active ? <Badge>Ativo</Badge> : data?.plan?.status === 'ended' ? <Badge variant="outline">Encerrado</Badge> : <Badge variant="outline">Não ativado</Badge>}
           </div>
-          <div className="text-xs text-muted-foreground">Uma loja paga por todas: a primeira pelo valor base e cada loja adicional pelo valor adicional. As outras lojas recebem o mesmo plano (com IA) e acompanham o pagamento da loja pagadora.</div>
+          <div className="text-xs text-muted-foreground">Uma loja paga por todas. O sistema calcula o valor de tabela (1ª loja + cada adicional) e você pode fechar um valor negociado com o cliente. As outras lojas recebem o mesmo plano (com IA) e acompanham o pagamento da loja pagadora.</div>
         </div>
       </div>
 
@@ -160,9 +172,23 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
             </label>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-2">
+            <label className="text-xs space-y-1">
+              <span className="text-muted-foreground">Valor negociado (R$/mês)</span>
+              <Input value={negotiated} onChange={(e) => setNegotiated(e.target.value)} inputMode="decimal" placeholder="Vazio = valor de tabela" disabled={saving} />
+            </label>
+            <label className="text-xs space-y-1">
+              <span className="text-muted-foreground">Observação da negociação</span>
+              <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Ex.: fechado em reunião em 13/11, revisar em 6 meses" maxLength={1000} disabled={saving} />
+            </label>
+          </div>
+
           <div className="rounded-md border bg-background p-3 text-sm">
             <div><strong>{formatBrlCents(previewCents)}/mês</strong> para {stores.length} loja(s)
-              {stores.length > 1 && <span className="text-muted-foreground"> (avulso seriam {formatBrlCents(aloneCents)})</span>}
+              {negotiatedValue !== null && previewCents !== tableCents && (
+                <span className="text-muted-foreground"> · valor negociado (tabela {formatBrlCents(tableCents)}, {previewCents < tableCents ? `desconto de ${formatBrlCents(tableCents - previewCents)}` : `acréscimo de ${formatBrlCents(previewCents - tableCents)}`})</span>
+              )}
+              {stores.length > 1 && negotiatedValue === null && <span className="text-muted-foreground"> (avulso seriam {formatBrlCents(aloneCents)})</span>}
             </div>
             {data?.payer && active && (
               <div className="text-xs text-muted-foreground mt-1">
@@ -194,19 +220,21 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
               size="sm"
               onClick={() => {
                 const message = active
-                  ? `Salvar o Plano Grupo com ${formatBrlCents(previewCents)}/mês?`
-                  : `Ativar o Plano Grupo: ${formatBrlCents(previewCents)}/mês para ${stores.length} loja(s)? As outras lojas recebem o plano da loja pagadora.`;
+                  ? `Salvar o Plano Personalizado com ${formatBrlCents(previewCents)}/mês?`
+                  : `Ativar o Plano Personalizado: ${formatBrlCents(previewCents)}/mês para ${stores.length} loja(s)? As outras lojas recebem o plano da loja pagadora.`;
                 if (!window.confirm(message)) return;
                 send('PUT', {
                   payerTenantId: payerId,
-                  basePrice: Number(basePrice.replace(',', '.')),
-                  additionalStorePrice: Number(additionalPrice.replace(',', '.')),
+                  basePrice: toNumber(basePrice),
+                  additionalStorePrice: toNumber(additionalPrice),
+                  negotiatedPrice: negotiatedValue,
+                  notes: notes.trim() || null,
                 });
               }}
               disabled={saving || !payerId}
             >
               {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-              {active ? 'Salvar Plano Grupo' : 'Ativar Plano Grupo'}
+              {active ? 'Salvar plano' : 'Ativar Plano Personalizado'}
             </Button>
             {active && (
               <>
@@ -216,7 +244,7 @@ export function GroupPlanCard({ groupId }: { groupId: string }) {
                   variant="outline"
                   className="text-rose-700 hover:text-rose-800"
                   onClick={() => {
-                    if (!window.confirm('Encerrar o Plano Grupo? As lojas cobertas perdem o plano do grupo (a IA delas para). Empresas, equipes, leads e conexões continuam como estão. A loja pagadora volta ao valor do próprio plano.')) return;
+                    if (!window.confirm('Encerrar o Plano Personalizado? As lojas cobertas perdem o plano do grupo (a IA delas para). Empresas, equipes, leads e conexões continuam como estão. A loja pagadora volta ao valor do próprio plano.')) return;
                     send('DELETE');
                   }}
                   disabled={saving}

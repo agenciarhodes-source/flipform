@@ -6,7 +6,7 @@ import { logPlatformAudit } from '@/lib/platform-audit';
 import { planIncludesAi, planPriceCents } from './subscription-rules';
 import {
   GROUP_PLAN_PROVIDER,
-  groupPlanTotalCents,
+  groupPlanChargeCents,
   hasOwnPaidSubscription,
   memberSubscriptionStatus,
   memberTenantStatus,
@@ -17,6 +17,8 @@ export type GroupPlan = {
   payerTenantId: string;
   basePrice: number;
   additionalStorePrice: number;
+  negotiatedPrice: number | null;
+  notes: string | null;
   status: 'active' | 'ended';
 };
 
@@ -39,9 +41,9 @@ function tableMissing(error: unknown) {
 /** The group's plan, or null; schemaReady is false while the table is not installed. */
 export async function loadGroupPlan(groupId: string): Promise<{ schemaReady: boolean; plan: GroupPlan | null }> {
   try {
-    const rows = await prisma.$queryRaw<Array<{ groupId: string; payerTenantId: string; basePrice: unknown; additionalStorePrice: unknown; status: string }>>(Prisma.sql`
+    const rows = await prisma.$queryRaw<Array<{ groupId: string; payerTenantId: string; basePrice: unknown; additionalStorePrice: unknown; negotiatedPrice: unknown; notes: string | null; status: string }>>(Prisma.sql`
       SELECT group_id AS "groupId", payer_tenant_id AS "payerTenantId", base_price AS "basePrice",
-        additional_store_price AS "additionalStorePrice", status
+        additional_store_price AS "additionalStorePrice", negotiated_price AS "negotiatedPrice", notes, status
       FROM business_group_plans WHERE group_id = ${groupId} LIMIT 1
     `);
     const row = rows[0];
@@ -53,6 +55,8 @@ export async function loadGroupPlan(groupId: string): Promise<{ schemaReady: boo
         payerTenantId: row.payerTenantId,
         basePrice: Number(row.basePrice),
         additionalStorePrice: Number(row.additionalStorePrice),
+        negotiatedPrice: row.negotiatedPrice === null || row.negotiatedPrice === undefined ? null : Number(row.negotiatedPrice),
+        notes: row.notes ?? null,
         status: row.status === 'ended' ? 'ended' : 'active',
       },
     };
@@ -110,7 +114,7 @@ export async function syncGroupPlan(groupId: string): Promise<GroupPlanSyncResul
   if (!plan) return { status: 'no_plan', ...empty, canceled: [] };
   const tenantIds = await groupTenantIds(groupId);
   const storeCount = tenantIds.length;
-  const totalCents = groupPlanTotalCents(storeCount, plan.basePrice, plan.additionalStorePrice);
+  const totalCents = groupPlanChargeCents({ storeCount, ...plan });
 
   if (plan.status === 'ended') return { status: 'ended', ...empty, canceled: await cancelGroupRows(groupId) };
   if (!tenantIds.includes(plan.payerTenantId)) {

@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  groupPlanChargeCents,
   groupPlanTotalCents,
   hasOwnPaidSubscription,
   memberSubscriptionStatus,
   memberTenantStatus,
   validGroupPlanPrices,
+  validNegotiatedPrice,
 } from '../lib/billing/group-plan-rules';
 
 test('group plan total: first store at the base price, each additional at the additional price', () => {
@@ -37,6 +39,18 @@ test('a store paying its own subscription is never covered (no double charge)', 
   assert.equal(hasOwnPaidSubscription([{ provider: 'courtesy', status: 'courtesy', paymentRequired: false }]), false);
   assert.equal(hasOwnPaidSubscription([{ provider: 'business_group', status: 'active', paymentRequired: false }]), false);
   assert.equal(hasOwnPaidSubscription([]), false);
+});
+
+test('a negotiated price replaces the table price', () => {
+  const table = { storeCount: 3, basePrice: 997, additionalStorePrice: 297 };
+  assert.equal(groupPlanChargeCents({ ...table, negotiatedPrice: null }), 159100);
+  assert.equal(groupPlanChargeCents({ ...table, negotiatedPrice: 997 }), 99700);
+  assert.equal(groupPlanChargeCents({ ...table, negotiatedPrice: 1297.5 }), 129750);
+  assert.equal(groupPlanChargeCents({ ...table, negotiatedPrice: 0 }), 159100);
+  assert.equal(validNegotiatedPrice(null), true);
+  assert.equal(validNegotiatedPrice(997), true);
+  assert.equal(validNegotiatedPrice(0), false);
+  assert.equal(validNegotiatedPrice(-5), false);
 });
 
 test('valid prices', () => {
