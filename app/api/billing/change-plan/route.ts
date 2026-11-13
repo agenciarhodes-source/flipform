@@ -5,6 +5,7 @@ import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { logAudit } from '@/lib/audit';
 import { validateTenantWithinPlanLimits } from '@/lib/plan-limits';
 import { isSellablePlan } from '@/lib/billing/subscription-rules';
+import { isActiveGroupPayer } from '@/lib/billing/group-plan';
 import { changeStripeSubscriptionPlan, StripeManageError } from '@/lib/stripe/subscription-manage';
 
 export const runtime = 'nodejs';
@@ -24,6 +25,10 @@ export const POST = withPermission('BILLING_MANAGE', async (req: NextRequest, se
   const tenant = await prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { id: true, status: true } });
   if (!tenant || tenant.status === 'canceled') return NextResponse.json({ error: 'Empresa inválida para troca de plano.', code: 'INVALID_TENANT' }, { status: 400 });
 
+  // The paying store of a group plan: the group's price is set by the platform.
+  if (await isActiveGroupPayer(session.tenantId)) {
+    return NextResponse.json({ error: 'Esta empresa paga o Plano Grupo. A troca de plano é feita pelo administrador da plataforma. Fale com o suporte.', code: 'GROUP_PLAN_MANAGED' }, { status: 400 });
+  }
   const currentSub = await prisma.subscription.findFirst({ where: { tenantId: session.tenantId }, include: { plan: true }, orderBy: { createdAt: 'desc' } });
   if (!currentSub?.plan) return NextResponse.json({ error: 'Assinatura não encontrada.', code: 'SUBSCRIPTION_NOT_FOUND' }, { status: 404 });
   const provider = String(currentSub.provider || '').toLowerCase();

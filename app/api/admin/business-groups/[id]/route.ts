@@ -10,6 +10,8 @@ import {
 } from '@/lib/business-groups';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { syncBusinessGroupMemberships } from '@/lib/business-group-memberships';
+import { loadGroupPlan } from '@/lib/billing/group-plan';
+import { refreshGroupPlan } from '@/lib/billing/group-plan-billing';
 
 const memberSchema = z.object({
   userId: z.string().guid().optional(),
@@ -67,6 +69,18 @@ export const PATCH = withPlatformAdmin(async (req: NextRequest, session, ctx: { 
         action: 'business_group.tenants_updated',
         metadata: { tenantIds: parsed.data.tenantIds },
       });
+      // A store that joins or leaves the group follows (or leaves) the group plan, and the total changes.
+      const groupPlan = await refreshGroupPlan(ctx.params.id);
+      if (groupPlan.sync.status !== 'no_plan') {
+        await safeAudit({
+          tenantId: null,
+          userId: session.userId,
+          entityType: 'business_group',
+          entityId: ctx.params.id,
+          action: 'business_group.plan_synced',
+          metadata: { trigger: 'tenants_updated', billing: groupPlan.billing, sync: groupPlan.sync },
+        });
+      }
     }
 
     if (parsed.data.member) {
@@ -118,6 +132,14 @@ export const DELETE = withPlatformAdmin(async (_req: NextRequest, session, ctx: 
     const current = rows[0];
     if (!current) {
       return NextResponse.json({ error: 'Grupo empresarial não encontrado.', code: 'BUSINESS_GROUP_NOT_FOUND' }, { status: 404 });
+    }
+
+    // An active group plan ends first: the covered stores lose the group subscription and the
+    // paying store goes back to its own plan price (nothing else of the stores is touched).
+    const groupPlan = await loadGroupPlan(ctx.params.id).catch(() => ({ schemaReady: false, plan: null }));
+    if (groupPlan.plan?.status === 'active') {
+      await prisma.$executeRaw(Prisma.sql`UPDATE business_group_plans SET status = 'ended', updated_at = NOW() WHERE group_id = ${ctx.params.id}`);
+      await refreshGroupPlan(ctx.params.id);
     }
 
     // As FKs do schema de grupos usam ON DELETE CASCADE somente para
