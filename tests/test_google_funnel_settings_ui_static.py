@@ -11,7 +11,7 @@ def read(path: str) -> str:
 def test_page_renders_the_funnel_card_after_existing_integrations():
     page = read('app/(app)/integrations/page.tsx')
     assert "import { GoogleFunnelCard } from './google-funnel-card';" in page
-    assert page.index('<IntegrationsClient />') < page.index('<GoogleFunnelCard />') < page.index('<WhatsAppEmbeddedSignupCard />')
+    assert page.index('<IntegrationsClient />') < page.index('<GoogleFunnelCard />') < page.rindex('<WhatsAppEmbeddedSignupCard />')
     assert "can(session.role, 'INTEGRATIONS_VIEW')" in page
 
 

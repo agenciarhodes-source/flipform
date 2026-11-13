@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { can, ROLE_LABELS_PT_BR, type PermissionKey, type RoleName } from "@/lib/rbac";
+import { INBOX_PLAN_PAGES } from "@/lib/billing/inbox-plan-rules";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -148,6 +149,7 @@ export function AppShell({
   businessGroups = [],
   hasCurrentTenantMembership = true,
   isBusinessGroupAnchor = false,
+  inboxOnly = false,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
@@ -155,6 +157,8 @@ export function AppShell({
   businessGroups?: Array<{ id: string; name: string; role: string }>;
   hasCurrentTenantMembership?: boolean;
   isBusinessGroupAnchor?: boolean;
+  /** Plano Inbox: the menu shows only the attendance screens. */
+  inboxOnly?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -179,11 +183,13 @@ export function AppShell({
       ]
     : [];
   const baseNavItems = [NAV[0], ...groupHubNav, ...NAV.slice(1)];
+  const inboxPlanMenu = new Set<string>(["/group", ...INBOX_PLAN_PAGES]);
   const navItems = ((inGroupView || isBusinessGroupAnchor) ? groupWorkspaceNav : baseNavItems).filter(
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
-      && !(item.href === "/team" && !hasCurrentTenantMembership),
+      && !(item.href === "/team" && !hasCurrentTenantMembership)
+      && (!inboxOnly || inGroupView || isBusinessGroupAnchor || inboxPlanMenu.has(item.href)),
   );
   const isNavItemActive = (href: string) => href === "/group" ? pathname === "/group" : pathname.startsWith(href);
 

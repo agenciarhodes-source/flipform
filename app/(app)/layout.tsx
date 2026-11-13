@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
 import { requireBillingAccess } from "@/lib/billing-access";
 import { getBusinessGroupAccessesForUser } from "@/lib/business-groups";
+import { INBOX_PLAN_HOME, inboxPlanAllowsPath, isInboxOnlyPlan } from "@/lib/billing/inbox-plan-rules";
 
 export default async function AppGroupLayout({
   children,
@@ -29,6 +30,7 @@ export default async function AppGroupLayout({
         logoUrl: true,
         status: true,
         nextDueDate: true,
+        plan: { select: { slug: true } },
       },
     }),
     getBusinessGroupAccessesForUser(prisma, session.userId),
@@ -50,6 +52,12 @@ export default async function AppGroupLayout({
     redirect("/group");
   }
 
+  // Plano Inbox: only the attendance screens; any other screen opens the Inbox.
+  const inboxOnly = isInboxOnlyPlan(tenant?.plan?.slug) && session.globalRole !== "platform_admin";
+  if (inboxOnly && pathname && !inboxPlanAllowsPath(pathname)) {
+    redirect(INBOX_PLAN_HOME);
+  }
+
   const billingAccess = await requireBillingAccess(session);
   // A visão do grupo precisa continuar acessível mesmo se a unidade atual ficar
   // bloqueada, para permitir que o responsável escolha outra unidade autorizada.
@@ -63,6 +71,7 @@ export default async function AppGroupLayout({
       businessGroups={groupState.accesses.map((group) => ({ id: group.id, name: group.name, role: group.role }))}
       hasCurrentTenantMembership={Boolean(currentTenantMembership)}
       isBusinessGroupAnchor={isBusinessGroupAnchor}
+      inboxOnly={inboxOnly}
       tenant={
         tenant
           ? {

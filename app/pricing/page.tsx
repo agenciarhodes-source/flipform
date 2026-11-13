@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import { isSellablePlan, planFeatures, planIncludesAi, planIncludesMessaging } from '@/lib/billing/subscription-rules';
+import { isInboxOnlyPlan } from '@/lib/billing/inbox-plan-rules';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || '';
 const checkoutHref = (slug: string) => (APP_URL ? `${APP_URL}/checkout/${slug}` : `/checkout/${slug}`);
@@ -31,7 +32,8 @@ export default async function PricingPage() {
       canUseReports: true, canExportCsv: true, canUseMetaPixel: true, canUseWebhooks: true, canUseCustomBranding: true, canUseTasks: true,
     },
   });
-  const plans = rows.filter(isSellablePlan);
+  // The Plano Inbox is sold by direct offer (its checkout link works), not on the price table.
+  const plans = rows.filter((plan) => isSellablePlan(plan) && !isInboxOnlyPlan(plan.slug));
   const rowsOf: Array<[string, (plan: (typeof plans)[number]) => string]> = [
     ['Usuários', (plan) => limit(plan.maxUsers)],
     ['Formulários', (plan) => limit(plan.maxForms)],

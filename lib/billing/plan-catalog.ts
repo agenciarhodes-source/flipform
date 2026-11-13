@@ -77,6 +77,19 @@ export const PLAN_CATALOG_UNSOLD: readonly CatalogPlan[] = [
   },
 ];
 
+/**
+ * Plans sold by direct offer, not on the public price table (migration
+ * 20261121120000_inbox_plan). Plano Inbox: only the WhatsApp attendance (lib/billing/inbox-plan-rules.ts).
+ */
+export const PLAN_CATALOG_SPECIAL: readonly CatalogPlan[] = [
+  {
+    slug: 'inbox', name: 'Inbox', description: 'Somente o atendimento: Inbox do WhatsApp oficial com vários números', price: 397,
+    maxUsers: 0, maxForms: 0, maxPipelines: 0, maxLeadsPerMonth: 0,
+    canUseReports: false, canExportCsv: false, canUseCustomBranding: false, canUseMetaPixel: false, canUseWebhooks: false, canUseTasks: false,
+    isActive: true,
+  },
+];
+
 export function catalogPlan(slug: string) {
-  return [...PLAN_CATALOG, ...PLAN_CATALOG_UNSOLD].find((plan) => plan.slug === slug) || null;
+  return [...PLAN_CATALOG, ...PLAN_CATALOG_UNSOLD, ...PLAN_CATALOG_SPECIAL].find((plan) => plan.slug === slug) || null;
 }
