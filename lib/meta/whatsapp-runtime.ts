@@ -11,8 +11,6 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensureConversation, MessageType, recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
-import { createWhatsAppConversationLead } from '@/lib/leads/whatsapp-auto-lead';
-import { shouldCreateWhatsAppLead } from '@/lib/leads/whatsapp-auto-lead-rules';
 import {
   enqueueWhatsAppMessageCoreAutomation,
   prepareWhatsAppMessageCoreAutomation,
@@ -530,27 +528,19 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             await recordContactOptOut({ tenantId: connection.tenantId, phone: resolvedExternalUserId, source: 'keyword' }).catch(() => undefined);
           }
           // Someone who already registered (a form, the team) is found by the number and linked now.
-          const linked = persisted.conversation.leadId
-            ? true
-            : await autoLinkWhatsAppConversation({
+          // A contact who never registered gets no lead by itself: the team registers it (one
+          // number may serve paid traffic and walk-in customers). With the WhatsApp AI on, the AI
+          // opens the lead once the person is identified.
+          if (!persisted.conversation.leadId) {
+            await autoLinkWhatsAppConversation({
               tenantId: connection.tenantId,
               conversationId: persisted.conversation.id,
               phone: resolvedExternalUserId,
-            }).then((outcome) => Boolean(outcome.linked)).catch(() => false);
+            }).catch(() => undefined);
+          }
           // The first message after a click-to-WhatsApp ad carries the ad; it is kept once.
           const referral = parseWhatsAppReferral(message?.referral);
           const aiOn = message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id);
-          // Every company: a new contact without a lead gets one in the main funnel (with the AI on,
-          // the AI opens it once the person is identified, as before).
-          if (shouldCreateWhatsAppLead({ hasLead: linked, aiOn, messageType: String(message?.type || '') })) {
-            await createWhatsAppConversationLead({
-              tenantId: connection.tenantId,
-              conversationId: persisted.conversation.id,
-              phone: resolvedExternalUserId,
-              displayName: contacts.get(message.from) ?? null,
-              fromAd: Boolean(referral),
-            }).catch((error) => console.error('WhatsApp auto lead failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
-          }
           if (referral) {
             await prisma.conversation.updateMany({
               where: { id: persisted.conversation.id, tenantId: connection.tenantId, adReferral: { equals: Prisma.DbNull } },

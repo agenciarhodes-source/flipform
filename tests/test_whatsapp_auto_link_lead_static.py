@@ -9,7 +9,7 @@ def read(path):
 
 def test_new_whatsapp_messages_link_the_registered_lead():
     runtime = read("lib/meta/whatsapp-runtime.ts")
-    assert "const linked = persisted.conversation.leadId" in runtime
+    assert "if (!persisted.conversation.leadId) {" in runtime
     assert "await autoLinkWhatsAppConversation({" in runtime
 
 
