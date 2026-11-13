@@ -30,7 +30,7 @@ export const POST = withPermission('LEADS_CONTACT_WHATSAPP', async (req: NextReq
   if (!parsed.success) return NextResponse.json({ error: 'Modelo ou chave de idempotência inválida.' }, { status: 400 });
 
   try {
-    const templates = await loadSendableWhatsAppTemplates(session.tenantId);
+    const templates = await loadSendableWhatsAppTemplates(session.tenantId, ctx.params.id);
     const template = templates.find(item => item.name === parsed.data.templateName && item.language === parsed.data.language);
     if (!template) {
       return NextResponse.json({ error: 'Este modelo não está aprovado pela Meta ou exige campos que ainda não são suportados.' }, { status: 409 });

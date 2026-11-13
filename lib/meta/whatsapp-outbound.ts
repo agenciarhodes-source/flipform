@@ -10,6 +10,7 @@ import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } fro
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
 import { getPlatformWhatsAppSendCredentials } from '@/lib/meta/whatsapp-send-credentials';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
+import { WhatsAppNumberError, whatsappNumberForConversation } from '@/lib/meta/whatsapp-conversation-number';
 import { reconcileBufferedWhatsAppStatusesForMessage } from '@/lib/meta/whatsapp-runtime';
 import { uploadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { processWhatsAppFunnelMessage } from '@/lib/tracking/whatsapp-funnel';
@@ -225,14 +226,19 @@ async function loadConversationForAi(input: { tenantId: string; conversationId: 
   return conversation;
 }
 
-async function resolveConnectedWhatsAppConnection(tenantId: string) {
-  const connection = await prisma.tenantWhatsAppConnection.findFirst({
-    where: { tenantId, status: 'connected' },
-    orderBy: { connectedAt: 'desc' },
-    select: { id: true, tenantId: true, phoneNumberId: true, status: true },
-  });
-  if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
-  return connection;
+/** The number that answers the conversation (several numbers: the one it came through). */
+async function numberForSend(tenantId: string, conversationId: string) {
+  try {
+    return await whatsappNumberForConversation(tenantId, conversationId);
+  } catch (error) {
+    if (error instanceof WhatsAppNumberError) throw new WhatsAppOutboundError('NOT_CONNECTED', error.message);
+    throw error;
+  }
+}
+
+async function resolveConnectedWhatsAppConnection(tenantId: string, conversationId: string) {
+  const connection = await numberForSend(tenantId, conversationId);
+  return { id: connection.id, tenantId: connection.tenantId, phoneNumberId: connection.phoneNumberId, status: connection.status };
 }
 
 async function findExistingOutboxMessage(tenantId: string, externalMessageId: string) {
@@ -279,7 +285,7 @@ async function enqueueWhatsAppTextMessage(input: {
     : await assertRequesterCanSend({ tenantId, userId: requestedByUserId, conversationId });
   const conversation = authorization.conversation;
   const recipientWaId = normalizeRecipient(conversation.externalContactIdentity.externalUserId);
-  const connection = await resolveConnectedWhatsAppConnection(tenantId);
+  const connection = await resolveConnectedWhatsAppConnection(tenantId, conversationId);
   const externalMessageId = localExternalMessageId(tenantId, idempotencyKey);
   const textFingerprint = requestFingerprint(conversationId,
     template ? `template\u0000${template.name}\u0000${template.language}\u0000${(template.parameters || []).join('\u0001')}` : text);
@@ -819,11 +825,8 @@ export async function enqueueAndDispatchWhatsAppAudioMessage(input: {
   const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
   let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
   if (!mediaId) {
-    const connection = await prisma.tenantWhatsAppConnection.findFirst({
-      where: { tenantId, status: 'connected' },
-      orderBy: { connectedAt: 'desc' },
-      select: { phoneNumberId: true, accessTokenEncrypted: true },
-    });
+    // The file goes to the number that answers this conversation (a media id belongs to one number).
+    const connection = await numberForSend(tenantId, input.conversationId.trim());
     if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
     const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
     const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
@@ -865,11 +868,8 @@ export async function enqueueAndDispatchWhatsAppDocumentMessage(input: {
   const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
   let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
   if (!mediaId) {
-    const connection = await prisma.tenantWhatsAppConnection.findFirst({
-      where: { tenantId, status: 'connected' },
-      orderBy: { connectedAt: 'desc' },
-      select: { phoneNumberId: true, accessTokenEncrypted: true },
-    });
+    // The file goes to the number that answers this conversation (a media id belongs to one number).
+    const connection = await numberForSend(tenantId, input.conversationId.trim());
     if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
     const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
     const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
@@ -912,11 +912,8 @@ export async function enqueueAndDispatchWhatsAppAiAudioMessage(input: {
   const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
   let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
   if (!mediaId) {
-    const connection = await prisma.tenantWhatsAppConnection.findFirst({
-      where: { tenantId, status: 'connected' },
-      orderBy: { connectedAt: 'desc' },
-      select: { phoneNumberId: true, accessTokenEncrypted: true },
-    });
+    // The file goes to the number that answers this conversation (a media id belongs to one number).
+    const connection = await numberForSend(tenantId, input.conversationId.trim());
     if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
     const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
     const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();

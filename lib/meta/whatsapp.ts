@@ -258,6 +258,8 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
   // Absent only when connecting an existing WhatsApp Business app: Meta then returns the
   // account alone, and the number is the single one that account holds.
   phoneNumberId?: string | null;
+  /** Numbers the company already connected: when adding another number, they are skipped. */
+  excludePhoneNumberIds?: string[];
 }) {
   const proof = createAppSecretProof(input.accessToken, input.appSecret);
   const wabaUrl = new URL(`https://${GRAPH_HOST}/${META_PLATFORM_GRAPH_API_VERSION}/${input.wabaId}`);
@@ -273,9 +275,11 @@ export async function validateWhatsAppWabaPhoneSelection(input: {
   }).toString();
   const phones = await metaJson(phonesUrl, 'waba_phone_numbers', { accessToken: input.accessToken });
   const listed: any[] = Array.isArray(phones?.data) ? phones.data : [];
+  const excluded = new Set(input.excludePhoneNumberIds || []);
+  const candidates = listed.filter((item: any) => !excluded.has(String(item?.id ?? '')));
   const phoneRaw = input.phoneNumberId
     ? listed.find((item: any) => String(item?.id ?? '') === input.phoneNumberId)
-    : listed.length === 1 ? listed[0] : null;
+    : candidates.length === 1 ? candidates[0] : null;
   if (!phoneRaw) {
     throw new Error(input.phoneNumberId
       ? 'Meta WhatsApp phone is not part of authorized WABA'

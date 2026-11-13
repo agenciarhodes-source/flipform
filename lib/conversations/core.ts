@@ -103,12 +103,43 @@ type EnsureConversationFields = {
   email?: string | null;
   metadata?: Prisma.InputJsonValue;
   seenAt?: Date | null;
+  /** WhatsApp number the contact wrote to (or was answered from). */
+  whatsappConnectionId?: string | null;
 };
 
 export type EnsureConversationInput = EnsureConversationFields & (
   | { channel: 'web'; provider: 'flip_ai' }
   | { channel: 'whatsapp' | 'instagram'; provider?: 'meta' }
 );
+
+/**
+ * The contact's conversation: one per WhatsApp number of the company. A conversation from before
+ * the numbers were told apart (no number) is taken by the first number that hears from the
+ * contact, so a company with a single number keeps every conversation as it was.
+ */
+async function findOrCreateConversation(tx: Prisma.TransactionClient, input: {
+  tenantId: string;
+  provider: string;
+  channel: string;
+  identityId: string;
+  timestamp: Date;
+  whatsappConnectionId: string | null;
+}) {
+  const base = { tenantId: input.tenantId, provider: input.provider, channel: input.channel, externalContactIdentityId: input.identityId };
+  const connectionId = input.channel === 'whatsapp' ? input.whatsappConnectionId : null;
+  if (connectionId) {
+    const own = await tx.conversation.findFirst({ where: { ...base, whatsappConnectionId: connectionId } });
+    if (own) return own;
+    const legacy = await tx.conversation.findFirst({ where: { ...base, whatsappConnectionId: null }, orderBy: { createdAt: 'asc' } });
+    if (legacy) return tx.conversation.update({ where: { id: legacy.id }, data: { whatsappConnectionId: connectionId } });
+  } else {
+    const existing = await tx.conversation.findFirst({ where: base, orderBy: [{ lastMessageAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'asc' }] });
+    if (existing) return existing;
+  }
+  return tx.conversation.create({
+    data: { ...base, whatsappConnectionId: connectionId, status: 'open', startedAt: input.timestamp },
+  });
+}
 
 export async function ensureConversation(rawInput: EnsureConversationInput) {
   const tenantId = required(rawInput.tenantId, 'tenantId');
@@ -149,24 +180,9 @@ export async function ensureConversation(rawInput: EnsureConversationInput) {
       },
     });
     const updatedIdentity = await advanceIdentityLastSeen(tx, identity.id, timestamp);
-    const conversation = await tx.conversation.upsert({
-      where: {
-        tenant_provider_channel_identity: {
-          tenantId,
-          provider,
-          channel,
-          externalContactIdentityId: identity.id,
-        },
-      },
-      create: {
-        tenantId,
-        provider,
-        channel,
-        externalContactIdentityId: identity.id,
-        status: 'open',
-        startedAt: timestamp,
-      },
-      update: {},
+    const conversation = await findOrCreateConversation(tx, {
+      tenantId, provider, channel, identityId: identity.id, timestamp,
+      whatsappConnectionId: rawInput.whatsappConnectionId ?? null,
     });
     return { identity: updatedIdentity, conversation };
   });
@@ -184,7 +200,8 @@ type RecordInboundMessageFields = {
   type?: MessageType;
   providerTimestamp?: Date | null;
   metadata?: Prisma.InputJsonValue;
-
+  /** WhatsApp number the contact wrote to. */
+  whatsappConnectionId?: string | null;
 };
 
 export type RecordInboundMessageInput = RecordInboundMessageFields & (
@@ -279,24 +296,9 @@ export async function recordInboundMessage(
       });
       const updatedIdentity = await advanceIdentityLastSeen(tx, identity.id, timestamp);
 
-      const conversation = await tx.conversation.upsert({
-        where: {
-          tenant_provider_channel_identity: {
-            tenantId,
-            provider,
-            channel,
-            externalContactIdentityId: identity.id,
-          },
-        },
-        create: {
-          tenantId,
-          provider,
-          channel,
-          externalContactIdentityId: identity.id,
-          status: 'open',
-          startedAt: timestamp,
-        },
-        update: {},
+      const conversation = await findOrCreateConversation(tx, {
+        tenantId, provider, channel, identityId: identity.id, timestamp,
+        whatsappConnectionId: rawInput.whatsappConnectionId ?? null,
       });
 
       const message = await tx.message.create({

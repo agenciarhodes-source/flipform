@@ -84,6 +84,8 @@ export function WhatsAppEmbeddedSignupCard() {
   const [connectingMode, setConnectingMode] = useState<WhatsAppOnboardingMode | null>(null);
 
   const modeRef = useRef<WhatsAppOnboardingMode | null>(null);
+  // Adding another number keeps the numbers already connected.
+  const addNumberRef = useRef(false);
   const stateRef = useRef<string | null>(null);
   const codeRef = useRef<string | null>(null);
   const sessionRef = useRef<{ wabaId: string; phoneNumberId?: string } | null>(null);
@@ -124,10 +126,12 @@ export function WhatsAppEmbeddedSignupCard() {
           wabaId: session.wabaId,
           phoneNumberId: session.phoneNumberId,
           onboardingMode,
+          ...(addNumberRef.current ? { addNumber: true } : {}),
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível concluir a conexão do WhatsApp.');
+      window.dispatchEvent(new Event('flipform:whatsapp-numbers-changed'));
       setPin('');
       toast.success(onboardingMode === 'coexistence'
         ? 'WhatsApp Business conectado sem desconectar o aplicativo.'
@@ -199,11 +203,13 @@ export function WhatsAppEmbeddedSignupCard() {
     return () => window.removeEventListener('message', handler);
   }, [completeIfReady]);
 
-  async function connect(onboardingMode: WhatsAppOnboardingMode) {
+  async function connect(onboardingMode: WhatsAppOnboardingMode, addNumber = false) {
+    if (addNumber && !window.confirm('Adicionar outro número? Os números já conectados continuam funcionando normalmente.')) return;
     setConnecting(true);
     setConnectingMode(onboardingMode);
     setPin('');
     modeRef.current = onboardingMode;
+    addNumberRef.current = addNumber;
     stateRef.current = null;
     codeRef.current = null;
     sessionRef.current = null;
@@ -366,6 +372,11 @@ export function WhatsAppEmbeddedSignupCard() {
         {platformAvailable && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={() => connect('cloud_api')} disabled={connecting || disconnecting || registering}>{connectingMode === 'cloud_api' ? 'Conectando...' : connected ? 'Reconectar número novo' : 'Conectar número novo'}</button>}
         {connected && <button type="button" className="px-4 py-2 rounded border text-sm disabled:opacity-60" onClick={disconnect} disabled={connecting || disconnecting || registering}>{disconnecting ? 'Desconectando...' : 'Desconectar'}</button>}
       </div>
+      {platformAvailable && connected && <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+        <span className="text-xs text-muted-foreground">Mais de um número na empresa:</span>
+        <button type="button" className="px-3 py-2 rounded border text-sm disabled:opacity-60" onClick={() => connect('coexistence', true)} disabled={connecting || disconnecting || registering}>Adicionar outro WhatsApp Business</button>
+        <button type="button" className="px-3 py-2 rounded border text-sm disabled:opacity-60" onClick={() => connect('cloud_api', true)} disabled={connecting || disconnecting || registering}>Adicionar outro número novo</button>
+      </div>}
       <p className="text-xs text-muted-foreground">A conexão é feita com segurança pela Meta. Credenciais técnicas ficam protegidas no servidor e não são exibidas neste painel.</p>
     </div>
   </div>;

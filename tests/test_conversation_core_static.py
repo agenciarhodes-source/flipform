@@ -24,7 +24,8 @@ def test_conversation_core_models_are_tenant_scoped_and_lead_optional():
     assert 'leadId' in identity and 'String?' in identity.split('leadId', 1)[1].split('\n', 1)[0]
     assert 'leadId' in conversation and 'String?' in conversation.split('leadId', 1)[1].split('\n', 1)[0]
     assert 'tenant_provider_channel_external_user' in identity
-    assert 'tenant_provider_channel_identity' in conversation
+    # One conversation per contact per WhatsApp number (unique rule in SQL, with the number).
+    assert 'conversation_tenant_channel_identity_idx' in conversation
     assert '@@map("external_contact_identities")' in identity
     assert '@@map("conversations")' in conversation
     assert '@@map("messages")' in message
@@ -74,7 +75,7 @@ def test_first_inbound_message_resolves_identity_conversation_and_message_atomic
     transaction = service.split('return await prisma.$transaction', 1)[1].split('});\n  } catch', 1)[0]
     assert 'tx.externalContactIdentity.upsert' in transaction
     assert 'advanceIdentityLastSeen(tx, identity.id, timestamp)' in transaction
-    assert 'tx.conversation.upsert' in transaction
+    assert 'findOrCreateConversation(tx, {' in transaction
     assert 'tx.message.create' in transaction
     assert 'advanceInboundActivity(tx, conversation.id, timestamp)' in transaction
     assert 'unreadCount: { increment: 1 }' in service

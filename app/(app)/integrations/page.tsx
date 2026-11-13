@@ -5,6 +5,7 @@ import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
+import { WhatsAppNumbersCard } from './whatsapp-numbers-card';
 import { WhatsAppTemplatesCard } from './whatsapp-templates-card';
 import { InstagramBusinessLoginCard } from './instagram-business-login-card';
 
@@ -20,6 +21,7 @@ export default async function IntegrationsPage() {
     </div>
     <div id="whatsapp-connection" className="scroll-mt-24">
       <WhatsAppEmbeddedSignupCard />
+      <WhatsAppNumbersCard />
     </div>
     <div id="whatsapp-templates" className="scroll-mt-24">
       <WhatsAppTemplatesCard />

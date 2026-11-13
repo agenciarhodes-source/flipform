@@ -120,8 +120,10 @@ export const DELETE = withPermission('INTEGRATIONS_EDIT', async (req: NextReques
   if (!rl.allowed) return rateLimitResponse(rl);
 
   try {
+    // One number of the company (several numbers), otherwise the company's number.
+    const connectionId = new URL(req.url).searchParams.get('connectionId')?.trim() || null;
     const connection = await prisma.tenantWhatsAppConnection.findFirst({
-      where: { tenantId: session.tenantId, status: 'connected' },
+      where: { tenantId: session.tenantId, status: 'connected', ...(connectionId ? { id: connectionId } : {}) },
       orderBy: { connectedAt: 'desc' },
       select: { id: true },
     });
