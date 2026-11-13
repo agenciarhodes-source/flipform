@@ -16,7 +16,7 @@ def test_inbox_names_deleted_and_undelivered_messages():
 
 def test_deleted_message_does_not_wake_the_ai_and_keeps_meta_reasons():
     runtime = read("lib/meta/whatsapp-runtime.ts")
-    assert "if (message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id)) {" in runtime
+    assert "const aiOn = message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id);" in runtime
     assert "revokedMessageId" in runtime
     assert "providerErrorCode: message.errors[0].code" in runtime
 

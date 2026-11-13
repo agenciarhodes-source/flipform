@@ -11,6 +11,8 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensureConversation, MessageType, recordInboundMessage, recordOutboundMessage } from '@/lib/conversations/core';
+import { createWhatsAppConversationLead } from '@/lib/leads/whatsapp-auto-lead';
+import { shouldCreateWhatsAppLead } from '@/lib/leads/whatsapp-auto-lead-rules';
 import {
   enqueueWhatsAppMessageCoreAutomation,
   prepareWhatsAppMessageCoreAutomation,
@@ -526,15 +528,27 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             await recordContactOptOut({ tenantId: connection.tenantId, phone: resolvedExternalUserId, source: 'keyword' }).catch(() => undefined);
           }
           // Someone who already registered (a form, the team) is found by the number and linked now.
-          if (!persisted.conversation.leadId) {
-            await autoLinkWhatsAppConversation({
+          const linked = persisted.conversation.leadId
+            ? true
+            : await autoLinkWhatsAppConversation({
               tenantId: connection.tenantId,
               conversationId: persisted.conversation.id,
               phone: resolvedExternalUserId,
-            }).catch(() => undefined);
-          }
+            }).then((outcome) => Boolean(outcome.linked)).catch(() => false);
           // The first message after a click-to-WhatsApp ad carries the ad; it is kept once.
           const referral = parseWhatsAppReferral(message?.referral);
+          const aiOn = message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id);
+          // Every company: a new contact without a lead gets one in the main funnel (with the AI on,
+          // the AI opens it once the person is identified, as before).
+          if (shouldCreateWhatsAppLead({ hasLead: linked, aiOn, messageType: String(message?.type || '') })) {
+            await createWhatsAppConversationLead({
+              tenantId: connection.tenantId,
+              conversationId: persisted.conversation.id,
+              phone: resolvedExternalUserId,
+              displayName: contacts.get(message.from) ?? null,
+              fromAd: Boolean(referral),
+            }).catch((error) => console.error('WhatsApp auto lead failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+          }
           if (referral) {
             await prisma.conversation.updateMany({
               where: { id: persisted.conversation.id, tenantId: connection.tenantId, adReferral: { equals: Prisma.DbNull } },
@@ -543,20 +557,21 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           }
           if (automationQueued) result.automationsQueued += 1;
           // A deleted message is only a notice: nothing new for the AI to answer.
-          if (message?.type !== 'revoke' && await hasWhatsAppAiOn(connection.id)) {
+          if (aiOn) {
             result.aiCandidates.push({
               tenantId: connection.tenantId,
               conversationId: persisted.conversation.id,
               inboundMessageId: persisted.message.id,
             });
-            if (['image', 'document', 'audio'].includes(persisted.message.type)) {
-              result.mediaToArchive.push({
-                tenantId: connection.tenantId,
-                connectionId: connection.id,
-                conversationId: persisted.conversation.id,
-                messageId: persisted.message.id,
-              });
-            }
+          }
+          // The kept copy (5 years) of what the customer sends, for every company, AI or not.
+          if (['image', 'document', 'audio'].includes(persisted.message.type)) {
+            result.mediaToArchive.push({
+              tenantId: connection.tenantId,
+              connectionId: connection.id,
+              conversationId: persisted.conversation.id,
+              messageId: persisted.message.id,
+            });
           }
         }
       }
