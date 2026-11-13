@@ -2223,3 +2223,22 @@ model LeadCall {
   @@index([tenantId, leadId, createdAt])
   @@map("lead_calls")
 }
+
+/// Group plan (Plano Grupo): one store of a business group pays for every store of the group;
+/// the other stores follow its subscription. status: active | ended. Read with raw SQL too.
+model BusinessGroupPlan {
+  groupId              String   @id @map("group_id")
+  payerTenantId        String   @map("payer_tenant_id")
+  basePrice            Decimal  @default(997) @map("base_price") @db.Decimal(10, 2)
+  additionalStorePrice Decimal  @default(297) @map("additional_store_price") @db.Decimal(10, 2)
+  /// Monthly price agreed with the customer; when set it replaces the table price.
+  negotiatedPrice      Decimal? @map("negotiated_price") @db.Decimal(10, 2)
+  notes                String?
+  status               String   @default("active")
+  createdBy            String?  @map("created_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@index([payerTenantId])
+  @@map("business_group_plans")
+}

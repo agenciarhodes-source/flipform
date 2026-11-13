@@ -17,6 +17,7 @@ import {
   tenantStatusFor,
   type OurSubscriptionStatus,
 } from '@/lib/billing/subscription-rules';
+import { syncGroupPlansForPayer } from '@/lib/billing/group-plan';
 import { getStripeClient } from './client';
 import { requireStripeConfiguration } from './config';
 
@@ -190,6 +191,11 @@ export async function applyStripeSubscriptionEvent(event: Stripe.Event) {
   else result = await handleInvoiceEvent(event.type, object);
 
   const tenantId = typeof object?.metadata?.tenantId === 'string' ? object.metadata.tenantId : invoiceTenantId(object);
+  // The stores of a group plan follow the paying store (paid, late, canceled).
+  if (tenantId) {
+    await syncGroupPlansForPayer(tenantId).catch((error) =>
+      console.error('[stripe][group-plan-sync]', { errorType: error instanceof Error ? error.name : 'unknown' }));
+  }
   await prisma.webhookEvent.create({
     data: {
       provider: 'stripe',
