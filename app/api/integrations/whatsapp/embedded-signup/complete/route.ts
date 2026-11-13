@@ -27,6 +27,8 @@ const bodySchema = z.object({
   // Meta does not return the number when an existing WhatsApp Business app is connected.
   phoneNumberId: idSchema.optional(),
   onboardingMode: z.enum(WHATSAPP_ONBOARDING_MODES),
+  // Another number of the company: the numbers already connected stay connected.
+  addNumber: z.boolean().optional(),
 }).strict().refine((body) => body.onboardingMode === 'coexistence' || Boolean(body.phoneNumberId));
 
 function clearSignupState(response: NextResponse) {
@@ -89,11 +91,19 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       wabaId: parsed.data.wabaId,
     });
     step = 'validate_signup_selection';
+    const addNumber = parsed.data.addNumber === true;
+    const alreadyConnected = addNumber
+      ? (await prisma.tenantWhatsAppConnection.findMany({
+        where: { tenantId: session.tenantId, status: 'connected' },
+        select: { phoneNumberId: true },
+      })).map((row) => row.phoneNumberId)
+      : [];
     const onboardingSelection = await validateWhatsAppWabaPhoneSelection({
       accessToken: exchanged.accessToken,
       appSecret: credentials.appSecret,
       wabaId: parsed.data.wabaId,
       phoneNumberId: parsed.data.phoneNumberId,
+      excludePhoneNumberIds: alreadyConnected,
     });
 
     const conflictingConnection = await prisma.tenantWhatsAppConnection.findFirst({
@@ -127,6 +137,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
       appSecret: credentials.appSecret,
       wabaId: onboardingSelection.waba.id,
       phoneNumberId: onboardingSelection.phone.id,
+      excludePhoneNumberIds: alreadyConnected,
     });
     step = 'subscribe_app';
     await subscribeAppToWhatsAppWaba({
@@ -156,23 +167,29 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
         select: { id: true, status: true, wabaId: true, phoneNumberId: true },
       });
 
-      // A WABA may contain multiple phone numbers. Reuse the historical row for
-      // the same tenant/WABA so selecting another phone does not collide with the
-      // global unique wabaId constraint.
+      // The same number connected again keeps its row (and its conversations). Replacing the
+      // company's number (the usual case) reuses the row of the same WhatsApp Business account,
+      // as before; adding another number never touches the numbers already connected.
       const reusableBinding = await tx.tenantWhatsAppConnection.findFirst({
-        where: { tenantId: session.tenantId, wabaId: runtimeSelection.waba.id },
+        where: { tenantId: session.tenantId, phoneNumberId: runtimeSelection.phone.id },
         select: { id: true },
-      });
+      }) || (addNumber ? null : await tx.tenantWhatsAppConnection.findFirst({
+        where: { tenantId: session.tenantId, wabaId: runtimeSelection.waba.id },
+        orderBy: { connectedAt: 'desc' },
+        select: { id: true },
+      }));
 
-      await tx.tenantWhatsAppConnection.updateMany({
-        where: {
-          tenantId: session.tenantId,
-          status: 'connected',
-          ...(reusableBinding ? { id: { not: reusableBinding.id } } : {}),
-        },
-        // A replaced connection no longer keeps the customer's credential.
-        data: { status: 'revoked', revokedAt: now, accessTokenEncrypted: null },
-      });
+      if (!addNumber) {
+        await tx.tenantWhatsAppConnection.updateMany({
+          where: {
+            tenantId: session.tenantId,
+            status: 'connected',
+            ...(reusableBinding ? { id: { not: reusableBinding.id } } : {}),
+          },
+          // A replaced connection no longer keeps the customer's credential.
+          data: { status: 'revoked', revokedAt: now, accessTokenEncrypted: null },
+        });
+      }
 
       const connectionData = {
         status: 'connected',
@@ -220,6 +237,7 @@ export const POST = withPermission('INTEGRATIONS_EDIT', async (req: NextRequest,
             runtimeScopeCount: runtimeValidation.grantedScopes.length,
             credentialMode: 'business_token',
             onboardingMode: parsed.data.onboardingMode,
+            addNumber,
           } as any,
         },
       });

@@ -427,6 +427,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
             externalUserId,
             phone: externalUserId,
             seenAt: parseProviderTimestamp(message.timestamp),
+            whatsappConnectionId: connection.id,
           });
           const persisted = await recordOutboundMessage({
             tenantId: connection.tenantId,
@@ -497,6 +498,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
           externalMessageId: message.id,
           displayName: contacts.get(message.from) ?? null,
           phone: resolvedExternalUserId,
+          whatsappConnectionId: connection.id,
           text: messageText,
           type: normalizeMessageType(message.type),
           providerTimestamp: parseProviderTimestamp(message.timestamp),

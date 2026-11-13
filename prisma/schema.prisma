@@ -896,11 +896,14 @@ model TenantWhatsAppConnection {
   id                   String    @id @default(cuid())
   tenantId             String    @map("tenant_id")
   status               String    @default("connected")
-  wabaId               String    @unique @map("waba_id")
+  /// One WhatsApp Business account may hold several numbers of the company.
+  wabaId               String    @map("waba_id")
   wabaName             String?   @map("waba_name")
   phoneNumberId        String    @unique @map("phone_number_id")
   displayPhoneNumber   String?   @map("display_phone_number")
   verifiedName         String?   @map("verified_name")
+  /// Name the company gives the number ("Tráfego pago", "Carteira").
+  label                String?
   qualityRating        String?   @map("quality_rating")
   connectedAt          DateTime  @default(now()) @map("connected_at")
   systemUserAssignedAt DateTime? @map("system_user_assigned_at")
@@ -916,6 +919,7 @@ model TenantWhatsAppConnection {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([wabaId])
   aiSettings TenantWhatsAppAiSettings?
   @@map("tenant_whatsapp_connections")
 }
@@ -994,6 +998,9 @@ model Conversation {
   aiPauseReason             String?   @map("ai_pause_reason")
   /// Click-to-WhatsApp ad the conversation came from (ctwa_clid, ad id, headline), set once.
   adReferral                Json?     @map("ad_referral")
+  /// WhatsApp number the conversation came through (empty = from before the company had
+  /// several numbers; the first number that hears from the contact takes it).
+  whatsappConnectionId      String?   @map("whatsapp_connection_id")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
 
@@ -1008,7 +1015,9 @@ model Conversation {
   aiReviews               FlipAiConversationReview[]
 
   @@unique([tenantId, id])
-  @@unique([tenantId, provider, channel, externalContactIdentityId], name: "tenant_provider_channel_identity", map: "conversation_tenant_channel_identity_key")
+  /// Unique per number too: conversation_tenant_channel_identity_number_key (SQL, with the number).
+  @@index([tenantId, provider, channel, externalContactIdentityId], map: "conversation_tenant_channel_identity_idx")
+  @@index([tenantId, whatsappConnectionId])
   @@index([tenantId, status, lastMessageAt])
   @@index([tenantId, assignedTo])
   @@index([tenantId, channel, lastMessageAt])

@@ -20,7 +20,7 @@ def test_only_approved_text_templates_without_variables_can_be_sent():
 def test_template_text_and_approval_come_from_meta_never_from_the_browser():
     route = read("app/api/conversations/[id]/messages/whatsapp-template/route.ts")
     assert "withPermission('LEADS_CONTACT_WHATSAPP'" in route
-    assert "await loadSendableWhatsAppTemplates(session.tenantId)" in route
+    assert "await loadSendableWhatsAppTemplates(session.tenantId, ctx.params.id)" in route
     assert "text: fillTemplateVariables(template.body, parameters)," in route
     assert "await resolveWhatsAppTemplateValues(session.tenantId, ctx.params.id)" in route
     schema = route.split("const bodySchema = z.object({", 1)[1].split("}).strict();", 1)[0]

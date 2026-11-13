@@ -67,7 +67,7 @@ def test_existing_business_app_connection_completes_on_its_own_event_without_a_p
     # A new number still has to name its phone.
     assert "body.onboardingMode === 'coexistence' || Boolean(body.phoneNumberId)" in route
     whatsapp = read('lib/meta/whatsapp.ts')
-    assert ": listed.length === 1 ? listed[0] : null;" in whatsapp
+    assert ": candidates.length === 1 ? candidates[0] : null;" in whatsapp
     assert "Meta WhatsApp account does not hold exactly one phone" in whatsapp
 
 

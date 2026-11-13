@@ -24,7 +24,7 @@ def test_whatsapp_credentials_are_platform_scoped_and_ads_remains_separate():
     assert 'phoneNumberId' in whatsapp
     assert 'systemUserAssignedAt' in whatsapp
     assert '@@map("tenant_whatsapp_connections")' in whatsapp
-    assert '@unique @map("waba_id")' in whatsapp
+    assert 'phoneNumberId        String    @unique @map("phone_number_id")' in whatsapp
     assert '@unique @map("phone_number_id")' in whatsapp
 
 
