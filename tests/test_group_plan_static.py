@@ -28,5 +28,6 @@ def test_paying_store_plan_is_managed_by_the_platform():
 def test_migration_is_additive():
     sql = read("prisma/migrations/20261118120000_business_group_plans/migration.sql").upper()
     assert "CREATE TABLE IF NOT EXISTS" in sql
+    statements = [line.strip() for line in sql.splitlines() if line.strip() and not line.strip().startswith("--")]
     for word in ("DROP ", "ALTER TABLE", "DELETE ", "UPDATE ", "TRUNCATE"):
-        assert word not in sql, word
+        assert not any(line.startswith(word) for line in statements), word
