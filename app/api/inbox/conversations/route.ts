@@ -6,6 +6,9 @@ import { withPermission } from '@/lib/rbac-server';
 import { getInboxConversationWhere, withInboxScope } from '@/lib/inbox/access';
 import { isWhatsAppAiEnabledForTenant, whatsAppAiAudience } from '@/lib/whatsapp-ai/pause';
 import { instagramAiAudience, isInstagramAiEnabledForTenant } from '@/lib/instagram-ai/audience';
+import { legacyWhatsAppNumberId } from '@/lib/inbox/number-access';
+import { mayUseNumber, numberMatch } from '@/lib/inbox/number-access-rules';
+import { numberDisplayName } from '@/lib/meta/whatsapp-number-rules';
 
 const ALLOWED_STATUS = new Set(['open', 'pending', 'resolved']);
 const ALLOWED_CHANNEL = new Set(['whatsapp', 'instagram']);
@@ -20,15 +23,40 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   const url = new URL(req.url);
   const rawStatus = url.searchParams.get('status')?.trim() || '';
   const rawChannel = url.searchParams.get('channel')?.trim() || '';
+  const rawNumber = url.searchParams.get('number')?.trim() || '';
 
-  const where = {
-    ...getInboxConversationWhere(await withInboxScope(session)),
-    provider: 'meta',
-    channel: ALLOWED_CHANNEL.has(rawChannel)
-      ? rawChannel
-      : { in: ['whatsapp', 'instagram'] },
-    ...(ALLOWED_STATUS.has(rawStatus) ? { status: rawStatus } : {}),
+  // Several WhatsApp numbers: the ones this person sees, by name, for the filter and the badge.
+  const scope = await withInboxScope(session);
+  const [connectedNumbers, legacyNumberId] = await Promise.all([
+    prisma.tenantWhatsAppConnection.findMany({
+      where: { tenantId: session.tenantId, status: 'connected' },
+      orderBy: { connectedAt: 'asc' },
+      select: { id: true, label: true, displayPhoneNumber: true, verifiedName: true },
+    }),
+    legacyWhatsAppNumberId(session.tenantId),
+  ]);
+  const visibleNumbers = connectedNumbers
+    .filter((number) => mayUseNumber(scope.numberScope, { channel: 'whatsapp', whatsappConnectionId: number.id }))
+    .map((number) => ({ id: number.id, name: numberDisplayName(number) }));
+  const numberName = new Map(visibleNumbers.map((number) => [number.id, number.name]));
+  const filterNumber = visibleNumbers.some((number) => number.id === rawNumber) ? rawNumber : '';
+
+  const where: Prisma.ConversationWhereInput = {
+    AND: [
+      getInboxConversationWhere(scope),
+      {
+        provider: 'meta',
+        channel: filterNumber
+          ? 'whatsapp'
+          : ALLOWED_CHANNEL.has(rawChannel)
+            ? rawChannel
+            : { in: ['whatsapp', 'instagram'] },
+        ...(ALLOWED_STATUS.has(rawStatus) ? { status: rawStatus } : {}),
+      },
+      ...(filterNumber ? [numberMatch(filterNumber, legacyNumberId)] : []),
+    ],
   };
+  const numbers = visibleNumbers.length > 1 ? visibleNumbers : [];
 
   const baseConversations = await prisma.conversation.findMany({
     where,
@@ -68,7 +96,7 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   const whatsappAi = await isWhatsAppAiEnabledForTenant(session.tenantId);
   const instagramAi = await isInstagramAiEnabledForTenant(session.tenantId);
   if (baseConversations.length === 0) {
-    return NextResponse.json({ conversations: [], whatsappAi, instagramAi });
+    return NextResponse.json({ conversations: [], whatsappAi, instagramAi, numbers });
   }
 
   const conversationIds = baseConversations.map((conversation) => conversation.id);
@@ -158,8 +186,12 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
         ? aiAnswers(conversation.externalContactIdentity.externalUserId)
         : conversation.channel === 'instagram' && instagramAiAnswers(conversation.externalContactIdentity.username),
       messages: message ? [message] : [],
+      // The number's name, shown when the company has several numbers.
+      whatsappNumberName: numbers.length && conversation.channel === 'whatsapp'
+        ? numberName.get(conversation.whatsappConnectionId ?? legacyNumberId ?? '') || null
+        : null,
     };
   });
 
-  return NextResponse.json({ conversations, whatsappAi, instagramAi });
+  return NextResponse.json({ conversations, whatsappAi, instagramAi, numbers });
 });

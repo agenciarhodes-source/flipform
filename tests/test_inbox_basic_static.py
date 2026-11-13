@@ -40,7 +40,8 @@ def test_inbox_read_routes_use_server_session_permissions_and_effective_time():
     mark_read = read('app/api/inbox/conversations/[id]/read/route.ts')
 
     assert "withPermission('INBOX_VIEW'" in conversations
-    assert "getInboxConversationWhere(await withInboxScope(session))" in conversations
+    assert "const scope = await withInboxScope(session);" in conversations
+    assert "getInboxConversationWhere(scope)," in conversations
     assert "take: 100" in conversations
     assert "lastMessageAt: { sort: 'desc', nulls: 'last' }" in conversations
     assert "COALESCE(provider_timestamp, created_at) DESC" in conversations
@@ -101,7 +102,7 @@ def test_inbox_shows_whatsapp_and_instagram():
     assert "canSendInstagram={can(session.role, 'INBOX_MANAGE')}" in page
     # Inbox lists the WhatsApp and Direct the Instagram; a link to the other channel moves page.
     assert "all.filter((conversation) => conversation.channel === channel)" in client
-    assert "fetch(`/api/inbox/conversations?channel=${channel}`" in client
+    assert "fetch(`/api/inbox/conversations?channel=${channel}${numberParam}`" in client
     assert "CHANNEL_PAGE: Record<InboxChannel, string> = { whatsapp: '/inbox', instagram: '/direct' }" in client
     direct = read('app/(app)/direct/page.tsx')
     assert 'channel="instagram"' in direct

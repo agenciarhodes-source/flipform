@@ -92,7 +92,7 @@ def test_public_chat_quota_is_server_scoped_atomic_and_fail_closed():
 
 def test_inbox_filters_flip_ai_before_pagination():
     inbox = read("app/api/inbox/conversations/route.ts")
-    where_block = inbox.split("const where =", 1)[1].split("const baseConversations", 1)[0]
+    where_block = inbox.split("const where: Prisma.ConversationWhereInput =", 1)[1].split("const baseConversations", 1)[0]
     assert "provider: 'meta'" in where_block
     assert "{ in: ['whatsapp', 'instagram'] }" in where_block
     assert "take: 100" in inbox
