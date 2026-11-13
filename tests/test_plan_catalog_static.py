@@ -23,3 +23,14 @@ def test_repair_script_only_creates_missing_plans_from_the_catalog():
     assert "update: {}," in repair
     for old in ("'Starter', 99", "'Growth', 199", "'Pro', 399"):
         assert old not in repair
+
+
+def test_inbox_plan_hides_and_blocks_the_other_modules():
+    layout = (ROOT / "app/(app)/layout.tsx").read_text(encoding="utf-8")
+    assert "if (inboxOnly && pathname && !inboxPlanAllowsPath(pathname)) {" in layout
+    rbac = (ROOT / "lib/rbac-server.ts").read_text(encoding="utf-8")
+    assert "isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))" in rbac
+    shell = (ROOT / "components/app-shell.tsx").read_text(encoding="utf-8")
+    assert "inboxPlanMenu.has(item.href)" in shell
+    pricing = (ROOT / "app/pricing/page.tsx").read_text(encoding="utf-8")
+    assert "!isInboxOnlyPlan(plan.slug)" in pricing

@@ -9,6 +9,7 @@ import { decideSessionAccess, SESSION_ACCESS_CACHE_MS, type SessionAccessDecisio
 type Cached<T> = { at: number; value: T };
 const accessCache = new Map<string, Cached<SessionAccessDecision>>();
 const tenantCache = new Map<string, Cached<{ allow: boolean; status: string | null; reason: string }>>();
+const planCache = new Map<string, Cached<string | null>>();
 const MAX_CACHE_ENTRIES = 5_000;
 
 function remember<T>(cache: Map<string, Cached<T>>, key: string, value: T) {
@@ -73,6 +74,16 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
   }
   if (!decision.ok) return { ok: false, reason: decision.reason };
   return { ok: true, session: { ...session, role: decision.role, globalRole: decision.globalRole } };
+}
+
+/** The plan slug of a company, reused for a few seconds like the other access decisions. */
+export async function tenantPlanSlug(tenantId: string) {
+  const cached = planCache.get(tenantId);
+  if (cached && Date.now() - cached.at < SESSION_ACCESS_CACHE_MS) return cached.value;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: { select: { slug: true } } } });
+  const slug = tenant?.plan?.slug ?? null;
+  remember(planCache, tenantId, slug);
+  return slug;
 }
 
 /** Whether the company of the session may use the system now (status and billing). */

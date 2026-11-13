@@ -3,7 +3,8 @@ import 'server-only';
 import { resolveRouteContext } from '@/lib/http/route-context';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getSessionFromRequest, getVerifiedSessionFromRequest, type SessionPayload } from './auth';
-import { tenantAccessAllowed } from './session-access';
+import { tenantAccessAllowed, tenantPlanSlug } from './session-access';
+import { INBOX_PLAN_BLOCKED_MESSAGE, inboxPlanBlocksPermission, isInboxOnlyPlan } from './billing/inbox-plan-rules';
 import { permissionWorksWhenBlocked } from './session-access-rules';
 import { can, type PermissionKey } from './rbac';
 
@@ -32,6 +33,11 @@ export function withPermission<T = any>(
           code: 'tenant_blocked', status: tenant.status, reason: tenant.reason,
         }, { status: 403 });
       }
+    }
+    // Plano Inbox: the modules outside the attendance answer as not part of the plan.
+    if (inboxPlanBlocksPermission(permission) && session.globalRole !== 'platform_admin' && session.tenantId
+      && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
+      return NextResponse.json({ error: INBOX_PLAN_BLOCKED_MESSAGE, code: 'INBOX_PLAN_MODULE' }, { status: 403 });
     }
     return handler(req, session, ctx);
   };

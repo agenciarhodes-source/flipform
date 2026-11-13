@@ -19,7 +19,7 @@ export function planIncludesAi(slug: string) {
 }
 
 /** Plans with WhatsApp and Instagram attendance by hand (Inbox, Direct, connecting the channels). */
-export const MESSAGING_PLAN_SLUGS = ['pro', 'business', 'premium', 'premium-pro'] as const;
+export const MESSAGING_PLAN_SLUGS = ['inbox', 'pro', 'business', 'premium', 'premium-pro'] as const;
 export function planIncludesMessaging(slug: string | null | undefined) {
   const value = String(slug || '').toLowerCase();
   return MESSAGING_PLAN_SLUGS.some((plan) => plan === value);
