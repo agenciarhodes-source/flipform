@@ -56,8 +56,10 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
         })
         : Promise.resolve(null),
     ]);
+    // The group role is read also with a membership below owner: a group owner or admin keeps
+    // that role inside each company of the group (their own user there is a Gestor).
     const needsGroup = user && user.globalRole !== 'platform_admin'
-      && (!session.tenantId || !membership || membership.status !== 'active');
+      && (!session.tenantId || !membership || membership.status !== 'active' || String(membership.role) !== 'owner');
     const groupRole = needsGroup ? await groupRoleFor(session.userId, session.tenantId || null) : null;
     decision = decideSessionAccess({
       tokenVersion: session.sv,

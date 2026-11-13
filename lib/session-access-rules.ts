@@ -25,6 +25,18 @@ export type SessionAccessDecision =
   | { ok: true; role: string; globalRole: string | null }
   | { ok: false; reason: 'user_missing' | 'session_revoked' | 'membership_revoked' };
 
+const ROLE_RANK: Record<string, number> = { viewer: 1, agent: 2, manager: 3, admin: 4, owner: 5 };
+
+/**
+ * The stronger of two roles. The owner or admin of a business group also has a Gestor user in
+ * each company of the group (so the team sees them); inside the company they keep the group's
+ * role (Dono do grupo = owner, Administrador do grupo = admin), never less.
+ */
+export function strongerRole(own: string, group: string | null) {
+  if (!group) return own;
+  return (ROLE_RANK[group] || 0) > (ROLE_RANK[own] || 0) ? group : own;
+}
+
 export function decideSessionAccess(input: SessionAccessInput): SessionAccessDecision {
   if (!input.user) return { ok: false, reason: 'user_missing' };
   if ((input.tokenVersion ?? 0) !== input.user.sessionVersion) return { ok: false, reason: 'session_revoked' };
@@ -37,7 +49,7 @@ export function decideSessionAccess(input: SessionAccessInput): SessionAccessDec
     return { ok: false, reason: 'membership_revoked' };
   }
   if (input.membership && input.membership.status === 'active') {
-    return { ok: true, role: input.membership.role, globalRole };
+    return { ok: true, role: strongerRole(input.membership.role, input.groupRole), globalRole };
   }
   if (input.groupRole) return { ok: true, role: input.groupRole, globalRole };
   if (globalRole) return { ok: true, role: input.tokenRole, globalRole };
