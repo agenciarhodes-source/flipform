@@ -80,3 +80,32 @@ export async function cancelStripeSubscriptionAtPeriodEnd(tenantId: string) {
   const updated = await getStripeClient().subscriptions.update(subscription.providerSubscriptionId, { cancel_at_period_end: true });
   return { subscriptionId: subscription.id, endsAt: subscriptionPeriodEnd(updated) };
 }
+
+/**
+ * Sets the amount of the company's Stripe subscription (the group plan: the paying store is charged
+ * for every store). Stripe prorates the difference on the next invoice. Nothing changes when the
+ * subscription already has this amount, or when the company does not pay through Stripe.
+ */
+export async function setStripeSubscriptionAmount(tenantId: string, plan: CheckoutPlan, amountCents: number) {
+  if (!Number.isSafeInteger(amountCents) || amountCents <= 0) {
+    throw new StripeManageError('PLAN_PRICE_INVALID', 400, 'Valor inválido.');
+  }
+  const subscription = await currentStripeSubscription(tenantId);
+  if (!subscription?.providerSubscriptionId || !['trialing', 'active', 'past_due'].includes(subscription.status)) {
+    return { changed: false as const, reason: 'no_stripe_subscription' as const };
+  }
+  requireStripeConfiguration();
+  const stripe = getStripeClient();
+  const current = await stripe.subscriptions.retrieve(subscription.providerSubscriptionId);
+  const item = current.items?.data?.[0];
+  if (!item) throw new StripeManageError('SUBSCRIPTION_ITEM_MISSING', 409, 'A assinatura no Stripe está sem item.');
+  if (item.price?.unit_amount === amountCents) return { changed: false as const, reason: 'same_amount' as const };
+  const productId = await ensurePlanProduct(stripe, plan);
+  const interval: 'month' | 'year' = plan.billingCycle === 'yearly' ? 'year' : 'month';
+  await stripe.subscriptions.update(subscription.providerSubscriptionId, {
+    items: [{ id: item.id, quantity: 1, price_data: { currency: 'brl', unit_amount: amountCents, recurring: { interval }, product: productId } }],
+    proration_behavior: 'create_prorations',
+    metadata: { ...(current.metadata || {}), groupPlanAmountCents: String(amountCents) },
+  } as unknown as Stripe.SubscriptionUpdateParams);
+  return { changed: true as const, reason: 'updated' as const };
+}
