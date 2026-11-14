@@ -25,7 +25,7 @@ export function captureServerException(error: unknown, ctx: Ctx) {
 
 const SENSITIVE_KEYS = [
   'password', 'senha', 'token', 'secret', 'authorization', 'cookie', 'set-cookie',
-  'apikey', 'api_key', 'asaas_api_key', 'asaas_webhook_token', 'smtp_password',
+  'apikey', 'api_key', 'smtp_password',
   'resend_api_key', 'database_url', 'jwt_secret_current', 'jwt_secret_previous', 'firstaccesstoken',
 ];
 
