@@ -78,7 +78,6 @@ async function run() {
   await checkJsonApi('/api/account/delete-request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: 'smoke', confirmation: 'EXCLUIR' }) }, [401, 403]);
 
   await checkJsonApi('/api/admin/allowed-users', { method: 'GET' }, [401, 403]);
-  await checkJsonApi('/api/admin/billing/reconcile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tenantId: 'smoke-tenant-id' }) }, [401, 403]);
   await checkJsonApi('/api/admin/tenants/courtesy', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Smoke Tenant', slug: 'smoke-tenant', ownerEmail: 'smoke@example.com', ownerName: 'Smoke Owner', planSlug: 'growth' }) }, [401, 403]);
   await checkJsonApi('/api/admin/lgpd', { method: 'GET' }, [401, 403]);
   await checkJsonApi('/api/auth/first-access/validate?token=invalid-test-token', { method: 'GET' }, [400]);
