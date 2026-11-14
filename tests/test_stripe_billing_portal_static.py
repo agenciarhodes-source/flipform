@@ -30,9 +30,11 @@ def test_plan_change_and_cancel_go_through_stripe():
     assert "@/lib/asaas" not in cancel
 
 
-def test_asaas_is_no_longer_required():
+def test_asaas_was_removed():
     env = read("lib/config/validate-env.ts")
-    assert "if (asaasConfigured) {" in env
+    assert "ASAAS" not in env
+    assert not (ROOT / "lib/asaas.ts").exists()
+    assert not (ROOT / "app/api/webhooks/asaas").exists()
     readiness = read("app/api/health/readiness/route.ts")
     assert "asaasConfig" not in readiness
     assert "checks.billingConfig" in readiness

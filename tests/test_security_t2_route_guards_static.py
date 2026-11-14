@@ -53,14 +53,12 @@ GUARDED = {
     "internal/jobs/automation-core/route.ts": CRON,
     "internal/jobs/post-sale/route.ts": CRON,
     "internal/jobs/whatsapp-ai/route.ts": CRON,
-    "internal/jobs/reconcile-billing/route.ts": "isAuthorized(",
     "health/readiness/route.ts": "INTERNAL_JOB_SECRET",
     "webhooks/whatsapp/message/route.ts": "INTERNAL_JOB_SECRET",
     # Webhooks: the provider's signature or token.
     "webhooks/meta/whatsapp/route.ts": "x-hub-signature",
     "webhooks/meta/instagram/route.ts": "x-hub-signature",
     "webhooks/stripe/route.ts": "constructEvent(",
-    "webhooks/asaas/route.ts": "validateWebhookToken(",
     "webhooks/zapsign/[tenantId]/route.ts": "zapSignWebhookAuthorized(",
     # Public pages (forms, site chat, checkout): published content only, with attempt limits.
     "public/forms/[slug]/route.ts": "slug",

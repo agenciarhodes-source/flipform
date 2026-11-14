@@ -28,9 +28,6 @@ jobs:
       EMAIL_PROVIDER: none
       EMAIL_FROM: atendimento@flipform.com.br
       EMAIL_REPLY_TO: atendimento@flipform.com.br
-      ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
-      ASAAS_API_KEY: test-placeholder
-      ASAAS_WEBHOOK_TOKEN: test-placeholder
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
@@ -97,7 +94,6 @@ jobs:
 
       - name: Regression guards
         run: |
-          grep -n "evaluateBillingAccess" app/api/webhooks/asaas/route.ts
           grep -n "userId?: string | null" lib/platform-audit.ts
           grep -n "Suspense" app/first-access/page.tsx
           grep -n "Suspense" app/checkout/cancelled/page.tsx
@@ -124,9 +120,6 @@ jobs:
       EMAIL_PROVIDER: none
       EMAIL_FROM: atendimento@flipform.com.br
       EMAIL_REPLY_TO: atendimento@flipform.com.br
-      ASAAS_BASE_URL: https://sandbox.asaas.com/api/v3
-      ASAAS_API_KEY: test-placeholder
-      ASAAS_WEBHOOK_TOKEN: test-placeholder
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
