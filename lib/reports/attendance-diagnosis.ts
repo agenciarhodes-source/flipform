@@ -106,7 +106,8 @@ export async function generateAttendanceDiagnosis(tenantId: string, input: { day
         'Formato: texto corrido, 4 a 6 parágrafos separados por linha em branco, como um parecer. Sem listas, sem tópicos, sem títulos, sem asteriscos.',
         'Ordem: visão geral; o que a equipe faz bem; o que mais pesa contra o resultado; o que ajustar já, com exemplos práticos do que dizer ou fazer;',
         'e uma conclusão com a prioridade da próxima semana.',
-        'Não cite nomes de clientes nem dados pessoais. Pode se referir às pessoas da equipe como "Pessoa 1", "Pessoa 2" quando precisar.',
+        'Não cite nomes de clientes nem dados pessoais. Ao falar de alguém da equipe, use exatamente o rótulo do bloco ("Pessoa 1", "Pessoa 2"...),',
+        'com o número, para o sistema mostrar o nome certo ao dono.',
         'Seja específico, justo e direto, em português do Brasil simples. Use os números quando ajudarem. Não invente números.',
         'title: título curto. overall: uma frase com a conclusão principal.',
       ].join('\n'),
@@ -116,12 +117,14 @@ export async function generateAttendanceDiagnosis(tenantId: string, input: { day
     const answer = JSON.parse(result.text) as { title?: unknown; overall?: unknown; text?: unknown };
     const text = cleanDiagnosisText(answer.text);
     if (!text) throw new Error('empty diagnosis');
+    // "Pessoa N" is the N-th block; its name is kept here and shown only inside the system.
     const diagnosis = {
       days,
       title: typeof answer.title === 'string' ? answer.title.slice(0, 120) : 'Diagnóstico de atendimento',
       overall: typeof answer.overall === 'string' ? answer.overall.slice(0, 400) : '',
       text,
       team,
+      people: people.map((person) => person.name),
     };
     const event = await prisma.flipAiUsageEvent.create({
       data: {

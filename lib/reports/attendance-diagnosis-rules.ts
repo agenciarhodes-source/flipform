@@ -21,9 +21,29 @@ export type StoredDiagnosis = {
   days: number;
   title: string;
   overall: string;
+  /** The diagnosis as shown: each "Pessoa N" replaced by the name of that attendant. */
   text: string;
+  /** The diagnosis as the AI wrote it, with "Pessoa N" (what may be sent to the AI again). */
+  labeledText: string;
   team: TeamNumbers;
 };
+
+/**
+ * The AI only ever sees the team as "Pessoa 1", "Pessoa 2"... (names never leave the system); the
+ * company sees the names of its attendants. "Pessoa N" without a name stays as it is.
+ */
+export function withAttendantNames(text: string, names: readonly string[]) {
+  if (!names.length) return text;
+  return text.replace(/\bPessoa (\d{1,2})\b/g, (label, index: string) => {
+    const name = (names[Number(index) - 1] || '').replace(/\s+/g, ' ').trim();
+    return name || label;
+  });
+}
+
+/** The attendant names kept with a diagnosis, in the order of "Pessoa 1", "Pessoa 2"... */
+export function diagnosisPeople(raw: unknown) {
+  return Array.isArray(raw) ? raw.map((name) => (typeof name === 'string' ? name.slice(0, 80) : '')).slice(0, 50) : [];
+}
 
 export function diagnosisDays(value: unknown) {
   const days = Number(value);
@@ -98,12 +118,14 @@ export function parseStoredDiagnosis(createdAt: Date, raw: unknown): StoredDiagn
   const team = (value.team && typeof value.team === 'object' ? value.team : {}) as Partial<TeamNumbers>;
   const num = (input: unknown) => (typeof input === 'number' && Number.isFinite(input) ? input : 0);
   const maybe = (input: unknown) => (typeof input === 'number' && Number.isFinite(input) ? input : null);
+  const people = diagnosisPeople(value.people);
   return {
     createdAt: createdAt.toISOString(),
     days: diagnosisDays(value.days),
-    title: typeof value.title === 'string' && value.title.trim() ? value.title.trim().slice(0, 120) : 'Diagnóstico de atendimento',
-    overall: typeof value.overall === 'string' ? value.overall.trim().slice(0, 400) : '',
-    text,
+    title: typeof value.title === 'string' && value.title.trim() ? withAttendantNames(value.title.trim(), people).slice(0, 120) : 'Diagnóstico de atendimento',
+    overall: typeof value.overall === 'string' ? withAttendantNames(value.overall.trim(), people).slice(0, 400) : '',
+    text: withAttendantNames(text, people),
+    labeledText: text,
     team: {
       attendants: num(team.attendants),
       conversations: num(team.conversations),

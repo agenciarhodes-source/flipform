@@ -309,6 +309,127 @@ export async function decideLearning(session: SessionPayload, id: string, input:
   return { status: 'approved' as const, ...sync };
 }
 
+/**
+ * Approves every pending suggestion at once and updates the attendants a single time (one new
+ * revision of each Markdown Mestre, not one per suggestion).
+ */
+export async function approveAllLearning(session: SessionPayload) {
+  if (!session.tenantId) throw new LearningDecisionError(403, 'Selecione uma empresa.');
+  const pending = await prisma.attendanceLearningSuggestion.findMany({
+    where: { tenantId: session.tenantId, status: 'pending' }, select: { id: true }, take: 100,
+  });
+  if (!pending.length) throw new LearningDecisionError(400, 'Nenhuma sugestão pendente.');
+  const ids = pending.map((item) => item.id);
+  await prisma.attendanceLearningSuggestion.updateMany({
+    where: { tenantId: session.tenantId, status: 'pending', id: { in: ids } },
+    data: { status: 'approved', decidedBy: session.userId, decidedAt: new Date() },
+  });
+  const sync = await syncLearningToAgents(session);
+  if (sync.updated.length) {
+    await prisma.attendanceLearningSuggestion.updateMany({
+      where: { tenantId: session.tenantId, id: { in: ids } }, data: { appliedRevision: sync.updated[0].revision },
+    });
+  }
+  return { status: 'approved' as const, approved: ids.length, ...sync };
+}
+
+const DIAGNOSIS_LESSONS_FORMAT = {
+  type: 'json_schema' as const,
+  name: 'diagnosis_lessons',
+  strict: true as const,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['suggestions'],
+    properties: {
+      suggestions: {
+        type: 'array',
+        maxItems: LEARNING_MAX_SUGGESTIONS,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind', 'topic', 'title', 'content', 'example'],
+          properties: {
+            kind: { type: 'string', enum: Object.keys(LEARNING_KINDS) },
+            topic: { type: 'string' },
+            title: { type: 'string' },
+            content: { type: 'string' },
+            example: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+  },
+};
+
+/**
+ * "Aplicar na IA": the practices of the last attendance diagnosis become learning suggestions for
+ * the company's AI attendants. They wait for approval like any other learning; nothing reaches the
+ * attendants on its own. The AI reads the diagnosis with "Pessoa N" (never the team's names).
+ * Once per diagnosis; charged in Flip AI credits.
+ */
+export async function lessonsFromDiagnosis(tenantId: string, diagnosis: { createdAt: string; labeledText: string }, now = new Date()) {
+  if (!process.env.OPENAI_API_KEY?.trim()) return { status: 'unavailable' as const, created: 0 };
+  const requestKey = `diagnosis-learning:${tenantId}:${diagnosis.createdAt}`;
+  const done = await prisma.flipAiUsageEvent.findFirst({ where: { requestKey }, select: { id: true } });
+  if (done) return { status: 'already' as const, created: 0 };
+  const agents = await companyAgents(tenantId);
+  if (!agents.length) return { status: 'no_agent' as const, created: 0 };
+  const wallet = await getFlipAiCreditBalanceForTenant(tenantId).catch(() => null);
+  if (!wallet?.available || wallet.balanceCredits <= 0) return { status: 'no_credits' as const, created: 0 };
+
+  const known = await prisma.attendanceLearningSuggestion.findMany({
+    where: { tenantId, status: { in: ['pending', 'approved'] } },
+    orderBy: { createdAt: 'desc' }, take: 80, select: { title: true },
+  });
+  const model = (await getActiveFlipAiTextModel()).model;
+  let parsed: ReturnType<typeof parseLearningSuggestions> = [];
+  try {
+    const result = await streamOpenAiText({
+      instructions: [
+        'Você transforma o DIAGNÓSTICO DE ATENDIMENTO de uma empresa em lições para a assistente de IA que atende os clientes dessa empresa',
+        'pelo WhatsApp. O diagnóstico avaliou a equipe humana; as lições ensinam a IA a atender do jeito certo.',
+        `Extraia até ${LEARNING_MAX_SUGGESTIONS} lições práticas, priorizando o que o diagnóstico manda "ajustar já":`,
+        '- práticas a seguir (kind triage, explanation, objection, closing, phrase ou other): a sequência de atendimento, perguntas de triagem,',
+        '  como explicar, como lidar com desconfiança, documentos, imagens ilegíveis, conversas paradas, reclamações;',
+        '- comportamentos criticados no diagnóstico viram kind "avoid" (o que a IA nunca deve fazer).',
+        'Para cada lição: kind; topic ("Geral" se vale para qualquer atendimento, ou o tema/serviço específico); title (curto);',
+        'content (orientação pronta para a IA, em português simples, até 500 caracteres, escrita como instrução: "Faça...", "Pergunte...");',
+        'example (uma frase pronta que a IA pode usar, tirada dos exemplos do diagnóstico quando houver, ou null).',
+        'Regras: nunca cite pessoas da equipe ("Pessoa 1" etc.) nem dados pessoais; adapte o que só um humano faz para o que a IA pode fazer',
+        '(por exemplo, em reclamações a IA reconhece o problema e encaminha para a equipe, sem prometer prazo que não conhece);',
+        'nunca proponha promessas de resultado, prazos ou valores; não repita estas lições já registradas:',
+        ...known.map((row) => `- ${row.title}`),
+        'Se o diagnóstico não trouxer nada aplicável à IA, devolva uma lista vazia.',
+      ].join('\n'),
+      messages: [{ role: 'user', content: diagnosis.labeledText.slice(0, 8_000) }],
+    }, () => undefined, { model, textFormat: DIAGNOSIS_LESSONS_FORMAT, timeoutMs: 50_000, maxOutputTokens: 2_000, safetyIdentifier: `diagnosis-learning:${tenantId}` });
+    parsed = parseLearningSuggestions(JSON.parse(result.text));
+    const event = await prisma.flipAiUsageEvent.create({
+      data: {
+        tenantId, requestKey,
+        operation: 'diagnosis_learning', provider: 'openai', model: result.model, status: 'confirmed',
+        inputTokens: result.inputTokens, outputTokens: result.outputTokens, units: 1,
+        metadata: { diagnosisAt: diagnosis.createdAt, suggestions: parsed.length } as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    }).catch(() => null);
+    if (event) await settleFlipAiUsageCharge({ tenantId, eventId: event.id }).catch(() => undefined);
+  } catch {
+    return { status: 'failed' as const, created: 0 };
+  }
+
+  for (const item of parsed) {
+    await prisma.attendanceLearningSuggestion.create({
+      data: {
+        id: randomUUID(), tenantId, agentId: agents[0].id, kind: item.kind, origin: 'diagnosis', topic: item.topic,
+        title: item.title, content: item.content, example: item.example, conversationCount: 1,
+      },
+    });
+  }
+  return { status: parsed.length ? 'done' as const : 'nothing_to_learn' as const, created: parsed.length };
+}
+
 /** Weekly run for every company with the WhatsApp AI on (a few per call; the next call takes the rest). */
 export async function runWeeklyAttendanceLearning(now = new Date()) {
   const tenants = await prisma.tenantWhatsAppAiSettings.findMany({ where: { enabled: true }, select: { tenantId: true }, distinct: ['tenantId'] });

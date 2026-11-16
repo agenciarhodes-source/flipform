@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { cleanDiagnosisText, diagnosisDays, parseStoredDiagnosis, teamNumbers } from '../lib/reports/attendance-diagnosis-rules';
+import { cleanDiagnosisText, diagnosisDays, parseStoredDiagnosis, teamNumbers, withAttendantNames } from '../lib/reports/attendance-diagnosis-rules';
 
 test('números da equipe somados, com a rapidez pesada pelas respostas', () => {
   const team = teamNumbers([
@@ -30,4 +30,20 @@ test('lê o diagnóstico guardado e recusa o vazio', () => {
   assert.equal(parsed?.days, 7);
   assert.equal(parsed?.team.conversations, 4);
   assert.equal(parsed?.team.typicalResponseMs, null);
+});
+
+test('a empresa vê o nome de cada atendente; a IA só viu "Pessoa N"', () => {
+  const names = ['Ana Souza', 'Bruno', 'Carla'];
+  assert.equal(withAttendantNames('A Pessoa 2 respondeu rápido; a Pessoa 1 e a Pessoa 3 não.', names),
+    'A Bruno respondeu rápido; a Ana Souza e a Carla não.');
+  // Sem nome guardado (diagnóstico antigo ou número a mais), o rótulo fica como está.
+  assert.equal(withAttendantNames('Pessoa 4 e Pessoa 12.', names), 'Pessoa 4 e Pessoa 12.');
+  assert.equal(withAttendantNames('Pessoa 1.', []), 'Pessoa 1.');
+
+  const at = new Date('2026-11-16T12:00:00Z');
+  const parsed = parseStoredDiagnosis(at, { days: 30, title: 'Pessoa 1 lidera', overall: 'Pessoa 2 precisa de apoio.', text: 'A Pessoa 1 acolhe bem.', team: {}, people: names });
+  assert.equal(parsed?.text, 'A Ana Souza acolhe bem.');
+  assert.equal(parsed?.labeledText, 'A Pessoa 1 acolhe bem.');
+  assert.equal(parsed?.title, 'Ana Souza lidera');
+  assert.equal(parsed?.overall, 'Bruno precisa de apoio.');
 });

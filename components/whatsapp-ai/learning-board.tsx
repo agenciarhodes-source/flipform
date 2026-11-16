@@ -18,6 +18,7 @@ const ORIGIN: Record<string, string> = {
   human_success: 'Atendimento da equipe que deu certo',
   human_failure: 'Atendimento da equipe que não avançou',
   ai_review: 'Supervisão da IA',
+  diagnosis: 'Diagnóstico de atendimento',
 };
 
 function syncMessage(data: Sync) {
@@ -67,6 +68,22 @@ export function LearningBoard({ initial, approved: initialApproved, lastRunAt, a
     }
   }
 
+  async function approveAll() {
+    if (!window.confirm(`Aprovar as ${items.length} sugestões e colocá-las no Markdown Mestre de todos os atendentes?`)) return;
+    setBusy('approve-all');
+    try {
+      const response = await fetch('/api/flip/learning/approve-all', { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível aprovar.');
+      toast.success(`${data.approved} aprovada(s). ${syncMessage(data)}`);
+      await reload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível aprovar.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function decide(item: Suggestion, action: 'approve' | 'dismiss' | 'remove') {
     if (action === 'remove' && !window.confirm(`Remover "${item.title}" dos aprendizados de todos os atendentes?`)) return;
     setBusy(item.id);
@@ -100,7 +117,14 @@ export function LearningBoard({ initial, approved: initialApproved, lastRunAt, a
         </span>
       </div>
 
-      <h2 className="font-semibold">Sugestões para aprovar ({items.length})</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Sugestões para aprovar ({items.length})</h2>
+        {items.length > 1 && (
+          <Button type="button" size="sm" variant="outline" onClick={() => void approveAll()} disabled={busy !== null}>
+            {busy === 'approve-all' ? 'Aprovando...' : `Aprovar todas (${items.length})`}
+          </Button>
+        )}
+      </div>
       {items.length === 0 && <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Nenhuma sugestão pendente.</div>}
       {items.map((item) => {
         const edit = editing[item.id];
@@ -108,7 +132,7 @@ export function LearningBoard({ initial, approved: initialApproved, lastRunAt, a
           <article key={item.id} className={`space-y-2 rounded-xl border bg-white p-4 shadow-sm ${item.kind === 'avoid' ? 'border-amber-300' : ''}`}>
             <p className="text-xs font-medium uppercase text-brand-700">
               {KIND[item.kind] || item.kind} · {item.topic || 'Geral'} · {ORIGIN[item.origin] || item.origin}
-              {item.origin !== 'ai_review' ? ` · vista em ${item.conversationCount} conversa(s)` : ''}
+              {item.origin !== 'ai_review' && item.origin !== 'diagnosis' ? ` · vista em ${item.conversationCount} conversa(s)` : ''}
             </p>
             {edit ? (
               <>
