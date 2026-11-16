@@ -29,6 +29,8 @@ export function AttendanceDiagnosisBoard() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -55,10 +57,28 @@ export function AttendanceDiagnosisBoard() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Não foi possível gerar o diagnóstico agora.');
       setDiagnosis(data.diagnosis || null);
+      setApplied(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Não foi possível gerar o diagnóstico agora.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  /** "Aplicar na IA": the practices become learning suggestions, approved on the learning page. */
+  async function applyToAi() {
+    if (applying) return;
+    setApplying(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/reports/attendance-diagnosis/learning', { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível preparar as lições agora.');
+      setApplied(data.message || 'Lições prontas para revisar.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Não foi possível preparar as lições agora.');
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -137,6 +157,28 @@ export function AttendanceDiagnosisBoard() {
                 <p key={index} className={index === 0 ? 'text-base font-medium text-slate-900' : ''}>{paragraph}</p>
               ))}
             </div>
+            {canGenerate && (
+              <div className="mt-8 flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="max-w-xl text-sm text-slate-700">
+                  <p className="font-semibold text-slate-900">Ensinar estas práticas à IA</p>
+                  <p>O Flip transforma o que este diagnóstico manda ajustar em lições para o atendente de IA. Você revisa e aprova antes de qualquer mudança.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void applyToAi()} disabled={applying}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-indigo-700 disabled:opacity-60">
+                    {applying ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+                    {applying ? 'Preparando lições…' : 'Aplicar na IA'}
+                  </button>
+                  <a href="/whatsapp-ai/learning" className="inline-flex items-center rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50">Revisar e aprovar</a>
+                </div>
+              </div>
+            )}
+            {applied && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <span>{applied}</span>
+                <a href="/whatsapp-ai/learning" className="inline-flex items-center rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">Abrir aprendizado</a>
+              </div>
+            )}
             <p className="mt-8 border-t pt-4 text-xs text-muted-foreground">
               Gerado em {new Date(diagnosis.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} pelo Flip, a partir de {diagnosis.team.attendants} {diagnosis.team.attendants === 1 ? 'pessoa' : 'pessoas'} da equipe. O tempo de resposta é medido no WhatsApp e não conta a IA.
             </p>

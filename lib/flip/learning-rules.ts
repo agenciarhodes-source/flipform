@@ -13,6 +13,7 @@ export const LEARNING_ORIGINS = {
   human_success: 'Atendimento da equipe que deu certo',
   human_failure: 'Atendimento da equipe que não avançou',
   ai_review: 'Supervisão da IA',
+  diagnosis: 'Diagnóstico de atendimento',
 } as const;
 export type LearningOrigin = keyof typeof LEARNING_ORIGINS;
 
