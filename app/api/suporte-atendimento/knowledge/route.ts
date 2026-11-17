@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { readTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
 import { withPermission } from '@/lib/rbac-server';
-import { canReadJunqueiraSupportKnowledge } from '@/lib/suporte-atendimento/access';
+import { canReadTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
 
 export const dynamic = 'force-dynamic';
 
 /** Nunca retorna a base a outro tenant, mesmo que conheça a URL da API. */
 export const GET = withPermission('INBOX_VIEW', async (_req, session) => {
-  if (!canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
+  if (!canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
     return NextResponse.json({ error: 'Não disponível.' }, {
       status: 404,
       headers: { 'Cache-Control': 'no-store, private' },
