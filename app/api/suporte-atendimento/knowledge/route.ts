@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 /** Nunca retorna a base a outro tenant, mesmo que conheça a URL da API. */
 export const GET = withPermission('INBOX_VIEW', async (_req, session) => {
-  if (!canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
+  if (!canReadTenantSupportKnowledge(session)) {
     return NextResponse.json({ error: 'Não disponível.' }, {
       status: 404,
       headers: { 'Cache-Control': 'no-store, private' },
