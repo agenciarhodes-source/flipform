@@ -63,3 +63,25 @@ O desejo de anexar/atualizar MD **pelo painel do tenant** e usar JEV para roteam
 5. Nunca compartilhar conteúdo entre empresas, nunca atualizar automaticamente o cérebro do Flip AI, nunca mover lead ou enviar mensagem ao cliente.
 
 **Referência para complementar o manual:** https://junqueira-campo.netlify.app/trabalhista . URL fornecida pelo usuário, porém a extração automática não foi possível: não afirmar que os roteiros dessa página foram importados. Se houver exportação HTML/PDF/MD do manual, revisar e incorporar em PR posterior com controle de origem.
+
+## Configuração global implementada no PR — pendente de homologação
+
+- Flags desligadas por padrão: SUPPORT_KB_GLOBAL_ENABLED=false e SUPPORT_KB_JEV_ENABLED=false.
+- Configurações → Manual de suporte de atendimento: owner/admin podem anexar .md até 1 MB; armazenamento privado R2 isolado por tenant, versões imutáveis, hash SHA-256, manifesto da revisão atual e log de auditoria.
+- Consultas read-only no balão Dúvidas do Inbox/Direct ou tela completa, para owner/admin/manager/agent; nunca viewer. Sem arquivo cadastrado, consulta não inventa resposta.
+- Sem migration ou alteração de CRM, WhatsApp, leads ou Markdown Mestre do Flip AI.
+- Sem R2 configurado, upload informa falha e não finge persistência. A base GitHub é fallback exclusivo do piloto Junqueira autorizado.
+- JEV classifica tópico somente quando SUPPORT_KB_JEV_ENABLED=true, FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true, FLIP_AI_JEV_ENABLED=true e tenant está na allowlist FLIP_AI_JEV_TENANT_IDS.
+- JEV não redige orientação jurídica: recebe pergunta curta minimizada e lista de títulos; a resposta textual sempre é trecho do Markdown da empresa, com capítulo-fonte. Sem permissão/erro/timeout, há recuperação local.
+- Não enviar automaticamente conversa, CPF, extratos nem arquivos para JEV; nunca enviar resposta ao cliente pelo painel.
+- Limites conhecidos para revisão antes da ativação: validação de upload e MIME, política de concorrência de manifesto R2 (sem CAS atômico nesta versão), disponibilidade e configuração de bucket, controles de custo, limites de consulta, trilha de auditoria, e teste de acesso entre tenants.
+- Confirmar todas as teses e roteiros com o escritório. O conteúdo da URL Netlify informada não foi extraído, por indisponibilidade da página para as ferramentas.
+
+### Gates de liberação
+
+- [ ] Typecheck, testes Python, teste de permissões, Playwright e build verde no HEAD final.
+- [ ] Dono e advogado aprovam conteúdo e rotina de atualização/rollback.
+- [ ] Revisão de segurança de R2, acesso por tenant, concorrência e versionamento.
+- [ ] Homologação com identidades e conteúdo inteiramente fictícios.
+- [ ] JEV somente após aprovação formal de privacidade/retention e custo.
+- [ ] Merge, deploy e flags apenas por autorização humana específica.
