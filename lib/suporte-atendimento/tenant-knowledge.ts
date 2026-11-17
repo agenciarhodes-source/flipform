@@ -1,7 +1,5 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { prisma } from '@/lib/prisma';
 import { createAttachmentUploadUrl, readAttachmentObject, resolveAttachmentStorage, type AttachmentStorageConfig } from '@/lib/storage/attachment-storage';
 
@@ -10,7 +8,7 @@ const MAX_MANIFEST_BYTES = 16_384;
 
 export type SupportKnowledge = {
   content: string;
-  source: 'tenant-upload' | 'pilot-repository';
+  source: 'tenant-upload';
   version: number;
   hash: string;
   updatedAt: string | null;
@@ -53,35 +51,20 @@ async function manifest(config: AttachmentStorageConfig, tenantId: string) {
   }
 }
 
-async function pilotMarkdown(tenantId: string) {
-  if (!process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID ||
-      tenantId !== process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID.trim()) return null;
-  const content = await readFile(join(process.cwd(), 'docs', 'suporte-atendimento', 'JUNQUEIRA-BASE-DE-CONHECIMENTO.md'), 'utf8');
-  return {
-    content,
-    source: 'pilot-repository' as const,
-    version: 1,
-    hash: createHash('sha256').update(content).digest('hex'),
-    updatedAt: null,
-  };
-}
-
 export async function readTenantSupportKnowledge(tenantId: string): Promise<SupportKnowledge | null> {
   safeTenantId(tenantId);
-  if (globalSupportUploadEnabled()) {
-    const storage = resolveAttachmentStorage();
-    if (storage.ready) {
-      const current = await manifest(storage.config, tenantId);
-      if (current) {
-        const contentBytes = await readAttachmentObject(storage.config, { key: current.key, maxBytes: MAX_MD_BYTES });
-        if (!contentBytes) throw new Error('SUPPORT_VERSION_MISSING');
-        const content = new TextDecoder('utf-8', { fatal: true }).decode(contentBytes);
-        if (createHash('sha256').update(content).digest('hex') !== current.hash) throw new Error('SUPPORT_HASH_MISMATCH');
-        return { content, source: 'tenant-upload', version: current.version, hash: current.hash, updatedAt: current.updatedAt };
-      }
-    }
-  }
-  return pilotMarkdown(tenantId);
+  // GitHub guarda código/templates; a fonte de conhecimento do produto é EXCLUSIVAMENTE
+  // a revisão privada anexada pela empresa. Nunca consultar ou herdar outra empresa.
+  if (!globalSupportUploadEnabled()) return null;
+  const storage = resolveAttachmentStorage();
+  if (!storage.ready) throw new Error('SUPPORT_STORAGE_NOT_CONFIGURED');
+  const current = await manifest(storage.config, tenantId);
+  if (!current) return null;
+  const contentBytes = await readAttachmentObject(storage.config, { key: current.key, maxBytes: MAX_MD_BYTES });
+  if (!contentBytes) throw new Error('SUPPORT_VERSION_MISSING');
+  const content = new TextDecoder('utf-8', { fatal: true }).decode(contentBytes);
+  if (createHash('sha256').update(content).digest('hex') !== current.hash) throw new Error('SUPPORT_HASH_MISMATCH');
+  return { content, source: 'tenant-upload', version: current.version, hash: current.hash, updatedAt: current.updatedAt };
 }
 
 async function writeObject(config: AttachmentStorageConfig, key: string, body: Uint8Array, contentType: string) {
