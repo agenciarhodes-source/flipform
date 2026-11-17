@@ -547,7 +547,7 @@
 
 > **ORIGEM DOCUMENTAL:** Capturas de tela fornecidas pelo responsável pelo projeto, relativas ao manual visual do Junqueira Advogados em https://junqueira-campo.netlify.app/trabalhista . Este capítulo documenta SOMENTE o conteúdo visível nos 13 prints; não equivale a leitura de outras páginas do site. A estrutura, a ordem dos assuntos e o tom das falas foram preservados. Para atendimento real, consultar também o bloco 37 (validações e adaptações obrigatórias). Não presumir que uma fala transcrita esteja aprovada juridicamente, comercialmente ou eticamente.
 
-### 36.1 Como usar este material
+## 36.1 Como usar este material
 
 > Estude antes de sair a campo. Em campo, use como consulta rápida. Fale do seu jeito — não decorado.
 
@@ -555,7 +555,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Uso no FlipForm:** estas falas servem como **referência para a equipe, não como respostas automáticas para leads**. No balão Suporte, o atendente solicita orientação e adapta a linguagem às circunstâncias. Oferta de serviços, captação ativa e contratação devem seguir normas da OAB e procedimentos internos aprovados.
 
-### 36.2 Perfil do cliente
+## 36.2 Perfil do cliente
 
 **Título do material:** “Perfil do Cliente”. **Subtítulo:** “Reconheça quem tem direito antes de chegar na porta”.
 
@@ -584,7 +584,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Nota de ética:** a indicação “onde achar” descreve um cenário do roteiro de campo, e não autoriza visitas indiscriminadas, indução ao litígio ou captação ativa irregular.
 
-### 36.3 Fase 1 de 5 — abordagem inicial
+## 36.3 Fase 1 de 5 — abordagem inicial
 
 **Título:** “Abordagem Inicial”. **Subtítulo:** “Os primeiros 30 segundos definem tudo”.
 
@@ -606,7 +606,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Aprovação necessária:** a oferta “análise gratuita” e qualquer afirmação de ausência de cobrança precisam ser confirmadas na política real do escritório. Não reproduzir a promessa antes da homologação.
 
-### 36.4 Fase 2 de 5 — qualificação do cliente
+## 36.4 Fase 2 de 5 — qualificação do cliente
 
 **Título:** “Qualificação do Cliente”. **Subtítulo:** “Entenda a situação antes de apresentar qualquer coisa”.
 
@@ -631,7 +631,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Registro operacional complementar:** função, local, empregador, datas exatas, remuneração, jornada efetiva, vínculo, indícios de documentação, urgência, outra representação e próximo encaminhamento, sempre registrando relato como relato.
 
-### 36.5 Fase 3 de 5 — apresentação do serviço
+## 36.5 Fase 3 de 5 — apresentação do serviço
 
 **Título:** “Apresentação do Serviço”. **Subtítulo:** “Fale da solução depois de entender o problema”.
 
@@ -657,7 +657,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Validação comercial/jurídica obrigatória:** prazo médio, forma de atuação, honorários e resultado são variáveis; não apresentar essas estimativas ou condições como garantias nem criar expectativa de ajuizamento automático.
 
-### 36.6 Fase 4 de 5 — tratamento de objeções
+## 36.6 Fase 4 de 5 — tratamento de objeções
 
 **Título:** “Tratamento de Objeções”. **Subtítulo:** “As 5 situações mais comuns — toque para abrir”.
 
@@ -706,7 +706,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Validação:** não garantir ausência de participação, exposição, comparecimentos ou consequências práticas. Explicar riscos, procedimentos e alternativas conforme a avaliação do advogado.
 
-### 36.7 Fase 5 de 5 — documentos necessários
+## 36.7 Fase 5 de 5 — documentos necessários
 
 **Título:** “Documentos Necessários”. **Subtítulo:** “Marque conforme for coletando”.
 
@@ -738,7 +738,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Rotina original do material:** lista interativa com progresso de 0/9, caixas de seleção e botão “Limpar para novo cliente”. Esse controle é do manual visual; não significa que o FlipForm já possua checklist automatizado por tese.
 
-### 36.8 Fechamento e pós-atendimento
+## 36.8 Fechamento e pós-atendimento
 
 **Título:** “Fechamento e Pós-Atendimento”. **Subtítulo:** “Como fechar bem e multiplicar captações”.
 
@@ -757,7 +757,7 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 **Validações:** confirmar se o SLA de 48 horas existe; não pressionar por indicação nem registrar contato de terceiro sem fundamento e consentimento; não abordar pessoas não solicitantes por indução comercial. No atendimento digital, manter o contato da pessoa apenas nos canais oficiais do escritório.
 
-### 36.9 Como o atendente deve pesquisar este material no “Suporte”
+## 36.9 Como o atendente deve pesquisar este material no “Suporte”
 
 | Pergunta recebida | Primeiro conteúdo a consultar | Próxima ação |
 | --- | --- | --- |
@@ -776,25 +776,25 @@ O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) q
 
 ## 37. Critérios de revisão obrigatória antes de utilizar o roteiro de campo
 
-### 37.1 Jurídico e prescrição
+## 37.1 Jurídico e prescrição
 
 **Regra geral:** a Constituição, art. 7º, XXIX, estabelece prescrição dos créditos trabalhistas em cinco anos, limitada a dois anos após a extinção do contrato, com nuances conforme matéria, fatos e exceções. **Não orientar que “todo caso com mais de 2 anos não cabe”**, nem que todo contrato vigente impede a análise. Identifique datas, pedidos e eventual ação anterior e escale ao advogado.
 
 **Fonte:** https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm ; https://www2.camara.leg.br/legin/fed/declei/1940-1949/decreto-lei-5452-1-maio-1943-415500-normaatualizada-pe.html .
 
-### 37.2 Privacidade de contas Gov.br
+## 37.2 Privacidade de contas Gov.br
 
 O print marca “Senha GOV” como obrigatória, **mas o procedimento do FlipForm deve tratá-la como NÃO SOLICITÁVEL**. Senha e códigos de autenticação são pessoais. Não criar campo de senha, não transcrever credenciais no CRM, não receber por WhatsApp, e instruir o próprio titular a gerar documentos oficiais por meios autorizados.
 
 **Fonte:** https://www.gov.br/gestao/pt-br/assuntos/editoria-defeso-eleitoral/cuidados-que-voce-precisa-ter-com-sua-conta-gov.br ; https://www.gov.br/pt-br/termos-de-uso .
 
-### 37.3 Ética da advocacia, oferta e resultados
+## 37.3 Ética da advocacia, oferta e resultados
 
 Os prints descrevem abordagem em campo, identificação de locais para encontrar pessoas, convite a processo, casos de sucesso, indicação de terceiros e metas de indicação. **Não tomar isso como autorização para captação indiscriminada**; exigir revisão com responsável inscrito na OAB e política de marketing ético. Não prometer processo, pagamento integral, valor, prazo ou êxito. Não utilizar caso concreto para induzir contratação sem análise das normas e consentimentos.
 
 **Fonte:** https://www.oab.org.br/leisnormas/legislacao/provimentos/205-2021 .
 
-### 37.4 Políticas do Junqueira que precisam ser confirmadas
+## 37.4 Políticas do Junqueira que precisam ser confirmadas
 
 - Tempo de atuação: prints afirmam “mais de 8 anos”; material institucional anteriormente consultado usa outra referência. Fixar texto oficial e versioná-lo.
 - Análise gratuita: se realmente é oferecida; quais serviços e condições.
@@ -805,7 +805,7 @@ Os prints descrevem abordagem em campo, identificação de locais para encontrar
 - Autorização de atuação em trabalhista: área, locais e responsáveis confirmados.
 - Validação de toda a conduta de captação à luz da OAB.
 
-### 37.5 Script operacional mais seguro (proposta original — NÃO é transcrição)
+## 37.5 Script operacional mais seguro (proposta original — NÃO é transcrição)
 
 **Abertura acolhedora, sem prometer valores:** “Olá! Sou da equipe de atendimento do Junqueira Advogados. Podemos ouvir sua situação e, se você desejar, encaminhar seus documentos para uma avaliação jurídica? Você trabalhou com ou sem carteira assinada?”
 
