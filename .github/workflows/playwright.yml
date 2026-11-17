@@ -5,31 +5,62 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
     timeout-minutes: 60
     runs-on: ubuntu-24.04
 
     env:
+      NODE_ENV: test
       JWT_SECRET_CURRENT: staging-local-secret
       JWT_SECRET_PREVIOUS: staging-local-previous
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      # Disposable PostgreSQL on this GitHub Actions runner. Never use GitHub database secrets.
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_e2e?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_e2e?schema=public
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
 
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: lts/*
+          node-version: 20
           cache: npm
+
+      - name: Confirm disposable local E2E database
+        run: node scripts/assert-ci-local-db.mjs flipform_e2e --require-direct
+
+      - name: Test CI database isolation guard
+        run: node --test tests/ci-db-isolation.test.mjs
 
       - name: Install dependencies
         run: npm ci
 
       - name: Generate Prisma Client
         run: npx prisma generate
+
+      - name: Start disposable PostgreSQL and pgvector
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          PG_MAJOR="$(pg_lsclusters -h | awk 'NR==1 {print $1}')"
+          sudo apt-get update -y
+          sudo apt-get install -y "postgresql-${PG_MAJOR}-pgvector"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo -u postgres createdb flipform_e2e
+          pg_isready -h 127.0.0.1 -p 5432
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d flipform_e2e -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector'
+
+      # Schema sync is allowed ONLY on the ephemeral runner DB, never Neon or Vercel.
+      - name: Prepare disposable E2E schema
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_e2e --require-direct
+          npx prisma db push --skip-generate
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
@@ -38,7 +69,9 @@ jobs:
         run: npm run build
 
       - name: Run Playwright onboarding tests
-        run: npm run test:e2e:onboarding
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_e2e --require-direct
+          npm run test:e2e:onboarding
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
