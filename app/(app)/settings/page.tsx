@@ -19,5 +19,5 @@ export default async function SettingsPage() {
     },
   });
   if (!tenant) return <div className="p-8">Tenant não encontrado.</div>;
-  return <SettingsPageClient initialTenant={JSON.parse(JSON.stringify(tenant))} role={session.role} />;
+  return <SettingsPageClient initialTenant={JSON.parse(JSON.stringify(tenant))} role={session.role} supportKnowledgeConfigEnabled={process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true'} />;
 }
