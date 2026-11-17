@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileUp, Loader2, BookOpen } from 'lucide-react';
+import { FileUp, Loader2, LifeBuoy } from 'lucide-react';
 
 type Config = { title: string | null; source: string | null; version: number; updatedAt: string | null };
 export function SupportKnowledgeConfig() {
@@ -43,7 +43,7 @@ export function SupportKnowledgeConfig() {
   };
 
   return <div className="max-w-3xl space-y-6 p-6">
-    <div className="flex items-center gap-3"><BookOpen className="h-6 w-6" /><h1 className="text-2xl font-semibold">Manual de suporte de atendimento</h1></div>
+    <div className="flex items-center gap-3"><LifeBuoy className="h-6 w-6 text-orange-500" /><h1 className="text-2xl font-semibold">Suporte — Manual da empresa</h1></div>
     <p className="text-sm text-muted-foreground">Uma base de conhecimento interna por empresa. Somente Dono e Administrador podem atualizar o arquivo; o time autorizado consulta no Inbox pelo botão Dúvidas.</p>
     <div className="rounded-lg border p-4 text-sm">
       {loading ? <p className="flex gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando...</p> : current ? <>
