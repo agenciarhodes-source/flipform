@@ -65,6 +65,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
     where.enteredAt = { gte: dateOnlyBoundary(rangeStart), lte: dateOnlyBoundary(rangeEnd, true) };
   }
   if (pipelineId) where.pipelineId = pipelineId;
+  // Leads of one stage (the stage filter of the Leads page); the company filter above still applies.
+  const stageId = searchParams.get('stageId');
+  if (stageId && /^[A-Za-z0-9_-]{1,128}$/.test(stageId)) where.stageId = stageId;
   if (search) {
     where.OR = [
       { name: { contains: search, mode: 'insensitive' } },
