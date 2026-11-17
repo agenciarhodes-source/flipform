@@ -1,34 +1,45 @@
 # Suporte de Atendimento — Junqueira Advogados
-**Base de conhecimento interna | FlipForm | Versão de trabalho 0.2 | 17/11/2026**
+**Base de conhecimento interna | FlipForm | Versão de trabalho 0.3 | 17/11/2026**
 
 > **ESTADO: RASCUNHO PARA HOMOLOGAÇÃO JURÍDICA E OPERACIONAL.** Este documento orienta a triagem humana. Não é parecer jurídico, não substitui análise individual e não autoriza prometer benefício, indenização, prazo ou resultado. Os responsáveis do escritório devem validar critérios, documentos, políticas comerciais e versões antes da publicação à equipe.
 
 **Finalidade:** ajudar quem acabou de entrar no atendimento do Junqueira Advogados a compreender o escritório, identificar o assunto, fazer as perguntas certas, pedir documentos pertinentes e encaminhar a análise com respeito e segurança.
 
-**Público:** atendentes, supervisores e gestores autorizados do tenant piloto Junqueira Advogados. **Não publicar como FAQ pública nem incluir automaticamente no Markdown Mestre que responde aos clientes.** Não inserir dados reais de leads, CPF, senhas, extratos ou documentos de clientes neste arquivo.
+**Público:** equipe interna autorizada do tenant Junqueira Advogados, após a empresa enviar esta versão aprovada do arquivo Markdown nas Configurações do FlipForm. **Não publicar como FAQ pública nem incluir automaticamente no Markdown Mestre que responde aos clientes.** Não inserir dados reais de leads, CPF, senhas, extratos ou documentos de clientes neste arquivo.
 
 **Princípio:** falta de um documento ou uma resposta incerta não significa automaticamente falta de direito. Registrar a pendência e encaminhar a um advogado. Qualificação operacional nunca equivale a conclusão jurídica.
 
-## 1. Cartão institucional — informações a completar pelo escritório
+## 1. Cartão institucional — informações públicas confirmadas e campos internos
 
-| Campo | Informações |
-|---|---|
+> **ORIGEM:** informações extraídas diretamente das páginas públicas oficiais do Junqueira Advogados em 17/11/2026. O domínio consultado é https://junqueiraadvogados.com (com "a" entre Junqueira e Advogados). Informações internas não divulgadas permanecem expressamente pendentes de validação.
+
+| Campo | Informação para consulta |
+| --- | --- |
 | Escritório | Junqueira Advogados |
-| Descrição aprovada | [VALIDAR: apresentação institucional em 2 frases] |
-| Áreas atendidas neste manual | Previdenciário/assistencial e demandas de consumidor especificadas abaixo |
-| Unidade e endereços | [PREENCHER E VALIDAR] |
-| Canais oficiais de atendimento | [PREENCHER E VALIDAR] |
-| Horário e plantão | [PREENCHER E VALIDAR] |
-| Advogado responsável por previdenciário | [PREENCHER] |
-| Advogado responsável por consumidor | [PREENCHER] |
-| Gestor/supervisor e escalonamento | [PREENCHER] |
-| Prazos internos de resposta e retorno | [PREENCHER] |
-| Política de honorários e contratos | [PREENCHER APÓS APROVAÇÃO JURÍDICA] |
-| Canal seguro de envio documental | [PREENCHER] |
-| Política de agendamento presencial/remoto | [PREENCHER] |
-| Versão e próximo revisor jurídico | [PREENCHER] |
+| Descrição institucional publicada | Escritório com origem em Luzilândia (PI), atuação presencial e digital em todo o Brasil, pautado em método, escuta, responsabilidade, transparência e proximidade |
+| Tempo de atuação divulgado na página principal atual | **15+ anos de experiência**; **ATENÇÃO:** página institucional antiga e roteiro de campo usam "8 anos"; divergência a validar antes de repetir ao cliente |
+| Unidades presenciais divulgadas | **7 unidades** — Teresina (matriz), Parnaíba, Luzilândia, Esperantina e Barras (PI); São Bernardo e Araioses (MA). Endereços e telefones na seção 28 |
+| WhatsApp geral oficial | **(86) 9 9926-6593** |
+| Telefone geral | **(86) 4009-6145** |
+| E-mail publicado | **contato@junqueiraadvogados.com.br** |
+| Horário geral publicado | **Segunda a sexta, 08h às 18h**. Confirmar feriados, plantão e horário individual de cada unidade antes de agendar |
+| Áreas destacadas no portal atual | Direito Previdenciário e Direito do Consumidor. Páginas históricas citam trabalhista, civil e família; confirmar aceitação atual de cada serviço com a direção |
+| Filipe Junqueira | Sócio-fundador, **OAB PI 15510 · OAB MA 28024-A** |
+| Adônis Ferreira | Sócio, **OAB PI 23588**; página pública menciona foco em previdenciário e consumidor |
+| Marcos Vinicius | Sócio, **OAB PI 23610**; página pública menciona atendimento consultivo e estratégico |
+| Marinara Rocha | Advogada; página da equipe informa liderança dos setores de Perícias Médicas, Pendências Documentais e Exigências Judiciais e Administrativas |
+| Atendimento e triagem interna | **[VALIDAR]** gestor do atendimento, supervisor, responsáveis por cada tese e política de encaminhamento |
+| SLA de retorno ao cliente | **[VALIDAR]**; prints de treinamento mencionam 48 horas, mas o portal não confirma esse compromisso |
+| Política de honorários e modelos de contrato | **[VALIDAR E APROVAR PELO JURÍDICO]**; não prometer "só paga se ganhar" sem confirmar o instrumento específico |
+| Envio seguro de documentos | **[VALIDAR]** canal oficial e procedimentos LGPD; WhatsApp divulgado publicamente não significa autorização para envio indiscriminado de dados pessoais |
+| Agendamento presencial/remoto | Atendimento presencial e digital divulgados; **[VALIDAR]** regra de agendamento, unidade, disponibilidade e confirmação |
+| Documento e revisor interno | **[PREENCHER]** versão aprovada, advogado responsável, data e política de atualização |
 
-**Nunca inventar** endereço, filial, preço, desconto, percentual de êxito, prazo de concessão, regra de honorários ou nome de advogado. Informar que a equipe confirmará pelo canal oficial.
+**Missão institucional divulgada:** oferecer atendimento jurídico com método, escuta e responsabilidade profissional. **Visão divulgada:** ser referência nacional pela qualidade da comunicação com o cliente, análise técnica e postura profissional. **Valores divulgados:** transparência, cuidado, proximidade e clareza, sem promessas de resultados.
+
+**Fontes oficiais específicas:** https://junqueiraadvogados.com/ ; https://junqueiraadvogados.com/escritorio ; https://junqueiraadvogados.com/equipe ; https://junqueiraadvogados.com/contato ; https://junqueiraadvogados.com/unidades .
+
+**Conduta do atendente:** canais e endereços públicos podem ser consultados, mas confirmam-se disponibilidade presencial, horário da unidade e contatos antes do agendamento. Nunca inventar preço, condições de êxito, exclusividade de advogado, prazo processual, promessa de concessão ou documentos não previstos.
 
 ## 2. O que o atendente faz — e o que não faz
 
@@ -428,25 +439,74 @@
 **Lembrete final:** é preferível um atendimento cordial com uma pendência corretamente registrada do que uma conclusão jurídica precipitada.
 
 
-## 28. Informações institucionais públicas verificadas — consulta de 17/11/2026
+## 28. Guia de contato, unidades e atuação — dados do site oficial
 
-**Fonte:** https://junqueiraadvogados.com/ . O site institucional informa trajetória superior a 15 anos, 7 unidades presenciais, atuação presencial e digital e origem do escritório em Luzilândia (PI). Prioriza comunicação próxima, técnica, transparente e cuidadosa. Não transformar informações de marketing em garantia de resultado.
+> **ATUALIZAÇÃO DE FONTE: 17/11/2026**. Informações obtidas de https://junqueiraadvogados.com/unidades e https://junqueiraadvogados.com/contato . São informações públicas do escritório, sujeitas à atualização. Não confundir o canal institucional com o contato pessoal do cliente nem presumir atendimento presencial sem agendamento.
 
-**Telefone institucional geral publicado:** (86) 4009-6145. **WhatsApp publicado:** (86) 9 9926-6593. Antes de informar endereço ou telefone ao cliente, confirme com a supervisão se a unidade atende presencialmente naquele dia e se o contato está atualizado.
+### 28.1 Canais gerais
 
-| Unidade | Endereço publicado | Telefone publicado |
+- Site: https://junqueiraadvogados.com/
+- Página de contato: https://junqueiraadvogados.com/contato
+- Página de unidades: https://junqueiraadvogados.com/unidades
+- Página da equipe: https://junqueiraadvogados.com/equipe
+- WhatsApp geral publicado: **(86) 9 9926-6593**
+- Telefone geral publicado: **(86) 4009-6145**
+- E-mail geral publicado: **contato@junqueiraadvogados.com.br**
+- Horário geral divulgado: **segunda a sexta-feira, das 08h às 18h**
+- Abrangência divulgada: atendimento presencial nas unidades e atendimento digital para clientes de todo o Brasil.
+
+### 28.2 As sete unidades com endereço e contato público
+
+| Unidade | Endereço exibido no portal | Contato divulgado |
 | --- | --- | --- |
-| Teresina, PI | Av. Jóquei Clube, 299, Edifício EuroBusiness, cobertura, sala 4, Jóquei | (86) 9 9926-6593 |
-| Parnaíba, PI | Rua Tabajara, 535, bairro São Francisco | (86) 9 9920-1896 |
-| Luzilândia, PI | Rua Coronel Hugo de Castro, 412 | (86) 9 9907-9295 |
-| Esperantina, PI | Rua Vereador Ramos, 727, Centro | (86) 9 8864-1132 |
-| Barras, PI | Rua Marechal Pires Ferreira, 484, Centro | (86) 9 8177-0086 |
-| São Bernardo, MA | Rua Barão do Rio Branco, 732 | (98) 9 8443-1955 |
-| Araioses, MA | Rua Vinte e Oito de Julho, s/n, Centro | [CONFIRMAR TELEFONE] |
+| **Teresina (matriz), PI** | Avenida Jóquei Clube, 299, Edifício EuroBusiness, Cobertura, Sala 4, bairro Jóquei | **(86) 4009-6145** (geral); **(86) 9 9926-6593** (WhatsApp) |
+| **Parnaíba, PI** | Rua Tabajara, 535, bairro São Francisco | **(86) 9 9920-1896** |
+| **Luzilândia, PI** | Rua Coronel Hugo de Castro, 412 | **(86) 9 9907-9295** |
+| **Esperantina, PI** | Rua Vereador Ramos, 727, Centro | **(86) 9 8864-1132** |
+| **Barras, PI** | Rua Marechal Pires Ferreira, 484, Centro | **(86) 9 8177-0086** |
+| **São Bernardo, MA** | Rua Barão do Rio Branco, 732 | **(98) 9 8443-1955** |
+| **Araioses, MA** | Rua Vinte e Oito de Julho, s/n, Centro | **(98) 7006-0896**, exatamente como publicado; **[VALIDAR FORMATO E FUNCIONAMENTO]** antes de oferecer ao cliente |
 
-**Áreas anunciadas na página institucional atual:** previdenciário (pensão por morte, aposentadorias, conferência de CNIS, planejamento, auxílio-acidente, BPC e salário-maternidade) e consumidor (empréstimos não reconhecidos, direito aéreo). Página de catálogo publicada no mesmo domínio também menciona trabalhista, cível e família/sucessões; **não confirmar aceite comercial dessas demandas sem aprovação da direção**, pois a apresentação atual do site principal dá destaque a previdenciário e consumidor.
+**Resposta modelo:** “O Junqueira Advogados tem unidades em Teresina, Parnaíba, Luzilândia, Esperantina, Barras, São Bernardo e Araioses, além do atendimento digital. Em qual cidade você prefere ser atendido? Vou confirmar a disponibilidade e o canal oficial.”
 
-**Sobre a equipe:** a página institucional consultada apresenta Adônis Ferreira como sócio; o organograma interno completo, advogados responsáveis e escalonamento de cada área permanecem **[VALIDAR]**. Não prometer que determinado advogado conduzirá o caso antes da confirmação.
+**Resposta ao pedir WhatsApp ou e-mail:** “O site oficial informa o WhatsApp geral (86) 9 9926-6593 e o e-mail contato@junqueiraadvogados.com.br. Posso confirmar com a equipe qual canal é o adequado para seu atendimento.”
+
+**Atenção:** a página traz contatos individuais de várias unidades; nenhum deles deve ser tratado como horário local, plantão, canal exclusivo para documentos ou promessa de retorno.
+
+### 28.3 Equipe institucional divulgada
+
+- **Filipe Junqueira**, sócio-fundador, OAB PI 15510 e OAB MA 28024-A.
+- **Adônis Ferreira**, sócio, OAB PI 23588; na página pública, atuação orientada a previdenciário e consumidor.
+- **Marcos Vinicius**, sócio, OAB PI 23610; na página pública, atendimento consultivo e estratégico.
+- **Marinara Rocha**, advogada; a página pública identifica liderança em Perícias Médicas, Pendências Documentais e Exigências Judiciais/Administrativas.
+
+**Não inferir:** pessoa responsável por uma tese, agenda, supervisão do time comercial, status do advogado perante processo individual ou exclusividade de área não são estabelecidos pelo site.
+
+**Fonte:** https://junqueiraadvogados.com/equipe .
+
+### 28.4 Especialidades e serviços publicados
+
+**Foco do portal institucional atual:** Previdenciário e Consumidor.
+
+**Previdenciário:** pensão por morte, aposentadorias, conferência de CNIS, planejamento previdenciário, auxílio-acidente, BPC/LOAS, BPC idoso, BPC e autismo, salário-maternidade urbano e rural. **Consumidor:** empréstimo não reconhecido, problemas com cancelamento/atraso de voo, extravio e bagagem.
+
+Outras páginas antigas do próprio domínio exibem Trabalhista, Civil e Família/Sucessões. **Divergência editorial:** não prometer aceitação dessas teses sem confirmação operacional, mesmo que exista o roteiro trabalhista apresentado nos prints.
+
+**Fontes:** https://junqueiraadvogados.com/areas-de-atuacao ; https://junqueiraadvogados.com/sobre-nos/ .
+
+### 28.5 História, missão, visão e valores
+
+O portal descreve a origem do escritório em Luzilândia (PI), a expansão para cidades do Piauí e Maranhão e o atendimento em todo o Brasil. Defende linguagem clara, escuta, transparência, cuidado e método na análise jurídica.
+
+**Divergência no tempo de atuação:** a homepage atual afirma “15+ anos de experiência”; a página “Sobre Nós” antiga relata “nasceu há oito anos”, semelhante aos prints do manual de campo. **Recomenda-se não citar tempo exato no script de atendimento até decisão da direção jurídica.**
+
+**Fontes:** https://junqueiraadvogados.com/ ; https://junqueiraadvogados.com/escritorio ; https://junqueiraadvogados.com/sobre-nos/ .
+
+### 28.6 Dados que o site NÃO permite preencher
+
+Continuam pendentes de aprovação interna: gerente do atendimento, responsáveis por teses, SLA de triagem/resposta, escala de plantão, nomes de equipes por unidade, política de agendamento, fluxo de procuração e contrato, honorários e exceções, requisitos mínimos documentais por fase e links internos de upload. Não inventar nem extrapolar dados públicos para preencher essas rotinas.
+
+**Uso operacional:** a seção 28 responde dúvidas sobre localização, contatos, estrutura, equipe e especialidades. Regras da tese, documentos e abordagem estão nos capítulos específicos. Se houver conflito, encaminhar à supervisão para atualização da base privada da empresa.
 
 ## 29. Módulo preliminar trabalhista — orientação geral complementar aos prints
 
