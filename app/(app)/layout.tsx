@@ -67,7 +67,7 @@ export default async function AppGroupLayout({
   }
 
   const supportKnowledgeEnabled = Boolean(currentTenantMembership) &&
-    canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID);
+    canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true');
 
   return (
     <AppShell
