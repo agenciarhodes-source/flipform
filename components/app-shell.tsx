@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
-  BookOpen,
+  LifeBuoy,
   KanbanSquare,
   Users,
   FileText,
@@ -65,7 +65,7 @@ const NAV: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/customers", label: "Clientes", icon: Users, permission: "LEADS_VIEW" },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
-  { href: "/suporte-atendimento", label: "Suporte de Atendimento", icon: BookOpen, permission: "INBOX_VIEW" },
+  { href: "/suporte-atendimento", label: "Suporte", icon: LifeBuoy, permission: "INBOX_VIEW" },
   { href: "/direct", label: "Direct", icon: Instagram, permission: "INBOX_VIEW" },
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },
