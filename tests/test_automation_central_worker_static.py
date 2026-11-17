@@ -32,7 +32,12 @@ def test_internal_worker_route_is_cron_secret_protected_and_supports_scheduler_g
 
 
 def test_scheduler_is_not_coupled_to_vercel_cron_plan():
-    assert not (ROOT / 'vercel.json').exists()
+    # Vercel Git branch controls are allowed; platform Cron scheduling is not.
+    config_path = ROOT / 'vercel.json'
+    if config_path.exists():
+        import json
+        config = json.loads(config_path.read_text(encoding='utf-8'))
+        assert 'crons' not in config
     route = read('app/api/internal/jobs/automation-core/route.ts')
     assert 'isCronRequestAuthorized(req)' in route
 

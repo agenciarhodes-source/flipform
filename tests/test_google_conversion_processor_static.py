@@ -22,7 +22,12 @@ def test_cron_route_is_authenticated_before_processing():
 
 
 def test_scheduler_stays_decoupled_from_vercel_cron():
-    assert not (ROOT / 'vercel.json').exists()
+    # Vercel Git branch controls are allowed; platform Cron scheduling is not.
+    config_path = ROOT / 'vercel.json'
+    if config_path.exists():
+        import json
+        config = json.loads(config_path.read_text(encoding='utf-8'))
+        assert 'crons' not in config
 
 
 def test_move_route_schedules_delivery_after_the_response_only_when_queued():

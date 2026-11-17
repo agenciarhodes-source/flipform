@@ -45,3 +45,9 @@ test('main CI database is hardcoded to a disposable local runner', () => {
   assert.doesNotMatch(workflow, /secrets\.(?:DATABASE_URL|DIRECT_URL)/);
   assert.match(workflow, /assert-ci-local-db\.mjs flipform_ci/);
 });
+
+test('Vercel config cannot declare platform crons and disables deploys for the audit branch', () => {
+  const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  assert.equal(config.git.deploymentEnabled['audit/pr00-a2s-isolation'], false);
+  assert.equal(Object.hasOwn(config, 'crons'), false);
+});
