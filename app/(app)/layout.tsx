@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
-import { canReadJunqueiraSupportKnowledge } from "@/lib/suporte-atendimento/access";
+import { canReadTenantSupportKnowledge } from "@/lib/suporte-atendimento/access";
 import { requireBillingAccess } from "@/lib/billing-access";
 import { getBusinessGroupAccessesForUser } from "@/lib/business-groups";
 import { INBOX_PLAN_HOME, inboxPlanAllowsPath, isInboxOnlyPlan } from "@/lib/billing/inbox-plan-rules";
@@ -67,7 +67,7 @@ export default async function AppGroupLayout({
   }
 
   const supportKnowledgeEnabled = Boolean(currentTenantMembership) &&
-    canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true');
+    canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true');
 
   return (
     <AppShell
