@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import warnings
 
 import pytest
 
@@ -58,17 +59,22 @@ def test_setnull_probe_never_silently_approves_clearing_tenant():
     if validated.returncode != 0:
         msg = output(validated)[-3000:]
         assert any(x.lower() in msg.lower() for x in ["SetNull", "onDelete", "referential"]), msg
+        warnings.warn("A2C10_SETNULL_DIAGNOSTIC=PRISMA_VALIDATE_REJECTED " + " ".join(msg.split())[-350:], RuntimeWarning, stacklevel=2)
         pytest.xfail("A2-C.10 BLOCKED: Prisma 5.22 rejected composite optional SetNull")
 
     diff = schema_diff(source)
     if diff.returncode != 0:
         msg = output(diff)[-3000:]
         assert any(x.lower() in msg.lower() for x in ["SetNull", "onDelete", "referential"]), msg
+        warnings.warn("A2C10_SETNULL_DIAGNOSTIC=PRISMA_DIFF_REJECTED " + " ".join(msg.split())[-350:], RuntimeWarning, stacklevel=2)
         pytest.xfail("A2-C.10 BLOCKED: Prisma 5.22 could not generate SetNull SQL safely")
     sql = diff.stdout
     assert "ON DELETE SET NULL" in sql and "a2c10_child" in sql, sql[-3000:]
     if not re.search(r'ON DELETE SET NULL\s*\(\s*"?parent_id"?\s*\)', sql, flags=re.I):
+        snippet = " ".join(line.strip() for line in sql.splitlines() if "FOREIGN KEY" in line or "ON DELETE SET NULL" in line)
+        warnings.warn("A2C10_SETNULL_DIAGNOSTIC=UNSAFE_BARE_SET_NULL " + snippet[-550:], RuntimeWarning, stacklevel=2)
         pytest.xfail("A2-C.10 BLOCKED: SQL does not limit SET NULL to parent_id; tenant_id at risk")
+    warnings.warn("A2C10_SETNULL_DIAGNOSTIC=SAFE_PARTIAL_COLUMN_SQL (but DB pull/client/drift still untested)", RuntimeWarning, stacklevel=2)
     # Even this success would not validate Prisma db pull / client disconnect / drift.
 
 
