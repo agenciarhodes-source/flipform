@@ -1,4 +1,4 @@
-# Suporte de Atendimento — Junqueira Advogados
+# Suporte — Junqueira Advogados
 **Base de conhecimento interna | FlipForm | Versão de trabalho 0.3 | 17/11/2026**
 
 > **ESTADO: RASCUNHO PARA HOMOLOGAÇÃO JURÍDICA E OPERACIONAL.** Este documento orienta a triagem humana. Não é parecer jurídico, não substitui análise individual e não autoriza prometer benefício, indenização, prazo ou resultado. Os responsáveis do escritório devem validar critérios, documentos, políticas comerciais e versões antes da publicação à equipe.
@@ -362,7 +362,7 @@
 
 ## 23. Como agir diante de objeções sem pressionar
 
-**“Tenho medo de golpe.”** Validar a preocupação. Informar canais oficiais e como conferir a identidade do escritório; não exigir Pix, senha ou documento por perfil pessoal. [PREENCHER CANAIS OFICIAIS]
+**“Tenho medo de golpe.”** Validar a preocupação. Informar canais oficiais e como conferir a identidade do escritório; não exigir Pix, senha ou documento por perfil pessoal. WhatsApp geral (86) 9 9926-6593; telefone (86) 4009-6145; e-mail contato@junqueiraadvogados.com.br. Confirmar identidade e unidade antes do envio de documentos
 
 **“Não tenho todos os documentos.”** Listar o mínimo necessário para começar, distinguir documento indispensável de útil e pedir ajuda ao supervisor nos casos difíceis.
 
@@ -411,7 +411,7 @@
 6. Aprovar modelos de contratação e assinaturas, especialmente menores, representação e baixa alfabetização.
 7. Fazer revisão jurídica das referências, datas, jurisprudência, normas da OAB e procedimentos locais.
 8. Definir responsável pela atualização do Markdown, controle de versões e periodicidade de revisão.
-9. Validar acesso restrito a perfis autorizados do tenant piloto; não publicar este conteúdo em site público.
+9. Validar acesso restrito aos perfis internos autorizados da empresa; o upload e a edição devem ocorrer exclusivamente no painel privado, não em site público.
 10. Antes de ampliar para outros escritórios, criar documentação própria por tenant, sem reutilizar informações institucionais do Junqueira.
 
 ## 27. Fontes normativas e revisão
