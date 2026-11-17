@@ -133,7 +133,12 @@ def test_signed_webhook_drains_core_and_pre_cutover_legacy_jobs_with_safe_fallba
     assert 'scheduleAfterResponse(backgroundWork)' in route
     assert 'await backgroundWork' in route
     assert route.index("if (!verifyInstagramWebhookSignature") < route.index('const coreWork = runAutomationWorker')
-    assert not (ROOT / 'vercel.json').exists()
+    # Vercel Git branch controls are allowed; platform Cron scheduling is not.
+    config_path = ROOT / 'vercel.json'
+    if config_path.exists():
+        import json
+        config = json.loads(config_path.read_text(encoding='utf-8'))
+        assert 'crons' not in config
     assert not (ROOT / 'app/api/cron/instagram-comment-automations/route.ts').exists()
 
 

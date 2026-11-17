@@ -38,8 +38,8 @@ Definir o procedimento operacional mínimo para backup e restore do banco Postgr
 ## Variáveis de ambiente necessárias
 - `DATABASE_URL` (origem para backup / destino para restore).
 - `BACKUP_FILE` (arquivo `.dump` para restore, quando aplicável).
-- `ALLOW_PROD_RESTORE=YES` (obrigatória para restore em produção).
-- `CONFIRM_RESTORE=YES` (confirmação explícita de restore).
+- `ALLOW_PRODUCTION_RESTORE=true` (obrigatória quando `NODE_ENV=production` ou `VERCEL_ENV=production`; script `scripts/db-restore.sh`).
+- `CONFIRM_RESTORE=true` (confirmação explícita; a comparação do script é sensível a maiúsculas/minúsculas).
 
 ## Como gerar backup
 1. Garantir acesso ao banco PostgreSQL via `DATABASE_URL`.
@@ -67,7 +67,7 @@ pg_restore --list ./backups/flipform-YYYYmmdd-HHMMSS.dump >/dev/null
 3. Executar:
 
 ```bash
-DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" CONFIRM_RESTORE=YES ./scripts/db-restore.sh
+DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" CONFIRM_RESTORE=true ./scripts/db-restore.sh
 ```
 
 4. Executar smoke test pós-restore (seção abaixo).
@@ -83,7 +83,7 @@ DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" CONFIRM_REST
 6. Executar restore em produção com flags explícitas:
 
 ```bash
-DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" ALLOW_PROD_RESTORE=YES CONFIRM_RESTORE=YES ./scripts/db-restore.sh
+DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" ALLOW_PRODUCTION_RESTORE=true CONFIRM_RESTORE=true ./scripts/db-restore.sh
 ```
 
 ## Checklist antes do restore
@@ -129,6 +129,10 @@ DATABASE_URL="postgres://..." BACKUP_FILE="./backups/flipform.dump" ALLOW_PROD_R
 - Criptografar backup quando armazenado fora do provedor.
 - Restringir acesso a backups por princípio de menor privilégio.
 - Sempre testar restore fora de produção antes de aplicar em produção.
+- O script identifica o contexto de produção apenas por `NODE_ENV`/`VERCEL_ENV`: **essas flags não identificam o servidor PostgreSQL**. Confirmar manualmente projeto, host e banco de destino no provedor antes de qualquer execução. Uma variável de ambiente incorreta pode apontar para produção mesmo durante um teste local.
+- Nunca restaurar backup com dados reais de clientes em staging/CI. Para simulações, usar exclusivamente massa fictícia e banco descartável independente.
+- O PR 00/A2-S não executa nenhum restore, migration ou deploy. Um exercício real de restore requer autorização específica e evidência de snapshot do destino.
+- O Playwright/CI deve usar apenas PostgreSQL local do runner com checagem `scripts/assert-ci-local-db.mjs`; credenciais Neon/Vercel não devem ser fornecidas ao job.
 
 ## Contatos / Responsáveis
 - **DRI Engenharia:** definir no on-call atual.
