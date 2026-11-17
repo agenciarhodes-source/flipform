@@ -8,6 +8,7 @@
 const NOT_A_FIRST_NAME = new Set([
   // Courtesy words and replies
   'sim', 'nao', 'ok', 'oi', 'ola', 'bom', 'boa', 'obrigado', 'obrigada',
+  'yes', 'yeah', 'yep', 'si', 'pode', 'podesim', 'claro', 'aham', 'uhum', 'confirmo', 'laele',
   // Family and affection
   'mae', 'mamae', 'pai', 'papai', 'vo', 'vovo', 'avo', 'tia', 'tio', 'filho', 'filha', 'irmao', 'irma',
   'amor', 'vida', 'bebe', 'princesa', 'gatinha', 'gata', 'linda', 'lindo', 'baby',
