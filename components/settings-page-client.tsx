@@ -24,7 +24,7 @@ interface TenantData {
   _count: { tenantUsers: number; leads: number; forms: number; pipelines: number };
 }
 
-export function SettingsPageClient({ initialTenant, role, supportKnowledgeConfigEnabled = false }: { initialTenant: TenantData; role: string; supportKnowledgeConfigEnabled?: boolean }) {
+export function SettingsPageClient({ initialTenant, role }: { initialTenant: TenantData; role: string }) {
   const router = useRouter();
   const canFullEdit = can(role, 'SETTINGS_EDIT');
   const canBrandingEdit = can(role, 'BRANDING_EDIT');
@@ -241,7 +241,7 @@ export function SettingsPageClient({ initialTenant, role, supportKnowledgeConfig
         </div>
       </Card>
 
-      {supportKnowledgeConfigEnabled && ['owner', 'admin'].includes(role) && (
+      {role === 'owner' && (
         <Card className="p-5 space-y-3">
           <h3 className="font-heading font-semibold">Suporte — Manual da empresa</h3>
           <p className="text-sm text-muted-foreground">Anexe e atualize a base de conhecimento do time. O conteúdo é isolado por empresa e exibido no balão Dúvidas do Inbox e Direct.</p>
