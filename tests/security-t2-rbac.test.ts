@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   PERMISSIONS, can, canDeleteLead, canEditLead, canManageRole, canMoveLead, getLeadScopeForRole,
+  canAccessLeadTasks, getTaskScopeForRole,
   type PermissionKey, type RoleName,
 } from '../lib/rbac';
 
@@ -57,5 +58,29 @@ test('perfil desconhecido não tem nenhuma permissão', () => {
     assert.equal(can('', key), false, key);
     assert.equal(can('platform_admin', key), false, key);
     assert.equal(can('OWNER', key), false, key);
+  }
+});
+
+
+test('A2-C.5: tarefa de lead exige tenant e responsabilidade do atendente', () => {
+  const sessionA = { role: 'agent', userId: 'agent-a', tenantId: 'tenant-a' };
+  assert.equal(canAccessLeadTasks(sessionA, { tenantId: 'tenant-a', assignedTo: 'agent-a' }), true);
+  assert.equal(canAccessLeadTasks(sessionA, { tenantId: 'tenant-a', assignedTo: 'agent-b' }), false);
+  assert.equal(canAccessLeadTasks(sessionA, { tenantId: 'tenant-a', assignedTo: null }), false);
+  assert.equal(canAccessLeadTasks(sessionA, { tenantId: 'tenant-b', assignedTo: 'agent-a' }), false);
+  assert.equal(canAccessLeadTasks(sessionA, null), false);
+  for (const role of ['owner', 'admin', 'manager', 'viewer']) {
+    assert.equal(canAccessLeadTasks({ ...sessionA, role }, { tenantId: 'tenant-b', assignedTo: 'agent-a' }), false, role);
+    assert.equal(canAccessLeadTasks({ ...sessionA, role }, { tenantId: 'tenant-a', assignedTo: 'agent-b' }), true, role);
+  }
+});
+
+test('A2-C.5: métricas de tarefas sempre limitam tenant, mesmo com IDs de usuário iguais', () => {
+  const agentA = getTaskScopeForRole({ role: 'agent', userId: 'agent-1', tenantId: 'tenant-a' });
+  const agentB = getTaskScopeForRole({ role: 'agent', userId: 'agent-1', tenantId: 'tenant-b' });
+  assert.deepEqual(agentA, { OR: [{ lead: { tenantId: 'tenant-a', assignedTo: 'agent-1' } }, { leadId: null, assignedTo: 'agent-1' }] });
+  assert.notDeepEqual(agentA, agentB);
+  for (const role of ['owner', 'admin', 'manager', 'viewer']) {
+    assert.deepEqual(getTaskScopeForRole({ role, userId: 'agent-1', tenantId: 'tenant-a' }), {});
   }
 });

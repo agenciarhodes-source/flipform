@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPermission, can } from '@/lib/rbac-server';
+import { withPermission, can, canAccessLeadTasks } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { taskCreateSchema } from '@/lib/schemas-tasks';
 
@@ -8,9 +8,10 @@ import { taskCreateSchema } from '@/lib/schemas-tasks';
 export const GET = withPermission('TASKS_VIEW', async (_req, session, ctx: { params: { id: string } }) => {
   const lead = await prisma.lead.findFirst({
     where: { id: ctx.params.id, tenantId: session.tenantId },
-    select: { id: true },
+    select: { id: true, assignedTo: true, tenantId: true },
   });
   if (!lead) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 });
+  if (!canAccessLeadTasks(session, lead)) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 });
 
   const tasks = await prisma.task.findMany({
     where: { tenantId: session.tenantId, leadId: lead.id },
@@ -32,9 +33,10 @@ export const GET = withPermission('TASKS_VIEW', async (_req, session, ctx: { par
 export const POST = withPermission('TASKS_CREATE', async (req, session, ctx: { params: { id: string } }) => {
   const lead = await prisma.lead.findFirst({
     where: { id: ctx.params.id, tenantId: session.tenantId },
-    select: { id: true, assignedTo: true, name: true },
+    select: { id: true, assignedTo: true, name: true, tenantId: true },
   });
   if (!lead) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 });
+  if (!canAccessLeadTasks(session, lead)) return NextResponse.json({ error: 'Lead não encontrado' }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
   const parsed = taskCreateSchema.safeParse(body);
@@ -42,15 +44,6 @@ export const POST = withPermission('TASKS_CREATE', async (req, session, ctx: { p
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const data = parsed.data;
-
-  // Agent só pode criar tarefa em lead atribuído a ele, ou para si mesmo
-  if (session.role === 'agent') {
-    const isLeadOwner = lead.assignedTo === session.userId;
-    const assignsToSelfOrNone = !data.assignedTo || data.assignedTo === session.userId;
-    if (!isLeadOwner && !assignsToSelfOrNone) {
-      return NextResponse.json({ error: 'Sem permissão para criar tarefa neste lead.' }, { status: 403 });
-    }
-  }
 
   // Apenas roles com TASKS_ASSIGN podem atribuir para outros
   if (data.assignedTo && data.assignedTo !== session.userId) {

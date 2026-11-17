@@ -19,7 +19,7 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     }
 
     const newStage = await prisma.pipelineStage.findFirst({
-      where: { id: stageId, pipeline: { tenantId: session.tenantId } },
+      where: { id: stageId, pipelineId: lead.pipelineId, pipeline: { tenantId: session.tenantId } },
     });
     if (!newStage) return NextResponse.json({ error: 'Etapa inválida' }, { status: 400 });
 
