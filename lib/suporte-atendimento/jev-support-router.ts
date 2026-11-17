@@ -1,5 +1,6 @@
 import 'server-only';
 import { isJevEnabledForTenant } from '@/lib/flip-ai/decision-engine';
+import { sanitizeJevPayload } from '@/lib/flip-ai/jev-privacy';
 
 const JEV_URL = 'https://api.typesafe.ai/v1/systemone';
 
@@ -48,7 +49,7 @@ export async function classifySupportQuestion(
       referrerPolicy: 'no-referrer',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(sanitizeJevPayload(payload)),
     });
     if (!response.ok || !response.headers.get('content-type')?.toLowerCase().includes('application/json')) return null;
     const declaredSize = Number(response.headers.get('content-length') || '0');
