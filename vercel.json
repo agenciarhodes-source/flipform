@@ -2,7 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "audit/pr00-a2s-isolation": false
+      "audit/pr00-a2s-isolation": false,
+      "audit/pr00-a2c2-prisma-sql-offline-20261117": false
     }
   }
 }
