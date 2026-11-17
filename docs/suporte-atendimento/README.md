@@ -44,7 +44,7 @@ Não tratar como informação confirmada: honorários, SLA interno, responsável
 
 ## Gates pendentes para ativação
 
-- [ ] CI, Smoke, E2E, Semgrep e Gitleaks verdes no HEAD final (o Gitleaks detectou um finding; NÃO ignorar sem análise do relatório SARIF).
+- [ ] CI, Smoke, E2E, Semgrep e Gitleaks verdes no HEAD final. O finding histórico do Gitleaks foi inspecionado no SARIF: .env.example linha 118 em commit 27914249, com **nomes de variáveis** R2 em comentário, sem valores. O arquivo .gitleaksignore registra um **único fingerprint** justificado; não desabilita regras e precisa ser confirmado no novo check.
 - [ ] Revisar persistência no R2, isolamento entre tenants, permissões, versões, logs, rollback, concorrência, privacidade e uploads inválidos.
 - [ ] Resolver **falta de compare-and-swap atômico** do manifesto R2 em uploads simultâneos; pode ocorrer perda de atualização na versão atual.
 - [ ] Testar com identidades fictícias de duas empresas e diferentes papéis, sem ler dados de produção.
