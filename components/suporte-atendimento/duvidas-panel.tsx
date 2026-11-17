@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BookOpen, CircleHelp, Loader2, Search, X } from 'lucide-react';
+import { BookOpen, LifeBuoy, Loader2, Search, X } from 'lucide-react';
 import { findSupportAnswers, type SupportResult } from '@/lib/suporte-atendimento/question-answer';
 
 export function DuvidasPanel() {
@@ -56,21 +56,21 @@ export function DuvidasPanel() {
   return (
     <>
       {!open && <button type="button" onClick={() => setOpen(true)}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg hover:opacity-95 focus-visible:outline focus-visible:outline-2"
-        aria-label="Abrir Dúvidas do Atendimento">
-        <CircleHelp aria-hidden="true" className="h-5 w-5" /> Dúvidas
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-orange-600 bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-orange-600 focus-visible:outline focus-visible:outline-2"
+        aria-label="Abrir Suporte">
+        <LifeBuoy aria-hidden="true" className="h-5 w-5" /> Suporte
       </button>}
       {open && <div className="fixed inset-0 z-50 flex justify-end">
         <button type="button" className="absolute inset-0 bg-black/30 md:bg-black/20"
-          aria-label="Fechar dúvidas" onClick={() => setOpen(false)} />
-        <aside role="dialog" aria-modal="true" aria-label="Dúvidas — suporte de atendimento"
+          aria-label="Fechar suporte" onClick={() => setOpen(false)} />
+        <aside role="dialog" aria-modal="true" aria-label="Suporte interno ao atendimento"
           className="relative flex h-full w-full max-w-[440px] flex-col border-l bg-background shadow-2xl">
-          <header className="flex items-center justify-between gap-3 border-b px-5 py-4">
+          <header className="flex items-center justify-between gap-3 border-b border-orange-200 px-5 py-4">
             <div className="flex items-center gap-2">
-              <CircleHelp className="h-5 w-5 text-primary" aria-hidden="true" />
-              <div><h2 className="font-semibold">Dúvidas</h2><p className="text-xs text-muted-foreground">Suporte interno ao atendimento</p></div>
+              <LifeBuoy className="h-5 w-5 text-orange-500" aria-hidden="true" />
+              <div><h2 className="font-semibold">Suporte</h2><p className="text-xs text-muted-foreground">Suporte interno ao atendimento</p></div>
             </div>
-            <button type="button" className="rounded-lg p-2 hover:bg-muted" aria-label="Fechar painel" onClick={() => setOpen(false)}><X className="h-5 w-5"/></button>
+            <button type="button" className="rounded-lg p-2 hover:bg-muted" aria-label="Fechar painel de suporte" onClick={() => setOpen(false)}><X className="h-5 w-5"/></button>
           </header>
           <div className="flex-1 space-y-4 overflow-auto p-5 text-sm" aria-live="polite">
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
@@ -93,7 +93,7 @@ export function DuvidasPanel() {
             <textarea id="support-question" value={question} onChange={(event) => setQuestion(event.target.value)}
               rows={3} maxLength={1000} placeholder="Ex.: precisa de carteira assinada para receber salário-maternidade?"
               className="w-full resize-none rounded-lg border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            <button type="submit" disabled={!manual || asking || question.trim().length < 3} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 font-semibold text-primary-foreground disabled:opacity-50">
+            <button type="submit" disabled={!manual || asking || question.trim().length < 3} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-3 py-2 font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
               {asking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {asking ? 'Consultando...' : 'Perguntar'}
             </button>
           </form>
