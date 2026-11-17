@@ -152,6 +152,16 @@ function titleName(name: string) {
 
 /** Explicit self-introduction, even if the assistant did not ask about the person's name.
  * Never infer identity from a standalone "sim", an aside or model-generated identity.name. */
+/** If a suggested name was refused or the reply was only a regional expression,
+ * ask for a preferred name once in an open-ended way. Never restart the question loop. */
+export function shouldClarifyName(question: string | null | undefined, answer: string) {
+  if (!question || !OFFERED_NAME.test(question)) return false;
+  if (nameFromReply(question, answer, null)) return false;
+  const normalized = normalizedReply(answer);
+  return /^(?:nao|no|nope|n|negativo|prefiro nao)(?:\b|$)/.test(normalized)
+    || new Set(['la ele', 'laele', 'sei la', 'eita', 'oxente', 'k', 'rs', 'hum', 'ah']).has(normalized);
+}
+
 export function explicitNameFromMessage(message: string) {
   const match = message.trim().match(EXPLICIT_NAME);
   const candidate = match ? plausibleName(match[1]) : null;
