@@ -1,5 +1,5 @@
 # Suporte de Atendimento — Junqueira Advogados
-**Base de conhecimento interna | FlipForm | Versão inicial 0.1 | 17/11/2026**
+**Base de conhecimento interna | FlipForm | Versão de trabalho 0.2 | 17/11/2026**
 
 > **ESTADO: RASCUNHO PARA HOMOLOGAÇÃO JURÍDICA E OPERACIONAL.** Este documento orienta a triagem humana. Não é parecer jurídico, não substitui análise individual e não autoriza prometer benefício, indenização, prazo ou resultado. Os responsáveis do escritório devem validar critérios, documentos, políticas comerciais e versões antes da publicação à equipe.
 
@@ -448,9 +448,9 @@
 
 **Sobre a equipe:** a página institucional consultada apresenta Adônis Ferreira como sócio; o organograma interno completo, advogados responsáveis e escalonamento de cada área permanecem **[VALIDAR]**. Não prometer que determinado advogado conduzirá o caso antes da confirmação.
 
-## 29. Módulo preliminar trabalhista — não extraído do manual Netlify
+## 29. Módulo preliminar trabalhista — orientação geral complementar aos prints
 
-**Situação da fonte:** o site https://junqueira-campo.netlify.app/trabalhista foi informado como referência do roteiro comercial, mas **não foi possível recuperar seu conteúdo nesta revisão**. Os tópicos a seguir são conteúdo **original de apoio**, baseado em diretrizes públicas gerais, e exigem homologação pelo escritório. Não atribuir qualquer script abaixo ao manual Netlify.
+**Situação da fonte:** o endereço https://junqueira-campo.netlify.app/trabalhista não pôde ser extraído automaticamente; posteriormente, o responsável forneceu **13 prints da interface**. Os tópicos da seção 29 são conteúdo original de apoio. A transcrição organizada do material visível nos prints está na seção 36, com análise de riscos na seção 37. O restante do site não foi verificado.
 
 **Quando abrir triagem:** trabalhador relata falta de registro, diferenças salariais, verbas rescisórias, jornada, férias, 13º, FGTS, assédio, acidentes ou término irregular do contrato. Identifique sempre empregador, local, função, datas de admissão/saída e situação atual do vínculo. Pergunte se é empregado, doméstico, rural, terceirizado, prestador autônomo ou atividade por plataforma; rótulo contratual não define automaticamente a realidade.
 
@@ -540,4 +540,285 @@
 
 **Status da implementação deste PR:** a consulta textual local com fonte pode ser implementada sem JEV. Anexar um MD pelo painel, persistir versão por tenant e ativar classificação por JEV dependem de camada adicional de armazenamento e homologação: **não considerar funcionalidades prontas até teste e aprovação**.
 
-**Rodapé de revisão complementar:** conteúdos das seções 28 a 35 redigidos como orientação original em 17/11/2026. O roteiro da URL Netlify *não foi extraído* devido à indisponibilidade de acesso. Revalidar com o escritório antes de publicar.
+**Rodapé de revisão complementar:** conteúdos das seções 28 a 35 redigidos como orientação original em 17/11/2026. O site da URL Netlify não foi extraído automaticamente; os scripts visíveis nos 13 prints recebidos foram incorporados na seção 36, com ressalvas na seção 37. Revalidar com o escritório antes de publicar.
+
+
+## 36. Roteiro comercial trabalhista do manual de campo — transcrição dos 13 prints enviados em 17/11/2026
+
+> **ORIGEM DOCUMENTAL:** Capturas de tela fornecidas pelo responsável pelo projeto, relativas ao manual visual do Junqueira Advogados em https://junqueira-campo.netlify.app/trabalhista . Este capítulo documenta SOMENTE o conteúdo visível nos 13 prints; não equivale a leitura de outras páginas do site. A estrutura, a ordem dos assuntos e o tom das falas foram preservados. Para atendimento real, consultar também o bloco 37 (validações e adaptações obrigatórias). Não presumir que uma fala transcrita esteja aprovada juridicamente, comercialmente ou eticamente.
+
+### 36.1 Como usar este material
+
+> Estude antes de sair a campo. Em campo, use como consulta rápida. Fale do seu jeito — não decorado.
+
+O material de origem foi organizado em cinco fases: (1) abordagem inicial, (2) qualificação, (3) apresentação do serviço, (4) tratamento de objeções e (5) documentos necessários. Além delas, os prints trazem um perfil de cliente no início e uma etapa final de fechamento e pós-atendimento.
+
+**Uso no FlipForm:** estas falas servem como **referência para a equipe, não como respostas automáticas para leads**. No balão Suporte, o atendente solicita orientação e adapta a linguagem às circunstâncias. Oferta de serviços, captação ativa e contratação devem seguir normas da OAB e procedimentos internos aprovados.
+
+### 36.2 Perfil do cliente
+
+**Título do material:** “Perfil do Cliente”. **Subtítulo:** “Reconheça quem tem direito antes de chegar na porta”.
+
+**Alerta destacado na arte:** “Prazo de 2 anos após a demissão para entrar com ação. Pergunte sempre quando saiu do emprego.” [REVISÃO JURÍDICA: regra geral com exceções e particularidades; não concluir “prescrito” com base apenas nesta linha.]
+
+| Campo da arte | Conteúdo mostrado |
+| --- | --- |
+| Quem é | Trabalhador demitido ou que pediu demissão |
+| Quando | Demitido há menos de 2 anos |
+| Situação | Não recebeu tudo certo na rescisão |
+| Onde achar | Comércios, feiras, bairros operários, zona rural |
+
+**“SINAIS DE QUE TEM CASO”** (indícios para investigar, nunca garantia de direito):
+- Trabalhou sem carteira assinada.
+- Não recebeu FGTS ou rescisão completa.
+- Fazia hora extra sem receber.
+- Foi demitido estando doente ou grávida.
+- Sofreu assédio ou humilhação no trabalho.
+- Trabalhava em condição insalubre sem adicional.
+- Não recebeu 13º ou férias.
+
+**“ATENÇÃO — VERIFIQUE ANTES”** (como aparece nos prints):
+- Faz mais de 2 anos que saiu → “processo não cabe” [SIMPLIFICAÇÃO PERIGOSA: não utilizar como indeferimento automático].
+- Ainda está empregado → “só em casos específicos” [VALIDAR: pessoa empregada também pode ter direitos a apurar].
+- Já tem advogado pelo mesmo emprego → não pode duplicar o processo [VERIFICAR existência, objeto, representação e conflito com jurídico].
+
+**Nota de ética:** a indicação “onde achar” descreve um cenário do roteiro de campo, e não autoriza visitas indiscriminadas, indução ao litígio ou captação ativa irregular.
+
+### 36.3 Fase 1 de 5 — abordagem inicial
+
+**Título:** “Abordagem Inicial”. **Subtítulo:** “Os primeiros 30 segundos definem tudo”.
+
+**Passo 1 — apresentação: seja direto e simpático.** Texto do print:
+
+> Bom dia / Boa tarde! Meu nome é [SEU NOME], sou representante do Escritório Junqueira Advogados. O escritório tem mais de 8 anos aqui no Piauí e a gente veio até aqui porque muitas pessoas da região têm direito a receber dinheiro que o patrão não pagou — e nem sabem disso.
+
+**Nota da arte sobre indicação:** “Se tiver indicação, mencione: ‘Fulano da rua tal me falou que o senhor(a) pode ter esse direito.’” [Exigir consentimento e verificar ética da captação; não citar nome de terceiro sem base legítima.]
+
+**Passo 2 — pergunta de abertura:**
+
+> Posso te fazer uma pergunta rápida? O senhor(a) já trabalhou em alguma empresa nos últimos anos? Com ou sem carteira assinada?
+
+**Alerta da arte:** “Não fale ‘processo’ ou ‘ação judicial’ agora. Fale em ‘verificar direitos’ ou ‘checar se tem algum valor a receber’.” [Usar informação transparente, sem induzir contratação ou omitir a natureza da consulta.]
+
+**Passo 3 — se a resposta for sim, abra o caminho:**
+
+> É que a gente faz uma análise gratuita pra ver se tem algum direito que não foi pago direitinho. Não tem custo nenhum pra você agora. Se não tiver nada, a gente mesmo te fala. Mas se tiver, a gente cuida de tudo. O senhor(a) tem uns minutinhos?
+
+**Aprovação necessária:** a oferta “análise gratuita” e qualquer afirmação de ausência de cobrança precisam ser confirmadas na política real do escritório. Não reproduzir a promessa antes da homologação.
+
+### 36.4 Fase 2 de 5 — qualificação do cliente
+
+**Título:** “Qualificação do Cliente”. **Subtítulo:** “Entenda a situação antes de apresentar qualquer coisa”.
+
+**“AS 5 PERGUNTAS ESSENCIAIS”**
+
+**1. Onde trabalhou e quando saiu?**
+> O senhor(a) me conta, onde trabalhava e faz quanto tempo que saiu?
+
+**Alerta do print:** “Se saiu há mais de 2 anos: ‘Infelizmente esse caso já prescreveu. Mas deixa eu verificar se tem outro direito previdenciário.’” [NÃO USAR SEM ANÁLISE DO JURÍDICO.]
+
+**2. Como foi a saída?**
+> O senhor(a) foi mandado embora ou pediu pra sair? Recebeu tudo direitinho na rescisão?
+
+**3. Carteira e jornada.**
+> Trabalhava com carteira assinada? Fazia hora extra? Trabalhava fim de semana ou à noite?
+
+**4. Condições de trabalho.**
+> O trabalho tinha algum risco ou coisa pesada? Produto químico, calor, eletricidade? Recebia adicional por isso?
+
+**5. Situação atual.**
+> Já procurou algum advogado pra isso antes? Tem algum processo aberto sobre esse emprego?
+
+**Registro operacional complementar:** função, local, empregador, datas exatas, remuneração, jornada efetiva, vínculo, indícios de documentação, urgência, outra representação e próximo encaminhamento, sempre registrando relato como relato.
+
+### 36.5 Fase 3 de 5 — apresentação do serviço
+
+**Título:** “Apresentação do Serviço”. **Subtítulo:** “Fale da solução depois de entender o problema”.
+
+**1. Conecte ao que a pessoa contou.**
+
+> Com o que o senhor(a) me falou, parece que tem sim alguns direitos que não foram respeitados. Horas extras sem pagar, FGTS não depositado — tudo isso a Justiça pode obrigar a empresa a pagar.
+
+**2. Explique como funciona.**
+
+> O Junqueira é um escritório com mais de 8 anos de experiência. A gente entra com a ação, cuida de tudo, e o senhor(a) não paga nada agora. Só se ganhar. Se não ganhar, não deve nada.
+
+**Dica da arte:** citar caso de sucesso da região, incluindo a frase sobre uma mulher que não recebia hora extra e conseguiu receber tudo de uma vez. [NÃO USAR COMO TÉCNICA PERSUASIVA SEM AVALIAÇÃO ÉTICA; depoimento/caso concreto e promessa de resultados não devem ser usados para captar clientes.]
+
+**3. Dê uma estimativa de prazo honesta.**
+
+> Esses processos levam em média entre 8 meses e 1 ano. Às vezes resolve mais rápido com acordo. O escritório acompanha tudo e te avisa de cada passo.
+
+**Aviso da arte:** “Nunca prometa prazo menor. Informação errada gera reclamação. Seja honesto — gera mais confiança.”
+
+**4. Chamada para ação.**
+
+> Posso fazer o cadastro agora pro advogado analisar o caso? É só a documentação básica. Se ele ver que tem direito, já dá andamento. Se não tiver, ele mesmo te explica.
+
+**Validação comercial/jurídica obrigatória:** prazo médio, forma de atuação, honorários e resultado são variáveis; não apresentar essas estimativas ou condições como garantias nem criar expectativa de ajuizamento automático.
+
+### 36.6 Fase 4 de 5 — tratamento de objeções
+
+**Título:** “Tratamento de Objeções”. **Subtítulo:** “As 5 situações mais comuns — toque para abrir”.
+
+**Princípio da arte:** “Objeção não é rejeição — é dúvida. Valide, depois redirecione. Não discuta.”
+
+**Objeção 1 — “Isso é golpe. Já teve muito disso aqui.”**
+
+**O que está por trás:** a pessoa foi abordada por estelionatários antes; desconfiança legítima.
+
+**Como responder (texto-fonte):**
+> O senhor(a) tem razão em desconfiar. Por isso mesmo é importante checar. O Junqueira é registrado na OAB, tem endereço em Teresina e mais de 8 anos na região. Não cobramos nada agora — só trabalhamos se ganhar. Pode verificar pelo Google antes de qualquer coisa.
+
+**Dica:** “Mostre o cartão ou WhatsApp oficial. Deixe a pessoa verificar — transparência gera confiança.”
+
+**Validação:** não fornecer número de inscrição OAB sem verificação; não prometer honorários de êxito sem contrato aprovado; usar canais oficiais confirmados.
+
+**Objeção 2 — “Já tentei advogado e não deu em nada.”**
+
+**O que está por trás:** frustração com experiência anterior; não quer se decepcionar novamente.
+
+**Como responder (texto-fonte):**
+> Entendo, e é frustrante isso. Me conta o que aconteceu? [escute]... Olha, pode ter dado errado por documentação incompleta, prazo perdido, caso diferente. O que o Junqueira faz diferente: o advogado analisa antes de abrir e te fala se tem chance ou não. Não abre processo sem base.
+
+**Validação:** não insinuar erro de outro profissional sem prova; evitar prometer análise conclusiva sem documentos.
+
+**Objeção 3 — “Já tenho advogado / processo aberto.”**
+
+**Como responder (texto-fonte):**
+> Que bom que já tem acompanhamento! Aí realmente não tem como a gente atuar pelo mesmo caso. Mas deixa eu perguntar: tem algum outro vínculo de trabalho que ainda não foi olhado? OU: O escritório também trabalha com previdenciário e consignado — tem alguma situação nessa área?
+
+**Alerta da arte:** “Se confirmar processo aberto pelo mesmo vínculo: respeite, agradeça e não insista. Anote para outro serviço futuro.”
+
+**Validação:** não abordar outro serviço como insistência para captação; avaliar conflitos e consentimentos, e respeitar opção de não contratar.
+
+**Objeção 4 — “Não tenho tempo / depois eu vejo.”**
+
+**Como responder (texto-fonte):**
+> Claro, sem problema! Mas uma coisa importante: esse direito tem prazo — 2 anos da demissão. Se passar, não tem mais como entrar. Quanto tempo faz que saiu? [se estiver perto:] Nesse caso seria bom fazer o cadastro hoje mesmo. Leva só uns 10 minutos.
+
+**Validação:** evitar urgência artificial; em dúvida sobre prazo, encaminhar a advogado sem afirmação definitiva.
+
+**Objeção 5 — “Não quero problema com o patrão.”**
+
+**Como responder (texto-fonte):**
+> O senhor(a) não precisa se preocupar. O processo é conduzido pelo advogado — não pelo senhor(a). A empresa recebe a notificação da Justiça, não um contato direto seu. Não é briga, é direito.
+
+**Validação:** não garantir ausência de participação, exposição, comparecimentos ou consequências práticas. Explicar riscos, procedimentos e alternativas conforme a avaliação do advogado.
+
+### 36.7 Fase 5 de 5 — documentos necessários
+
+**Título:** “Documentos Necessários”. **Subtítulo:** “Marque conforme for coletando”.
+
+**Alerta da arte:** “Alta taxa de reprovação por documentação incompleta. Não repasse sem os itens obrigatórios.” [VALIDAR fases do fluxo: triagem, contrato e protocolo não demandam necessariamente os mesmos documentos.]
+
+**Nove itens que aparecem como “Obrigatórios” no print:**
+1. Controle de atendimento preenchido e assinado.
+2. Procuração e contrato de honorários.
+3. Questionário trabalhista preenchido.
+4. RG ou CPF do cliente.
+5. Carteira de Trabalho ou documentos de vínculo.
+6. Nome e dados do empregador.
+7. Comprovante de endereço atualizado (máximo 3 meses).
+8. Declaração de Hipossuficiência.
+9. **Senha GOV** — **ITEM NÃO ADOTADO; PROIBIDO SOLICITAR/ARMAZENAR A SENHA.** Consta no print de origem, mas não integrar checklist operacional, chat, banco nem cadastro. A conta Gov.br e a autenticação são pessoais. Para prova de vínculos, preferir CNIS/CTPS ou exportação pelo próprio titular por meios oficiais.
+
+**“Colete se o cliente tiver” (4 itens):**
+- Extrato de saque do FGTS.
+- Termo de Rescisão (TRCT).
+- Cartão de ponto.
+- Indicação de duas testemunhas.
+
+**“Somente se for contra entidade pública” (3 itens):**
+- Portaria de nomeação.
+- Termo de posse.
+- Contracheque atualizado.
+
+**Aviso de qualificação:** pendência documental não substitui a triagem; separar explicitamente (a) informações mínimas para análise inicial, (b) documentos para contratação, e (c) documentos para eventual ajuizamento. “Procuração e contrato” só após aceite e orientação jurídica; testemunhas devem ser indicadas livremente, sem direcionamento.
+
+**Rotina original do material:** lista interativa com progresso de 0/9, caixas de seleção e botão “Limpar para novo cliente”. Esse controle é do manual visual; não significa que o FlipForm já possua checklist automatizado por tese.
+
+### 36.8 Fechamento e pós-atendimento
+
+**Título:** “Fechamento e Pós-Atendimento”. **Subtítulo:** “Como fechar bem e multiplicar captações”.
+
+**1. Confirme o que foi coletado.**
+> Deixa eu conferir rapidinho o que a gente pegou [confira o checklist]. Tá faltando o [documento X] — o senhor(a) tem em casa? Posso passar amanhã pra pegar, ou o senhor(a) pode me mandar foto pelo WhatsApp.
+
+**2. Explique o próximo passo.**
+> O advogado vai analisar o caso em até 48 horas. O escritório vai entrar em contato pelo telefone que o senhor(a) me deu. Qualquer dúvida, pode chamar nesse número [mostre o contato].
+
+**Aviso do print:** “Nunca prometa resultado. Diga ‘o advogado vai analisar e te dar uma resposta honesta’.”
+
+**3. Peça indicações — sempre.**
+> Uma última coisa: o senhor(a) conhece alguém que também trabalhou e pode ter passado por isso? Alguém que foi demitido recentemente ou trabalhou sem carteira? A gente verifica de graça pra qualquer pessoa.
+
+**Meta descrita:** sair com “pelo menos 2 indicações por atendimento”.
+
+**Validações:** confirmar se o SLA de 48 horas existe; não pressionar por indicação nem registrar contato de terceiro sem fundamento e consentimento; não abordar pessoas não solicitantes por indução comercial. No atendimento digital, manter o contato da pessoa apenas nos canais oficiais do escritório.
+
+### 36.9 Como o atendente deve pesquisar este material no “Suporte”
+
+| Pergunta recebida | Primeiro conteúdo a consultar | Próxima ação |
+| --- | --- | --- |
+| “Trabalhei sem carteira. Posso?” | 36.2, 36.4 e 30 | Investigar realidade do vínculo e provas; encaminhar ao jurídico |
+| “Fui demitida há mais de dois anos.” | 36.2 e 36.4 | Registrar datas exatas; revisão individual de prescrição |
+| “Quero saber se tenho horas extras.” | 36.4 e 32 | Perguntar jornada real e documentos |
+| “Que documentos eu mando?” | 36.7 e 4 | Pedir somente os necessários à fase e por canal seguro |
+| “O escritório é confiável?” | 36.6, objeção 1 | Compartilhar canais públicos confirmados, sem prometer resultado |
+| “Tenho advogado em outro processo.” | 36.6, objeção 3 | Respeitar representação; escalar dúvida ética |
+| “Quanto demora?” | 36.5, passo 3 | Não prometer estimativa não aprovada |
+| “Tenho medo do meu patrão.” | 36.6, objeção 5 | Acolher, não garantir ausência de riscos |
+| “Quanto custa?” | 36.5 e 36.6 | Remeter à política de honorários validada |
+| “Qual o próximo passo?” | 36.8 | Explicar procedimento real e contato oficial |
+
+**Controle de fonte:** 13 prints fornecidos pelo usuário em 17/11/2026; material visual intitulado “Perfil do Cliente”, “Abordagem Inicial”, “Qualificação do Cliente”, “Como usar este material”, “Apresentação do Serviço”, “Tratamento de Objeções”, “Documentos Necessários” e “Fechamento e Pós-Atendimento”. Outros conteúdos do site não observados nos prints permanecem **não verificados**.
+
+## 37. Critérios de revisão obrigatória antes de utilizar o roteiro de campo
+
+### 37.1 Jurídico e prescrição
+
+**Regra geral:** a Constituição, art. 7º, XXIX, estabelece prescrição dos créditos trabalhistas em cinco anos, limitada a dois anos após a extinção do contrato, com nuances conforme matéria, fatos e exceções. **Não orientar que “todo caso com mais de 2 anos não cabe”**, nem que todo contrato vigente impede a análise. Identifique datas, pedidos e eventual ação anterior e escale ao advogado.
+
+**Fonte:** https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm ; https://www2.camara.leg.br/legin/fed/declei/1940-1949/decreto-lei-5452-1-maio-1943-415500-normaatualizada-pe.html .
+
+### 37.2 Privacidade de contas Gov.br
+
+O print marca “Senha GOV” como obrigatória, **mas o procedimento do FlipForm deve tratá-la como NÃO SOLICITÁVEL**. Senha e códigos de autenticação são pessoais. Não criar campo de senha, não transcrever credenciais no CRM, não receber por WhatsApp, e instruir o próprio titular a gerar documentos oficiais por meios autorizados.
+
+**Fonte:** https://www.gov.br/gestao/pt-br/assuntos/editoria-defeso-eleitoral/cuidados-que-voce-precisa-ter-com-sua-conta-gov.br ; https://www.gov.br/pt-br/termos-de-uso .
+
+### 37.3 Ética da advocacia, oferta e resultados
+
+Os prints descrevem abordagem em campo, identificação de locais para encontrar pessoas, convite a processo, casos de sucesso, indicação de terceiros e metas de indicação. **Não tomar isso como autorização para captação indiscriminada**; exigir revisão com responsável inscrito na OAB e política de marketing ético. Não prometer processo, pagamento integral, valor, prazo ou êxito. Não utilizar caso concreto para induzir contratação sem análise das normas e consentimentos.
+
+**Fonte:** https://www.oab.org.br/leisnormas/legislacao/provimentos/205-2021 .
+
+### 37.4 Políticas do Junqueira que precisam ser confirmadas
+
+- Tempo de atuação: prints afirmam “mais de 8 anos”; material institucional anteriormente consultado usa outra referência. Fixar texto oficial e versioná-lo.
+- Análise gratuita: se realmente é oferecida; quais serviços e condições.
+- Honorários: se há entrada, êxito, despesas, sucumbência e exceções; texto contratual vigente aprovado.
+- Prazos: verificar média divulgada, possibilidade de acordo e SLA interno prometido de 48 horas.
+- Documentos obrigatórios por etapa: cadastro, análise, contrato, distribuição/ajuizamento.
+- Rotina de contato: visita, WhatsApp, envio e recebimento seguro, consentimento, responsáveis, documentação de representação e proteção de dados.
+- Autorização de atuação em trabalhista: área, locais e responsáveis confirmados.
+- Validação de toda a conduta de captação à luz da OAB.
+
+### 37.5 Script operacional mais seguro (proposta original — NÃO é transcrição)
+
+**Abertura acolhedora, sem prometer valores:** “Olá! Sou da equipe de atendimento do Junqueira Advogados. Podemos ouvir sua situação e, se você desejar, encaminhar seus documentos para uma avaliação jurídica? Você trabalhou com ou sem carteira assinada?”
+
+**Quando o trabalhador descreve problema:** “Entendi. Para não orientar de forma incompleta, vou registrar datas, o tipo de vínculo, como era a jornada e quais documentos você tem. A equipe jurídica vai avaliar as possibilidades.”
+
+**Quando ultrapassaram dois anos:** “Obrigado por informar a data. Existem prazos que precisam ser conferidos cuidadosamente. Vou encaminhar ao responsável, sem descartar o caso antes da análise.”
+
+**Quando questionam custo:** “As condições dependem do contrato de honorários aprovado pelo escritório. Posso encaminhar você ao responsável para explicá-las de maneira completa e transparente.”
+
+**Quando questionam duração:** “A duração varia conforme o caso, as provas, o órgão e outros fatores. O advogado poderá explicar as etapas e as estimativas sem garantir prazo.”
+
+**Quando faltam documentos:** “Podemos começar identificando os documentos que você possui. Não compartilhe senhas do Gov.br ou de bancos. Vamos informar o canal seguro para o envio dos comprovantes necessários.”
+
+**Quando a pessoa não quer prosseguir:** “Entendido. Respeitamos sua decisão. Se desejar informações futuramente, procure os canais oficiais do escritório.”
+
+**Data de transcrição e revisão inicial:** 17/11/2026. **Status:** reprodução documentada dos prints + proposta de atendimento sujeita a aprovação jurídica e operacional. Nenhum dado de pessoa atendida foi incluído.
