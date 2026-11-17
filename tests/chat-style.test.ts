@@ -31,3 +31,10 @@ test('a long reply becomes two messages at a blank line; short ones stay whole',
   assert.deepEqual(splitIntoBubbles(`${first}\n\n${second}`), [first, second]);
   assert.deepEqual(splitIntoBubbles('c'.repeat(400)), ['c'.repeat(400)]);
 });
+
+test('intentional two shorter paragraphs become two bubbles without bloating text', () => {
+  const first = 'Vamos analisar o seu caso com os documentos que faltam.'.padEnd(101, ' ');
+  const second = 'Pode me enviar a carteira de trabalho quando conseguir?'.padEnd(101, ' ');
+  assert.deepEqual(splitIntoBubbles(`${first}\n\n${second}`), [first.trim(), second.trim()]);
+  assert.deepEqual(splitIntoBubbles('Tudo certo.\n\nPode enviar depois.'), ['Tudo certo.\n\nPode enviar depois.']);
+});
