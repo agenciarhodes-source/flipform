@@ -8,7 +8,7 @@ export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
   if (!globalSupportUploadEnabled()) return NextResponse.json({ error: 'Configuração desabilitada.' }, { status: 404 });
   try {
     const current = await readTenantSupportKnowledge(session.tenantId);
-    return NextResponse.json({ version: current?.source === 'tenant-upload' ? current.version : 0, title: current?.content.split('\n')[0] || null, updatedAt: current?.updatedAt ?? null, source: current?.source || null }, { headers: { 'Cache-Control': 'no-store, private' } });
+    return NextResponse.json({ version: current?.version || 0, title: current?.content.split('\n')[0] || null, updatedAt: current?.updatedAt ?? null, source: current?.source || null }, { headers: { 'Cache-Control': 'no-store, private' } });
   } catch {
     return NextResponse.json({ error: 'Não foi possível consultar a configuração.' }, { status: 503 });
   }
