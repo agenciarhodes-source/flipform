@@ -20,35 +20,65 @@ export default function LeadsPage() {
   const [stages, setStages] = useState<any[]>([]);
   const [pipelines, setPipelines] = useState<any[]>([]);
   const [search, setSearch] = useState('');
+  // Filters: a pipeline, then one of its stages ("" = all).
+  const [pipelineFilter, setPipelineFilter] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
 
   const load = async () => {
+    const params = new URLSearchParams();
+    if (search) params.set('q', search);
+    if (pipelineFilter) params.set('pipelineId', pipelineFilter);
+    if (pipelineFilter && stageFilter) params.set('stageId', stageFilter);
+    const query = params.toString();
     const [l, p] = await Promise.all([
-      fetch(`/api/leads${search ? `?q=${encodeURIComponent(search)}` : ''}`).then((r) => r.json()),
+      fetch(`/api/leads${query ? `?${query}` : ''}`).then((r) => r.json()),
       fetch('/api/pipelines').then((r) => r.json()),
     ]);
-    setLeads(l.leads);
+    setLeads(l.leads || []);
     setPipelines(p.pipelines || []);
-    setStages(p.pipelines[0]?.stages || []);
+    setStages(p.pipelines?.[0]?.stages || []);
   };
-  useEffect(() => { load(); }, []);
   useEffect(() => {
     const leadId = searchParams.get('leadId');
     if (leadId) setSelectedId(leadId);
   }, [searchParams]);
-  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [search, pipelineFilter, stageFilter]);
+
+  const filterStages = (pipelines.find((pipeline) => pipeline.id === pipelineFilter)?.stages || [])
+    .filter((stage: any) => !stage.isArchived);
 
   const tempIcon = (t: string) => t === 'hot' ? <Flame className="w-3.5 h-3.5 text-red-500" /> : t === 'warm' ? <Thermometer className="w-3.5 h-3.5 text-amber-500" /> : <Snowflake className="w-3.5 h-3.5 text-sky-500" />;
 
   return (
     <div className="p-4 lg:p-8 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl lg:text-3xl font-bold">Leads</h1>
           <p className="text-muted-foreground text-sm">{leads.length} leads encontrados</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Filtrar por pipeline"
+            value={pipelineFilter}
+            onChange={(event) => { setPipelineFilter(event.target.value); setStageFilter(''); }}
+            className="h-10 w-48 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="">Todos os pipelines</option>
+            {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
+          </select>
+          <select
+            aria-label="Filtrar por etapa"
+            value={stageFilter}
+            onChange={(event) => setStageFilter(event.target.value)}
+            disabled={!pipelineFilter}
+            title={pipelineFilter ? undefined : 'Escolha um pipeline para filtrar por etapa'}
+            className="h-10 w-52 rounded-md border bg-background px-3 text-sm disabled:opacity-60"
+          >
+            <option value="">{pipelineFilter ? 'Todas as etapas' : 'Etapa (escolha o pipeline)'}</option>
+            {filterStages.map((stage: any) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
+          </select>
           <PortfolioTransferDialog onDone={load} />
           <Button type="button" onClick={() => setManualOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
           <div className="relative w-72">
