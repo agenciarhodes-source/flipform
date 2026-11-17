@@ -1,6 +1,5 @@
 import 'server-only';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
 import { notFound, redirect } from 'next/navigation';
 import { getVerifiedSession } from '@/lib/auth';
 import { canReadJunqueiraSupportKnowledge } from '@/lib/suporte-atendimento/access';
@@ -18,16 +17,13 @@ export default async function SupportKnowledgePage() {
   if (!session) redirect('/login');
 
   // Fail closed: sem ID aprovado não há leitura nem descoberta por nome/slug.
-  if (!canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID)) {
+  if (!canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
     notFound();
   }
 
   // Arquivo versionado. Configuração outputFileTracingIncludes garante inclusão
   // no build standalone/serverless sem usar banco, dados reais nem API externa.
-  const content = await readFile(
-    join(process.cwd(), 'docs', 'suporte-atendimento', 'JUNQUEIRA-BASE-DE-CONHECIMENTO.md'),
-    'utf8',
-  );
-
-  return <SupportKnowledgeClient markdown={content} />;
+  const knowledge = await readTenantSupportKnowledge(session.tenantId);
+  if (!knowledge) notFound();
+  return <SupportKnowledgeClient markdown={knowledge.content} />;
 }
