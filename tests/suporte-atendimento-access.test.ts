@@ -15,6 +15,10 @@ test('nega visualizador e sessão inválida', () => {
   assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'viewer' }, tenant), false);
   assert.equal(canReadJunqueiraSupportKnowledge(null, tenant), false);
 });
+test('global libera por papel e tenant próprio, sem depender do piloto', () => {
+  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: 'empresa-b', role: 'agent' }, undefined, true), true);
+  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: 'empresa-b', role: 'viewer' }, undefined, true), false);
+});
 test('nega configuração ausente e não permite wildcard', () => {
   assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'agent' }, undefined), false);
   assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'agent' }, '*'), false);
