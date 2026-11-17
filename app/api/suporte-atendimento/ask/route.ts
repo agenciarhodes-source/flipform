@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 import { canReadTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
-import { readTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
+import { readTenantSupportKnowledge, isTenantSupportActive } from '@/lib/suporte-atendimento/tenant-knowledge';
 import { findSupportAnswers, supportTerms } from '@/lib/suporte-atendimento/question-answer';
 import { classifySupportQuestion } from '@/lib/suporte-atendimento/jev-support-router';
 
 export const dynamic = 'force-dynamic';
 
 export const POST = withPermission('INBOX_VIEW', async (req, session) => {
-  if (!canReadTenantSupportKnowledge(session)) {
+  if (!canReadTenantSupportKnowledge(session) || !(await isTenantSupportActive(session.tenantId))) {
     return NextResponse.json({ error: 'Indisponível.' }, { status: 404 });
   }
   const limits = await rateLimit({ key: 'support_questions:' + session.tenantId + ':' + session.userId, limit: 30, windowMs: 3_600_000 });

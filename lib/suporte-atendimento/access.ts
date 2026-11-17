@@ -17,3 +17,11 @@ export function canReadTenantSupportKnowledge(session: SupportSession | null): b
 export function canManageTenantSupportKnowledge(session: SupportSession | null): boolean {
   return Boolean(session?.tenantId?.trim() && session.role === 'owner');
 }
+
+/** A ativação da empresa é uma segunda trava, além do papel do atendente. */
+export function canUseTenantSupportKnowledge(
+  session: SupportSession | null,
+  tenantEnabled: boolean,
+): boolean {
+  return tenantEnabled === true && canReadTenantSupportKnowledge(session);
+}

@@ -75,3 +75,19 @@ Não tratar como informação confirmada: honorários, SLA interno, responsável
 **Estado sem arquivo:** o Atendente verá uma mensagem orientando o Proprietário a cadastrar o manual, não um 404 sem explicação.
 
 **Gates:** CI, Playwright, Semgrep e Gitleaks devem passar no HEAD do PR corretivo; validação de upload real e isolamento no R2 somente com autorização específica e preferencialmente com dados fictícios. **Sem merge/deploy/alteração de produção nesta revisão.**
+
+
+## Atualização — liga/desliga do Suporte por empresa (17/11/2026)
+
+O **Suporte vem DESLIGADO de fábrica** para todos os tenants, incluindo os que já anexaram Markdown antes desta versão. A configuração `Configurações → Suporte` permanece visível para o Proprietário independentemente de o recurso estar ligado ou não.
+
+- O Proprietário tem um **switch liga/desliga**. A ativação só é aceita quando há um Markdown válido já publicado para **a empresa atual**. O estado é salvo em `tenants/<tenantId>/support-knowledge/activation.json` no mesmo R2 privado, separado do manifesto do manual, com revisão e auditoria. Sem arquivo de ativação = `enabled:false`.
+- Ao **ligar**, apenas o perfil **Atendente (agent)** recebe botão Suporte, tela de consulta e acesso às APIs de leitura/pergunta; todas verificam o estado privado do próprio tenant.
+- Ao **desligar**, o botão some e as APIs negam acesso ao manual e às respostas (mesmo por URL direta); o documento **não é apagado** e pode continuar a ser editado pelo Proprietário.
+- Nenhuma flag global, alteração de variáveis Vercel ou migration para liberar o switch. Não altera IA/JEV, Ads, leads, conversas, Stripe ou permissões de outros módulos.
+- Estado de ativação ausente, inválido ou inacessível = **desligado (fail closed)**. O GET do Proprietário denuncia armazenamento indisponível sem fingir que um upload ou switch foi salvo.
+- O switch usa `PATCH /api/suporte-atendimento/config` com verificação de sessão, papel `owner`, revisão esperada e `tenantId` somente do servidor; registra evento de ativação/desativação no AuditLog.
+
+**Limite técnico conhecido:** o objeto de ativação usa verificação otimista de revisão, porém o R2 não oferece CAS atômico neste fluxo. Duas alterações concorrentes, em sessões diferentes do Proprietário, podem competir; revisar transações/serialização antes de usar essa funcionalidade em cenários multiadministrador. Na política atual só `owner` administra.
+
+**Liberação:** homologar testes de papéis, OFF inicial, ON com manual, OFF mantendo manual, tenant B independente, falha R2, refresh de página e APIs negadas antes do merge e deploy. **Não publicar ou alterar produção automaticamente.**

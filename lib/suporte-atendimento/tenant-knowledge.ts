@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { createAttachmentUploadUrl, readAttachmentObject, resolveAttachmentStorage, type AttachmentStorageConfig } from '@/lib/storage/attachment-storage';
+import { DEFAULT_SUPPORT_ACTIVATION, parseTenantSupportActivation, type TenantSupportActivation } from './support-switch-rules';
 
 const MAX_MD_BYTES = 1_000_000;
 const MAX_MANIFEST_BYTES = 16_384;
@@ -75,6 +76,83 @@ async function writeObject(config: AttachmentStorageConfig, key: string, body: U
     cache: 'no-store',
   });
   if (!response.ok) throw new Error('SUPPORT_UPLOAD_STORAGE_FAILED');
+}
+
+
+const MAX_SWITCH_BYTES = 4_096;
+
+/** Estado separado do manifesto do Markdown para evitar perder o conteúdo ao desligar. */
+function activationKey(tenantId: string) {
+  return 'tenants/' + safeTenantId(tenantId) + '/support-knowledge/activation.json';
+}
+
+/** Sempre desligado na ausência de configuração persistida, sem migração. */
+export async function readTenantSupportActivation(tenantId: string): Promise<TenantSupportActivation> {
+  safeTenantId(tenantId);
+  const storage = resolveAttachmentStorage();
+  if (!storage.ready) throw new Error('SUPPORT_STORAGE_NOT_CONFIGURED');
+  const bytes = await readAttachmentObject(storage.config, { key: activationKey(tenantId), maxBytes: MAX_SWITCH_BYTES });
+  if (!bytes) return DEFAULT_SUPPORT_ACTIVATION;
+  try {
+    return parseTenantSupportActivation(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown);
+  } catch {
+    throw new Error('SUPPORT_ACTIVATION_INVALID');
+  }
+}
+
+/** Falha fechada: falha de leitura, configuração ausente ou estado inválido = OFF. */
+export async function isTenantSupportActive(tenantId: string): Promise<boolean> {
+  try {
+    return (await readTenantSupportActivation(tenantId)).enabled;
+  } catch {
+    return false;
+  }
+}
+
+/** Proprietário altera apenas o seu próprio tenant, validado na rota autenticada. */
+export async function saveTenantSupportActivation(input: {
+  tenantId: string;
+  userId: string;
+  enabled: boolean;
+  expectedRevision: number;
+}) {
+  safeTenantId(input.tenantId);
+  if (typeof input.enabled !== 'boolean' ||
+      !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 0) {
+    throw new Error('SUPPORT_ACTIVATION_BAD_REQUEST');
+  }
+  const current = await readTenantSupportActivation(input.tenantId);
+  if (current.revision !== input.expectedRevision) throw new Error('SUPPORT_ACTIVATION_CONFLICT');
+  if (current.enabled === input.enabled) return { ...current, noop: true };
+
+  // Ativar exige manual privado válido. Desativar não apaga ou altera o .md.
+  if (input.enabled && !(await readTenantSupportKnowledge(input.tenantId))) {
+    throw new Error('SUPPORT_ACTIVATION_NO_MANUAL');
+  }
+  const storage = resolveAttachmentStorage();
+  if (!storage.ready) throw new Error('SUPPORT_STORAGE_NOT_CONFIGURED');
+
+  const next: TenantSupportActivation = {
+    enabled: input.enabled,
+    revision: current.revision + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeObject(
+    storage.config,
+    activationKey(input.tenantId),
+    new TextEncoder().encode(JSON.stringify(next)),
+    'application/json',
+  );
+
+  await prisma.auditLog.create({ data: {
+    tenantId: input.tenantId,
+    userId: input.userId,
+    entityType: 'support_knowledge',
+    entityId: input.tenantId,
+    action: input.enabled ? 'support_knowledge.enabled' : 'support_knowledge.disabled',
+    metadata: { enabled: next.enabled, revision: next.revision },
+  } });
+  return { ...next, noop: false };
 }
 
 /** Escreve versão imutável e então atualiza ponteiro. Não deleta nem modifica versões anteriores. */

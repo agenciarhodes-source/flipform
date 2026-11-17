@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BookOpenText, Download, FileUp, LifeBuoy, Loader2, PencilLine } from 'lucide-react';
 
-type Config = { title: string | null; source: string | null; version: number; updatedAt: string | null };
+type Config = { title: string | null; source: string | null; version: number; updatedAt: string | null; enabled: boolean; activationRevision: number };
 const MAX_BYTES = 1_000_000;
 
 export function SupportKnowledgeConfig() {
@@ -13,6 +13,7 @@ export function SupportKnowledgeConfig() {
   const [editorVisible, setEditorVisible] = useState(false);
   const [loadingCurrent, setLoadingCurrent] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -72,9 +73,30 @@ export function SupportKnowledgeConfig() {
     }
   }
 
+  const toggleSupport = async () => {
+    if (!current || switching || saving) return;
+    setError(''); setSuccess(''); setSwitching(true);
+    try {
+      const nextEnabled = !current.enabled;
+      const response = await fetch('/api/suporte-atendimento/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextEnabled, expectedRevision: current.activationRevision }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível alterar o Suporte.');
+      await refresh();
+      setSuccess(nextEnabled
+        ? 'Suporte ligado: os atendentes desta empresa já podem consultar o manual.'
+        : 'Suporte desligado: o manual continua salvo e editável.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao atualizar a configuração.');
+    } finally { setSwitching(false); }
+  };
+
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!current || saving) return;
+    if (!current || saving || switching) return;
     setError(''); setSuccess('');
     const bodyFile = file || (editorVisible && markdown.trim().length >= 50
       ? new File([markdown], 'suporte-empresa.md', { type: 'text/markdown' }) : null);
@@ -91,13 +113,13 @@ export function SupportKnowledgeConfig() {
       setFile(null);
       setEditorVisible(false);
       setMarkdown('');
-      setSuccess(data.noop ? 'O arquivo já corresponde à revisão atual.' : 'Nova revisão privada do manual publicada para sua equipe.');
+      setSuccess(data.noop ? 'O arquivo já corresponde à revisão atual.' : 'Manual salvo na base privada. A disponibilidade para atendentes depende do botão liga/desliga.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao anexar o manual.');
     } finally { setSaving(false); }
   };
 
-  const canSubmit = Boolean(current && !loading && !saving && (
+  const canSubmit = Boolean(current && !loading && !saving && !switching && (
     file && file.size > 0 && file.size <= MAX_BYTES ||
     editorVisible && markdown.trim().length >= 50 && new Blob([markdown]).size <= MAX_BYTES
   ));
@@ -112,8 +134,39 @@ export function SupportKnowledgeConfig() {
       <p className="text-sm text-muted-foreground">
         Anexe um arquivo Markdown ou escreva o conteúdo aqui. O material é privado e separado por empresa.
         Somente o Proprietário pode configurar e publicar o manual. O Suporte será mostrado apenas para o perfil Atendente no Inbox ou Direct.
-        O JEV, quando aprovado e habilitado, apenas identifica os capítulos pertinentes.
+        O Suporte começa desligado e precisa ser ativado por você. O JEV, quando aprovado e habilitado, apenas identifica os capítulos pertinentes.
       </p>
+
+      <section aria-label="Ativação do Suporte" className="rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="font-semibold">Ativar Suporte para os atendentes</h2>
+            <p className="text-sm text-muted-foreground">
+              {current?.enabled ? 'Ligado — disponível para os atendentes desta empresa.' : 'Desligado — não aparece para os atendentes.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Ativar Suporte para os atendentes"
+            aria-checked={Boolean(current?.enabled)}
+            disabled={!current || loading || switching || saving || (!current.enabled && current.version === 0)}
+            onClick={() => void toggleSupport()}
+            className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${current?.enabled ? 'bg-orange-500' : 'bg-muted-foreground/40'}`}
+          >
+            <span aria-hidden="true" className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${current?.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        {!current?.enabled && current?.version === 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">Publique um arquivo Markdown primeiro para habilitar este botão.</p>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Cada empresa controla seu próprio estado. Desligar não exclui o arquivo nem muda as configurações do JEV.
+        </p>
+        {switching && <p role="status" className="mt-2 text-xs text-muted-foreground">Salvando o estado...</p>}
+      </section>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {success && <p role="status" className="text-sm">{success}</p>}
 
       <div className="space-y-2 rounded-lg border p-4 text-sm">
         {loading ? <p className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando configuração...</p>
@@ -162,8 +215,6 @@ export function SupportKnowledgeConfig() {
           Limite: 1 MB por manual. Revise o conteúdo com o responsável antes de publicar.
           Não insira informações pessoais de clientes, senhas, códigos ou dados bancários.
         </p>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {success && <p role="status" className="text-sm">{success}</p>}
         <button type="submit" disabled={!canSubmit}
           className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
