@@ -1,3 +1,4 @@
+import { leadIdsByCpf } from '@/lib/leads/cpf';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
@@ -74,6 +75,9 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
       { email: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search } },
     ];
+    // A CPF typed in the search finds its lead (by the keyed fingerprint, nothing is decrypted).
+    const byCpf = await leadIdsByCpf(session.tenantId, search);
+    if (byCpf.length) where.OR.push({ id: { in: byCpf } });
   }
   if (basis === 'open') {
     delete where.enteredAt;

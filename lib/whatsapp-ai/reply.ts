@@ -51,6 +51,8 @@ import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
 import { CHAT_STYLE_RULE, cleanChatStyle, replyLengthRule, splitIntoBubbles } from '@/lib/flip-ai/chat-style';
 import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
 import { shouldSendVoice } from './voice-rules';
+import { setLeadCpf } from '@/lib/leads/cpf';
+import { findCpfInText } from '@/lib/leads/cpf-rules';
 import { decideWhatsAppAiAnswer, isTestPhoneNumber, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
@@ -348,6 +350,12 @@ export async function replyToWhatsAppConversation(input: {
   const knownNames = knownFirstNames([conversation.externalContactIdentity.displayName, conversation.lead?.name]);
   for (const message of pending) {
     if (message.text?.trim()) parts.push(message.text.trim());
+    // The customer wrote a valid CPF: it goes to the lead (encrypted) when the lead has none yet.
+    const typedCpf = conversation.leadId ? findCpfInText(message.text) : null;
+    if (typedCpf && conversation.leadId) {
+      await setLeadCpf({ tenantId: input.tenantId, leadId: conversation.leadId, cpf: typedCpf, source: 'chat', onlyIfEmpty: true })
+        .catch(() => undefined);
+    }
     if (message.type === 'audio') {
       const heard = await transcribeWhatsAppVoiceNote({
         tenantId: input.tenantId,
