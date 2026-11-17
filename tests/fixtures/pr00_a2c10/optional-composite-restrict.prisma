@@ -1,0 +1,22 @@
+// A2-C.10: offline Prisma 5.22 compatibility fixture, not production schema.
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model A2C10Parent {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  children A2C10Child[]
+  @@unique([id, tenantId])
+  @@map("a2c10_parent")
+}
+model A2C10Child {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  parentId String? @map("parent_id")
+  parent A2C10Parent? @relation(fields: [parentId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+  @@map("a2c10_child")
+}

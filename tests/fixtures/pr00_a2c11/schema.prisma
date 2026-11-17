@@ -1,0 +1,23 @@
+// PR00 A2-C.11: isolated Prisma Client fixture, not the production schema.
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated-client"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model A2C11Parent {
+  id String @id
+  tenantId String @map("tenant_id")
+  children A2C11Child[]
+  @@unique([id, tenantId])
+  @@map("a2c11_parent")
+}
+model A2C11Child {
+  id String @id
+  tenantId String @map("tenant_id")
+  parentId String? @map("parent_id")
+  parent A2C11Parent? @relation(fields: [parentId, tenantId], references: [id, tenantId], onDelete: SetNull, onUpdate: Restrict)
+  @@map("a2c11_child")
+}

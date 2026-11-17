@@ -178,6 +178,15 @@ jobs:
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
 
+      # A2-C.11: separate synthetic tables; transaction rollback restores local DB.
+      - name: PR00 A2-C.11 Prisma Client synthetic partial-SET-NULL proof
+        env:
+          CI: "true"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx prisma generate --schema tests/fixtures/pr00_a2c11/schema.prisma
+          node --test tests/pr00-a2c11-prisma-client.integration.test.mjs
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
