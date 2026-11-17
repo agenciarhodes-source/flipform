@@ -3,6 +3,7 @@ const nextConfig = {
   // Garante que o Markdown interno acompanhe a rota no deploy standalone/serverless.
   outputFileTracingIncludes: {
     '/suporte-atendimento': ['./docs/suporte-atendimento/*.md'],
+    '/api/suporte-atendimento/knowledge': ['./docs/suporte-atendimento/*.md'],
   },
   images: {
     unoptimized: true,
