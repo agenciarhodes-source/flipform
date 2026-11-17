@@ -23,6 +23,11 @@ export default function LeadsPage() {
   // Filters: a pipeline, then one of its stages ("" = all).
   const [pipelineFilter, setPipelineFilter] = useState('');
   const [stageFilter, setStageFilter] = useState('');
+  // Period by the date the lead came in: all, last 7 or 30 days, or a custom range.
+  const [periodFilter, setPeriodFilter] = useState<'' | '7d' | '30d' | 'custom'>('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const customReady = periodFilter === 'custom' && Boolean(startDate && endDate && startDate <= endDate);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
 
@@ -31,6 +36,12 @@ export default function LeadsPage() {
     if (search) params.set('q', search);
     if (pipelineFilter) params.set('pipelineId', pipelineFilter);
     if (pipelineFilter && stageFilter) params.set('stageId', stageFilter);
+    if (periodFilter === '7d' || periodFilter === '30d') params.set('period', periodFilter);
+    if (customReady) {
+      params.set('period', 'custom');
+      params.set('startDate', startDate);
+      params.set('endDate', endDate);
+    }
     const query = params.toString();
     const [l, p] = await Promise.all([
       fetch(`/api/leads${query ? `?${query}` : ''}`).then((r) => r.json()),
@@ -44,7 +55,12 @@ export default function LeadsPage() {
     const leadId = searchParams.get('leadId');
     if (leadId) setSelectedId(leadId);
   }, [searchParams]);
-  useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t); }, [search, pipelineFilter, stageFilter]);
+  useEffect(() => {
+    // A custom range waits for both dates (an incomplete range keeps the last list).
+    if (periodFilter === 'custom' && !customReady) return;
+    const t = setTimeout(load, 300);
+    return () => clearTimeout(t);
+  }, [search, pipelineFilter, stageFilter, periodFilter, startDate, endDate]);
 
   const filterStages = (pipelines.find((pipeline) => pipeline.id === pipelineFilter)?.stages || [])
     .filter((stage: any) => !stage.isArchived);
@@ -79,6 +95,26 @@ export default function LeadsPage() {
             <option value="">{pipelineFilter ? 'Todas as etapas' : 'Etapa (escolha o pipeline)'}</option>
             {filterStages.map((stage: any) => <option key={stage.id} value={stage.id}>{stage.name}</option>)}
           </select>
+          <select
+            aria-label="Filtrar por período de entrada"
+            value={periodFilter}
+            onChange={(event) => setPeriodFilter(event.target.value as typeof periodFilter)}
+            className="h-10 w-44 rounded-md border bg-background px-3 text-sm"
+          >
+            <option value="">Todo o período</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          {periodFilter === 'custom' && (
+            <span className="flex items-center gap-1">
+              <input type="date" aria-label="Data inicial" value={startDate} max={endDate || undefined}
+                onChange={(event) => setStartDate(event.target.value)} className="h-10 rounded-md border bg-background px-2 text-sm" />
+              <span className="text-xs text-muted-foreground">até</span>
+              <input type="date" aria-label="Data final" value={endDate} min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)} className="h-10 rounded-md border bg-background px-2 text-sm" />
+            </span>
+          )}
           <PortfolioTransferDialog onDone={load} />
           <Button type="button" onClick={() => setManualOpen(true)}><Plus className="w-4 h-4 mr-1" />Novo lead</Button>
           <div className="relative w-72">
