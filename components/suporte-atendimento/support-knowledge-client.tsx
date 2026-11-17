@@ -37,7 +37,7 @@ function inline(text: string) {
   const fragments = text.split(/(https?:\/\/[^\s)]+|\*\*[^*]+\*\*)/g);
   return fragments.map((part, i) => {
     if (/^https?:\/\//.test(part)) {
-      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all underline text-primary">{part}</a>;
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all font-medium text-primary">{part}</a>;
     }
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={i}>{part.slice(2, -2)}</strong>;
