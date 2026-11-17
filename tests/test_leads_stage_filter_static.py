@@ -21,3 +21,14 @@ def test_leads_page_has_pipeline_then_stage_filter():
     assert "setPipelineFilter(event.target.value); setStageFilter('');" in page
     assert "if (pipelineFilter && stageFilter) params.set('stageId', stageFilter);" in page
     assert "disabled={!pipelineFilter}" in page
+
+
+def test_leads_page_has_period_filter():
+    page = read("app/(app)/leads/page.tsx")
+    assert 'aria-label="Filtrar por período de entrada"' in page
+    assert '<option value="7d">Últimos 7 dias</option>' in page
+    assert '<option value="30d">Últimos 30 dias</option>' in page
+    assert '<option value="custom">Personalizado</option>' in page
+    assert "params.set('period', 'custom');" in page
+    route = read("app/api/leads/route.ts")
+    assert "if (!['7d', '30d', 'custom'].includes(period)) {" in route
