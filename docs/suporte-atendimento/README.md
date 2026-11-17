@@ -1,99 +1,55 @@
-# Suporte de Atendimento (piloto Junqueira) — implantação controlada
+# Suporte — conhecimento interno por empresa (PR #614)
 
-## Escopo deste PR
+**Estado:** DRAFT. Sem autorização para merge, deploy, migration, credenciais ou dados reais. Configurações desligadas por padrão.
 
-Nova tela de consulta **somente leitura** em /suporte-atendimento, com pesquisa textual no navegador e índice de seções, alimentada exclusivamente pelo arquivo versionado JUNQUEIRA-BASE-DE-CONHECIMENTO.md.
+## Arquitetura vigente deste PR
 
-A base é distinta do Markdown Mestre/índice do Flip AI. **Nenhuma chamada a OpenAI, TypeSafe/Jev, banco de dados, canais de mensagem ou serviços externos é feita pela consulta do conteúdo.** Não usa dados reais do CRM, não muda Kanban, leads, carteiras, contratos ou permissões gerais.
+**O GitHub não é a base de conhecimento em runtime.** O arquivo no repositório é apenas um exemplo para revisão e futuro upload. Cada tenant envia seu próprio arquivo .md em Configurações → Suporte — Manual da empresa. O arquivo privado fica no R2 e só pode ser recuperado pelo tenant da sessão verificada. Não se recupera Markdown do repositório como fallback.
 
-## Acesso e isolamento
+- Owner/Admin: anexar arquivo .md (até 1 MB) e atualizar sua versão pelo painel; controle de versão, SHA-256, manifesto privado e auditoria.
+- Owner/Admin/Manager/Agent: consultar o próprio manual pelo botão **Suporte** (ícone LifeBuoy laranja) dentro do Inbox e do Direct, ou pela tela interna completa.
+- Viewer: acesso negado. Nenhum membro pode escolher o tenant por nome, slug ou ID no request: o servidor obtém ID de sessão.
+- Arquivo não enviado ou armazenamento indisponível: resposta controlada de indisponibilidade; não inventar respostas e não mostrar conteúdo de outra empresa.
+- Sem mudanças em IA de conversas com clientes, Markdown Mestre do Flip AI, CRM, leads, Ads/Pixel, WhatsApp ou Stripe.
 
-- **Fail closed**: sem SUPPORT_KB_JUNQUEIRA_TENANT_ID configurado, não é possível consultar e o link fica oculto.
-- Configurar em ambiente autorizado apenas depois de identificar e validar o **ID real do tenant Junqueira Advogados**, sem usar slug ou nome editável.
-- Exige sessão verificada e correspondência exata do tenant; perfis autorizados: owner, admin, manager, agent. Viewer fica de fora.
-- Link visível na seção Atendimento da navegação somente ao tenant/papel autorizado e com associação ativa ao tenant.
-- Mesmo conhecendo a URL, usuários de outros tenants recebem 404. A rota permanece dentro do layout autenticado e das verificações de cobrança já existentes.
-- Documento armazenado no **repositório privado**. Não enviar esse arquivo para diretório public nem publicar como página de SEO.
-- **Não** colocar o identificador real do tenant em commits, comentários ou screenshots; configurar somente no ambiente de execução após aprovação.
+## Busca sem IA e JEV opcional
 
-## Passos de homologação e ativação (NÃO executar automaticamente)
+A pesquisa lexical funciona sem IA: normaliza texto, localiza capítulos e extrai trechos diretamente do Markdown aprovado. A resposta exibe título do capítulo para conferência do atendente.
 
-1. Responsável jurídico aprova texto e atualizações legais, especialmente maternidade, BPC, aposentadoria, direitos do consumidor e normas da OAB.
-2. Operação do escritório preenche todos os campos [PREENCHER]/[VALIDAR], critérios de aceite e documentação por fase, mensagens e contratos aprovados.
-3. Segurança revisa a política de acesso e confirma o ID do tenant no ambiente autorizado, sem abrir dados reais ou alterar credenciais neste PR.
-4. Validar CI (npm ci, prisma generate/validate, typecheck, build) e testes de acesso; em build standalone/serverless confirmar arquivo .md presente no bundle.
-5. Validar com identidades de teste: agente Junqueira pode ler; owner/admin/manager podem ler; viewer, usuário sem sessão e outro tenant não podem; sem env ninguém acessa. Checar busca, páginas vazias, temas de documentos, layouts móveis.
-6. Somente após aprovação específica e merge manual, configurar SUPPORT_KB_JUNQUEIRA_TENANT_ID no ambiente autorizado com ID validado e realizar o processo usual de implantação.
-7. Publicar o conteúdo ao time após homologação jurídica e treinamento. Uma atualização do MD exige novo PR e revisão do conteúdo.
+JEV é usado apenas quando explicitamente ativado para classificar a dúvida em uma seção existente. Condições cumulativas: SUPPORT_KB_JEV_ENABLED=true, FLIP_AI_JEV_ENABLED=true, FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true e tenant permitido em FLIP_AI_JEV_TENANT_IDS. Se estiver desligado, falhar ou não encontrar capítulo, usar busca local.
 
-## Atualização do manual
+JEV não cria conhecimento, não consulta a internet, não redige respostas jurídicas e não recebe automaticamente conversa, documentos ou dados pessoais do cliente. Só a pergunta curta minimizada e títulos de seções são candidatos a serem enviados, após aprovação de privacidade. Nenhuma resposta é enviada automaticamente ao lead.
 
-- Caminho único: docs/suporte-atendimento/JUNQUEIRA-BASE-DE-CONHECIMENTO.md.
-- Evitar PII ou qualquer material de casos reais no repositório.
-- Revisões devem registrar data, responsável e referência oficial.
-- Não alterar Markdown Mestre do Flip AI nem indexar o manual automaticamente para a IA externa.
-- Qualquer futura edição pelo próprio painel, upload por gestor ou suporte para múltiplos tenants será **outra proposta**, exigindo autenticação, trilha de auditoria e armazenamento isolado por tenant.
+## Configuração e armazenamento
 
-## Limites conhecidos
+- SUPPORT_KB_GLOBAL_ENABLED=false por padrão. Sem ativação, nem botão nem API de consulta funcionam.
+- Reutiliza bucket R2 privado do FlipForm (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ATTACHMENTS_BUCKET).
+- Prefixos independentes por tenant, versões imutáveis e manifesto por empresa. AuditLog registra troca de revisão.
+- Sem migração no banco; não executar qualquer operação em produção neste PR.
+- O manual Junqueira em docs/suporte-atendimento/JUNQUEIRA-BASE-DE-CONHECIMENTO.md é material de preparação a ser **anexado no painel** após homologação, não fonte automática do sistema.
 
-- Primeira versão oferece **pesquisa textual**, não um chatbot gerador de respostas.
-- O conteúdo é um rascunho inicial com campos institucionais e procedimentos que dependem do escritório.
-- Ainda **não** é configurável/editar pelo painel; mudanças dependem de revisão/PR do arquivo MD.
-- A página fica deliberadamente invisível/inacessível até ativação explícita.
-- Sem migrações, sem mudança de cobrança e sem publicação automática.
+## Conteúdo do piloto Junqueira
 
+O manual registra Previdenciário, Consumidor, roteiro de campo Trabalhista dos 13 prints, fluxo do atendimento, perguntas, documentos, fontes e alertas. As informações oficiais de telefone, WhatsApp, e-mail, horário geral, sete unidades, endereços, contatos e equipe foram extraídas em 17/11/2026 de:
+- https://junqueiraadvogados.com/
+- https://junqueiraadvogados.com/contato
+- https://junqueiraadvogados.com/unidades
+- https://junqueiraadvogados.com/equipe
+- https://junqueiraadvogados.com/escritorio
+- https://junqueiraadvogados.com/areas-de-atuacao
 
-## Revisão da experiência — painel lateral Dúvidas (17/11/2026)
+Não tratar como informação confirmada: honorários, SLA interno, responsável pela distribuição, roteiro aprovado de assinatura/contrato, agenda da unidade e documentação obrigatória por fase. O site atual indica 15+ anos e página antiga indica 8 anos; texto de experiência exige revisão. O contato de Araioses publicado como (98) 7006-0896 requer confirmação operacional.
 
-- A consulta também está disponível como **balão flutuante "Dúvidas"** em Inbox e Direct para o tenant piloto autorizado (sem entrar na tela separada).
-- Abre painel lateral inspirado em suporte contextual e mantém a conversa atrás, sem envio automático ao cliente.
-- O funcionário escreve uma pergunta e recebe **trechos recuperados do Markdown**, com título da seção como fonte.
-- A recuperação atual é **extrativa, local e determinística**: não há geração de novo parecer ou ligação com JEV, OpenAI ou dados da conversa do cliente. Se não encontra fonte suficientemente próxima, informa indisponibilidade e remete à supervisão.
-- Link do manual no menu permanece como alternativa de leitura integral.
-- A API privada do manual verifica sessão atual, permissionamento e o ID exato de tenant antes de ler/devolver o MD. Arquivo versionado e cache no-store.
-- Corrigido o teste visual que falhou no CI inicial: link sublinhado na linha 40 do componente de leitura, detectado por tests/test_action_links_as_buttons_static.py. Revalidar a CI no **HEAD atual** do PR.
+**Atenção:** os prints antigos listam “Senha GOV” como obrigatória, mas é proibido exigir ou guardar senha ou código de autenticação de clientes. As promessas de resultado/prazo e práticas de captação e indicação precisam passar por revisão jurídica e ética antes de serem publicadas como script operacional.
 
-### Configuração global solicitada — pendente de implementação
+## Gates pendentes para ativação
 
-O desejo de anexar/atualizar MD **pelo painel do tenant** e usar JEV para roteamento semântico foi documentado, mas **não faz parte das funcionalidades operacionais deste PR ainda**. A próxima implementação deve:
-1. Criar configuração global de produto com documentos **isolados por tenant**, revisão imutável, hash, auditoria e revisão/aprovação antes da publicação.
-2. Oferecer upload de .md com validação de tamanho, MIME, formato, idempotência e permissões (owner/admin), além de rollback.
-3. Entregar acesso somente-leitura a atendentes autorizados e observabilidade de decisões, custo e falhas.
-4. JEV opcional somente após revisão formal de privacidade/retention e aprovação do tenant. Pergunta mínima redigida, sem conversa do cliente nem documentos; JEV escolhe classificação/seção, recuperação no servidor usa apenas conteúdo aprovado, fallback local sem IA.
-5. Nunca compartilhar conteúdo entre empresas, nunca atualizar automaticamente o cérebro do Flip AI, nunca mover lead ou enviar mensagem ao cliente.
+- [ ] CI, Smoke, E2E, Semgrep e Gitleaks verdes no HEAD final (o Gitleaks detectou um finding; NÃO ignorar sem análise do relatório SARIF).
+- [ ] Revisar persistência no R2, isolamento entre tenants, permissões, versões, logs, rollback, concorrência, privacidade e uploads inválidos.
+- [ ] Resolver **falta de compare-and-swap atômico** do manifesto R2 em uploads simultâneos; pode ocorrer perda de atualização na versão atual.
+- [ ] Testar com identidades fictícias de duas empresas e diferentes papéis, sem ler dados de produção.
+- [ ] Aprovar o conteúdo juridicamente, políticas internas e práticas de contato/captação.
+- [ ] Validar gastos e aprovação de tratamento de dados antes de habilitar JEV.
+- [ ] Obter autorização humana específica para merge, deploy e ativação das flags.
 
-**Referência para complementar o manual:** https://junqueira-campo.netlify.app/trabalhista . URL fornecida pelo usuário, porém a extração automática não foi possível: não afirmar que os roteiros dessa página foram importados. Se houver exportação HTML/PDF/MD de conteúdos adicionais do site, comparar com as 13 capturas já transcritas e incorporar com controle de origem.
-
-## Configuração global implementada no PR — pendente de homologação
-
-- Flags desligadas por padrão: SUPPORT_KB_GLOBAL_ENABLED=false e SUPPORT_KB_JEV_ENABLED=false.
-- Configurações → Manual de suporte de atendimento: owner/admin podem anexar .md até 1 MB; armazenamento privado R2 isolado por tenant, versões imutáveis, hash SHA-256, manifesto da revisão atual e log de auditoria.
-- Consultas read-only no balão Dúvidas do Inbox/Direct ou tela completa, para owner/admin/manager/agent; nunca viewer. Sem arquivo cadastrado, consulta não inventa resposta.
-- Sem migration ou alteração de CRM, WhatsApp, leads ou Markdown Mestre do Flip AI.
-- Sem R2 configurado, upload informa falha e não finge persistência. A base GitHub é fallback exclusivo do piloto Junqueira autorizado.
-- JEV classifica tópico somente quando SUPPORT_KB_JEV_ENABLED=true, FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true, FLIP_AI_JEV_ENABLED=true e tenant está na allowlist FLIP_AI_JEV_TENANT_IDS.
-- JEV não redige orientação jurídica: recebe pergunta curta minimizada e lista de títulos; a resposta textual sempre é trecho do Markdown da empresa, com capítulo-fonte. Sem permissão/erro/timeout, há recuperação local.
-- Não enviar automaticamente conversa, CPF, extratos nem arquivos para JEV; nunca enviar resposta ao cliente pelo painel.
-- Limites conhecidos para revisão antes da ativação: validação de upload e MIME, política de concorrência de manifesto R2 (sem CAS atômico nesta versão), disponibilidade e configuração de bucket, controles de custo, limites de consulta, trilha de auditoria, e teste de acesso entre tenants.
-- Confirmar todas as teses e roteiros com o escritório. O conteúdo da URL Netlify informada não foi extraído, por indisponibilidade da página para as ferramentas.
-
-### Gates de liberação
-
-- [ ] Typecheck, testes Python, teste de permissões, Playwright e build verde no HEAD final.
-- [ ] Dono e advogado aprovam conteúdo e rotina de atualização/rollback.
-- [ ] Revisão de segurança de R2, acesso por tenant, concorrência e versionamento.
-- [ ] Homologação com identidades e conteúdo inteiramente fictícios.
-- [ ] JEV somente após aprovação formal de privacidade/retention e custo.
-- [ ] Merge, deploy e flags apenas por autorização humana específica.
-
-
-## Atualização documental: screenshots do manual de campo
-
-- Em 17/11/2026 foram recebidas **13 capturas de tela** do manual trabalhista de campo do escritório. O conteúdo visual foi incorporado na íntegra do que é legível como **seção 36** da base principal, preservando o fluxo de perfil, abordagem, qualificação, apresentação, objeções, documentos e pós-atendimento.
-- **Seção 37** contém validações jurídicas/éticas e scripts operacionais alternativos, claramente separados da transcrição dos prints. Isso evita que o classificador e a busca tratem como regra vigente as frases que exigem homologação.
-- A lista original tem **nove itens obrigatórios** e inclui *Senha GOV*. Este item **não é permitido** no fluxo operacional: conta e senha são pessoais; em nenhuma hipótese pedir/capturar/armazenar credencial. O item aparece exclusivamente como registro de divergência do material original.
-- A referência ao prazo de dois anos não deve ser convertida em recusa automática: a prescrição trabalhista e os pedidos possíveis dependem da avaliação do advogado.
-- As frases sobre honorários, prazo de 8 meses a 1 ano, retorno em 48 horas, histórico de atuação, casos de sucesso e metas de indicações precisam de validação da direção jurídica e da conformidade com a OAB.
-- As screenshots não autorizam abordar indiscriminadamente pessoas em feiras, comércio ou bairros, nem solicitação de contatos de terceiros sem consentimento.
-- **UI:** rótulo final do botão/painel/menu **Suporte**, ícone **LifeBuoy** (boia) e destaque **laranja**. A URL técnica /suporte-atendimento permanece por compatibilidade.
-- O PR deve continuar como draft até que todos os checks, inclusive **Security / Secret scan (Gitleaks)**, estejam verdes.
+**Não fazer merge nem deploy automaticamente.**
