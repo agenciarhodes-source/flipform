@@ -15,7 +15,7 @@ export default async function DirectPage() {
 
   return (
     <InboxClient
-      supportKnowledgeEnabled={canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID)}
+      supportKnowledgeEnabled={canReadJunqueiraSupportKnowledge(session, process.env.SUPPORT_KB_JUNQUEIRA_TENANT_ID, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')}
       channel="instagram"
       canManage={can(session.role, 'INBOX_MANAGE')}
       canAssign={['owner', 'admin', 'manager'].includes(session.role)}
