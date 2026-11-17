@@ -51,7 +51,7 @@ import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
 import { CHAT_STYLE_RULE, cleanChatStyle, replyLengthRule, splitIntoBubbles } from '@/lib/flip-ai/chat-style';
 import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
 import { shouldSendVoice } from './voice-rules';
-import { decideWhatsAppAiAnswer, isTestPhoneNumber, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, explicitNameFromMessage, isTestPhoneNumber, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -652,7 +652,7 @@ export async function replyToWhatsAppConversation(input: {
       runtime,
       classification: parsed.qualification?.classification,
       // The model may read "Simmm" as a name: only something that can be a name is kept.
-      preferredName: alignNameSpelling(plausibleName(parsed.identity?.name) || nameInAnswer, knownNames),
+      preferredName: alignNameSpelling(nameInAnswer || explicitNameFromMessage(turnText), knownNames),
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,
