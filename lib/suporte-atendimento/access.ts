@@ -8,9 +8,11 @@ export const SUPPORT_KNOWLEDGE_ROLES = ['owner', 'admin', 'manager', 'agent'] as
 export function canReadJunqueiraSupportKnowledge(
   session: { tenantId?: string | null; role?: string | null } | null,
   allowedTenantId: string | undefined,
+  globalEnabled = false,
 ): boolean {
-  if (!session?.tenantId || !allowedTenantId) return false;
-  const expected = allowedTenantId.trim();
-  if (!expected || session.tenantId !== expected) return false;
-  return SUPPORT_KNOWLEDGE_ROLES.some((role) => role === session.role);
+  if (!session?.tenantId) return false;
+  if (!SUPPORT_KNOWLEDGE_ROLES.some((role) => role === session.role)) return false;
+  if (globalEnabled) return true;
+  const expected = allowedTenantId?.trim();
+  return Boolean(expected && session.tenantId === expected);
 }
