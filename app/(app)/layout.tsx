@@ -4,6 +4,7 @@ import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
 import { canReadTenantSupportKnowledge } from "@/lib/suporte-atendimento/access";
+import { isTenantSupportActive } from "@/lib/suporte-atendimento/tenant-knowledge";
 import { requireBillingAccess } from "@/lib/billing-access";
 import { getBusinessGroupAccessesForUser } from "@/lib/business-groups";
 import { INBOX_PLAN_HOME, inboxPlanAllowsPath, isInboxOnlyPlan } from "@/lib/billing/inbox-plan-rules";
@@ -67,7 +68,8 @@ export default async function AppGroupLayout({
   }
 
   const supportKnowledgeEnabled = Boolean(currentTenantMembership) &&
-    canReadTenantSupportKnowledge(session);
+    canReadTenantSupportKnowledge(session) &&
+    await isTenantSupportActive(session.tenantId);
 
   return (
     <AppShell
