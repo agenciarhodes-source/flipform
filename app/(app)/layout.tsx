@@ -67,7 +67,7 @@ export default async function AppGroupLayout({
   }
 
   const supportKnowledgeEnabled = Boolean(currentTenantMembership) &&
-    canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true');
+    canReadTenantSupportKnowledge(session);
 
   return (
     <AppShell
