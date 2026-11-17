@@ -1,5 +1,5 @@
 import 'server-only';
-import { readTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
+import { readTenantSupportKnowledge, isTenantSupportActive } from '@/lib/suporte-atendimento/tenant-knowledge';
 import { notFound, redirect } from 'next/navigation';
 import { getVerifiedSession } from '@/lib/auth';
 import { canReadTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
@@ -17,7 +17,7 @@ export default async function SupportKnowledgePage() {
   if (!session) redirect('/login');
 
   // Consulta operacional é exclusiva do Atendente e seu próprio tenant.
-  if (!canReadTenantSupportKnowledge(session)) {
+  if (!canReadTenantSupportKnowledge(session) || !(await isTenantSupportActive(session.tenantId))) {
     notFound();
   }
 
