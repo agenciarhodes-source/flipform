@@ -1,25 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canReadJunqueiraSupportKnowledge } from '../lib/suporte-atendimento/access';
+import { canReadTenantSupportKnowledge } from '../lib/suporte-atendimento/access';
 
-const tenant = 'tenant-piloto-junqueira';
 for (const role of ['owner', 'admin', 'manager', 'agent']) {
-  test('autoriza papel interno '+role+' no tenant exato', () => {
-    assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role }, tenant), true);
+  test('papel interno '+role+' pode consultar próprio tenant com suporte habilitado', () => {
+    assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role }, true), true);
   });
 }
-test('nega outro tenant, mesmo com papel de dono', () => {
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: 'outro', role: 'owner' }, tenant), false);
+test('nega visualizador e acesso sem sessão/tenant', () => {
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'viewer' }, true), false);
+  assert.equal(canReadTenantSupportKnowledge(null, true), false);
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: '', role: 'owner' }, true), false);
 });
-test('nega visualizador e sessão inválida', () => {
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'viewer' }, tenant), false);
-  assert.equal(canReadJunqueiraSupportKnowledge(null, tenant), false);
+test('nega acesso quando flag global está desligada', () => {
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), false);
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }, false), false);
 });
-test('global libera por papel e tenant próprio, sem depender do piloto', () => {
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: 'empresa-b', role: 'agent' }, undefined, true), true);
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: 'empresa-b', role: 'viewer' }, undefined, true), false);
-});
-test('nega configuração ausente e não permite wildcard', () => {
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'agent' }, undefined), false);
-  assert.equal(canReadJunqueiraSupportKnowledge({ tenantId: tenant, role: 'agent' }, '*'), false);
+test('suporte genérico: nomes de empresas não são allowlist', () => {
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'empresa-b', role: 'agent' }, true), true);
 });
