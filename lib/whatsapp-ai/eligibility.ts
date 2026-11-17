@@ -114,7 +114,7 @@ const NAME_PREFERENCE = /\b(?:prefiro(?:\s+que\s+(?:me\s+)?chame\s+de)?|(?:pode\
 const EXPLICIT_NAME = /^\s*(?:meu\s+nome\s+(?:é|e)|me\s+chamo|(?:pode\s+)?me\s+cham(?:ar|a|e)\s+de)\s+([\p{L}\p{M}' -]{2,48})\s*[.!]?\s*$/iu;
 
 const YES_REPLIES = new Set([
-  'sim', 's', 'c', 'si', 'yes', 'yeah', 'yep', 'yup', 'sure', 'claro', 'isso', 'isso mesmo',
+  'sim', 's', 'c', 'si', 'yes', 'yeah', 'yep', 'yup', 'sure', 'claro', 'isso', 'isso mesmo', 'iso', 'iso mesmo',
   'pode', 'pode sim', 'pode ser', 'pode chamar', 'pode chamar sim', 'pode me chamar',
   'pode me chamar assim', 'claro pode sim', 'ok', 'certo', 'com certeza', 'aham', 'uhum',
   'exato', 'positivo', 'confirmo', 'beleza', 'blz', 'tudo bem', 'ta', 'ta bom',
@@ -142,7 +142,7 @@ export function isAffirmation(value: string | null | undefined) {
 export function plausibleName(value: string | null | undefined) {
   const name = (value || '').trim();
   if (!/^[\p{L}\p{M}][\p{L}\p{M}' -]{1,50}$/u.test(name)) return null;
-  if (name.split(/\s+/).length > 4 || NOT_NAMES.has(normalizedReply(name))) return null;
+  if (name.split(/\s+/).length > 4 || /(\p{L})\1\1/iu.test(name) || NOT_NAMES.has(normalizedReply(name))) return null;
   if (/^(?:eu|quero|preciso|meu|pode|vou|tenho|sou)\s/i.test(name)) return null;
   return name;
 }
