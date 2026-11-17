@@ -39,6 +39,6 @@ test('reconhece quando a IA já perguntou o nome', () => {
 
 test('cadastro com nome que não é claro: a IA não passa a usar esse nome sozinha', () => {
   assert.deepEqual(registrationNameState({ registeredName: 'Rf', preferredName: null, aiRepliesSoFar: 2 }).knownName, null);
-  assert.equal(registrationNameState({ registeredName: 'LUIZA BEATRIZ', preferredName: null, aiRepliesSoFar: 2 }).knownName, 'Luiza');
+  assert.equal(registrationNameState({ registeredName: 'LUIZA BEATRIZ', preferredName: null, aiRepliesSoFar: 2 }).knownName, null);
   assert.equal(registrationNameState({ registeredName: 'Rf', preferredName: 'Rafaela', aiRepliesSoFar: 2 }).knownName, 'Rafaela');
 });
