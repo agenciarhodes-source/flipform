@@ -1,0 +1,94 @@
+name: PR 00 A2-C2 - Prisma SQL Offline Review
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/pr00-a2c2-sql-offline.yml'
+      - 'scripts/pr00_a2c2_audit_sql.py'
+      - 'tests/test_pr00_a2c2_sql_audit.py'
+      - 'docs/pr00-a2c2-sql-review.md'
+      - 'vercel.json'
+
+permissions:
+  contents: read
+
+jobs:
+  sql-offline-review:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/pr00-a2c2-prisma-sql-offline-20261117'
+    name: Prisma 5.22 SQL offline and destructive-operation audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      # This loopback endpoint is intentionally unusable. No Neon connection.
+      DATABASE_URL: postgresql://pr00_offline:no_connection@127.0.0.1:1/never_connect
+      DIRECT_URL: postgresql://pr00_offline:no_connection@127.0.0.1:1/never_connect
+
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Verify exact schema, CLI pins, offline URLs and Vercel block
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object prisma/schema.prisma)" = "1b82864d1034c41694ac349bc7cfdd8f42e81973"
+          node -e "const p=require('./package.json');if(p.dependencies.prisma!=='5.22.0'||p.dependencies['@prisma/client']!=='5.22.0'||p.scripts.postinstall!=='prisma generate')process.exit(1)"
+          python3 -c "import json; c=json.load(open('vercel.json')); assert c['git']['deploymentEnabled']['audit/pr00-a2c2-prisma-sql-offline-20261117'] is False; assert 'crons' not in c"
+          python3 -c "import os; assert os.environ['DATABASE_URL'].endswith('@127.0.0.1:1/never_connect'); assert os.environ['DIRECT_URL'].endswith('@127.0.0.1:1/never_connect')"
+          test ! -e .env
+          test ! -e .env.local
+          test ! -e .env.production
+
+      - name: Prepare artifact directory and test auditor fail-closed logic
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pr00-sql-review
+          python3 -m unittest discover -s tests -p 'test_pr00_a2c2_sql_audit.py' -v
+
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install exact project dependency versions
+        run: npm ci
+
+      - name: Validate Prisma schema offline
+        run: ./node_modules/.bin/prisma validate --schema prisma/schema.prisma
+
+      - name: Generate SQL from empty datamodel without contacting a database
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./node_modules/.bin/prisma migrate diff \
+            --from-empty \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script \
+            --output pr00-sql-review/prisma-schema-from-empty.sql
+          test -s pr00-sql-review/prisma-schema-from-empty.sql
+
+      - name: Offline SQL audit - reject unexpected/destructive operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/pr00_a2c2_audit_sql.py \
+            --sql pr00-sql-review/prisma-schema-from-empty.sql \
+            --schema prisma/schema.prisma \
+            --report pr00-sql-review/audit-report.json
+          sha256sum pr00-sql-review/prisma-schema-from-empty.sql > pr00-sql-review/prisma-schema-from-empty.sha256
+          git rev-parse HEAD > pr00-sql-review/source-commit.txt
+
+      - name: Upload generated SQL and audit report for manual review only
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pr00-a2c2-prisma-sql-offline-review
+          path: pr00-sql-review/
+          if-no-files-found: warn
+          retention-days: 14
