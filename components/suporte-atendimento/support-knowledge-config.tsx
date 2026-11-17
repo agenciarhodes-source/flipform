@@ -96,7 +96,7 @@ export function SupportKnowledgeConfig() {
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!current || saving) return;
+    if (!current || saving || switching) return;
     setError(''); setSuccess('');
     const bodyFile = file || (editorVisible && markdown.trim().length >= 50
       ? new File([markdown], 'suporte-empresa.md', { type: 'text/markdown' }) : null);
@@ -119,7 +119,7 @@ export function SupportKnowledgeConfig() {
     } finally { setSaving(false); }
   };
 
-  const canSubmit = Boolean(current && !loading && !saving && (
+  const canSubmit = Boolean(current && !loading && !saving && !switching && (
     file && file.size > 0 && file.size <= MAX_BYTES ||
     editorVisible && markdown.trim().length >= 50 && new Blob([markdown]).size <= MAX_BYTES
   ));
@@ -164,9 +164,9 @@ export function SupportKnowledgeConfig() {
           Cada empresa controla seu próprio estado. Desligar não exclui o arquivo nem muda as configurações do JEV.
         </p>
         {switching && <p role="status" className="mt-2 text-xs text-muted-foreground">Salvando o estado...</p>}
-        {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
-        {success && <p role="status" className="mt-2 text-sm">{success}</p>}
       </section>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {success && <p role="status" className="text-sm">{success}</p>}
 
       <div className="space-y-2 rounded-lg border p-4 text-sm">
         {loading ? <p className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando configuração...</p>
@@ -215,8 +215,6 @@ export function SupportKnowledgeConfig() {
           Limite: 1 MB por manual. Revise o conteúdo com o responsável antes de publicar.
           Não insira informações pessoais de clientes, senhas, códigos ou dados bancários.
         </p>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {success && <p role="status" className="text-sm">{success}</p>}
         <button type="submit" disabled={!canSubmit}
           className="flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
