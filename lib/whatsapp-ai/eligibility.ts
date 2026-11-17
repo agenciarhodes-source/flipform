@@ -108,51 +108,75 @@ export function withWhatsAppSourceLinks(text: string, _sources: Array<{ url: str
 
 /** WhatsApp marks bold with one asterisk; models often write Markdown with two. */
 const NAME_PREFIXES = /^(?:(?:pode\s+)?me\s+chamar\s+de|me\s+chamo|meu\s+nome\s+(?:é|e)|(?:eu\s+)?sou(?:\s+(?:o|a))?|é|e)\s+/i;
-const YES = /^(?:sim|pode|pode\s+sim|pode\s+ser|claro|isso|ok|certo|com\s+certeza)\b/i;
-const NOT_A_NAME = /^(?:sim|não|nao|ok|obrigad[oa]|bom\s+dia|boa\s+tarde|boa\s+noite|oi|olá|ola)$/i;
-/** Affirmations and small talk written with repeated letters ("Simmm", "okkk", "issoo"), compared squashed. */
-const SQUASHED_YES = /^(?:sim|s|pode|pode\s+sim|pode\s+ser|claro|iso|ok|certo|com\s+certeza|aham|uhum|exato|positivo|beleza|blz|tudo\s+bem)$/;
-const SQUASHED_NOT_A_NAME = /^(?:sim|s|n|nao|não|ok|pode|pode\s+sim|pode\s+ser|claro|iso|certo|com\s+certeza|aham|uhum|exato|positivo|beleza|blz|tudo\s+bem|obrigad[oa]|vlw|valeu|bom\s+dia|boa\s+tarde|boa\s+noite|oi|ola|olá|hum|ah|eita|k|rs)$/;
+const NAME_QUESTION = /cham(?:ad[oa]|ar)|seu nome|como (?:posso|devo)/i;
+const OFFERED_NAME = /\bposso\s+(?:te|lhe)\s+chamar\s+de\s+([\p{L}\p{M}'-]{2,40})\s*\?/iu;
+const NAME_PREFERENCE = /\b(?:prefiro(?:\s+que\s+(?:me\s+)?chame\s+de)?|(?:pode\s+)?(?:me\s+)?cham(?:ar|a|e)\s+de|meu\s+nome\s+(?:é|e)|me\s+chamo)\s+([\p{L}\p{M}' -]{2,48})\s*[.!]?\s*$/iu;
+const EXPLICIT_NAME = /^\s*(?:meu\s+nome\s+(?:é|e)|me\s+chamo|(?:pode\s+)?me\s+cham(?:ar|a|e)\s+de)\s+([\p{L}\p{M}' -]{2,48})\s*[.!]?\s*$/iu;
 
-/** "Simmm!!" -> "sim": lower case, no punctuation, each repeated letter once. */
-function squashWords(value: string) {
-  return value.toLowerCase().replace(/[^\p{L}\s]/gu, ' ').replace(/(\p{L})\1+/gu, '$1').replace(/\s+/g, ' ').trim();
+const YES_REPLIES = new Set([
+  'sim', 's', 'c', 'si', 'yes', 'yeah', 'yep', 'yup', 'sure', 'claro', 'isso', 'isso mesmo',
+  'pode', 'pode sim', 'pode ser', 'pode chamar', 'pode chamar sim', 'pode me chamar',
+  'pode me chamar assim', 'claro pode sim', 'ok', 'certo', 'com certeza', 'aham', 'uhum',
+  'exato', 'positivo', 'confirmo', 'beleza', 'blz', 'tudo bem', 'ta', 'ta bom',
+]);
+const NOT_NAMES = new Set([
+  ...YES_REPLIES, 'n', 'nao', 'no', 'nope', 'negativo', 'prefiro nao',
+  'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'obrigado', 'obrigada', 'valeu', 'vlw',
+  'la ele', 'laele', 'sei la', 'eita', 'oxente', 'kkk', 'rs', 'haha', 'hum', 'ah',
+  'cliente', 'contato', 'loja', 'vendas', 'atendimento', 'mae', 'pai',
+]);
+
+/** Only conversational yes/no words, never arbitrary text. A one-letter "C" is a yes
+ * ONLY when answering an explicit "Posso te chamar de X?" question. */
+function normalizedReply(value: string) {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    .replace(/[-_.]/g, '').replace(/[!?;,'"()]/g, ' ')
+    .replace(/\s+/g, ' ').trim().replace(/(\p{L})\1+/gu, '$1');
 }
-
-/** Whether the whole answer is just a "yes" (any spelling: "sim", "Simmm", "pode sim!"). */
 export function isAffirmation(value: string | null | undefined) {
-  return SQUASHED_YES.test(squashWords(value || ''));
+  return YES_REPLIES.has(normalizedReply(value || ''));
 }
 
-/**
- * A name only when it can be one: "Simmm", "ok", "obrigada" or "bom dia" are never a name.
- * Returns the name trimmed, or null.
- */
+/** Reject confirmations, regional expressions and sentences before storing a preferred name.
+ * This is global for any tenant: no customer-specific vocabulary or company data. */
 export function plausibleName(value: string | null | undefined) {
   const name = (value || '').trim();
-  if (!name || !/\p{L}/u.test(name)) return null;
-  if (SQUASHED_NOT_A_NAME.test(squashWords(name))) return null;
+  if (!/^[\p{L}\p{M}][\p{L}\p{M}' -]{1,50}$/u.test(name)) return null;
+  if (name.split(/\s+/).length > 4 || NOT_NAMES.has(normalizedReply(name))) return null;
+  if (/^(?:eu|quero|preciso|meu|pode|vou|tenho|sou)\s/i.test(name)) return null;
   return name;
 }
-
-/**
- * The name in the customer's answer, when the AI's last message asked how to call them.
- * "Diego", "pode me chamar de Diego", or "sim" to "Posso te chamar de Diego?" (the profile name).
- * Anything that does not look like a short name is ignored.
- */
-export function nameFromReply(question: string | null | undefined, answer: string, profileFirstName: string | null) {
-  if (!question || !/cham(?:ad[oa]|ar)|seu nome|como (?:posso|devo)/i.test(question)) return null;
-  const text = answer.trim().replace(/[.!]+$/, '');
-  // "Sim", "Simmm", "pode sim!": a yes to "Posso te chamar de X?" is X, never a name of its own.
-  if (isAffirmation(text)) return profileFirstName || null;
-  if (YES.test(text) && profileFirstName) {
-    const rest = text.replace(YES, '').replace(/^[,\s]+/, '');
-    if (!rest) return profileFirstName;
-  }
-  const name = text.replace(YES, '').replace(/^[,\s]+/, '').replace(NAME_PREFIXES, '').trim();
-  if (!/^\p{L}[\p{L}\p{M}' -]{1,40}$/u.test(name) || name.split(/\s+/).length > 4 || NOT_A_NAME.test(name)) return null;
-  if (!plausibleName(name)) return null;
+function titleName(name: string) {
   return name.split(/\s+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
+/** Explicit self-introduction, even if the assistant did not ask about the person's name.
+ * Never infer identity from a standalone "sim", an aside or model-generated identity.name. */
+export function explicitNameFromMessage(message: string) {
+  const match = message.trim().match(EXPLICIT_NAME);
+  const candidate = match ? plausibleName(match[1]) : null;
+  return candidate ? titleName(candidate) : null;
+}
+
+/** Interprets the last ACTUAL name question and the customer's answer together.
+ * "ss", "C", "sí" and "yes" confirm the name in that question, not the literal reply.
+ * An open name question ("Como posso te chamar?") has no name to confirm. */
+export function nameFromReply(question: string | null | undefined, answer: string, _profileFirstName: string | null) {
+  if (!question || !NAME_QUESTION.test(question)) return null;
+  const offered = question.match(OFFERED_NAME);
+  const offeredName = offered ? plausibleName(offered[1]) : null;
+  const text = answer.trim().replace(/[.!]+$/, '');
+
+  // A correction takes precedence over a "yes": "sim, mas prefiro Ana".
+  const preferred = text.match(NAME_PREFERENCE);
+  const preferredName = preferred ? plausibleName(preferred[1]) : null;
+  if (preferredName) return titleName(preferredName);
+  if (isAffirmation(text)) return offeredName ? titleName(offeredName) : null;
+  if (['nao', 'n', 'no', 'nope', 'negativo'].includes(normalizedReply(text))) return null;
+
+  const unprefixed = text.replace(/^(?:sim|si|yes|yeah|pode|claro|ok)\b[\s,;]*/i, '').replace(NAME_PREFIXES, '').trim();
+  const candidate = plausibleName(unprefixed);
+  return candidate ? titleName(candidate) : null;
 }
 
 export function toWhatsAppText(text: string) {
