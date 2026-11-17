@@ -123,6 +123,7 @@ const NOT_NAMES = new Set([
   ...YES_REPLIES, 'n', 'nao', 'no', 'nope', 'negativo', 'prefiro nao',
   'oi', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'obrigado', 'obrigada', 'valeu', 'vlw',
   'la ele', 'laele', 'sei la', 'eita', 'oxente', 'kkk', 'rs', 'haha', 'hum', 'ah',
+  'outro', 'outro nome', 'prefiro outro', 'prefiro outro nome', 'qualquer nome', 'tanto faz', 'nao sei', 'sem nome',
   'cliente', 'contato', 'loja', 'vendas', 'atendimento', 'mae', 'pai',
 ]);
 
@@ -158,7 +159,8 @@ export function shouldClarifyName(question: string | null | undefined, answer: s
   if (!question || !OFFERED_NAME.test(question)) return false;
   if (nameFromReply(question, answer, null)) return false;
   const normalized = normalizedReply(answer);
-  return /^(?:nao|no|nope|n|negativo|prefiro nao)(?:\b|$)/.test(normalized)
+  if (normalized === 'nao quero' || normalized.startsWith('nao quero dizer')) return false;
+  return /^(?:nao|no|nope|n|negativo|prefiro nao|prefiro outro)(?:\b|$)/.test(normalized)
     || new Set(['la ele', 'laele', 'sei la', 'eita', 'oxente', 'k', 'rs', 'hum', 'ah']).has(normalized);
 }
 
