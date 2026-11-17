@@ -51,7 +51,7 @@ import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
 import { CHAT_STYLE_RULE, cleanChatStyle, replyLengthRule, splitIntoBubbles } from '@/lib/flip-ai/chat-style';
 import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
 import { shouldSendVoice } from './voice-rules';
-import { decideWhatsAppAiAnswer, explicitNameFromMessage, isTestPhoneNumber, nameFromReply, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, explicitNameFromMessage, isTestPhoneNumber, nameFromReply, shouldClarifyName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -138,6 +138,8 @@ function whatsappInstructions(input: {
   profileName: string | null;
   /** The AI already asked how to call the person and got no name back. */
   nameAsked?: boolean;
+  /** Last reply rejected a proposed name or was an ambiguous regional expression. */
+  nameClarificationNeeded?: boolean;
   /** analyst = triage then the team; closer = up to the close. */
   role?: AttendantRole;
   /** The person came from a company form: said on the first reply. */
@@ -166,7 +168,9 @@ function whatsappInstructions(input: {
       + ' sem repetir o pedido, e respeite o prazo que ele deu (por exemplo: "Combinado! Fico no aguardo.").',
     input.knownName
       ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
-      : input.nameAsked
+      : input.nameClarificationNeeded
+        ? 'NOME: a pessoa não confirmou o nome sugerido. Pergunte uma única vez "Como posso te chamar?" e não assuma nenhum nome. Depois disso, mesmo sem resposta clara, continue sem usar nome e sem repetir a pergunta.'
+        : input.nameAsked
         ? 'NOME: você já perguntou como a pessoa prefere ser chamada e ela ainda não disse. Não pergunte de novo e não use nenhum nome até ela dizer.'
         // Global: "Posso te chamar de X?" only when X is clearly a first name; profile names such as
         // "Rf", "Mãe" or "Loja Bela" get "Como posso te chamar?" (lib/whatsapp-ai/name-clarity.ts).
@@ -546,6 +550,7 @@ export async function replyToWhatsAppConversation(input: {
           : nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
         nameAsked: askedForName(recentOutbound.map((message) => message.text)),
+        nameClarificationNeeded: shouldClarifyName(recentOutbound[0]?.text, turnText),
         role: runtime.attendantRole,
         registrationNote: registration?.fromForm && recentOutbound.length === 0
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
