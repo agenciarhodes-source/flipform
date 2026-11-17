@@ -15,17 +15,3 @@ regexes = [
 paths = [
   '''package-lock\.json''',
 ]
-
-
-# Exceção específica para falso positivo verificado no relatório SARIF do PR #614:
-# o comentário histórico em .env.example lista APENAS NOMES de variáveis R2
-# e não contém valor de credencial. Não desabilita a regra generic-api-key.
-[[rules]]
-id = "generic-api-key"
-
-  [[rules.allowlists]]
-  description = "Nomes públicos das variáveis R2 em comentário do .env.example; nenhum valor de segredo"
-  condition = "AND"
-  regexTarget = "line"
-  paths = [ '''^\.env\.example$''' ]
-  regexes = [ '''^# Requer R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ATTACHMENTS_BUCKET\.$''' ]
