@@ -16,7 +16,7 @@
 
 A pesquisa lexical funciona sem IA: normaliza texto, localiza capítulos e extrai trechos diretamente do Markdown aprovado. A resposta exibe título do capítulo para conferência do atendente.
 
-JEV é usado apenas quando explicitamente ativado para classificar a dúvida em uma seção existente. Condições cumulativas: SUPPORT_KB_JEV_ENABLED=true, FLIP_AI_JEV_ENABLED=true, FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true e tenant permitido em FLIP_AI_JEV_TENANT_IDS. Se estiver desligado, falhar ou não encontrar capítulo, usar busca local.
+JEV é usado apenas quando explicitamente ativado para classificar a dúvida em uma seção existente. Condições cumulativas: SUPPORT_KB_JEV_ENABLED=true, FLIP_AI_JEV_DATA_PROCESSING_APPROVED=true e tenant permitido na allowlist separada SUPPORT_KB_JEV_TENANT_IDS. A flag FLIP_AI_JEV_ENABLED (resposta ao cliente) NÃO é alterada para usar o Suporte. Se estiver desligado, falhar ou não encontrar capítulo, usar busca local.
 
 JEV não cria conhecimento, não consulta a internet, não redige respostas jurídicas e não recebe automaticamente conversa, documentos ou dados pessoais do cliente. Só a pergunta curta minimizada e títulos de seções são candidatos a serem enviados, após aprovação de privacidade. Nenhuma resposta é enviada automaticamente ao lead.
 
