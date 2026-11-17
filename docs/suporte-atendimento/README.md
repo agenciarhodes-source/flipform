@@ -62,7 +62,7 @@ O desejo de anexar/atualizar MD **pelo painel do tenant** e usar JEV para roteam
 4. JEV opcional somente após revisão formal de privacidade/retention e aprovação do tenant. Pergunta mínima redigida, sem conversa do cliente nem documentos; JEV escolhe classificação/seção, recuperação no servidor usa apenas conteúdo aprovado, fallback local sem IA.
 5. Nunca compartilhar conteúdo entre empresas, nunca atualizar automaticamente o cérebro do Flip AI, nunca mover lead ou enviar mensagem ao cliente.
 
-**Referência para complementar o manual:** https://junqueira-campo.netlify.app/trabalhista . URL fornecida pelo usuário, porém a extração automática não foi possível: não afirmar que os roteiros dessa página foram importados. Se houver exportação HTML/PDF/MD do manual, revisar e incorporar em PR posterior com controle de origem.
+**Referência para complementar o manual:** https://junqueira-campo.netlify.app/trabalhista . URL fornecida pelo usuário, porém a extração automática não foi possível: não afirmar que os roteiros dessa página foram importados. Se houver exportação HTML/PDF/MD de conteúdos adicionais do site, comparar com as 13 capturas já transcritas e incorporar com controle de origem.
 
 ## Configuração global implementada no PR — pendente de homologação
 
@@ -85,3 +85,15 @@ O desejo de anexar/atualizar MD **pelo painel do tenant** e usar JEV para roteam
 - [ ] Homologação com identidades e conteúdo inteiramente fictícios.
 - [ ] JEV somente após aprovação formal de privacidade/retention e custo.
 - [ ] Merge, deploy e flags apenas por autorização humana específica.
+
+
+## Atualização documental: screenshots do manual de campo
+
+- Em 17/11/2026 foram recebidas **13 capturas de tela** do manual trabalhista de campo do escritório. O conteúdo visual foi incorporado na íntegra do que é legível como **seção 36** da base principal, preservando o fluxo de perfil, abordagem, qualificação, apresentação, objeções, documentos e pós-atendimento.
+- **Seção 37** contém validações jurídicas/éticas e scripts operacionais alternativos, claramente separados da transcrição dos prints. Isso evita que o classificador e a busca tratem como regra vigente as frases que exigem homologação.
+- A lista original tem **nove itens obrigatórios** e inclui *Senha GOV*. Este item **não é permitido** no fluxo operacional: conta e senha são pessoais; em nenhuma hipótese pedir/capturar/armazenar credencial. O item aparece exclusivamente como registro de divergência do material original.
+- A referência ao prazo de dois anos não deve ser convertida em recusa automática: a prescrição trabalhista e os pedidos possíveis dependem da avaliação do advogado.
+- As frases sobre honorários, prazo de 8 meses a 1 ano, retorno em 48 horas, histórico de atuação, casos de sucesso e metas de indicações precisam de validação da direção jurídica e da conformidade com a OAB.
+- As screenshots não autorizam abordar indiscriminadamente pessoas em feiras, comércio ou bairros, nem solicitação de contatos de terceiros sem consentimento.
+- **UI:** rótulo final do botão/painel/menu **Suporte**, ícone **LifeBuoy** (boia) e destaque **laranja**. A URL técnica /suporte-atendimento permanece por compatibilidade.
+- O PR deve continuar como draft até que todos os checks, inclusive **Security / Secret scan (Gitleaks)**, estejam verdes.
