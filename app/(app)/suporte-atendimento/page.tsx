@@ -8,7 +8,7 @@ import { SupportKnowledgeClient } from '@/components/suporte-atendimento/support
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'Suporte de Atendimento — FlipForm',
+  title: 'Suporte — FlipForm',
   robots: { index: false, follow: false },
 };
 
