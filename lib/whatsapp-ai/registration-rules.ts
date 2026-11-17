@@ -5,13 +5,11 @@
  */
 
 import { clearFirstName } from './name-clarity';
+import { plausibleName } from './eligibility';
 
 /** First name of the registration, written normally ("LUIZA BEATRIZ" -> "Luiza"). */
 export function registrationFirstName(name: string | null | undefined) {
-  const clean = (name || '').replace(/[^\p{L}\p{M}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim();
-  const first = clean.split(' ')[0] || '';
-  if (first.length < 2) return null;
-  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  return clearFirstName(name);
 }
 
 /** Date of the registration in Brasília time, as dd/mm/aaaa. */
@@ -50,9 +48,9 @@ export function registrationNameState(input: {
   aiRepliesSoFar: number;
 }) {
   const first = registrationFirstName(input.registeredName);
-  const preferred = (input.preferredName || '').trim() || null;
+  const preferred = plausibleName(input.preferredName);
   if (preferred) return { knownName: preferred, nameToConfirm: first };
   if (input.aiRepliesSoFar === 0) return { knownName: null, nameToConfirm: first };
-  // Without an answer the registration name is used only when it is clearly a first name ("Rf" is not).
-  return { knownName: clearFirstName(first), nameToConfirm: first };
+  // A suggested registration name is never silently promoted to a confirmed name.
+  return { knownName: null, nameToConfirm: first };
 }
