@@ -9,6 +9,7 @@ import {
   withWhatsAppSourceLinks,
   nameFromReply,
   isAffirmation,
+  shouldClarifyName,
   explicitNameFromMessage,
   plausibleName,
   type WhatsAppAiRuleSettings,
@@ -168,4 +169,15 @@ test('explicit name self-introductions work without trusting model identity fiel
   assert.equal(explicitNameFromMessage('sim'), null);
   assert.equal(explicitNameFromMessage('lá ele'), null);
   assert.equal(explicitNameFromMessage('quero saber se tenho direito'), null);
+});
+
+test('after a refused or regional answer, one open-ended name clarification is appropriate', () => {
+  for (const answer of ['não', 'no', 'prefiro não', 'lá ele', 'la ele', 'kkkk']) {
+    assert.equal(shouldClarifyName('Posso te chamar de Bruna?', answer), true, answer);
+  }
+  for (const answer of ['sim', 'ss', 'C', 'S-I', 'yes', 'sí', 'Ana', 'prefiro Ana']) {
+    assert.equal(shouldClarifyName('Posso te chamar de Bruna?', answer), false, answer);
+  }
+  assert.equal(shouldClarifyName('Como posso te chamar?', 'lá ele'), false);
+  assert.equal(shouldClarifyName('Qual benefício procura?', 'não'), false);
 });
