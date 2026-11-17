@@ -426,3 +426,118 @@
 - Próxima revisão: [PREENCHER]. Aprovado por: [PREENCHER]. Evidência de aprovação: [PREENCHER].
 
 **Lembrete final:** é preferível um atendimento cordial com uma pendência corretamente registrada do que uma conclusão jurídica precipitada.
+
+
+## 28. Informações institucionais públicas verificadas — consulta de 17/11/2026
+
+**Fonte:** https://junqueiraadvogados.com/ . O site institucional informa trajetória superior a 15 anos, 7 unidades presenciais, atuação presencial e digital e origem do escritório em Luzilândia (PI). Prioriza comunicação próxima, técnica, transparente e cuidadosa. Não transformar informações de marketing em garantia de resultado.
+
+**Telefone institucional geral publicado:** (86) 4009-6145. **WhatsApp publicado:** (86) 9 9926-6593. Antes de informar endereço ou telefone ao cliente, confirme com a supervisão se a unidade atende presencialmente naquele dia e se o contato está atualizado.
+
+| Unidade | Endereço publicado | Telefone publicado |
+| --- | --- | --- |
+| Teresina, PI | Av. Jóquei Clube, 299, Edifício EuroBusiness, cobertura, sala 4, Jóquei | (86) 9 9926-6593 |
+| Parnaíba, PI | Rua Tabajara, 535, bairro São Francisco | (86) 9 9920-1896 |
+| Luzilândia, PI | Rua Coronel Hugo de Castro, 412 | (86) 9 9907-9295 |
+| Esperantina, PI | Rua Vereador Ramos, 727, Centro | (86) 9 8864-1132 |
+| Barras, PI | Rua Marechal Pires Ferreira, 484, Centro | (86) 9 8177-0086 |
+| São Bernardo, MA | Rua Barão do Rio Branco, 732 | (98) 9 8443-1955 |
+| Araioses, MA | Rua Vinte e Oito de Julho, s/n, Centro | [CONFIRMAR TELEFONE] |
+
+**Áreas anunciadas na página institucional atual:** previdenciário (pensão por morte, aposentadorias, conferência de CNIS, planejamento, auxílio-acidente, BPC e salário-maternidade) e consumidor (empréstimos não reconhecidos, direito aéreo). Página de catálogo publicada no mesmo domínio também menciona trabalhista, cível e família/sucessões; **não confirmar aceite comercial dessas demandas sem aprovação da direção**, pois a apresentação atual do site principal dá destaque a previdenciário e consumidor.
+
+**Sobre a equipe:** a página institucional consultada apresenta Adônis Ferreira como sócio; o organograma interno completo, advogados responsáveis e escalonamento de cada área permanecem **[VALIDAR]**. Não prometer que determinado advogado conduzirá o caso antes da confirmação.
+
+## 29. Módulo preliminar trabalhista — não extraído do manual Netlify
+
+**Situação da fonte:** o site https://junqueira-campo.netlify.app/trabalhista foi informado como referência do roteiro comercial, mas **não foi possível recuperar seu conteúdo nesta revisão**. Os tópicos a seguir são conteúdo **original de apoio**, baseado em diretrizes públicas gerais, e exigem homologação pelo escritório. Não atribuir qualquer script abaixo ao manual Netlify.
+
+**Quando abrir triagem:** trabalhador relata falta de registro, diferenças salariais, verbas rescisórias, jornada, férias, 13º, FGTS, assédio, acidentes ou término irregular do contrato. Identifique sempre empregador, local, função, datas de admissão/saída e situação atual do vínculo. Pergunte se é empregado, doméstico, rural, terceirizado, prestador autônomo ou atividade por plataforma; rótulo contratual não define automaticamente a realidade.
+
+**Perguntas mínimas:** 
+1. Para qual empresa ou pessoa você trabalhou? Em qual cidade e período?
+2. Qual era sua função, quem orientava o trabalho e como a rotina era organizada?
+3. Tinha carteira assinada, contrato, recibos, MEI, pagamento semanal/quinzenal ou transferências?
+4. Qual era a remuneração real, inclusive comissões, diárias ou adicionais?
+5. Quais eram os dias e horários habituais, intervalo e eventuais horas extras?
+6. Ainda trabalha lá? Se saiu, quando, como e por quê? Recebeu documentos e valores de rescisão?
+7. Quem pode confirmar o que ocorreu e quais mensagens/recibos já possui?
+8. Há audiência, notificação ou prazo em curso? Algum advogado já atua?
+
+**Documentos úteis:** CTPS digital/física (se houver), CNIS, termo de rescisão (TRCT), comprovantes de salário e transferências, holerites, extratos de FGTS, escala/cartões de ponto, mensagens, e-mails, contratos, crachá, uniformes/fotos contextuais, documentos da empresa, comunicação da rescisão, instrumentos sindicais quando pertinentes, atestados/CAT e relatórios de saúde em acidente.
+
+**Cuidados:** não orientar gravação ilícita ou acesso a sistemas alheios; não solicitar gravações e documentos privados de terceiros sem legitimidade. Não inventar testemunhas, jornadas nem valores. Encaminhar imediatamente possível prazo prescricional e riscos de retaliação/violência.
+
+**Fonte geral:** https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/perguntas-frequentes ; https://www.gov.br/pt-br/servicos/realizar-denuncia-trabalhista
+
+## 30. Trabalhista — sem carteira assinada / reconhecimento do vínculo
+
+**Não há descarte automático.** Ausência de CTPS assinada não impede investigar trabalho pessoal, remunerado, habitual/não eventual e subordinado; também não significa que todo serviço informal caracteriza emprego. O advogado examina fatos, exceções e legislação específica.
+
+**Perguntas:** quem determinava horários, tarefas e substituições? Tinha obrigação de comparecer pessoalmente? Recebia ordens e pagamento periódico? Prestava serviços para outros clientes? Emitia notas ou MEI? Qual período? Existem comprovantes de pagamentos, conversas ou testemunhas identificáveis?
+
+**Resposta ao cliente:** “Mesmo sem registro em carteira, podemos organizar como o serviço acontecia de verdade. Os comprovantes e a rotina de trabalho vão ajudar o advogado a analisar a relação.”
+
+**Documentos:** transferências, recibos, mensagens sobre escalas/ordens, registros de ponto, fotos da atividade e identificação de pessoas que presenciaram os fatos. Nunca sugerir produção artificial de prova.
+
+## 31. Trabalhista — demissão, rescisão, seguro-desemprego e FGTS
+
+**Classificar antes de orientar:** pedido de demissão, dispensa sem justa causa, justa causa, acordo, contrato por prazo determinado ou rescisão indireta são cenários diferentes e modificam direitos e documentos. Não explicar multa do FGTS ou seguro-desemprego como universais.
+
+**Perguntas:** modalidade comunicada pelo empregador; data de último dia trabalhado; aviso-prévio trabalhado/indenizado; pagamentos e comprovantes; férias/13º; depósitos de FGTS; entrega das guias; emprego posterior; existência de estabilidade ou afastamento.
+
+**Documentos:** CTPS, contrato, TRCT, comprovante de pagamento das verbas, extrato analítico FGTS, comunicação de dispensa, guias, recibos, mensagens e protocolos.
+
+**Resposta curta:** “Para verificar o que poderia ser devido, precisamos confirmar de que forma o vínculo terminou, as datas e o que foi pago. Cada modalidade tem regras diferentes.”
+
+**Escalar:** prazo iminente, homologação controversa, justa causa, rescisão indireta, estabilidade ou falta de entrega de guias.
+
+**Fonte:** https://www.gov.br/trabalho-e-emprego/pt-br/acesso-a-informacao/acoes-e-programas/programas-projetos-acoes-obras-e-atividades/proteja/duvidas-frequentes
+
+## 32. Trabalhista — jornada, horas extras, intervalo, férias e 13º
+
+**Perguntas:** horário de entrada/saída e dias; pausas efetivas; trabalho aos finais de semana/feriados; controle de ponto; plantões; banco de horas; regime remoto/híbrido; férias gozadas ou pagas; período aquisitivo; 13º recebido e comprovantes.
+
+**Provas:** espelhos de ponto, escala, e-mails e mensagens com horário, recibos, calendário, folha salarial, testemunhas e convenção coletiva quando cabível.
+
+**Cuidado:** nem toda jornada dá direito ao mesmo adicional; regimes de compensação, cargos e categorias têm regras distintas. Não calcular horas nem saldo sem validação.
+
+**Frase:** “Você consegue explicar sua rotina de um dia normal e nos dias em que ficava até mais tarde? Se houver escalas ou registros, podemos avaliar com o advogado.”
+
+## 33. Trabalhista — assédio, discriminação, gestação e acidentes
+
+**Perguntas com acolhimento:** “Se se sentir confortável, poderia explicar o que aconteceu e quando? Há mensagens, registros ou pessoas que presenciaram?” Não colocar a vítima em confronto com agressor. Não obrigar relato gráfico. Em risco atual à integridade física, orientar proteção imediata e canais oficiais.
+
+**Gestação/estabilidade:** verificar data da confirmação da gestação, início/fim do contrato, modalidade de dispensa, comunicações, documentos médicos. **Não prometer reintegração, indenização ou estabilidade sem análise especializada.**
+
+**Acidente/doença do trabalho:** quando e onde ocorreu; atividade exercida; houve CAT? atestado, afastamento, benefício e sequelas? existe vínculo temporal com o trabalho? Escalar também possível repercussão previdenciária.
+
+**Assédio/discriminação:** registrar narrativa factual, datas, locais, comunicações, impacto, eventual testemunha; preservar confidencialidade e acesso mínimo.
+
+**Provas:** documentos do contrato, mensagens, atestados, CAT, boletins e protocolos quando existentes; preservar arquivos originais.
+
+## 34. Trabalhista — perfis especiais e dúvidas frequentes
+
+**“Sou MEI, então não posso ter direito trabalhista?”** — “Ter MEI não encerra sozinho a análise. O advogado precisa entender a prestação real dos serviços, a autonomia e a relação com quem contratou.”
+
+**“Trabalhei na roça sem carteira, é trabalhista ou previdenciário?”** — “Pode exigir avaliação das duas áreas. Vamos identificar empregador, tipo de atividade, datas e provas. O responsável definirá as possibilidades.”
+
+**“Sou diarista ou doméstica.”** — “Precisamos entender frequência, subordinação, empregador e demais condições. Há regras específicas para trabalho doméstico e prestação eventual.”
+
+**“Meu chefe não pagou horas extras.”** — “Vamos levantar a rotina, a forma de controle de horário, pagamentos e documentos antes da análise.”
+
+**“Pedi demissão e quero seguro-desemprego.”** — “O direito ao seguro-desemprego depende, entre outras condições, da forma de encerramento do contrato. O advogado pode conferir seu histórico.”
+
+**“Já se passaram anos da saída.”** — “O decurso do tempo pode afetar a possibilidade de ação. Precisamos das datas imediatamente para a equipe avaliar prazos.”
+
+## 35. Orientação para o futuro módulo JEV — suporte ao HUMANO, não ao lead
+
+**Objetivo proposto (não ativado neste manual):** atendente digita dúvida no balão **Dúvidas** no Inbox/Direct; o classificador JEV, se habilitado e aprovado para o tenant, seleciona o tema e as seções da versão aprovada do Markdown; o sistema recupera os trechos pertinentes e monta uma resposta explicativa citando capítulos e registrando ressalvas. Sem base pertinente: informar “não encontrei” e encaminhar para supervisor. Respostas são destinadas **somente ao funcionário**.
+
+**Privacidade:** nunca enviar automaticamente conversa completa, CPF, documentos, laudos ou mensagens pessoais do cliente ao JEV. Limitar ao texto da dúvida após minimização/redação e aprovação formal do tratamento de dados. Chave sempre backend; logs sem transcrições; controle de custos; isolamento por tenant.
+
+**Governança:** uma base global **por empresa/tenant**, não um único Markdown compartilhado entre empresas. Owner/admin podem anexar e versionar via configuração com trilha de auditoria após implantação específica. Atendentes fazem apenas consultas. Mudanças no manual exigem revisão do responsável.
+
+**Status da implementação deste PR:** a consulta textual local com fonte pode ser implementada sem JEV. Anexar um MD pelo painel, persistir versão por tenant e ativar classificação por JEV dependem de camada adicional de armazenamento e homologação: **não considerar funcionalidades prontas até teste e aprovação**.
+
+**Rodapé de revisão complementar:** conteúdos das seções 28 a 35 redigidos como orientação original em 17/11/2026. O roteiro da URL Netlify *não foi extraído* devido à indisponibilidade de acesso. Revalidar com o escritório antes de publicar.
