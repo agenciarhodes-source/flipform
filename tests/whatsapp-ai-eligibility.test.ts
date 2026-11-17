@@ -172,12 +172,14 @@ test('explicit name self-introductions work without trusting model identity fiel
 });
 
 test('after a refused or regional answer, one open-ended name clarification is appropriate', () => {
-  for (const answer of ['não', 'no', 'prefiro não', 'lá ele', 'la ele', 'kkkk']) {
+  for (const answer of ['não', 'no', 'prefiro não', 'prefiro outro', 'prefiro outro nome', 'lá ele', 'la ele', 'kkkk']) {
     assert.equal(shouldClarifyName('Posso te chamar de Bruna?', answer), true, answer);
   }
   for (const answer of ['sim', 'ss', 'C', 'S-I', 'yes', 'sí', 'Ana', 'prefiro Ana']) {
     assert.equal(shouldClarifyName('Posso te chamar de Bruna?', answer), false, answer);
   }
+  assert.equal(shouldClarifyName('Posso te chamar de Bruna?', 'não quero dizer'), false);
+  assert.equal(nameFromReply('Posso te chamar de Bruna?', 'prefiro outro nome', 'Bruna'), null);
   assert.equal(shouldClarifyName('Como posso te chamar?', 'lá ele'), false);
   assert.equal(shouldClarifyName('Qual benefício procura?', 'não'), false);
 });
