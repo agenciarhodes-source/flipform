@@ -1,5 +1,5 @@
 import 'server-only';
-import { isJevEnabledForTenant } from '@/lib/flip-ai/decision-engine';
+import { parseJevTenantIds } from '@/lib/flip-ai/decision-engine';
 import { sanitizeJevPayload } from '@/lib/flip-ai/jev-privacy';
 
 const JEV_URL = 'https://api.typesafe.ai/v1/systemone';
@@ -10,14 +10,13 @@ export async function classifySupportQuestion(
   headings: string[],
   tenantId: string,
 ): Promise<number | null> {
+  // A ativação do Suporte é independente da IA que conversa com os leads.
+  // A aprovação de privacidade TypeSafe/JEV continua obrigatória.
   if (process.env.SUPPORT_KB_JEV_ENABLED !== 'true' ||
-      process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED !== 'true' ||
-      !isJevEnabledForTenant({
-        tenantId,
-        enabledRaw: process.env.FLIP_AI_JEV_ENABLED,
-        tenantIdsRaw: process.env.FLIP_AI_JEV_TENANT_IDS,
-        premiumPlansRaw: 'false',
-      })) return null;
+      process.env.FLIP_AI_JEV_DATA_PROCESSING_APPROVED !== 'true') return null;
+  const allowlist = parseJevTenantIds(process.env.SUPPORT_KB_JEV_TENANT_IDS);
+  if (!allowlist.configured || !allowlist.valid ||
+      !allowlist.tenantIds.includes(tenantId.trim().toLowerCase())) return null;
   const key = process.env.TYPESAFE_API_KEY;
   if (!key || key.length < 12 || headings.length === 0 || headings.length > 100) return null;
   // Dados reais de clientes nunca devem entrar na pergunta; se o usuário colou
