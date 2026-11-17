@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Search, AlertCircle } from 'lucide-react';
+import { LifeBuoy, Search, AlertCircle } from 'lucide-react';
 
 type Section = { heading: string; body: string; index: number };
 
@@ -103,8 +103,8 @@ export function SupportKnowledgeClient({ markdown }: { markdown: string }) {
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
       <header className="space-y-2">
         <div className="flex items-center gap-3">
-          <BookOpen aria-hidden="true" className="h-7 w-7 text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">Suporte de Atendimento</h1>
+          <LifeBuoy aria-hidden="true" className="h-7 w-7 text-orange-500" />
+          <h1 className="text-2xl font-semibold tracking-tight">Suporte</h1>
         </div>
         <p className="text-sm text-muted-foreground">Base interna do Junqueira Advogados para consulta rápida dos atendentes.</p>
         <p className="flex items-start gap-2 rounded-lg border p-3 text-xs text-muted-foreground">
