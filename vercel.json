@@ -4,7 +4,8 @@
     "deploymentEnabled": {
       "audit/pr00-a2s-isolation": false,
       "audit/pr00-a2c2-prisma-sql-offline-20261117": false,
-      "security/pr00-a2c5-tenant-task-stage-20261117": false
+      "security/pr00-a2c5-tenant-task-stage-20261117": false,
+      "security/pr00-a2c9-multitenant-integrity-lab-20261117": false
     }
   }
 }
