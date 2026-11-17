@@ -8,6 +8,8 @@ import {
   toWhatsAppText,
   withWhatsAppSourceLinks,
   nameFromReply,
+  isAffirmation,
+  explicitNameFromMessage,
   plausibleName,
   type WhatsAppAiRuleSettings,
 } from '../lib/whatsapp-ai/eligibility';
@@ -127,4 +129,43 @@ test('sim, ok ou obrigada nunca viram nome', () => {
   assert.equal(plausibleName('Simone'), 'Simone');
   assert.equal(plausibleName('Isaac'), 'Isaac');
   assert.equal(plausibleName('Valdecir'), 'Valdecir');
+});
+
+
+test('confirmation is contextual, multilingual, and never becomes the name itself', () => {
+  for (const answer of [
+    'sim', 's', 'ss', 'sss', 'C', 'S-I', 'si', 'sí', 'yes', 'yeah', 'yep',
+    'pode', 'pode sim', 'pode chamar', 'claro', 'ok', 'Siiim!!',
+  ]) {
+    assert.equal(isAffirmation(answer), true, answer);
+    assert.equal(nameFromReply('Posso te chamar de Bruna?', answer, 'Bruna'), 'Bruna', answer);
+    assert.equal(nameFromReply('Como posso te chamar?', answer, 'Bruna'), null, answer);
+    assert.equal(plausibleName(answer), null, answer);
+  }
+});
+
+test('last actual name question wins over profile and explicit corrections override yes', () => {
+  assert.equal(nameFromReply('Posso te chamar de Bruna?', 'sim', 'Maria'), 'Bruna');
+  assert.equal(nameFromReply('Posso te chamar de Bruna?', 'sim, mas prefiro Ana', 'Bruna'), 'Ana');
+  assert.equal(nameFromReply('Posso te chamar de Bruna?', 'não', 'Bruna'), null);
+  assert.equal(nameFromReply('Como posso te chamar?', 'Ana', null), 'Ana');
+  assert.equal(nameFromReply('Como posso te chamar?', 'pode me chamar de Maria das Dores', null), 'Maria Das Dores');
+  assert.equal(nameFromReply('Qual benefício você procura?', 'sim', 'Bruna'), null);
+});
+
+test('regional phrases and nonsensical short strings never become names', () => {
+  for (const answer of ['lá ele', 'la ele', 'kkkk', 'yes', 'si', 'sí', 'C', 'ss', 'S-I', 'não', 'eita']) {
+    assert.equal(plausibleName(answer), null, answer);
+    assert.equal(nameFromReply('Como posso te chamar?', answer, null), null, answer);
+  }
+  assert.equal(plausibleName('Bruna'), 'Bruna');
+  assert.equal(plausibleName('Simone'), 'Simone');
+});
+
+test('explicit name self-introductions work without trusting model identity fields', () => {
+  assert.equal(explicitNameFromMessage('Meu nome é Maria'), 'Maria');
+  assert.equal(explicitNameFromMessage('pode me chamar de Ana Paula'), 'Ana Paula');
+  assert.equal(explicitNameFromMessage('sim'), null);
+  assert.equal(explicitNameFromMessage('lá ele'), null);
+  assert.equal(explicitNameFromMessage('quero saber se tenho direito'), null);
 });
