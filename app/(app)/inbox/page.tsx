@@ -14,7 +14,7 @@ export default async function InboxPage() {
 
   return (
     <InboxClient
-      supportKnowledgeEnabled={canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')}
+      supportKnowledgeEnabled={canReadTenantSupportKnowledge(session)}
       canManage={can(session.role, 'INBOX_MANAGE')}
       canAssign={['owner', 'admin', 'manager'].includes(session.role)}
       canSendWhatsApp={can(session.role, 'LEADS_CONTACT_WHATSAPP')}

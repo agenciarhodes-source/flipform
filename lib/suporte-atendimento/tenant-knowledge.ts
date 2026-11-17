@@ -15,7 +15,6 @@ export type SupportKnowledge = {
 };
 
 type Manifest = { version: number; hash: string; key: string; updatedAt: string };
-export const globalSupportUploadEnabled = () => process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true';
 
 function isManifest(value: unknown): value is Manifest {
   if (!value || typeof value !== 'object') return false;
@@ -55,7 +54,6 @@ export async function readTenantSupportKnowledge(tenantId: string): Promise<Supp
   safeTenantId(tenantId);
   // GitHub guarda código/templates; a fonte de conhecimento do produto é EXCLUSIVAMENTE
   // a revisão privada anexada pela empresa. Nunca consultar ou herdar outra empresa.
-  if (!globalSupportUploadEnabled()) return null;
   const storage = resolveAttachmentStorage();
   if (!storage.ready) throw new Error('SUPPORT_STORAGE_NOT_CONFIGURED');
   const current = await manifest(storage.config, tenantId);
@@ -83,7 +81,6 @@ async function writeObject(config: AttachmentStorageConfig, key: string, body: U
 export async function saveTenantSupportKnowledge(input: {
   tenantId: string; userId: string; filename: string; content: string; expectedVersion: number;
 }) {
-  if (!globalSupportUploadEnabled()) throw new Error('SUPPORT_UPLOAD_DISABLED');
   safeTenantId(input.tenantId);
   if (!/\.md$/i.test(input.filename) || input.filename.length > 150) throw new Error('SUPPORT_ONLY_MARKDOWN');
   if (!Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 0) throw new Error('SUPPORT_INVALID_REVISION');

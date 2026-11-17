@@ -16,13 +16,24 @@ export default async function SupportKnowledgePage() {
   const session = await getVerifiedSession();
   if (!session) redirect('/login');
 
-  // Fail closed: sem ID aprovado não há leitura nem descoberta por nome/slug.
-  if (!canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
+  // Consulta operacional é exclusiva do Atendente e seu próprio tenant.
+  if (!canReadTenantSupportKnowledge(session)) {
     notFound();
   }
 
   // Consulta somente a revisão do Markdown anexada pela própria empresa.
-  const knowledge = await readTenantSupportKnowledge(session.tenantId);
-  if (!knowledge) notFound();
-  return <SupportKnowledgeClient markdown={knowledge.content} />;
+  try {
+    const knowledge = await readTenantSupportKnowledge(session.tenantId);
+    if (!knowledge) {
+      return <div className="m-8 rounded-xl border p-6 text-sm">
+        Nenhum manual de Suporte foi publicado para esta empresa.
+        O Proprietário deve cadastrar o arquivo em Configurações → Suporte.
+      </div>;
+    }
+    return <SupportKnowledgeClient markdown={knowledge.content} />;
+  } catch {
+    return <div className="m-8 rounded-xl border p-6 text-sm">
+      Manual temporariamente indisponível. Comunique o Proprietário ou a equipe técnica.
+    </div>;
+  }
 }

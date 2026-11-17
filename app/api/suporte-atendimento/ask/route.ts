@@ -9,7 +9,7 @@ import { classifySupportQuestion } from '@/lib/suporte-atendimento/jev-support-r
 export const dynamic = 'force-dynamic';
 
 export const POST = withPermission('INBOX_VIEW', async (req, session) => {
-  if (!canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')) {
+  if (!canReadTenantSupportKnowledge(session)) {
     return NextResponse.json({ error: 'Indisponível.' }, { status: 404 });
   }
   const limits = await rateLimit({ key: 'support_questions:' + session.tenantId + ':' + session.userId, limit: 30, windowMs: 3_600_000 });

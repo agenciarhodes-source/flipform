@@ -1,16 +1,19 @@
-/** Central de suporte global por tenant. Acesso depende de sessão verificada,
- * perfil interno permitido e habilitação explícita da configuração do produto.
- * O documento é recuperado sempre usando o tenantId da sessão, nunca nome/slug.
+/**
+ * Suporte interno global e privado por empresa.
+ * A configuração é exclusiva de Proprietário; a consulta é exclusiva de Atendente.
+ * O papel técnico "Desenvolvedor" NÃO existe no RBAC atual: qualquer delegação
+ * futura deve ter permissão própria, auditoria e aprovação explícita.
+ * Nunca escolher o manual via tenantId, slug ou nome enviados pelo cliente.
  */
-export const SUPPORT_KNOWLEDGE_ROLES = ['owner', 'admin', 'manager', 'agent'] as const;
+export const SUPPORT_KNOWLEDGE_ROLES = ['agent'] as const;
+export const SUPPORT_CONFIG_ROLES = ['owner'] as const;
 
-export function canReadTenantSupportKnowledge(
-  session: { tenantId?: string | null; role?: string | null } | null,
-  globalEnabled = false,
-): boolean {
-  return Boolean(
-    globalEnabled &&
-    session?.tenantId?.trim() &&
-    SUPPORT_KNOWLEDGE_ROLES.some((role) => role === session.role),
-  );
+type SupportSession = { tenantId?: string | null; role?: string | null };
+
+export function canReadTenantSupportKnowledge(session: SupportSession | null): boolean {
+  return Boolean(session?.tenantId?.trim() && session.role === 'agent');
+}
+
+export function canManageTenantSupportKnowledge(session: SupportSession | null): boolean {
+  return Boolean(session?.tenantId?.trim() && session.role === 'owner');
 }

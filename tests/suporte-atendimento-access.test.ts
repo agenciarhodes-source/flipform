@@ -1,21 +1,36 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canReadTenantSupportKnowledge } from '../lib/suporte-atendimento/access';
+import { canReadTenantSupportKnowledge, canManageTenantSupportKnowledge } from '../lib/suporte-atendimento/access';
+import { inboxPlanAllowsPath } from '../lib/billing/inbox-plan-rules';
 
-for (const role of ['owner', 'admin', 'manager', 'agent']) {
-  test('papel interno '+role+' pode consultar próprio tenant com suporte habilitado', () => {
-    assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role }, true), true);
+test('Proprietário configura o Suporte sem flag de ambiente', () => {
+  assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'owner' }), true);
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'owner' }), false);
+});
+test('Atendente consulta o próprio manual e não altera configuração', () => {
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), true);
+  assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), false);
+});
+for (const role of ['admin', 'manager', 'viewer', 'developer', 'platform_admin']) {
+  test('papel ' + role + ' não gerencia nem consulta sem delegação específica', () => {
+    assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role }), false);
+    assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role }), false);
   });
 }
-test('nega visualizador e acesso sem sessão/tenant', () => {
-  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'viewer' }, true), false);
-  assert.equal(canReadTenantSupportKnowledge(null, true), false);
-  assert.equal(canReadTenantSupportKnowledge({ tenantId: '', role: 'owner' }, true), false);
+test('nega sessão inexistente, tenant vazio e perfis sem contexto', () => {
+  assert.equal(canReadTenantSupportKnowledge(null), false);
+  assert.equal(canManageTenantSupportKnowledge(null), false);
+  assert.equal(canManageTenantSupportKnowledge({ tenantId: '', role: 'owner' }), false);
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: ' ', role: 'agent' }), false);
 });
-test('nega acesso quando flag global está desligada', () => {
-  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), false);
-  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }, false), false);
+test('tenant determina o manual consultado; papel sozinho não escolhe base de outra empresa', () => {
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), true);
+  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-b', role: 'agent' }), true);
+  // A API e a camada R2 usam tenantId da sessão verificada, nunca do formulário.
 });
-test('suporte genérico: nomes de empresas não são allowlist', () => {
-  assert.equal(canReadTenantSupportKnowledge({ tenantId: 'empresa-b', role: 'agent' }, true), true);
+test('plano Inbox permite o painel de configuração do proprietário e leitura de atendente', () => {
+  assert.equal(inboxPlanAllowsPath('/settings/suporte-atendimento'), true);
+  assert.equal(inboxPlanAllowsPath('/suporte-atendimento'), true);
+  assert.equal(inboxPlanAllowsPath('/settings'), false);
+  assert.equal(inboxPlanAllowsPath('/settings/tenant'), false);
 });

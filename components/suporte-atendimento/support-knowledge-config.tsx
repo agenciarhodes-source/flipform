@@ -32,7 +32,7 @@ export function SupportKnowledgeConfig() {
   }, []);
 
   async function getPrivateMarkdown() {
-    const response = await fetch('/api/suporte-atendimento/knowledge', { cache: 'no-store' });
+    const response = await fetch('/api/suporte-atendimento/config?includeContent=1', { cache: 'no-store' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || typeof data.content !== 'string') {
       throw new Error(data.error || 'A revisão atual não está disponível.');
@@ -111,7 +111,7 @@ export function SupportKnowledgeConfig() {
 
       <p className="text-sm text-muted-foreground">
         Anexe um arquivo Markdown ou escreva o conteúdo aqui. O material é privado e separado por empresa.
-        Somente Dono e Administrador podem atualizar; o time autorizado consulta no botão Suporte do Inbox ou Direct.
+        Somente o Proprietário pode configurar e publicar o manual. O Suporte será mostrado apenas para o perfil Atendente no Inbox ou Direct.
         O JEV, quando aprovado e habilitado, apenas identifica os capítulos pertinentes.
       </p>
 

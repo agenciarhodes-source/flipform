@@ -53,3 +53,25 @@ Não tratar como informação confirmada: honorários, SLA interno, responsável
 - [ ] Obter autorização humana específica para merge, deploy e ativação das flags.
 
 **Não fazer merge nem deploy automaticamente.**
+
+
+## PR corretivo: erro 404 e política de acesso (17/11/2026)
+
+**Problema confirmado:** a rota `/settings/suporte-atendimento` executava `notFound()` quando a variável `SUPPORT_KB_GLOBAL_ENABLED` estava ausente ou desligada. O card em Configurações e os endpoints de consulta também estavam condicionados à mesma flag, embora o código estivesse em produção após o PR #614.
+
+**Correção:** a interface e o endpoint de configuração passam a estar disponíveis ao **Proprietário (owner)** sem feature flag, com sessão verificada e controle de tenant. O armazenamento real continua exigindo configuração válida de R2, hash e versões, e o sistema informa erro de configuração em vez de fingir que salvou um manual.
+
+**RBAC obrigatório:**
+
+- `owner`: gerencia e baixa a revisão do próprio tenant pela API de Configurações; **não** tem acesso ao botão operacional do atendente.
+- `agent`: encontra o botão **Suporte** no Inbox/Direct, pesquisa e visualiza apenas o Markdown da empresa associada à sessão; **não** edita nem faz upload.
+- `admin`, `manager` e `viewer`: não gerenciam nem consultam o Suporte na versão atual.
+- `developer`: **não é papel existente no RBAC**. Não habilitar por aproximação a `platform_admin` ou `admin`; futura autorização técnica deve ter regra própria, auditabilidade e revisão da política de acesso entre tenants.
+
+**Edição segura:** o editor e o download do manual fazem `GET /api/suporte-atendimento/config?includeContent=1` autenticado como Proprietário, e não utilizam o endpoint operacional do Atendente. Nenhum endpoint aceita `tenantId` do navegador para escolher outra empresa.
+
+**Plano Inbox:** `/settings/suporte-atendimento` e `/suporte-atendimento` são explicitamente permitidos; a configuração tem link independente no menu para o Proprietário. Outras Configurações continuam bloqueadas no Plano Inbox.
+
+**Estado sem arquivo:** o Atendente verá uma mensagem orientando o Proprietário a cadastrar o manual, não um 404 sem explicação.
+
+**Gates:** CI, Playwright, Semgrep e Gitleaks devem passar no HEAD do PR corretivo; validação de upload real e isolamento no R2 somente com autorização específica e preferencialmente com dados fictícios. **Sem merge/deploy/alteração de produção nesta revisão.**

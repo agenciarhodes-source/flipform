@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server';
 import { withPermission } from '@/lib/rbac-server';
-import { globalSupportUploadEnabled, readTenantSupportKnowledge, saveTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
+import { readTenantSupportKnowledge, saveTenantSupportKnowledge } from '@/lib/suporte-atendimento/tenant-knowledge';
+import { canManageTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
 
 export const dynamic = 'force-dynamic';
 
-export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
-  if (!globalSupportUploadEnabled()) return NextResponse.json({ error: 'Configuração desabilitada.' }, { status: 404 });
-  if (!['owner', 'admin'].includes(session.role)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+export const GET = withPermission('SETTINGS_VIEW', async (req, session) => {
+  if (!canManageTenantSupportKnowledge(session)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
   try {
     const current = await readTenantSupportKnowledge(session.tenantId);
-    return NextResponse.json({ version: current?.version || 0, title: current?.content.split('\n')[0] || null, updatedAt: current?.updatedAt ?? null, source: current?.source || null }, { headers: { 'Cache-Control': 'no-store, private' } });
+    return NextResponse.json({ version: current?.version || 0, title: current?.content.split('\n')[0] || null, updatedAt: current?.updatedAt ?? null, source: current?.source || null, ...(req.nextUrl.searchParams.get('includeContent') === '1' ? { content: current?.content ?? null } : {}) }, { headers: { 'Cache-Control': 'no-store, private', 'X-Robots-Tag': 'noindex, nofollow' } });
   } catch {
     return NextResponse.json({ error: 'Não foi possível consultar a configuração.' }, { status: 503 });
   }
 });
 
 export const POST = withPermission('SETTINGS_VIEW', async (req, session) => {
-  if (!globalSupportUploadEnabled()) return NextResponse.json({ error: 'Configuração desabilitada.' }, { status: 404 });
-  if (!['owner', 'admin'].includes(session.role)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
+  if (!canManageTenantSupportKnowledge(session)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
   try {
     const length = Number(req.headers.get('content-length') || 0);
     if (length > 1_200_000) return NextResponse.json({ error: 'O arquivo ultrapassa 1 MB.' }, { status: 413 });
