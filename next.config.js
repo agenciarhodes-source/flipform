@@ -1,5 +1,9 @@
 const nextConfig = {
   output: 'standalone',
+  // Garante que o Markdown interno acompanhe a rota no deploy standalone/serverless.
+  outputFileTracingIncludes: {
+    '/suporte-atendimento': ['./docs/suporte-atendimento/*.md'],
+  },
   images: {
     unoptimized: true,
   },
@@ -60,7 +64,7 @@ const nextConfig = {
     ].join('; ');
     const STRICT_AREAS = [
       'account', 'automations', 'billing', 'customers', 'dashboard', 'domains', 'flip', 'flip-ai', 'forms',
-      'group', 'inbox', 'kanban', 'leads', 'pipelines', 'reports', 'sales-rotation', 'team', 'users',
+      'group', 'inbox', 'suporte-atendimento', 'kanban', 'leads', 'pipelines', 'reports', 'sales-rotation', 'team', 'users',
       'whatsapp-ai', 'whatsapp-funnel', 'admin',
     ];
     const strictRules = STRICT_AREAS.flatMap((area) => [
