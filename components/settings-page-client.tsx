@@ -241,7 +241,7 @@ export function SettingsPageClient({ initialTenant, role, supportKnowledgeConfig
         </div>
       </Card>
 
-      {supportKnowledgeConfigEnabled && can(role, 'SETTINGS_VIEW') && (
+      {supportKnowledgeConfigEnabled && ['owner', 'admin'].includes(role) && (
         <Card className="p-5 space-y-3">
           <h3 className="font-heading font-semibold">Suporte — Manual da empresa</h3>
           <p className="text-sm text-muted-foreground">Anexe e atualize a base de conhecimento do time. O conteúdo é isolado por empresa e exibido no balão Dúvidas do Inbox e Direct.</p>
