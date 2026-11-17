@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export const GET = withPermission('SETTINGS_VIEW', async (_req, session) => {
   if (!globalSupportUploadEnabled()) return NextResponse.json({ error: 'Configuração desabilitada.' }, { status: 404 });
+  if (!['owner', 'admin'].includes(session.role)) return NextResponse.json({ error: 'Acesso negado.' }, { status: 403 });
   try {
     const current = await readTenantSupportKnowledge(session.tenantId);
     return NextResponse.json({ version: current?.version || 0, title: current?.content.split('\n')[0] || null, updatedAt: current?.updatedAt ?? null, source: current?.source || null }, { headers: { 'Cache-Control': 'no-store, private' } });
