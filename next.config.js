@@ -60,7 +60,7 @@ const nextConfig = {
     ].join('; ');
     const STRICT_AREAS = [
       'account', 'automations', 'billing', 'customers', 'dashboard', 'domains', 'flip', 'flip-ai', 'forms',
-      'group', 'inbox', 'kanban', 'leads', 'pipelines', 'reports', 'sales-rotation', 'team', 'users',
+      'group', 'inbox', 'suporte-atendimento', 'kanban', 'leads', 'pipelines', 'reports', 'sales-rotation', 'team', 'users',
       'whatsapp-ai', 'whatsapp-funnel', 'admin',
     ];
     const strictRules = STRICT_AREAS.flatMap((area) => [

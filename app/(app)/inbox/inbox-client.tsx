@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { whatsappFailureText } from '@/lib/meta/whatsapp-failure-reasons';
+import { DuvidasPanel } from '@/components/suporte-atendimento/duvidas-panel';
 import { StageSuggestionBanner } from '@/components/stage-suggestion-banner';
 import {
   AlertCircle,
@@ -413,6 +414,7 @@ export function InboxClient({
   canSendWhatsApp,
   canSendInstagram,
   currentUserId,
+  supportKnowledgeEnabled = false,
   channel = 'whatsapp',
 }: {
   canManage: boolean;
@@ -420,6 +422,7 @@ export function InboxClient({
   canSendWhatsApp: boolean;
   canSendInstagram: boolean;
   currentUserId: string;
+  supportKnowledgeEnabled?: boolean;
   /** Inbox shows the WhatsApp; Direct shows the Instagram. */
   channel?: InboxChannel;
 }) {
@@ -1252,6 +1255,7 @@ export function InboxClient({
           )}
         </section>
       </div>
+      {supportKnowledgeEnabled && <DuvidasPanel />}
       {contextMenu && (
         <div role="menu" className="fixed z-50 min-w-48 rounded-md border bg-popover p-1 text-sm shadow-md"
           style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>

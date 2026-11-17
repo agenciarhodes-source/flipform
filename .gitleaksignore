@@ -1,0 +1,4 @@
+# Falso positivo histórico verificado: somente nomes de variáveis R2 em comentário
+# .env.example linha 118 no commit indicado, sem valores de credenciais.
+# Escopo: um finding específico, sem desligar scanner, arquivos ou regras.
+279142490aef7d79d92172bbd70034c5e70ed09e:.env.example:generic-api-key:118

@@ -1,5 +1,6 @@
 'use client';
 import { MfaCard } from '@/components/mfa/mfa-card';
+import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
@@ -23,7 +24,7 @@ interface TenantData {
   _count: { tenantUsers: number; leads: number; forms: number; pipelines: number };
 }
 
-export function SettingsPageClient({ initialTenant, role }: { initialTenant: TenantData; role: string }) {
+export function SettingsPageClient({ initialTenant, role, supportKnowledgeConfigEnabled = false }: { initialTenant: TenantData; role: string; supportKnowledgeConfigEnabled?: boolean }) {
   const router = useRouter();
   const canFullEdit = can(role, 'SETTINGS_EDIT');
   const canBrandingEdit = can(role, 'BRANDING_EDIT');
@@ -239,6 +240,14 @@ export function SettingsPageClient({ initialTenant, role }: { initialTenant: Ten
           </Button>
         </div>
       </Card>
+
+      {supportKnowledgeConfigEnabled && ['owner', 'admin'].includes(role) && (
+        <Card className="p-5 space-y-3">
+          <h3 className="font-heading font-semibold">Suporte — Manual da empresa</h3>
+          <p className="text-sm text-muted-foreground">Anexe e atualize a base de conhecimento do time. O conteúdo é isolado por empresa e exibido no balão Dúvidas do Inbox e Direct.</p>
+          <Link href="/settings/suporte-atendimento" className="inline-flex rounded-md border px-3 py-2 text-sm font-medium hover:bg-muted">Gerenciar manual de atendimento</Link>
+        </Card>
+      )}
 
       <MfaCard />
 

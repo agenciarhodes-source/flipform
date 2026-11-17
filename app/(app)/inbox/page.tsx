@@ -4,6 +4,7 @@ import { can } from '@/lib/rbac';
 import { tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { MessagingPlanNotice } from '@/components/billing/messaging-plan-notice';
 import { InboxClient } from './inbox-client';
+import { canReadTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
 
 export default async function InboxPage() {
   const session = await getSession();
@@ -13,6 +14,7 @@ export default async function InboxPage() {
 
   return (
     <InboxClient
+      supportKnowledgeEnabled={canReadTenantSupportKnowledge(session, process.env.SUPPORT_KB_GLOBAL_ENABLED === 'true')}
       canManage={can(session.role, 'INBOX_MANAGE')}
       canAssign={['owner', 'admin', 'manager'].includes(session.role)}
       canSendWhatsApp={can(session.role, 'LEADS_CONTACT_WHATSAPP')}
