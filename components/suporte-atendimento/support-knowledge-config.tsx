@@ -44,11 +44,11 @@ export function SupportKnowledgeConfig() {
 
   return <div className="max-w-3xl space-y-6 p-6">
     <div className="flex items-center gap-3"><LifeBuoy className="h-6 w-6 text-orange-500" /><h1 className="text-2xl font-semibold">Suporte — Manual da empresa</h1></div>
-    <p className="text-sm text-muted-foreground">Uma base de conhecimento interna por empresa. Somente Dono e Administrador podem atualizar o arquivo; o time autorizado consulta no Inbox pelo botão Dúvidas.</p>
+    <p className="text-sm text-muted-foreground">Uma base de conhecimento interna por empresa. Somente Dono e Administrador podem atualizar o arquivo; o time autorizado consulta pelo botão Suporte no Inbox ou Direct.</p>
     <div className="rounded-lg border p-4 text-sm">
       {loading ? <p className="flex gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando...</p> : current ? <>
         <p><strong>Revisão anexada:</strong> {current.version > 0 ? current.version : 'Nenhuma revisão enviada pelo painel'}</p>
-        <p><strong>Origem atual:</strong> {current.source === 'pilot-repository' ? 'Manual piloto versionado no repositório' : current.source === 'tenant-upload' ? 'Arquivo privado da empresa' : 'Sem manual'}</p>
+        <p><strong>Origem atual:</strong> {current.source === 'tenant-upload' ? 'Arquivo privado da empresa' : 'Sem manual cadastrado'}</p>
         {current.title && <p><strong>Identificação:</strong> {current.title}</p>}
         {current.updatedAt && <p><strong>Atualizado:</strong> {new Date(current.updatedAt).toLocaleString('pt-BR')}</p>}
       </> : null}
@@ -61,7 +61,7 @@ export function SupportKnowledgeConfig() {
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {success && <p role="status" className="text-sm">{success}</p>}
       <button type="submit" disabled={!current || !file || saving || !/\.md$/i.test(file?.name || '') || (file?.size || 0) > 1_000_000}
-        className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+        className="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
         {saving ? 'Salvando...' : 'Anexar nova revisão'}
       </button>
