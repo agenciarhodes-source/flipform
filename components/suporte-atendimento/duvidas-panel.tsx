@@ -11,6 +11,8 @@ export function DuvidasPanel() {
   const [error, setError] = useState('');
   const [question, setQuestion] = useState('');
   const [results, setResults] = useState<SupportResult[] | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [answerMode, setAnswerMode] = useState<'manual' | 'jev'>('manual');
 
   useEffect(() => {
     if (!open || manual !== null) return;
@@ -30,10 +32,25 @@ export function DuvidasPanel() {
     return () => controller.abort();
   }, [open, manual]);
 
-  const ask = (event: React.FormEvent<HTMLFormElement>) => {
+  const ask = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!manual || question.trim().length < 3) return;
-    setResults(findSupportAnswers(question, manual));
+    if (!manual || question.trim().length < 3 || asking) return;
+    setAsking(true);
+    setError('');
+    try {
+      const response = await fetch('/api/suporte-atendimento/ask', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question.trim() }), cache: 'no-store',
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Não foi possível consultar.');
+      setResults(Array.isArray(data.results) ? data.results : []);
+      setAnswerMode(data.mode === 'jev' ? 'jev' : 'manual');
+    } catch (reason) {
+      setResults(findSupportAnswers(question, manual));
+      setAnswerMode('manual');
+      setError(reason instanceof Error ? reason.message : 'Usando consulta local do manual.');
+    } finally { setAsking(false); }
   };
 
   return (
@@ -58,11 +75,12 @@ export function DuvidasPanel() {
           <div className="flex-1 space-y-4 overflow-auto p-5 text-sm" aria-live="polite">
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
               As respostas abaixo citam trechos do manual interno, não uma conclusão jurídica.
-              A pesquisa é local e não usa IA nem envia a pergunta ou a conversa do cliente para terceiros.
+              A consulta usa somente o manual da empresa. O JEV pode classificar a dúvida se a equipe responsável habilitar esse recurso após revisão de privacidade. Nunca inclua dados pessoais do cliente.
             </div>
             {loading && <p className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Carregando manual...</p>}
             {error && <p className="rounded-lg border border-destructive/30 p-3 text-destructive">{error}</p>}
             {!loading && !results && <p>Pergunte sobre critérios, documentos, abordagem, provas rurais, BPC, salário-maternidade, empréstimos e outros assuntos do manual.</p>}
+            {results && results.length > 0 && <p className="text-xs text-muted-foreground">{answerMode === 'jev' ? 'Capítulo identificado pelo JEV; resposta extraída do manual.' : 'Consulta textual ao manual.'}</p>}
             {results?.length === 0 && <p className="rounded-lg border p-3">Não encontrei uma orientação suficientemente próxima. Consulte o supervisor ou advogado responsável antes de responder ao cliente.</p>}
             {results?.map((item) => <section key={item.index} className="space-y-2 rounded-lg border p-4">
               <h3 className="flex gap-2 font-semibold"><BookOpen className="mt-0.5 h-4 w-4 shrink-0" />{item.title}</h3>
@@ -75,8 +93,8 @@ export function DuvidasPanel() {
             <textarea id="support-question" value={question} onChange={(event) => setQuestion(event.target.value)}
               rows={3} maxLength={1000} placeholder="Ex.: precisa de carteira assinada para receber salário-maternidade?"
               className="w-full resize-none rounded-lg border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-            <button type="submit" disabled={!manual || question.trim().length < 3} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 font-semibold text-primary-foreground disabled:opacity-50">
-              <Search className="h-4 w-4" /> Consultar manual
+            <button type="submit" disabled={!manual || asking || question.trim().length < 3} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 font-semibold text-primary-foreground disabled:opacity-50">
+              {asking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {asking ? 'Consultando...' : 'Perguntar'}
             </button>
           </form>
         </aside>
