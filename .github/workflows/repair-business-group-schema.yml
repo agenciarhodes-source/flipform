@@ -30,8 +30,8 @@ jobs:
       MAINTENANCE_DIRECT_HOST: ${{ vars.MAINTENANCE_DIRECT_HOST }}
       MAINTENANCE_DB_NAME: ${{ vars.MAINTENANCE_DB_NAME }}
       MAINTENANCE_DB_USER: ${{ vars.MAINTENANCE_DB_USER }}
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+      DATABASE_URL: ${{ secrets.PR00_MAINTENANCE_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.PR00_MAINTENANCE_DIRECT_URL }}
 
     steps:
       - name: Checkout
