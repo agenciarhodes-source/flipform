@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ROUTE = (ROOT / "app/api/public/forms/[slug]/submit/route.ts").read_text()
+ROUTE = (ROOT / "lib/forms/public-submit-handler.ts").read_text()
 VIEW = (ROOT / "app/f/[slug]/public-form-view.tsx").read_text()
 PIXEL = (ROOT / "lib/tracking/meta-pixel-client.ts").read_text()
 RUNTIME = (ROOT / "lib/meta/runtime.ts").read_text()
