@@ -12,7 +12,7 @@ def test_the_form_shows_the_notice_and_sending_it_records_the_authorization():
     assert "pelo WhatsApp" in notice and "não são compartilhados com terceiros" in notice
     public = read("components/public-typeform.tsx")
     assert "{contactConsentNotice(form.tenantName)}" in public
-    submit = read("app/api/public/forms/[slug]/submit/route.ts")
+    submit = read("lib/forms/public-submit-handler.ts")
     assert "action: CONTACT_CONSENT_ACTION," in submit
     assert "notice: contactConsentNotice(form.tenant.name)," in submit
     # No extra field: the authorization does not depend on a box the person might miss.
