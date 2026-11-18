@@ -14,7 +14,7 @@ def test_ai_provider_never_receives_document_numbers():
 
 
 def test_form_documents_are_encrypted_and_shown_masked():
-    assert "answer: protectDocumentAnswer(a.fieldType, a.value) as any," in read("app/api/public/forms/[slug]/submit/route.ts")
+    assert "answer: protectDocumentAnswer(a.fieldType, a.value) as any," in read("lib/forms/public-submit-handler.ts")
     assert "encrypted: encryptIntegrationSecret(value)," in read("lib/privacy/protect-answer.ts")
     assert "answers: lead.answers.map(publicLeadAnswer)" in read("app/api/leads/[id]/route.ts")
     reveal = read("app/api/leads/[id]/answers/[answerId]/document/route.ts")
