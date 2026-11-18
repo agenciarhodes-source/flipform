@@ -50,15 +50,27 @@ export const POST = withPermission('LEADS_MOVE', async (req, session, ctx: { par
     else if (lead.status === 'won') newStatus = 'open';
     else newStatus = 'open';
 
-    const [, stageHistory] = await prisma.$transaction([
-      prisma.lead.update({
-        where: { id: lead.id },
+    // Compare-and-swap: record history and tracking only when the observed state
+    // still belongs to the same tenant, pipeline and source stage.
+    const stageHistory = await prisma.$transaction(async (tx) => {
+      const updated = await tx.lead.updateMany({
+        where: {
+          id: lead.id,
+          tenantId: session.tenantId,
+          pipelineId: lead.pipelineId,
+          stageId: lead.stageId,
+          status: lead.status,
+        },
         data: { stageId, status: newStatus, temperature: newTemperature },
-      }),
-      prisma.leadStageHistory.create({
+      });
+      if (updated.count !== 1) return null;
+      return tx.leadStageHistory.create({
         data: { leadId: lead.id, fromStageId: lead.stageId, toStageId: stageId, changedBy: session.userId },
-      }),
-    ]);
+      });
+    });
+    if (!stageHistory) {
+      return NextResponse.json({ error: 'O lead foi alterado por outra operação. Atualize e tente novamente.' }, { status: 409 });
+    }
 
     const trackingEvents = await dispatchKanbanStageTracking({
       tenantId: session.tenantId,
