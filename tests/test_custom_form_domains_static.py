@@ -173,7 +173,7 @@ def test_custom_domain_public_route_resolves_by_active_host_and_ssl_gate():
     assert "where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' }" in page
     assert 'tenantId: customDomain.tenantId' in page
     assert 'slug: params.slug' in page
-    submit = read('app/api/public/forms/[slug]/submit/route.ts')
+    submit = read('lib/forms/resolve-public-form-identity.ts')
     assert "sslStatus: 'active'" in submit
 
 
