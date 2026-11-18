@@ -1,6 +1,6 @@
 # PR 00 / PR #623 — production-maintenance Environment: configuração segura
 
-**Status:** instruções e bloqueios preparados em Draft; **o ambiente GitHub não foi criado/configurado automaticamente**. Nenhum workflow de reparo foi executado. Não mesclar ou fazer deploy por causa deste documento.
+**Status atualizado em 18/11/2026:** ambiente GitHub `production-maintenance` **criado manualmente pelo responsável** e comprovado por capturas da interface; restrição à `main` e `MAINTENANCE_GATE=disabled` confirmadas. Quatro workflows legados de reparo aparecem desativados. Não há secrets exclusivos registrados nas capturas e a aprovação obrigatória de revisores não foi comprovada. O PR #623 continua Draft. Ver `docs/security/pr00-a2b-recovery-evidence-and-acceptance-20261118.md`. Nenhum workflow de reparo foi executado. Não mesclar ou fazer deploy por causa deste documento.
 
 ## Limites e plano GitHub
 
@@ -11,8 +11,8 @@
 
 ## Passo administrativo de criação (somente por administrador autorizado)
 
-1. GitHub → repositório → **Settings → Environments → New environment**, nome exato: `production-maintenance`.
-2. Restringir **Deployment branches and tags** à branch `main`; não usar "No restriction". Se disponível em plano/conta, configurar revisão humana obrigatória e `prevent self-review`. Em plano onde isso não existe para repo privado, o gate de aprovação humana continua **NÃO HOMOLOGADO** e requer procedimento externo de duas pessoas, com registro de autorização antes de cada operação; não declarar equivalente técnico a review obrigatório.
+1. **JÁ REALIZADO:** GitHub → repositório → **Settings → Environments**; ambiente `production-maintenance` criado manualmente. Não recriar o ambiente.
+2. **JÁ REALIZADO:** **Deployment branches and tags** restrita à `main`, sem tags; não voltar a "No restriction". Se disponível em plano/conta, configurar revisão humana obrigatória e `prevent self-review`. Em plano onde isso não existe para repo privado, o gate de aprovação humana continua **NÃO HOMOLOGADO** e requer procedimento externo de duas pessoas, com registro de autorização antes de cada operação; não declarar equivalente técnico a review obrigatório.
 3. Em **Environment secrets** (e somente ali), cadastrar nomes novos abaixo, **sem informar valores neste chat, no diff, PR ou logs**:
    - `PR00_MAINTENANCE_DATABASE_URL`: endpoint de runtime/pooled autorizado para o banco PROD real de manutenção.
    - `PR00_MAINTENANCE_DIRECT_URL`: endpoint direto autorizado ao mesmo projeto/banco/role, usando TLS.
