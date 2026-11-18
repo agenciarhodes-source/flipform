@@ -1,13 +1,35 @@
 name: Repair Team Hierarchy Schema
 
+permissions:
+  contents: read
+
+concurrency:
+  group: production-maintenance
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type REPAIR team-hierarchy-schema to authorize a reviewed maintenance action'
+        required: true
+        type: string
 
 jobs:
   repair-team-hierarchy-schema:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    environment: production-maintenance
 
     env:
+      MAINTENANCE_ACTION: team-hierarchy-schema
+      MAINTENANCE_CONFIRM: ${{ inputs.confirm }}
+      MAINTENANCE_ENVIRONMENT: production-maintenance
+      MAINTENANCE_GATE: ${{ vars.MAINTENANCE_GATE }}
+      MAINTENANCE_DB_HOST: ${{ vars.MAINTENANCE_DB_HOST }}
+      MAINTENANCE_DIRECT_HOST: ${{ vars.MAINTENANCE_DIRECT_HOST }}
+      MAINTENANCE_DB_NAME: ${{ vars.MAINTENANCE_DB_NAME }}
+      MAINTENANCE_DB_USER: ${{ vars.MAINTENANCE_DB_USER }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
@@ -20,6 +42,12 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Verify approved maintenance destination before any database operation
+        run: node scripts/assert-production-maintenance-db.mjs
+
+      - name: Test maintenance guard (offline)
+        run: node --test tests/production-maintenance-guard.test.mjs
 
       - name: Install dependencies
         run: npm ci
