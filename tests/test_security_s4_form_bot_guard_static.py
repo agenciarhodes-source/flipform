@@ -15,7 +15,7 @@ def test_public_form_sends_the_guard_and_has_a_hidden_field():
 
 
 def test_submit_route_limits_and_drops_robots_without_creating_leads():
-    route = read("app/api/public/forms/[slug]/submit/route.ts")
+    route = read("lib/forms/public-submit-handler.ts")
     assert "key: `form-submit:${slug}:${getClientIp(req)}`" in route
     assert "const botReason = formBotReason(parsed.data.guard);" in route
     assert "action: 'form.bot_blocked', metadata: { reason: botReason }" in route
