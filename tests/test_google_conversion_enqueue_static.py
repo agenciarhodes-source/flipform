@@ -11,7 +11,7 @@ def read(path: str) -> str:
 
 def test_move_route_queues_after_the_committed_transition_and_keeps_meta():
     route = read(MOVE)
-    commit = route.index('await prisma.$transaction([')
+    commit = route.index('await prisma.$transaction(async (tx) => {')
     meta = route.index('await dispatchKanbanStageTracking({')
     google = route.index('const googleEvents = await enqueueGoogleConversionEvents({')
     audit = route.index('await logAudit({')
