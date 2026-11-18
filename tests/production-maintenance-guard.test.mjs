@@ -65,6 +65,9 @@ test('all maintenance workflows require the same preflight before any DB command
   ]) {
     const yml = readFileSync(new URL('../.github/workflows/' + file, import.meta.url), 'utf8');
     assert.match(yml, /environment: production-maintenance/);
+    assert.match(yml, /secrets\.PR00_MAINTENANCE_DATABASE_URL/);
+    assert.match(yml, /secrets\.PR00_MAINTENANCE_DIRECT_URL/);
+    assert.doesNotMatch(yml, /secrets\.(?:DATABASE_URL|DIRECT_URL|JWT_SECRET_CURRENT|JWT_SECRET_PREVIOUS)\b/);
     assert.match(yml, /MAINTENANCE_GATE: \$\{\{ vars\.MAINTENANCE_GATE \}\}/);
     assert.match(yml, /run: node scripts\/assert-production-maintenance-db\.mjs/);
     assert.match(yml, /github\.ref == 'refs\/heads\/main'/);
