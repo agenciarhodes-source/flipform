@@ -80,6 +80,9 @@ jobs:
       - name: Run Python test suite
         run: python -m pytest tests -q
 
+      - name: Public form identity policy tests (synthetic, no database)
+        run: npx tsx --test tests/public-form-identity.test.ts
+
       - name: Run Flip AI policy tests
         env:
           NODE_OPTIONS: --conditions=react-server
