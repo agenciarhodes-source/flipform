@@ -180,7 +180,7 @@ def test_custom_domain_public_route_resolves_by_active_host_and_ssl_gate():
 def test_forms_page_has_preview_and_functional_active_link_copy():
     page = read('app/(app)/forms/page.tsx')
     assert 'copyLink(f.publicUrl)' in page
-    assert 'href={f.publicUrl || `/f/${f.slug}`}' in page
+    assert 'href={f.publicUrl || `/f/id/${f.id}/${f.slug}`}' in page
     assert 'Domínio personalizado pendente' in page
     assert 'Domínio pendente' in page
 
