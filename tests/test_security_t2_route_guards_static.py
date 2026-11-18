@@ -61,8 +61,10 @@ GUARDED = {
     "webhooks/stripe/route.ts": "constructEvent(",
     "webhooks/zapsign/[tenantId]/route.ts": "zapSignWebhookAuthorized(",
     # Public pages (forms, site chat, checkout): published content only, with attempt limits.
-    "public/forms/[slug]/route.ts": "slug",
-    "public/forms/[slug]/submit/route.ts": "rateLimit(",
+    "public/forms/[slug]/route.ts": "getPublicForm(req",
+    "public/forms/[slug]/submit/route.ts": "submitPublicForm(req",
+    "public/forms/by-id/[formId]/route.ts": "getPublicForm(req",
+    "public/forms/by-id/[formId]/submit/route.ts": "submitPublicForm(req",
     "public/checkout/route.ts": "rateLimit(",
     "flip-ai/public/[slug]/attachments/route.ts": "rateLimit(",
     "flip-ai/public/[slug]/messages/route.ts": "slug",
@@ -123,3 +125,14 @@ def test_cron_routes_check_the_secret_before_working():
             continue
         text = (API / path).read_text(encoding="utf-8")
         assert "if (!isCronRequestAuthorized(req))" in text, path
+
+
+def test_shared_public_form_handlers_keep_real_security_guards():
+    resolver = (ROOT / "lib/forms/resolve-public-form-identity.ts").read_text(encoding="utf-8")
+    submit = (ROOT / "lib/forms/public-submit-handler.ts").read_text(encoding="utf-8")
+    get = (ROOT / "lib/forms/public-get-handler.ts").read_text(encoding="utf-8")
+    assert "resolvePublicFormIdentity(" in get and "resolvePublicFormIdentity(" in submit
+    assert "rateLimit(" in submit and "FORM_SUBMIT_LIMIT" in submit
+    assert "tenantId: identity.tenantId" in submit and "tenantId: identity.tenantId" in get
+    assert "take: 2" in resolver and "selectUniquePublicForm(candidates)" in resolver
+    assert "if (!customDomain) return null" in resolver
