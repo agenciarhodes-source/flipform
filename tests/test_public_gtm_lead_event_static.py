@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PAGE = ROOT / 'app/f/[slug]/page.tsx'
+PAGE = ROOT / 'app/f/public-form-page.tsx'
 VIEW = ROOT / 'app/f/[slug]/public-form-view.tsx'
 GTM = ROOT / 'lib/tracking/gtm-client.ts'
 
