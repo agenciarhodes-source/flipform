@@ -35,7 +35,7 @@ def test_fbclid_is_promoted_to_first_party_fbc_before_public_submit():
 
 
 def test_public_form_preloads_only_non_secret_meta_pixel_identifier():
-    standard = read('app/f/[slug]/page.tsx')
+    standard = read('app/f/public-form-page.tsx')
     custom = read('app/custom-domain/[slug]/page.tsx')
     view = read('app/f/[slug]/public-form-view.tsx')
     pixel = read('lib/tracking/meta-pixel-client.ts')
