@@ -1,6 +1,7 @@
 import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { normalizeHostname } from '@/lib/host-routing';
+import { selectUniquePublicForm } from '@/lib/forms/public-form-identity-policy';
 
 /**
  * Resolves a public form only when the request host provides a trusted tenant
@@ -52,5 +53,5 @@ export async function resolvePublicFormIdentity(
     take: 2,
   });
   // Never choose the "first" tenant when slug identity is ambiguous.
-  return candidates.length === 1 ? candidates[0] : null;
+  return selectUniquePublicForm(candidates);
 }
