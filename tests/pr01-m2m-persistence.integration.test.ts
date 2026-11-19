@@ -7,6 +7,7 @@ import {
 } from '../lib/api-v1/prisma-credential-repository';
 import { apiV1Entitled } from '../lib/api-v1/policy';
 import { authorizeApiV1Request, digestApiV1Secret } from '../lib/api-v1/identity';
+import { issueApiV1Key, rotateApiV1Key, revokeApiV1Key } from '../lib/api-v1/credential-lifecycle';
 
 function assertDisposableCI(): void {
   if (process.env.CI !== 'true') throw new Error('PR01 integration suite is CI-only');
@@ -107,6 +108,75 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       } });
       assert.equal(apiV1Entitled(tenantB, await repo.findTenantEntitlement(tenantB)), false);
 
+      // Phase 3: the server-only lifecycle requires an actual active owner,
+      // an eligible tenant, same-tenant integration and a future expiration.
+      const ownerA = { userId: actorId, tenantId: tenantA };
+      const options = {
+        integrationId: integrationA.id,
+        expiresAt: new Date('2030-05-01T00:00:00Z'),
+        scopes: ['integrations.read'] as const,
+      };
+      assert.equal(await issueApiV1Key(
+        { userId: actorId, tenantId: tenantB },
+        { ...options, integrationId: integrationB.id }, db,
+      ), null, 'viewer in tenant B cannot issue');
+      assert.equal(await issueApiV1Key(
+        ownerA, { ...options, integrationId: integrationB.id }, db,
+      ), null, 'owner A cannot issue into integration B');
+      const issued = await issueApiV1Key(ownerA, options, db);
+      assert.ok(issued && issued.bearerToken.startsWith('ffv1.'));
+      const issuedRow = await db.apiCredential.findUnique({ where: { id: issued.credentialId } });
+      assert.ok(issuedRow);
+      assert.equal(issuedRow.tenantId, tenantA);
+      assert.equal(issuedRow.secretHashHex.length, 64);
+      assert.equal(issuedRow.secretHashHex.includes(issued.bearerToken), false);
+      assert.equal(await db.apiCredentialAudit.count({ where: {
+        tenantId: tenantA, credentialId: issued.credentialId, action: 'issued',
+      } }), 1);
+
+      const rotated = await rotateApiV1Key(
+        ownerA, issued.credentialId,
+        { integrationId: integrationA.id, expiresAt: new Date('2031-01-01T00:00:00Z') }, db,
+      );
+      assert.ok(rotated && rotated.credentialId !== issued.credentialId);
+      assert.equal((await db.apiCredential.findUnique({
+        where: { id: issued.credentialId },
+      }))?.revokedAt instanceof Date, true);
+      assert.equal(await rotateApiV1Key(
+        ownerA, issued.credentialId,
+        { integrationId: integrationA.id, expiresAt: new Date('2031-01-01T00:00:00Z') }, db,
+      ), null, 'a revoked key cannot rotate twice');
+      assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integrationA.id, db), true);
+      assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integrationA.id, db), false);
+      assert.equal(await db.apiCredentialAudit.count({
+        where: { tenantId: tenantA, actorUserId: actorId },
+      }), 4);
+      assert.equal(await db.apiCredentialAudit.count({
+        where: { tenantId: tenantB },
+      }), 0, 'no cross-tenant audit');
+
+      // Quotas are atomic across concurrent DB clients and deny on exceed.
+      // This is a local, explicit synthetic test policy, NOT a production plan.
+      const quotaRepo = new PrismaApiV1CredentialRepository(db, {
+        limit: 2, windowMs: 60_000,
+        now: () => new Date('2028-06-01T12:00:00Z'),
+      });
+      const quotaToken = 'Bearer ffv1.' + credential.id + '.' + secret.toString('base64url');
+      const concurrent = await Promise.all(Array.from({ length: 10 }, () =>
+        authorizeApiV1Request({
+          authorizationHeader: quotaToken, scope: 'integrations.read',
+          operation: 'GET /api/v1/diagnostic', now: new Date('2028-06-01T12:00:00Z'),
+        }, quotaRepo)));
+      assert.equal(concurrent.filter((result) => result.ok).length, 2);
+      assert.equal(concurrent.filter((result) =>
+        !result.ok && result.status === 429).length, 8);
+      const quotaRows = await db.apiV1QuotaBucket.findMany({
+        where: { tenantId: tenantA, credentialId: credential.id },
+      });
+      assert.equal(quotaRows.length, 1);
+      assert.equal(quotaRows[0].consumed, 2);
+      assert.equal(await db.apiV1QuotaBucket.count({ where: { tenantId: tenantB } }), 0);
+
       // Auth cannot pass until the distributed quota store exists.
       const bearer = 'Bearer ffv1.' + credential.id + '.' + secret.toString('base64url');
       assert.deepEqual(
@@ -126,6 +196,8 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       // CI-only synthetic cleanup; never pointed at Neon.
       if (tenantA || tenantB) {
         const ids = [tenantA, tenantB].filter(Boolean);
+        await db.apiV1QuotaBucket.deleteMany({ where: { tenantId: { in: ids } } });
+        await db.apiCredentialAudit.deleteMany({ where: { tenantId: { in: ids } } });
         await db.apiCredential.deleteMany({ where: { tenantId: { in: ids } } });
         await db.apiIntegration.deleteMany({ where: { tenantId: { in: ids } } });
         await db.tenantEntitlementGrant.deleteMany({ where: { tenantId: { in: ids } } });
