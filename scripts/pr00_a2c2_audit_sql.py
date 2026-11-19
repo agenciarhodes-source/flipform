@@ -45,12 +45,14 @@ def split_statements(content):
         raise ValueError("Empty SQL output")
     return statements
 
-# PR00 baseline remains 92 models; PR01 can add only these three specific tables.
-PR01_ADDITIVE_MODELS = {
-    "ApiIntegration": "api_v1_integrations",
-    "ApiCredential": "api_v1_credentials",
-    "TenantEntitlementGrant": "tenant_entitlement_grants",
-}
+# PR00 baseline remains 92 models; PR01 can add only these five specific tables.
+PR01_ADDITIVE_MODELS = dict([
+    ("ApiIntegration", "api_v1_integrations"),
+    ("ApiCredential", "api_v1_credentials"),
+    ("TenantEntitlementGrant", "tenant_entitlement_grants"),
+    ("ApiCredentialAudit", "api_v1_credential_audits"),
+    ("ApiV1QuotaBucket", "api_v1_quota_buckets"),
+])
 
 def parse_expected_tables(schema):
     blocks = re.findall(r"(?ms)^model\s+(\w+)\s*\{(.*?)^\}", schema)
