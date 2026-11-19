@@ -193,6 +193,17 @@ jobs:
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-m2m-persistence.integration.test.ts
 
+      # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
+      # No external endpoints, workers, real credentials or Neon access.
+      - name: PR01 durable held event replay (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-durable-events.integration.test.ts
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
