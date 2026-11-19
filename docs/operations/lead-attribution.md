@@ -39,7 +39,7 @@ A migration `20260809120000_add_lead_attribution` cria `lead_attributions`, a un
 Abra uma URL no domínio de plataforma ou em um custom domain válido:
 
 ```text
-https://app.flipform.com.br/f/SLUG?utm_source=meta&utm_medium=paid_social&utm_campaign=teste_attribution&utm_content=criativo_a&utm_term=aposentadoria&fbclid=TESTE123
+https://app.flipform.com.br/f/id/FORM_UUID/SLUG?utm_source=meta&utm_medium=paid_social&utm_campaign=teste_attribution&utm_content=criativo_a&utm_term=aposentadoria&fbclid=TESTE123
 ```
 
 Envie um formulário qualificado e confirme o lead, answers, history e o registro 1:1 em `lead_attributions`. Repita sem query string e confirme que a submissão continua funcionando. Para resiliência, simule indisponibilidade apenas da tabela de atribuição em ambiente isolado e confirme que a resposta ainda indica sucesso e o lead permanece salvo.
