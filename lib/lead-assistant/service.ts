@@ -397,14 +397,23 @@ async function saveBatch(tx: Prisma.TransactionClient, session: Session, command
   return batch.id;
 }
 
-/** Writes each lead's tags in one statement (only leads of this company). */
-async function writeTags(tx: Prisma.TransactionClient, tenantId: string, rows: Array<{ id: string; tags: string[] }>) {
-  if (!rows.length) return;
-  await tx.$executeRaw`
+/** Conditional bulk tag write: return only lead IDs actually changed by CAS. */
+async function writeTags(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  rows: Array<{ id: string; tags: string[]; previousTags: string[] }>,
+  requireOpen: boolean,
+) {
+  if (!rows.length) return [] as string[];
+  const updated = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE leads AS l
     SET tags = ARRAY(SELECT jsonb_array_elements_text(v.tags)), updated_at = NOW()
-    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS v(id text, tags jsonb)
-    WHERE l.id = v.id AND l.tenant_id = ${tenantId}`;
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS v(id text, tags jsonb, "previousTags" jsonb)
+    WHERE l.id = v.id AND l.tenant_id = ${tenantId}
+      AND l.tags = ARRAY(SELECT jsonb_array_elements_text(v."previousTags"))
+      AND (${requireOpen} = false OR l.status = 'open')
+    RETURNING l.id`;
+  return updated.map((row) => row.id);
 }
 
 /** Applies a confirmed plan. Recomputed now; if it no longer matches the preview, nothing changes. */
@@ -470,7 +479,17 @@ export async function applyLeadPlan(session: Session, plan: ResolvedLeadAssistan
       const tagged = await computeTagChanges(tx, session.tenantId, plan);
       if (tagged.changes.length !== expectedMoves) throw new LeadAssistantError(409, STALE_PREVIEW);
       if (!tagged.changes.length) return { batchId: null, moves: 0 };
-      await writeTags(tx, session.tenantId, tagged.changes.map((change) => ({ id: change.leadId, tags: change.tags })));
+      const updatedTags = await writeTags(
+        tx,
+        session.tenantId,
+        tagged.changes.map((change) => ({
+          id: change.leadId,
+          tags: change.tags,
+          previousTags: tagged.previous.get(change.leadId) || [],
+        })),
+        true,
+      );
+      if (updatedTags.length !== tagged.changes.length) throw new LeadAssistantError(409, STALE_PREVIEW);
       await tx.auditLog.createMany({
         data: tagged.changes.map((change) => ({
           tenantId: session.tenantId,
@@ -665,16 +684,22 @@ export async function undoLeadBatch(session: Session, batchId: string) {
         const lead = byId.get(change.l);
         return lead && sameTags(lead.tags, change.n);
       });
-      await writeTags(tx, session.tenantId, restore.map((change) => ({ id: change.l, tags: change.p })));
-      if (restore.length) {
+      const restoredIds = new Set(await writeTags(
+        tx,
+        session.tenantId,
+        restore.map((change) => ({ id: change.l, tags: change.p, previousTags: change.n })),
+        false,
+      ));
+      const confirmed = restore.filter((change) => restoredIds.has(change.l));
+      if (confirmed.length) {
         await tx.auditLog.createMany({
-          data: restore.map((change) => ({
+          data: confirmed.map((change) => ({
             tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: change.l, action: 'lead.updated',
             metadata: { changes: ['tags'], tags: change.p, previousTags: change.n, message: 'Mudança de etiqueta do Assistente de leads desfeita.' },
           })),
         });
       }
-      restored = restore.length;
+      restored = confirmed.length;
     } else {
       const changes = list.filter((item): item is AssignChange => isRecord(item)
         && typeof item.l === 'string' && typeof item.t === 'string' && (item.f === null || typeof item.f === 'string'));
