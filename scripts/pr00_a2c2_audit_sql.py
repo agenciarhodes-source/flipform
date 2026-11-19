@@ -45,19 +45,35 @@ def split_statements(content):
         raise ValueError("Empty SQL output")
     return statements
 
+# PR00 baseline remains 92 models; PR01 can add only these three specific tables.
+PR01_ADDITIVE_MODELS = {
+    "ApiIntegration": "api_v1_integrations",
+    "ApiCredential": "api_v1_credentials",
+    "TenantEntitlementGrant": "tenant_entitlement_grants",
+}
+
 def parse_expected_tables(schema):
-    blocks = re.findall(r"(?ms)^model\s+\w+\s*\{(.*?)^\}", schema)
-    if len(blocks) != 92:
-        raise ValueError("Expected 92 Prisma models")
+    blocks = re.findall(r"(?ms)^model\\s+(\\w+)\\s*\\{(.*?)^\\}", schema)
+    baseline = [(name, body) for name, body in blocks if name not in PR01_ADDITIVE_MODELS]
+    additions = [(name, body) for name, body in blocks if name in PR01_ADDITIVE_MODELS]
+    if len(baseline) != 92:
+        raise ValueError("Expected exactly 92 baseline Prisma models")
+    if additions and {name for name, _ in additions} != set(PR01_ADDITIVE_MODELS):
+        raise ValueError("Incomplete or unapproved PR01 additive models")
+    if len(additions) not in (0, len(PR01_ADDITIVE_MODELS)):
+        raise ValueError("Incomplete PR01 additive model set")
     names = []
-    for block in blocks:
-        match = re.search(r'@@map\("([^"]+)"\)', block)
+    for name, block in blocks:
+        match = re.search(r'@@map\\("([^"]+)"\\)', block)
         if not match:
             raise ValueError("Prisma model without explicit @@map")
-        names.append(match.group(1))
-    if len(set(names)) != 92:
+        physical = match.group(1)
+        if name in PR01_ADDITIVE_MODELS and physical != PR01_ADDITIVE_MODELS[name]:
+            raise ValueError("Unexpected physical table for approved PR01 model")
+        names.append(physical)
+    if len(set(names)) != len(blocks):
         raise ValueError("Duplicate Prisma physical table names")
-    if len(re.findall(r"(?m)^enum\s+\w+\s*\{", schema)) != 10:
+    if len(re.findall(r"(?m)^enum\\s+\\w+\\s*\\{", schema)) != 10:
         raise ValueError("Expected 10 Prisma enums")
     return set(names)
 
@@ -97,8 +113,8 @@ def audit_sql(sql, schema):
             kinds["ALTER TABLE ADD FOREIGN KEY"] += 1
         else:
             raise ValueError(f"Statement {idx}: operation outside additive allowlist")
-    if len(tables) != 92 or len(set(tables)) != 92 or set(tables) != expected:
-        raise ValueError("Generated CREATE TABLE names do not match all 92 Prisma models")
+    if len(tables) != len(expected) or len(set(tables)) != len(expected) or set(tables) != expected:
+        raise ValueError("Generated CREATE TABLE names do not match approved Prisma models")
     if kinds["CREATE TYPE"] != 10:
         raise ValueError("Generated enum count does not match 10 Prisma enums")
     if not kinds["CREATE INDEX"] or not kinds["ALTER TABLE ADD FOREIGN KEY"]:
@@ -115,7 +131,7 @@ def audit_sql(sql, schema):
         "schema_sha256": hashlib.sha256(schema.encode()).hexdigest(),
         "sql_sha256": hashlib.sha256(sql.encode()).hexdigest(),
         "manual_gates": [
-            "Review all statements and 56 schema onDelete: Cascade relationships",
+            "Review all statements and schema onDelete: Cascade relationships",
             "Confirm vector(1536) and pgvector extension in isolated staging",
             "Confirm target empty branch and take a new snapshot",
             "Obtain separate specific approval before any SQL execution",
