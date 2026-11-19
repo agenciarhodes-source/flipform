@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { applyLeadPlan, LeadAssistantError } from '@/lib/lead-assistant/service';
@@ -18,6 +19,10 @@ export const POST = withPermission('LEAD_ASSISTANT_COMMAND', async (req: NextReq
     return NextResponse.json(await applyLeadPlan(session, parsed.data.plan, parsed.data.expectedMoves, parsed.data.command));
   } catch (error) {
     if (error instanceof LeadAssistantError) return NextResponse.json({ error: error.message }, { status: error.status });
+    // Serializable transaction aborted by a concurrent operation: no partial writes.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      return NextResponse.json({ error: 'Os leads mudaram durante a operação. Atualize e tente novamente.' }, { status: 409 });
+    }
     console.error('Lead assistant apply failed', { errorType: error instanceof Error ? error.name : 'unknown' });
     return NextResponse.json({ error: 'Não foi possível aplicar a distribuição. Nada foi alterado.' }, { status: 500 });
   }
