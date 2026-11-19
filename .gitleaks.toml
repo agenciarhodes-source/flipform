@@ -31,5 +31,10 @@ paths = ['''^scripts/pr00_a2c2_audit_sql\.py$''']
 regexes = [
   '''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*$''',
   '''^\s*\("ApiIntegration",\s*"api_v1_integrations"\),?\s*$''',
-  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*$''',
+  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*
+]
+'',
+  '''^\s*\("ApiV1IdempotencyRecord",\s*"api_v1_idempotency_records"\),?\s*
+]
+'',
 ]
