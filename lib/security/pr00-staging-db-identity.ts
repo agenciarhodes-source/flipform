@@ -32,13 +32,23 @@ function matchesExpectedConnection(raw: string | undefined): boolean {
  * Use ONLY a preview deployment of the exact PR00 branch in the staging project.
  * The Neon staging endpoint currently has connection pooling disabled.
  */
+/**
+ * Safe booleans for deployment failure diagnosis. Never print raw env values,
+ * connection-string fragments, hostnames, usernames or passwords.
+ */
+export function stagingIdentityPreflightChecks(env: Environment) {
+  return {
+    previewTarget: env.VERCEL_ENV === 'preview',
+    exactBranch: env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch,
+    correctProject: env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId,
+    nextRuntime: env.NODE_ENV === 'production',
+    databaseUrlAllowlisted: matchesExpectedConnection(env.DATABASE_URL),
+    directUrlAllowlisted: matchesExpectedConnection(env.DIRECT_URL),
+  };
+}
+
 export function stagingIdentityBuildGateEnabled(env: Environment): boolean {
-  return env.VERCEL_ENV === 'preview'
-    && env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch
-    && env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId
-    && env.NODE_ENV === 'production'
-    && matchesExpectedConnection(env.DATABASE_URL)
-    && matchesExpectedConnection(env.DIRECT_URL);
+  return Object.values(stagingIdentityPreflightChecks(env)).every(Boolean);
 }
 
 export function stagingIdentityGateEnabled(env: Environment): boolean {
