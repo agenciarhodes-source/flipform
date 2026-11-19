@@ -89,7 +89,8 @@ def test_bulk_stage_moves_send_nothing_to_the_ads_and_never_mark_won():
 
 def test_stage_and_tag_changes_can_be_undone():
     undo = SERVICE.split("export async function undoLeadBatch", 1)[1]
-    assert "kind === 'stage'" in undo and "lead.stageId === change.ts" in undo
+    assert "kind === 'stage'" in undo and "lead.stageId !== change.ts" in undo
+    assert "stageId: change.ts" in undo and "if (updated.count === 1) restore.push(change)" in undo
     assert "kind === 'tag'" in undo and "sameTags(lead.tags, change.n)" in undo
     # Tags are written only for leads of this company.
     assert "WHERE l.id = v.id AND l.tenant_id = ${tenantId}" in SERVICE
