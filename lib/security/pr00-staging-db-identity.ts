@@ -32,16 +32,20 @@ function matchesExpectedConnection(raw: string | undefined): boolean {
  * Use ONLY a preview deployment of the exact PR00 branch in the staging project.
  * The Neon staging endpoint currently has connection pooling disabled.
  */
-export function stagingIdentityGateEnabled(env: Environment): boolean {
-  return env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
-    && env.VERCEL_ENV === 'preview'
+export function stagingIdentityBuildGateEnabled(env: Environment): boolean {
+  return env.VERCEL_ENV === 'preview'
     && env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch
     && env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId
     && env.NODE_ENV === 'production'
-    && Boolean(env.PR00_STAGING_ATTESTATION_TOKEN)
-    && Buffer.byteLength(env.PR00_STAGING_ATTESTATION_TOKEN || '', 'utf8') >= 32
     && matchesExpectedConnection(env.DATABASE_URL)
     && matchesExpectedConnection(env.DIRECT_URL);
+}
+
+export function stagingIdentityGateEnabled(env: Environment): boolean {
+  return env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
+    && Boolean(env.PR00_STAGING_ATTESTATION_TOKEN)
+    && Buffer.byteLength(env.PR00_STAGING_ATTESTATION_TOKEN || '', 'utf8') >= 32
+    && stagingIdentityBuildGateEnabled(env);
 }
 
 /** Exact token match without timing leaks or any diagnostic logging. */
