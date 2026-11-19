@@ -2385,7 +2385,7 @@ model ApiV1InboxEvent {
   id                  String   @id @default(uuid())
   tenantId            String   @map("tenant_id")
   integrationId       String   @map("integration_id")
-  idempotencyRecordId String   @unique @map("idempotency_record_id")
+  idempotencyRecordId String   @map("idempotency_record_id")
   eventType           String   @map("event_type")
   payloadHash         String   @map("payload_hash")
   state               String   @default("held")
@@ -2395,6 +2395,7 @@ model ApiV1InboxEvent {
   outbox            ApiV1OutboxEvent?
 
   @@unique([tenantId, integrationId, id])
+  @@unique([tenantId, integrationId, idempotencyRecordId])
   @@index([tenantId, state, createdAt])
   @@map("api_v1_inbox_events")
 }
@@ -2405,7 +2406,7 @@ model ApiV1OutboxEvent {
   id            String   @id @default(uuid())
   tenantId      String   @map("tenant_id")
   integrationId String   @map("integration_id")
-  inboxEventId  String   @unique @map("inbox_event_id")
+  inboxEventId  String   @map("inbox_event_id")
   eventType     String   @map("event_type")
   state         String   @default("held")
   attempts      Int      @default(0)
@@ -2413,6 +2414,7 @@ model ApiV1OutboxEvent {
 
   inbox ApiV1InboxEvent @relation(fields: [tenantId, integrationId, inboxEventId], references: [tenantId, integrationId, id], onDelete: Cascade)
 
+  @@unique([tenantId, integrationId, inboxEventId])
   @@index([tenantId, state, createdAt])
   @@map("api_v1_outbox_events")
 }
