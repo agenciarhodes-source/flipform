@@ -18,14 +18,21 @@ paths = [
 
 # PR01: a constant Prisma model->table mapping was flagged as generic-api-key
 # in commit ca1cc74e... (SARIF rule generic-api-key at auditor line 50).
-# This is not a credential. Constrain suppression to exactly this single
-# deterministic source line AND this one file, without disabling the rule.
+# This is not a credential. Suppress only the exact historical line and
+# two newly detected constant mapping lines in this audit file, not the rule.
 [[rules]]
 id = "generic-api-key"
 
 [[rules.allowlists]]
-description = "PR01 schema map false positive: ApiIntegration model to its fixed table name"
+description = "PR01 false positives: three exact model-to-table constant mappings"
 condition = "AND"
 regexTarget = "line"
 paths = ['''^scripts/pr00_a2c2_audit_sql\.py$''']
-regexes = ['''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*$''']
+regexes = [
+  '''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*
+'',
+  '''^\s*\("ApiIntegration",\s*"api_v1_integrations"\),?\s*
+'',
+  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*
+'',
+]
