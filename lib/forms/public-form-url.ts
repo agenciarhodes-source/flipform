@@ -13,14 +13,14 @@ function cleanDomain(value: string) {
 
 export function buildPublicFormUrlState(params: {
   slug: string;
-  formId?: string;
+  formId: string;
   appDomain: string;
   primaryDomain?: PublicFormUrlDomain | null;
 }) {
   const cleanSlug = params.slug.replace(/^\/+/, '');
   const appDomain = cleanDomain(params.appDomain);
-  const legacyFallbackUrl = `https://${appDomain}/f/${cleanSlug}`;
-  const fallbackUrl = params.formId ? `https://${appDomain}/f/id/${encodeURIComponent(params.formId)}/${cleanSlug}` : legacyFallbackUrl;
+  // Never generate a tenant-ambiguous platform URL when the form ID is absent.
+  const fallbackUrl = `https://${appDomain}/f/id/${encodeURIComponent(params.formId)}/${cleanSlug}`;
 
   if (!params.primaryDomain) {
     return {
@@ -57,7 +57,7 @@ export function buildPublicFormUrlState(params: {
 
 export function buildPublicFormUrl(params: {
   slug: string;
-  formId?: string;
+  formId: string;
   appDomain: string;
   primaryDomain?: string | PublicFormUrlDomain | null;
 }) {
