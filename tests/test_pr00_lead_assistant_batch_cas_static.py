@@ -44,3 +44,29 @@ def test_batch_stage_does_not_emit_conversions():
     assert "dispatchKanbanStageTracking" not in SRC
     assert "enqueueGoogleConversionEvents" not in SRC
     assert "scheduleGoogleConversionDelivery" not in SRC
+
+
+def test_assignment_batch_and_undo_have_cas_and_real_audit_count():
+    apply = SRC.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
+    assert "const observed = new Map(distribution.leads.map" in apply
+    assert "assignedTo: change.from" in apply
+    assert "data: { assignedTo: change.to }" in apply
+    assert "if (updated.count !== 1) throw new LeadAssistantError(409, STALE_PREVIEW)" in apply
+    undo = SRC.split("export async function undoLeadBatch", 1)[1]
+    assign = undo.split("} else {", 1)[-1]
+    assert "status: 'open', assignedTo: change.t" in assign
+    assert "if (updated.count === 1) confirmed.push(change)" in assign
+    assert "restored = confirmed.length" in assign
+
+
+def test_tag_batch_cas_enforces_previous_array_state_and_audits_only_updated():
+    helper = SRC.split("async function writeTags", 1)[1].split("/** Applies a confirmed plan.", 1)[0]
+    assert "RETURNING l.id" in helper
+    assert "l.tags = ARRAY(SELECT jsonb_array_elements_text(v.\\"previousTags\\"))" in helper
+    assert "WHERE l.id = v.id AND l.tenant_id = ${tenantId}" in helper
+    apply = SRC.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
+    assert "if (updatedTags.length !== tagged.changes.length) throw new LeadAssistantError(409, STALE_PREVIEW)" in apply
+    undo = SRC.split("export async function undoLeadBatch", 1)[1]
+    assert "const restoredIds = new Set(await writeTags(" in undo
+    assert "const confirmed = restore.filter((change) => restoredIds.has(change.l))" in undo
+    assert "restored = confirmed.length" in undo
