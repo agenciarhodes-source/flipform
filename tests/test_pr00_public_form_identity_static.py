@@ -59,3 +59,9 @@ def test_legacy_aliases_are_explicitly_reviewed_and_fail_closed():
     assert "typeof row.evidenceRef !== 'string'" in aliases
     assert "UUID.test(row.formId)" in aliases
     assert "UUID.test(row.tenantId)" in aliases
+
+
+def test_seed_example_uses_immutable_form_id():
+    seed = source('prisma/seed.ts')
+    assert 'Form público: /f/id/${form.id}/${form.slug}' in seed
+    assert 'Form público: /f/${form.slug}' not in seed
