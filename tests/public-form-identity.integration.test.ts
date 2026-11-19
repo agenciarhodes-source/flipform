@@ -67,12 +67,11 @@ test('PR00: same slug across two tenants never selects an arbitrary platform own
   const slug = 'same-public-slug-' + randomUUID();
   const a = await fixture(slug, 'A');
   let b: Fixture | undefined;
+  const previousManifest = process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
+  delete process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
   try {
-    // Provisional legacy bridge works with precisely one current candidate.
-    assert.deepEqual(
-      await resolvePublicFormIdentity('app.flipform.com.br', { slug }),
-      { id: a.formId, tenantId: a.tenantId },
-    );
+    // Historical ownership can NEVER be inferred from current uniqueness.
+    assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug }), null);
     b = await fixture(slug, 'B');
     assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug }), null);
     assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug }), null);
@@ -88,7 +87,56 @@ test('PR00: same slug across two tenants never selects an arbitrary platform own
     assert.equal(await resolvePublicFormIdentity(null, { formId: a.formId }), null);
     assert.equal(await resolvePublicFormIdentity('unrelated.example.invalid', { formId: a.formId }), null);
   } finally {
+    if (previousManifest === undefined) delete process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
+    else process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON = previousManifest;
     if (b) await cleanup(b);
+    await cleanup(a);
+  }
+});
+
+test('PR00: explicit reviewed historical alias selects only its immutable tenant/form ID', async () => {
+  assertDisposableDatabase();
+  const oldSlug = 'old-campaign-' + randomUUID();
+  const a = await fixture('renamed-form-' + randomUUID(), 'Alias owner');
+  const b = await fixture(oldSlug, 'Current other tenant');
+  const previous = process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
+  try {
+    // Even with a current uniquely active slug, no owner-evidence means no match.
+    delete process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
+    assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug: oldSlug }), null);
+
+    process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON = JSON.stringify({
+      version: 1,
+      verified: [{
+        slug: oldSlug,
+        tenantId: a.tenantId,
+        formId: a.formId,
+        evidenceRef: 'PR00-APPROVAL-SYNTHETIC',
+      }],
+    });
+    // Link from an older campaign points to A even if its current slug changed
+    // and B now publishes a form with that same old slug.
+    assert.deepEqual(await resolvePublicFormIdentity('app.flipform.com.br', { slug: oldSlug }), {
+      id: a.formId, tenantId: a.tenantId,
+    });
+    assert.equal(await resolvePublicFormIdentity('unverified.example.invalid', { slug: oldSlug }), null);
+    assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug: b.slug + '-unknown' }), null);
+
+    // An accidental tenantId mismatch cannot retrieve or change another tenant.
+    process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON = JSON.stringify({
+      version: 1,
+      verified: [{
+        slug: oldSlug,
+        tenantId: b.tenantId,
+        formId: a.formId,
+        evidenceRef: 'PR00-APPROVAL-SYNTHETIC',
+      }],
+    });
+    assert.equal(await resolvePublicFormIdentity('app.flipform.com.br', { slug: oldSlug }), null);
+  } finally {
+    if (previous === undefined) delete process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON;
+    else process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON = previous;
+    await cleanup(b);
     await cleanup(a);
   }
 });
