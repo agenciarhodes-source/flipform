@@ -181,6 +181,12 @@ jobs:
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
 
+      - name: PR00 public form tenant A/B collision tests (disposable PostgreSQL only)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test --test-concurrency=1 tests/public-form-identity.integration.test.ts
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
