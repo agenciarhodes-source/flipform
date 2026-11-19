@@ -34,3 +34,13 @@ regexes = [
   '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*$''',
   '''^\s*\("ApiV1IdempotencyRecord",\s*"api_v1_idempotency_records"\),?\s*$''',
 ]
+
+# Historical PR01 commit used a clearly synthetic idempotency fixture.
+# The branch scanner checks ALL commits; changing the test line later does not
+# remove the historical false positive. This exception is exact line + file.
+[[rules.allowlists]]
+description = "historical synthetic fixture, never a real credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^tests/pr01-durable-events\.integration\.test\.ts$''']
+regexes = ['''^\s*const key = 'synthetic-idempotency-key-001';\s*$''']
