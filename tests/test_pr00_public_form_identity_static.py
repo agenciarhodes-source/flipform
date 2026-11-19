@@ -13,6 +13,10 @@ def test_resolver_rejects_unknown_host_and_slug_collisions():
     assert "sslStatus: 'active'" in resolver
     assert "selectUniquePublicForm(candidates)" in resolver
     assert "take: 2" in resolver
+    assert "getVerifiedLegacyFormAlias(slug, process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON)" in resolver
+    assert "if (!alias) return null;" in resolver
+    assert "id: alias.formId, tenantId: alias.tenantId, isActive: true" in resolver
+    assert resolver.index("if (platform) {") < resolver.index("const candidates = await prisma.form.findMany")
     assert "host.endsWith('.vercel.app')" not in resolver
 
 def test_page_and_get_post_share_server_resolved_identity():
@@ -43,3 +47,14 @@ def test_existing_tracking_and_attribution_persist_in_shared_handler():
                      'CONTACT_CONSENT_ACTION', 'protectDocumentAnswer', 'metaLeadEventId',
                      'parseAttributionCookies'):
         assert required in handler
+
+
+def test_legacy_aliases_are_explicitly_reviewed_and_fail_closed():
+    aliases = source('lib/forms/verified-legacy-form-aliases.ts')
+    assert "manifestJson.length > 32768" in aliases
+    assert "parsed.version !== 1" in aliases
+    assert "parsed.verified.length > 200" in aliases
+    assert "seen.has(row.slug)" in aliases
+    assert "typeof row.evidenceRef !== 'string'" in aliases
+    assert "UUID.test(row.formId)" in aliases
+    assert "UUID.test(row.tenantId)" in aliases
