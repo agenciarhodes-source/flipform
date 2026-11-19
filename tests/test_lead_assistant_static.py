@@ -29,7 +29,9 @@ def test_preview_never_writes():
 def test_apply_recomputes_and_only_touches_open_lead_owner():
     apply = SERVICE.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
     assert "distribution.changes.length !== expectedMoves" in apply
-    assert "data: { assignedTo: to }" in apply
+    assert "data: { assignedTo: change.to }" in apply
+    assert "assignedTo: change.from" in apply
+    assert "if (updated.count !== 1) throw new LeadAssistantError(409, STALE_PREVIEW)" in apply
     assert "status: 'open'" in apply
     # The Kanban only: conversations keep their attendant, nothing is deleted.
     assert "conversation" not in SERVICE
