@@ -38,7 +38,8 @@ def test_platform_links_use_form_uuid_without_changing_custom_domain_links():
     assert "/f/id/" in links
     assert "customUrl" in links
     assert "formId: form.id" in source('app/api/forms/route.ts')
-    assert "publicUrl: " in source('lib/dashboard-metrics.ts')
+    assert "publicUrl: `/f/id/${form.id}/${form.slug}`" in source('lib/dashboard-metrics.ts')
+    assert "f.publicUrl || `/f/id/${f.id}/${f.slug}`" in source('app/(app)/forms/page.tsx')
     assert "submitEndpoint:" in source('app/f/public-form-page.tsx')
 
 def test_existing_tracking_and_attribution_persist_in_shared_handler():
