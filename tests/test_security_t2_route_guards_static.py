@@ -116,6 +116,16 @@ def test_pr00_staging_identity_route_preserves_both_auth_gates_and_read_only_sql
     assert "prisma.$queryRaw" in text
 
 
+def test_pr00_preview_lockdown_blocks_every_route_except_attestation():
+    text = (ROOT / "middleware.ts").read_text(encoding="utf-8")
+    assert "if (process.env.VERCEL_ENV === 'preview')" in text
+    assert "process.env.VERCEL_PROJECT_ID !== 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu'" in text
+    assert "req.method !== 'GET'" in text
+    assert "pathname !== '/api/internal/pr00/staging-identity'" in text
+    assert "return NextResponse.json({ ok: false, code: 'not_found' }" in text
+    assert text.index("if (process.env.VERCEL_ENV === 'preview')") < text.index("if (!isPlatformHost")
+
+
 def test_listed_routes_still_exist():
     existing = {path for path, _ in routes()}
     assert not set(GUARDED) - existing, sorted(set(GUARDED) - existing)
