@@ -14,7 +14,8 @@ const token = 'A'.repeat(48);
 const env = {
   PR00_STAGING_ATTESTATION_ENABLED: 'true',
   PR00_STAGING_ATTESTATION_TOKEN: token,
-  VERCEL_ENV: 'production',
+  VERCEL_ENV: 'preview',
+  VERCEL_GIT_COMMIT_REF: PR00_STAGING.previewBranch,
   VERCEL_PROJECT_ID: PR00_STAGING.vercelProjectId,
   NODE_ENV: 'production',
   DATABASE_URL: url,
@@ -27,7 +28,8 @@ test('PR00 identity disabled unless all staging conditions are met', () => {
     assert.equal(stagingIdentityGateEnabled({ ...env, [key]: undefined }), false, 'missing ' + key + ' must block');
   }
   assert.equal(stagingIdentityGateEnabled({ ...env, PR00_STAGING_ATTESTATION_ENABLED: 'false' }), false);
-  assert.equal(stagingIdentityGateEnabled({ ...env, VERCEL_ENV: 'preview' }), false);
+  assert.equal(stagingIdentityGateEnabled({ ...env, VERCEL_ENV: 'production' }), false);
+  assert.equal(stagingIdentityGateEnabled({ ...env, VERCEL_GIT_COMMIT_REF: 'main' }), false);
   assert.equal(stagingIdentityGateEnabled({ ...env, NODE_ENV: 'test' }), false);
   assert.equal(stagingIdentityGateEnabled({ ...env, VERCEL_PROJECT_ID: 'prj_7CWjG34Zspu7iUrhXweIKR0uNG0v' }), false);
   assert.equal(stagingIdentityGateEnabled({ ...env, PR00_STAGING_ATTESTATION_TOKEN: 'weak' }), false);
