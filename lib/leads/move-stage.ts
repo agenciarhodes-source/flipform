@@ -40,12 +40,25 @@ export async function moveLeadToStage(input: {
   } else if (newStage.name === 'Perdido') newStatus = 'lost';
   else newStatus = 'open';
 
-  const [, stageHistory] = await prisma.$transaction([
-    prisma.lead.update({ where: { id: lead.id }, data: { stageId: newStage.id, status: newStatus, temperature: newTemperature } }),
-    prisma.leadStageHistory.create({
+  // Atomic state comparison prevents stale assistant/approval operations from
+  // overwriting another move or creating a history record for an uncommitted move.
+  const stageHistory = await prisma.$transaction(async (tx) => {
+    const updated = await tx.lead.updateMany({
+      where: {
+        id: lead.id,
+        tenantId: input.tenantId,
+        pipelineId: lead.pipelineId,
+        stageId: lead.stageId,
+        status: lead.status,
+      },
+      data: { stageId: newStage.id, status: newStatus, temperature: newTemperature },
+    });
+    if (updated.count !== 1) return null;
+    return tx.leadStageHistory.create({
       data: { leadId: lead.id, fromStageId: lead.stageId, toStageId: newStage.id, changedBy: input.changedBy },
-    }),
-  ]);
+    });
+  });
+  if (!stageHistory) return { moved: false as const, reason: 'concurrent_update' };
 
   try {
     await dispatchKanbanStageTracking({

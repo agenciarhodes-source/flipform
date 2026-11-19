@@ -29,7 +29,9 @@ def test_preview_never_writes():
 def test_apply_recomputes_and_only_touches_open_lead_owner():
     apply = SERVICE.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
     assert "distribution.changes.length !== expectedMoves" in apply
-    assert "data: { assignedTo: to }" in apply
+    assert "data: { assignedTo: change.to }" in apply
+    assert "assignedTo: change.from" in apply
+    assert "if (updated.count !== 1) throw new LeadAssistantError(409, STALE_PREVIEW)" in apply
     assert "status: 'open'" in apply
     # The Kanban only: conversations keep their attendant, nothing is deleted.
     assert "conversation" not in SERVICE
@@ -87,7 +89,8 @@ def test_bulk_stage_moves_send_nothing_to_the_ads_and_never_mark_won():
 
 def test_stage_and_tag_changes_can_be_undone():
     undo = SERVICE.split("export async function undoLeadBatch", 1)[1]
-    assert "kind === 'stage'" in undo and "lead.stageId === change.ts" in undo
+    assert "kind === 'stage'" in undo and "lead.stageId !== change.ts" in undo
+    assert "stageId: change.ts" in undo and "if (updated.count === 1) restore.push(change)" in undo
     assert "kind === 'tag'" in undo and "sameTags(lead.tags, change.n)" in undo
     # Tags are written only for leads of this company.
     assert "WHERE l.id = v.id AND l.tenant_id = ${tenantId}" in SERVICE

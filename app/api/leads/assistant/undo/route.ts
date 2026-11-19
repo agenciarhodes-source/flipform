@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { withPermission } from '@/lib/rbac-server';
 import { LeadAssistantError, undoLeadBatch } from '@/lib/lead-assistant/service';
@@ -13,6 +14,10 @@ export const POST = withPermission('LEAD_ASSISTANT_COMMAND', async (req: NextReq
     return NextResponse.json(await undoLeadBatch(session, parsed.data.batchId));
   } catch (error) {
     if (error instanceof LeadAssistantError) return NextResponse.json({ error: error.message }, { status: error.status });
+    // Serializable transaction aborted by a concurrent operation: no partial writes.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      return NextResponse.json({ error: 'Os leads mudaram durante a operação. Atualize e tente novamente.' }, { status: 409 });
+    }
     console.error('Lead assistant undo failed', { errorType: error instanceof Error ? error.name : 'unknown' });
     return NextResponse.json({ error: 'Não foi possível desfazer agora. Nada foi alterado.' }, { status: 500 });
   }
