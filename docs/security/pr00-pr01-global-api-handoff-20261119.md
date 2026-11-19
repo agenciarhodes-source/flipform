@@ -58,7 +58,7 @@ Cada nova entidade exigirá `tenantId` obrigatório onde pertinente; índices/co
 
 1. **Fundação de segurança:** feature flag off, entidades aditivas sem dados reais, chaves M2M, rota interna de administração e grants com RBAC. Testes A/B, papéis, rotação e revogação. Não expor segredo no cliente depois da criação.
 2. **Infraestrutura de API e contratos:** `/api/v1`, OpenAPI executável, validação e erros sanitizados, limites e quotas distribuídos. Somente endpoints diagnósticos não destrutivos previstos pelo contrato.
-3. **Eventos e webhooks:** inbox/outbox/assinaturas/retries/idempotência/SSR F, isolamento de jobs e controle de entrega; teste de falha e replay 10x, sem integração real.
+3. **Eventos e webhooks:** inbox/outbox/assinaturas/retries/idempotência/SSRF, isolamento de jobs e controle de entrega; teste de falha e replay 10x, sem integração real.
 4. **Painel Integrações e API:** gestão por tenant e escopos com permissões; logs e diagnósticos sem exposição de segredos. Sem mudança de cobrança ou da navegação geral.
 5. **Homologação com staging isolado:** CI + Playwright, teste PostgreSQL sintético concorrente, regressão CRM, Kanban, Inbox, Meta/Google/WhatsApp/Stripe, kill switch e rollback.
 6. **PR 02 depois:** somente após aceite separado, implementar CRUD empresarial, mapeamento genérico e piloto Junqueira.
