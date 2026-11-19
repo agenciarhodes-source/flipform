@@ -30,6 +30,23 @@ async function verifyJWT(token: string): Promise<any | null> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // PR00 staging database attestation preview: reject ALL other endpoints before
+  // authentication, CRM, integrations, webhooks, tracking, background handlers, etc.
+  // This is a branch-specific hard lockdown and does not affect main/prod code.
+  if (
+    process.env.VERCEL_ENV === 'preview'
+    && process.env.VERCEL_GIT_COMMIT_REF === 'security/pr00-a2d-staging-db-attestation-20261118'
+  ) {
+    if (
+      process.env.VERCEL_PROJECT_ID !== 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu'
+      || req.method !== 'GET'
+      || pathname !== '/api/internal/pr00/staging-identity'
+    ) {
+      return NextResponse.json({ ok: false, code: 'not_found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+    }
+    return NextResponse.next();
+  }
+
   const host = req.headers.get('host');
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-pathname', pathname);
