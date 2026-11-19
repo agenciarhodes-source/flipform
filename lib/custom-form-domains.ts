@@ -33,9 +33,10 @@ export function getConfiguredAppDomain() {
   return (process.env.NEXT_PUBLIC_APP_DOMAIN || DEFAULT_APP_DOMAIN).replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
 }
 
-export function buildPublicFormUrl(params: { slug: string; primaryDomain?: string | null; appDomain?: string | null }) {
+export function buildPublicFormUrl(params: { slug: string; formId: string; primaryDomain?: string | null; appDomain?: string | null }) {
   return buildPublicFormUrlBase({
     slug: params.slug,
+    formId: params.formId,
     primaryDomain: params.primaryDomain,
     appDomain: params.appDomain || getConfiguredAppDomain(),
   });
@@ -124,8 +125,14 @@ export async function getPrimaryCustomFormDomain(tenantId: string) {
 }
 
 export async function getTenantPublicFormUrl(tenantId: string, slug: string) {
+  // Do not publish a platform URL without resolving the ID within this tenant.
+  const form = await prisma.form.findFirst({
+    where: { tenantId, slug, isActive: true },
+    select: { id: true },
+  });
+  if (!form) return null;
   const primary = await getPrimaryCustomFormDomain(tenantId);
-  return buildPublicFormUrl({ slug, primaryDomain: primary?.domain });
+  return buildPublicFormUrl({ slug, formId: form.id, primaryDomain: primary?.domain });
 }
 
 export function getManualDnsInstruction(_domain: string, value = DEFAULT_VERCEL_DNS_TARGET): DnsInstruction {
