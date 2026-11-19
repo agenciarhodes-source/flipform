@@ -156,6 +156,7 @@ model Tenant {
   // PR01 additive API foundation. No production schema change is authorized here.
   apiV1Integrations ApiIntegration[]
   apiV1EntitlementGrants TenantEntitlementGrant[]
+  apiV1CredentialAudits ApiCredentialAudit[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -2293,7 +2294,10 @@ model ApiCredential {
 
   // A credential cannot point to another tenant's integration.
   integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Cascade)
+  quotaBuckets ApiV1QuotaBucket[]
 
+  // Isolates quota bucket references by tenant + integration + credential.
+  @@unique([tenantId, integrationId, id])
   @@index([tenantId, integrationId])
   @@map("api_v1_credentials")
 }
@@ -2316,4 +2320,44 @@ model TenantEntitlementGrant {
 
   @@index([tenantId, feature, enabled, revokedAt])
   @@map("tenant_entitlement_grants")
+}
+
+
+/// PR01 Phase 3: append-only audit trail for key issuance, rotation and revocation.
+/// No raw bearer token, authorization header, or secret is stored here.
+model ApiCredentialAudit {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  credentialId  String   @map("credential_id")
+  actorUserId   String   @map("actor_user_id")
+  action        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, credentialId, createdAt])
+  @@map("api_v1_credential_audits")
+}
+
+/// PR01 Phase 3: shared PostgreSQL quota bucket, never an in-memory counter.
+/// Values are supplied by server-side policy, without an arbitrary default.
+model ApiV1QuotaBucket {
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  credentialId  String   @map("credential_id")
+  operation     String
+  windowStart   DateTime @map("window_start")
+  consumed      Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  credential ApiCredential @relation(
+    fields: [tenantId, integrationId, credentialId],
+    references: [tenantId, integrationId, id],
+    onDelete: Cascade
+  )
+
+  @@id([tenantId, integrationId, credentialId, operation, windowStart])
+  @@index([createdAt])
+  @@map("api_v1_quota_buckets")
 }
