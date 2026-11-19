@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { matchesLiveDatabaseIdentity, stagingIdentityBuildGateEnabled } from '../lib/security/pr00-staging-db-identity';
+import { matchesLiveDatabaseIdentity, stagingIdentityBuildGateEnabled, stagingIdentityPreflightChecks } from '../lib/security/pr00-staging-db-identity';
 
 // Executed ONLY by this Draft branch build command, never by main.
 // GitHub CI runs with no VERCEL runtime so it intentionally does NOT touch Neon.
@@ -12,7 +12,12 @@ async function main() {
   }
 
   if (!stagingIdentityBuildGateEnabled(process.env)) {
-    throw new Error('PR00 staging build blocked: unexpected project, preview branch, or database identity');
+    // Log only per-condition booleans: never inspect or print credentials/URLs.
+    const checks = stagingIdentityPreflightChecks(process.env);
+    for (const [name, ok] of Object.entries(checks)) {
+      process.stderr.write('PR00 staging preflight ' + name + ': ' + (ok ? 'pass' : 'blocked') + '\\n');
+    }
+    throw new Error('PR00 staging build blocked: identity preflight denied');
   }
 
   const prisma = new PrismaClient({ log: ['error'] });
