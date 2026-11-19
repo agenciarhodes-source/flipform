@@ -182,6 +182,17 @@ jobs:
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
 
+      # PR01 Phase 2: synthetic-only isolation on the runner's disposable PostgreSQL.
+      # Never use Neon, Vercel, or external integrations in this suite.
+      - name: PR01 M2M persistence and tenant isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-m2m-persistence.integration.test.ts
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
