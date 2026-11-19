@@ -2274,6 +2274,7 @@ model ApiIntegration {
 
   tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   credentials ApiCredential[]
+  idempotencyRecords ApiV1IdempotencyRecord[]
 
   // Compound identity is needed for tenant-safe credential references.
   @@unique([tenantId, id])
@@ -2356,4 +2357,62 @@ model ApiV1QuotaBucket {
   @@id([tenantId, integrationId, credentialId, operation, windowStart])
   @@index([createdAt])
   @@map("api_v1_quota_buckets")
+}
+
+
+/// PR01 Phase 4: durable idempotency claim, unique within one tenant/integration/operation.
+/// Only a SHA-256 digest of the caller key and a request fingerprint are saved.
+model ApiV1IdempotencyRecord {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  operation     String
+  keyHash       String   @map("key_hash")
+  fingerprint   String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Cascade)
+  inbox       ApiV1InboxEvent?
+
+  @@unique([tenantId, integrationId, operation, keyHash])
+  @@unique([tenantId, integrationId, id])
+  @@map("api_v1_idempotency_records")
+}
+
+/// PR01 Phase 4: diagnostic-only inbox envelope; no customer payload is persisted.
+/// State is always held while the feature remains Draft, with no worker enabled.
+model ApiV1InboxEvent {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  integrationId       String   @map("integration_id")
+  idempotencyRecordId String   @unique @map("idempotency_record_id")
+  eventType           String   @map("event_type")
+  payloadHash         String   @map("payload_hash")
+  state               String   @default("held")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  idempotencyRecord ApiV1IdempotencyRecord @relation(fields: [tenantId, integrationId, idempotencyRecordId], references: [tenantId, integrationId, id], onDelete: Cascade)
+  outbox            ApiV1OutboxEvent?
+
+  @@unique([tenantId, integrationId, id])
+  @@index([tenantId, state, createdAt])
+  @@map("api_v1_inbox_events")
+}
+
+/// PR01 Phase 4: held outbound envelope, *not* a delivery/dispatch worker.
+/// Its parent inbox event must belong to exactly the same tenant and integration.
+model ApiV1OutboxEvent {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  inboxEventId  String   @unique @map("inbox_event_id")
+  eventType     String   @map("event_type")
+  state         String   @default("held")
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  inbox ApiV1InboxEvent @relation(fields: [tenantId, integrationId, inboxEventId], references: [tenantId, integrationId, id], onDelete: Cascade)
+
+  @@index([tenantId, state, createdAt])
+  @@map("api_v1_outbox_events")
 }
