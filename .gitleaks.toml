@@ -15,3 +15,17 @@ regexes = [
 paths = [
   '''package-lock\.json''',
 ]
+
+# PR01: a constant Prisma model->table mapping was flagged as generic-api-key
+# in commit ca1cc74e... (SARIF rule generic-api-key at auditor line 50).
+# This is not a credential. Constrain suppression to exactly this single
+# deterministic source line AND this one file, without disabling the rule.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "PR01 schema map false positive: ApiIntegration model to its fixed table name"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^scripts/pr00_a2c2_audit_sql\.py$''']
+regexes = ['''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*$''']
