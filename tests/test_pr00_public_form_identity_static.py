@@ -34,7 +34,8 @@ def test_canonical_routes_are_separate_from_legacy():
 
 def test_platform_links_use_form_uuid_without_changing_custom_domain_links():
     links = source('lib/forms/public-form-url.ts')
-    assert "params.formId ? " in links
+    assert "formId: string;" in links
+    assert "params.formId ? " not in links
     assert "/f/id/" in links
     assert "customUrl" in links
     assert "formId: form.id" in source('app/api/forms/route.ts')
