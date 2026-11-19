@@ -6,14 +6,24 @@ import { canManageApiV1Keys, apiV1Enabled, apiV1Entitled, type ApiV1Entitlement 
 import type { ApiV1CredentialRecord, ApiV1CredentialRepository } from './identity';
 
 /**
- * PR01 Phase 2: read-only backing store for credentials and tenant entitlements.
- * The API is NOT wired to this store, credential issuance is NOT available, and
+ * PR01 Phase 3: read-only M2M identity, tenant entitlement and guarded quota store.
+ * The API HTTP route is NOT wired to this store, no quota default is installed, and
  * no actual API key or database migration is provisioned by this module.
  */
-type ApiV1Db = Pick<PrismaClient, 'apiCredential' | 'tenant' | 'tenantUser' | 'tenantEntitlementGrant'>;
+type ApiV1Db = Pick<PrismaClient, 'apiCredential' | 'tenant' | 'tenantUser' | 'tenantEntitlementGrant' | 'apiV1QuotaBucket'>;
+
+export type ApiV1QuotaPolicy = {
+  /** Explicitly approved server-side values. Absent policy blocks every request. */
+  limit: number;
+  windowMs: number;
+  now?: () => Date;
+};
 
 export class PrismaApiV1CredentialRepository implements ApiV1CredentialRepository {
-  constructor(private readonly db: ApiV1Db = prisma) {}
+  constructor(
+    private readonly db: ApiV1Db = prisma,
+    private readonly quotaPolicy: ApiV1QuotaPolicy | null = null,
+  ) {}
 
   async findCredential(id: string): Promise<ApiV1CredentialRecord | null> {
     const row = await this.db.apiCredential.findUnique({
@@ -84,10 +94,42 @@ export class PrismaApiV1CredentialRepository implements ApiV1CredentialRepositor
     };
   }
 
-  async consumeQuota(): Promise<boolean> {
-    // Distributed atomic quotas are a separate gate. No in-memory fallback and
-    // no 200/authorization path is possible from this repository until then.
-    throw new Error('API_V1_DISTRIBUTED_QUOTA_NOT_IMPLEMENTED');
+  async consumeQuota(params: {
+    tenantId: string; integrationId: string; credentialId: string; operation: string;
+  }): Promise<boolean> {
+    const policy = this.quotaPolicy;
+    // A quota policy must be explicitly injected by a trusted future server
+    // integration. There is deliberately NO default, even in test environments.
+    if (!policy || !Number.isSafeInteger(policy.limit) || policy.limit < 1
+      || !Number.isSafeInteger(policy.windowMs) || policy.windowMs < 1000
+      || !params.tenantId || !params.integrationId || !params.credentialId
+      || !params.operation || params.operation.length > 120) {
+      throw new Error('API_V1_QUOTA_NOT_CONFIGURED');
+    }
+    const now = (policy.now ?? (() => new Date()))();
+    if (!Number.isFinite(now.getTime())) throw new Error('API_V1_QUOTA_INVALID_CLOCK');
+    const windowStart = new Date(Math.floor(now.getTime() / policy.windowMs) * policy.windowMs);
+    const where = {
+      tenantId: params.tenantId,
+      integrationId: params.integrationId,
+      credentialId: params.credentialId,
+      operation: params.operation,
+      windowStart,
+    };
+    try {
+      // First caller creates one shared row; a competing create fails on the
+      // compound primary key. Never silently switch to a process-local counter.
+      await this.db.apiV1QuotaBucket.create({ data: { ...where, consumed: 1 } });
+      return true;
+    } catch (error) {
+      // Only duplicate-key conflict can fall through to atomic update.
+      if ((error as { code?: string })?.code !== 'P2002') throw error;
+      const result = await this.db.apiV1QuotaBucket.updateMany({
+        where: { ...where, consumed: { lt: policy.limit } },
+        data: { consumed: { increment: 1 } },
+      });
+      return result.count === 1;
+    }
   }
 }
 
