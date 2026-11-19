@@ -17,7 +17,7 @@
 
 ## 2. Evidências verificadas agora (sem SQL de produção)
 
-- Repositório privado `agenciarhodes-source/flipform`, default `main`, `allow_auto_merge=false`. Os PRs **#619, #620, #621, #622, #623, #624, #625 e #626** permanecem Draft e não mesclados; **CI e Playwright E2E `success`** em seus HEADs (a auditoria Prisma offline está skipped, não executada).
+- Repositório privado `agenciarhodes-source/flipform`, default `main`, `allow_auto_merge=false`. **Commit atual de referência da `main`: `6def5c5ed92920deadd0f83806f057da4219a022`.** PRs legados `#82`, `#84`, `#123` e `#145`: **closed**, não mesclados na verificação atual; não contá-los como abertos. Os PRs **#619, #620, #621, #622, #623, #624, #625 e #626** permanecem Draft e não mesclados; **CI e Playwright E2E `success`** em seus HEADs (a auditoria Prisma offline está skipped, não executada).
 - Vercel projeto produtivo **`flipform`**, ID `prj_7CWjG34Zspu7iUrhXweIKR0uNG0v`; deployment Production recente `dpl_EBz4fK3MG8uidSzWSpRBZw4QQGYp`, READY, commit `6def5c5ed92920deadd0f83806f057da4219a022`.
 - Vercel projeto isolado **`flipform-staging`**, ID `prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu`; deployment Production do **projeto staging** `dpl_gXw1pmHztnKtFieJ5BPi7dSg4QT5`, READY no mesmo commit de aplicação. Ter o mesmo commit NÃO significa ter o mesmo banco: projetos e variáveis são distintos.
 - Nomes de env no projeto staging (sem decriptar): **somente** `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET_CURRENT`, `JWT_SECRET_PREVIOUS`, para targets preview/production **do staging**. O projeto produtivo tem 50 variáveis de app/integrações. A ausência de secrets de integração no staging **não prova** que todas as chamadas de saída/crons estão bloqueados pelo código.
@@ -78,7 +78,7 @@ O PR #623 registra que `PR00_MAINTENANCE_DATABASE_URL` e `PR00_MAINTENANCE_DIREC
 ## 6. Pacote pronto para próximo turno (não executar automaticamente)
 
 **Entrada para PR 01:**
-- Repositório `agenciarhodes-source/flipform` · base `main` atual a registrar no início · nova branch futura sugerida `feature/pr01-global-api-foundation` (não criada).
+- Repositório `agenciarhodes-source/flipform` · base `main` atual (`6def5c5ed92920deadd0f83806f057da4219a022`, **reconfirmar no momento de criar branch**) · nova branch futura sugerida `feature/pr01-global-api-foundation` (não criada).
 - Referências: Plano Mestre v6.1; `docs/security/pr00-pr01-global-api-handoff-20261119.md`; este documento; PRs Draft #622–#626 como evidências, **não como código automaticamente mesclado**.
 - Proposta inicial de diff (somente se autorizado): `docs/api/openapi-v1.yaml`, `docs/security/pr01-adrs.md`, `lib/api-v1/{auth,entitlements,limits,errors,idempotency,events,webhooks}.ts`, `app/api/v1/*` com flag OFF, modelos Prisma aditivos e testes unitários/integrados; caminhos finais a confirmar no review. Evitar tocar `app/api/leads/route.ts`, Ads/Pixel ou workflows de reparação.
 - Primeiros testes: tenant A/B e grupo; revisão de papéis; chave expirada/revogada; missing critical limiter -> fail-closed; evento 10x com fingerprint; HMAC e replay; SSRF/redirect; sem tráfego externo/PII; desligamento de flag e ausência de side effects.
