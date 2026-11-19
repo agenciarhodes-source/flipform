@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PR00_STAGING,
+  stagingIdentityBuildGateEnabled,
   stagingIdentityGateEnabled,
   matchesStagingIdentityToken,
   matchesLiveDatabaseIdentity,
@@ -33,6 +34,15 @@ test('PR00 identity disabled unless all staging conditions are met', () => {
   assert.equal(stagingIdentityGateEnabled({ ...env, NODE_ENV: 'test' }), false);
   assert.equal(stagingIdentityGateEnabled({ ...env, VERCEL_PROJECT_ID: 'prj_7CWjG34Zspu7iUrhXweIKR0uNG0v' }), false);
   assert.equal(stagingIdentityGateEnabled({ ...env, PR00_STAGING_ATTESTATION_TOKEN: 'weak' }), false);
+});
+
+test('Vercel build gate has the same connection/project restrictions, but no HTTP token requirement', () => {
+  assert.equal(stagingIdentityBuildGateEnabled(env), true);
+  assert.equal(stagingIdentityBuildGateEnabled({ ...env, PR00_STAGING_ATTESTATION_TOKEN: undefined }), true);
+  assert.equal(stagingIdentityBuildGateEnabled({ ...env, VERCEL_ENV: 'production' }), false);
+  assert.equal(stagingIdentityBuildGateEnabled({ ...env, VERCEL_PROJECT_ID: 'prj_7CWjG34Zspu7iUrhXweIKR0uNG0v' }), false);
+  assert.equal(stagingIdentityBuildGateEnabled({ ...env, VERCEL_GIT_COMMIT_REF: 'main' }), false);
+  assert.equal(stagingIdentityBuildGateEnabled({ ...env, DATABASE_URL: 'postgresql://example:secret@localhost/neondb?sslmode=require' }), false);
 });
 
 test('wrong host / database / role / TLS / password blocks before any SQL', () => {
