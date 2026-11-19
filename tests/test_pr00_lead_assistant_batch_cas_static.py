@@ -62,7 +62,7 @@ def test_assignment_batch_and_undo_have_cas_and_real_audit_count():
 def test_tag_batch_cas_enforces_previous_array_state_and_audits_only_updated():
     helper = SRC.split("async function writeTags", 1)[1].split("/** Applies a confirmed plan.", 1)[0]
     assert "RETURNING l.id" in helper
-    assert "l.tags = ARRAY(SELECT jsonb_array_elements_text(v.\\"previousTags\\"))" in helper
+    assert 'l.tags = ARRAY(SELECT jsonb_array_elements_text(v."previousTags"))' in helper
     assert "WHERE l.id = v.id AND l.tenant_id = ${tenantId}" in helper
     apply = SRC.split("export async function applyLeadPlan", 1)[1].split("type AssignChange", 1)[0]
     assert "if (updatedTags.length !== tagged.changes.length) throw new LeadAssistantError(409, STALE_PREVIEW)" in apply
