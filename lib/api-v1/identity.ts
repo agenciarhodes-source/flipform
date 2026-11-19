@@ -44,7 +44,7 @@ const UNAVAILABLE: ApiV1Authorization = { ok: false, status: 503, code: 'depende
 export function parseApiV1Bearer(header: string | null): { id: string; secret: Buffer } | null {
   if (!header || header.length > 160) return null;
   const match = BEARER.exec(header);
-  if (!match) return null;
+  if (!match || match[0].length !== header.length) return null;
   const secret = Buffer.from(match[2], 'base64url');
   if (secret.length !== 32 || secret.toString('base64url') !== match[2]) return null;
   return { id: match[1].toLowerCase(), secret };
