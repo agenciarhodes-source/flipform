@@ -2351,11 +2351,7 @@ model ApiV1QuotaBucket {
   consumed      Int      @default(0)
   createdAt     DateTime @default(now()) @map("created_at")
 
-  credential ApiCredential @relation(
-    fields: [tenantId, integrationId, credentialId],
-    references: [tenantId, integrationId, id],
-    onDelete: Cascade
-  )
+  credential ApiCredential @relation(fields: [tenantId, integrationId, credentialId], references: [tenantId, integrationId, id], onDelete: Cascade)
 
   @@id([tenantId, integrationId, credentialId, operation, windowStart])
   @@index([createdAt])
