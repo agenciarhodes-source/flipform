@@ -41,6 +41,11 @@ def test_platform_links_use_form_uuid_without_changing_custom_domain_links():
     assert "publicUrl: `/f/id/${form.id}/${form.slug}`" in source('lib/dashboard-metrics.ts')
     assert "f.publicUrl || `/f/id/${f.id}/${f.slug}`" in source('app/(app)/forms/page.tsx')
     assert "submitEndpoint:" in source('app/f/public-form-page.tsx')
+    assert "formId: string;" in source('lib/forms/public-form-url.ts')
+    assert 'legacyFallbackUrl' not in source('lib/forms/public-form-url.ts')
+    tenant_helper = source('lib/custom-form-domains.ts')
+    assert 'where: { tenantId, slug, isActive: true }' in tenant_helper
+    assert 'formId: form.id' in tenant_helper
 
 def test_existing_tracking_and_attribution_persist_in_shared_handler():
     handler = source('lib/forms/public-submit-handler.ts')
