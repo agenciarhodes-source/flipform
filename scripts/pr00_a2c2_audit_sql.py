@@ -53,7 +53,7 @@ PR01_ADDITIVE_MODELS = {
 }
 
 def parse_expected_tables(schema):
-    blocks = re.findall(r"(?ms)^model\\s+(\\w+)\\s*\\{(.*?)^\\}", schema)
+    blocks = re.findall(r"(?ms)^model\s+(\w+)\s*\{(.*?)^\}", schema)
     baseline = [(name, body) for name, body in blocks if name not in PR01_ADDITIVE_MODELS]
     additions = [(name, body) for name, body in blocks if name in PR01_ADDITIVE_MODELS]
     if len(baseline) != 92:
@@ -64,7 +64,7 @@ def parse_expected_tables(schema):
         raise ValueError("Incomplete PR01 additive model set")
     names = []
     for name, block in blocks:
-        match = re.search(r'@@map\\("([^"]+)"\\)', block)
+        match = re.search(r'@@map\("([^"]+)"\)', block)
         if not match:
             raise ValueError("Prisma model without explicit @@map")
         physical = match.group(1)
@@ -73,7 +73,7 @@ def parse_expected_tables(schema):
         names.append(physical)
     if len(set(names)) != len(blocks):
         raise ValueError("Duplicate Prisma physical table names")
-    if len(re.findall(r"(?m)^enum\\s+\\w+\\s*\\{", schema)) != 10:
+    if len(re.findall(r"(?m)^enum\s+\w+\s*\{", schema)) != 10:
         raise ValueError("Expected 10 Prisma enums")
     return set(names)
 
