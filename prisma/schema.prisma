@@ -153,6 +153,10 @@ model Tenant {
   leadStageSuggestions LeadStageSuggestion[]
   documentChecklists   DocumentChecklist[]
 
+  // PR01 additive API foundation. No production schema change is authorized here.
+  apiV1Integrations ApiIntegration[]
+  apiV1EntitlementGrants TenantEntitlementGrant[]
+
   @@index([accountKind])
   @@map("tenants")
 }
@@ -2255,4 +2259,61 @@ model WhatsAppNumberAccess {
   @@id([connectionId, userId])
   @@index([tenantId, userId])
   @@map("whatsapp_number_access")
+}
+
+
+/// PR01: disabled by default. Generic per-tenant integration, never provider-specific.
+model ApiIntegration {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  displayName String   @map("display_name")
+  status      String   @default("disabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentials ApiCredential[]
+
+  // Compound identity is needed for tenant-safe credential references.
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@map("api_v1_integrations")
+}
+
+/// PR01: stores only the digest of a high-entropy bearer secret, never plaintext.
+model ApiCredential {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  integrationId String    @map("integration_id")
+  secretHashHex String    @map("secret_hash_hex")
+  scopes        String[]  @default([])
+  expiresAt     DateTime? @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // A credential cannot point to another tenant's integration.
+  integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Cascade)
+
+  @@index([tenantId, integrationId])
+  @@map("api_v1_credentials")
+}
+
+/// PR01: explicit, tenant-local exception. Not inherited from a group or platform role.
+/// No UI or write endpoint is enabled in this phase.
+model TenantEntitlementGrant {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  feature    String
+  enabled    Boolean   @default(false)
+  reason     String
+  approvedBy String    @map("approved_by")
+  startsAt   DateTime  @map("starts_at")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, feature, enabled, revokedAt])
+  @@map("tenant_entitlement_grants")
 }
