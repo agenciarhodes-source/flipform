@@ -15,7 +15,7 @@ async function main() {
     // Log only per-condition booleans: never inspect or print credentials/URLs.
     const checks = stagingIdentityPreflightChecks(process.env);
     for (const [name, ok] of Object.entries(checks)) {
-      process.stderr.write('PR00 staging preflight ' + name + ': ' + (ok ? 'pass' : 'blocked') + '\\n');
+      process.stderr.write('PR00 staging preflight ' + name + ': ' + (ok ? 'pass' : 'blocked') + '\n');
     }
     throw new Error('PR00 staging build blocked: identity preflight denied');
   }
