@@ -8,7 +8,7 @@
 
 | Fonte / linha em `main` | Emissão ou referência antiga | Consequência e situação no PR #624 |
 |---|---|---|
-| `lib/forms/public-form-url.ts:21` | Fallback `https://{appDomain}/f/{slug}` | A listagem antiga podia fornecer um link só por slug; a listagem do PR #624 já passa `formId` e emite URL canônica. O helper ainda contém um fallback quando `formId` não é informado: **ponto residual para revisão**, não autorização de release |
+| `lib/forms/public-form-url.ts:21` | Fallback `https://{appDomain}/f/{slug}` | A listagem antiga podia fornecer um link só por slug; a listagem do PR #624 já passa `formId` e emite URL canônica. O helper da branch Draft foi endurecido para **exigir sempre `formId`**; o fallback só por slug foi removido |
 | `app/api/forms/route.ts:34` | Chamava `buildPublicFormUrlState` sem UUID | PR #624 já passa `formId: form.id`; novos links emitidos na listagem deixam de depender de identidade por slug |
 | `lib/dashboard-metrics.ts:679` | `publicUrl: /f/{form.slug}` no Dashboard | PR #624 já substitui por `/f/id/{form.id}/{form.slug}`; teste estático impede regressão |
 | `app/(app)/forms/page.tsx:169` | Fallback para `/f/{f.slug}` no botão de abrir | PR #624 já usa ID imutável no fallback |
@@ -17,6 +17,8 @@
 | `docs/operations/lead-attribution.md:42` | Exemplo de UTM/Meta/Facebook no formato `/f/SLUG?...` | Atualizado na branch Draft para `/f/id/FORM_UUID/SLUG?...`; é **exemplo**, não anúncio real comprovado |
 | `tests/test_custom_form_domains_static.py:31,183` | Asserções antigas cobriam emissão por slug | Asserções do PR #624 já cobrem links por ID na tela; o teste de fallback do helper permanece como possível ponto de geração, sob revisão |
 | `docs/operations/meta-capi.md:60` | Documentação genérica cita `/f/[slug]` | Referência descritiva, não prova de publicidade ativa, nem permissão para mudar Pixel/CAPI |
+
+**Controle adicional nesta rodada:** `lib/forms/public-form-url.ts` exige `formId` para links de plataforma; `lib/custom-form-domains.ts` obtém o ID do formulário ativo **dentro do tenant** antes de gerar o link; o seed sintético também anuncia a URL canônica. Testes Python e TypeScript foram adicionados, mas a aprovação depende do último CI.
 
 **Evidência histórica de código não equivale a titularidade comercial.** Não foi possível obter do repositório quais URLs foram efetivamente compartilhadas, quem recebeu cada URL, qual tenant era proprietário no momento de publicação, ou se um slug foi renomeado, desativado ou reutilizado.
 
