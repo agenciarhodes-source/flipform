@@ -2,16 +2,16 @@ import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { normalizeHostname } from '@/lib/host-routing';
 import { selectUniquePublicForm } from '@/lib/forms/public-form-identity-policy';
+import { getVerifiedLegacyFormAlias } from '@/lib/forms/verified-legacy-form-aliases';
 
 /**
  * Resolves a public form only when the request host provides a trusted tenant
  * boundary (verified custom domain), or an immutable form ID is supplied on
  * the configured platform host.
  *
- * Legacy slug-only platform requests may still resolve when unique across
- * active tenants. This is a provisional migration bridge: it does not prove
- * historical URL ownership and MUST NOT be deployed without the legacy-link
- * mapping and business-compatibility gate.
+ * Legacy platform slug-only URLs require an explicitly reviewed alias manifest;
+ * current uniqueness never proves ownership of historical campaigns. Without
+ * an approved alias, fail closed. Verified custom domains remain tenant-scoped.
  */
 export async function resolvePublicFormIdentity(
   hostHeader: string | null,
@@ -47,11 +47,23 @@ export async function resolvePublicFormIdentity(
   const slug = selector.slug?.trim();
   if (!slug) return null;
 
+  if (platform) {
+    // Never infer historical ownership from a currently unique global slug.
+    // An explicit owner-reviewed alias must bind both immutable form ID and tenant.
+    const alias = getVerifiedLegacyFormAlias(slug, process.env.PR00_VERIFIED_LEGACY_FORM_ALIASES_JSON);
+    if (!alias) return null;
+    const form = await prisma.form.findFirst({
+      where: { id: alias.formId, tenantId: alias.tenantId, isActive: true },
+      select: { id: true, tenantId: true },
+    });
+    return form ?? null;
+  }
+
   const candidates = await prisma.form.findMany({
     where: { slug, isActive: true, ...(tenantId ? { tenantId } : {}) },
     select: { id: true, tenantId: true },
     take: 2,
   });
-  // Never choose the "first" tenant when slug identity is ambiguous.
+  // A verified custom host binds to one tenant; reject unexpected duplicates.
   return selectUniquePublicForm(candidates);
 }
