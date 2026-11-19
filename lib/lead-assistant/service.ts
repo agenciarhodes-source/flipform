@@ -414,17 +414,30 @@ export async function applyLeadPlan(session: Session, plan: ResolvedLeadAssistan
       const moves = await computeStageMoves(tx, session.tenantId, plan);
       if (moves.changes.length !== expectedMoves) throw new LeadAssistantError(409, STALE_PREVIEW);
       if (!moves.changes.length) return { batchId: null, moves: 0 };
-      const groups = new Map<string, string[]>();
+      // Every lead must still have exactly the state used for the preview.
+      // A single failed CAS aborts the whole transaction: no partial batch,
+      // history, audit or notifications for stale stage changes.
+      const pipelineByLead = new Map(moves.leads.map((lead) => [lead.id, lead.pipelineId]));
       for (const change of moves.changes) {
-        const key = `${change.toStageId}|${change.toStatus}`;
-        groups.set(key, [...(groups.get(key) || []), change.leadId]);
-      }
-      for (const [key, ids] of groups) {
-        const [stageId, status] = key.split('|');
-        await tx.lead.updateMany({
-          where: { tenantId: session.tenantId, status: 'open', id: { in: ids } },
-          data: { stageId, status: status as 'open' | 'lost' },
+        const pipelineId = pipelineByLead.get(change.leadId);
+        if (!pipelineId) throw new LeadAssistantError(409, STALE_PREVIEW);
+        // Recheck stage and tenant inside the same transaction, including archive races.
+        const target = await tx.pipelineStage.findFirst({
+          where: { id: change.toStageId, pipelineId, isArchived: false, pipeline: { tenantId: session.tenantId, isArchived: false } },
+          select: { id: true },
         });
+        if (!target) throw new LeadAssistantError(409, STALE_PREVIEW);
+        const updated = await tx.lead.updateMany({
+          where: {
+            tenantId: session.tenantId,
+            id: change.leadId,
+            pipelineId,
+            stageId: change.fromStageId,
+            status: change.fromStatus as 'open' | 'lost',
+          },
+          data: { stageId: change.toStageId, status: change.toStatus as 'open' | 'lost' },
+        });
+        if (updated.count !== 1) throw new LeadAssistantError(409, STALE_PREVIEW);
       }
       await tx.leadStageHistory.createMany({
         data: moves.changes.map((change) => ({ leadId: change.leadId, fromStageId: change.fromStageId, toStageId: change.toStageId, changedBy: session.userId })),
@@ -512,7 +525,7 @@ export async function applyLeadPlan(session: Session, plan: ResolvedLeadAssistan
       changes: distribution.changes.map((change) => ({ l: change.leadId, f: change.from, t: change.to })),
     });
     return { batchId, moves: distribution.changes.length };
-  }, { timeout: 30_000 });
+  }, { timeout: 30_000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
 type AssignChange = { l: string; f: string | null; t: string };
@@ -587,18 +600,32 @@ export async function undoLeadBatch(session: Session, batchId: string) {
         && typeof item.fst === 'string' && typeof item.tst === 'string');
       const current = await tx.lead.findMany({
         where: { tenantId: session.tenantId, id: { in: changes.map((change) => change.l) } },
-        select: { id: true, stageId: true, status: true },
+        select: { id: true, pipelineId: true, stageId: true, status: true },
       });
       const byId = new Map(current.map((lead) => [lead.id, lead]));
-      const restore = changes.filter((change) => {
+      const restore: StageBatchChange[] = [];
+      for (const change of changes) {
         const lead = byId.get(change.l);
-        return lead && lead.stageId === change.ts && lead.status === change.tst && (change.fst === 'open' || change.fst === 'lost');
-      });
-      const groups = new Map<string, string[]>();
-      for (const change of restore) groups.set(`${change.fs}|${change.fst}`, [...(groups.get(`${change.fs}|${change.fst}`) || []), change.l]);
-      for (const [key, ids] of groups) {
-        const [stageId, status] = key.split('|');
-        await tx.lead.updateMany({ where: { tenantId: session.tenantId, id: { in: ids } }, data: { stageId, status: status as 'open' | 'lost' } });
+        if (!lead || lead.stageId !== change.ts || lead.status !== change.tst
+          || (change.fst !== 'open' && change.fst !== 'lost')) continue;
+        // Never undo into an archived or cross-pipeline stage.
+        const source = await tx.pipelineStage.findFirst({
+          where: { id: change.fs, pipelineId: lead.pipelineId, isArchived: false, pipeline: { tenantId: session.tenantId, isArchived: false } },
+          select: { id: true },
+        });
+        if (!source) continue;
+        const updated = await tx.lead.updateMany({
+          where: {
+            id: change.l,
+            tenantId: session.tenantId,
+            pipelineId: lead.pipelineId,
+            stageId: change.ts,
+            status: change.tst as 'open' | 'lost',
+          },
+          data: { stageId: change.fs, status: change.fst as 'open' | 'lost' },
+        });
+        // Another concurrent move wins: do not invent a restore history for it.
+        if (updated.count === 1) restore.push(change);
       }
       if (restore.length) {
         await tx.leadStageHistory.createMany({
@@ -674,5 +701,5 @@ export async function undoLeadBatch(session: Session, batchId: string) {
       },
     });
     return { restored, skipped };
-  }, { timeout: 30_000 });
+  }, { timeout: 30_000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
