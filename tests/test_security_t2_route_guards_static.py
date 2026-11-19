@@ -69,6 +69,8 @@ GUARDED = {
     "flip-ai/public/[slug]/realtime/session/route.ts": "slug",
     "flip-ai/public/[slug]/speech/route.ts": "rateLimit(",
     "health/route.ts": "GET",
+    # PR01 Phase 1: always 404 when OFF; 503 when no M2M repository exists.
+    "v1/status/route.ts": "apiV1Enabled(process.env)",
     # Test helper: answers only when NODE_ENV is "test".
     "test/otp/latest/route.ts": "process.env.NODE_ENV !== 'test'",
     # Same handlers as integrations/events (withPermission).
@@ -96,6 +98,17 @@ def test_every_route_is_wrapped_or_has_a_listed_guard():
             continue
         assert GUARDED[path] in text, (path, GUARDED[path])
     assert not unguarded, f"Routes without a known guard: {unguarded}"
+
+
+
+def test_pr01_v1_status_never_opens_without_real_m2m_repository():
+    route = (API / "v1/status/route.ts").read_text(encoding="utf-8")
+    assert "if (!apiV1Enabled(process.env))" in route
+    assert "apiV1Error('api_unavailable', 404)" in route
+    assert "apiV1Error('dependency_unavailable', 503)" in route
+    assert "prisma." not in route
+    assert "fetch(" not in route
+    assert "NextResponse.json({ ok: true" not in route
 
 
 def test_listed_routes_still_exist():
