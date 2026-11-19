@@ -28,7 +28,9 @@ def test_custom_domain_public_resolution_uses_only_active_verified_domains():
 
 def test_public_url_helper_uses_fallback_until_domain_is_active():
     helper = read('lib/forms/public-form-url.ts')
-    assert 'https://${appDomain}/f/${cleanSlug}' in helper
+    assert 'https://${appDomain}/f/id/${encodeURIComponent(params.formId)}/${cleanSlug}' in helper
+    assert 'formId: string;' in helper
+    assert 'legacyFallbackUrl' not in helper
     assert 'https://${primaryDomain}/${cleanSlug}' in helper
     assert "state: 'custom_pending'" in helper
     assert "state: 'custom_active'" in helper
