@@ -31,12 +31,11 @@ async function verifyJWT(token: string): Promise<any | null> {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   // PR00 staging database attestation preview: reject ALL other endpoints before
-  // authentication, CRM, integrations, webhooks, tracking, background handlers, etc.
-  // This is a branch-specific hard lockdown and does not affect main/prod code.
-  if (
-    process.env.VERCEL_ENV === 'preview'
-    && process.env.VERCEL_GIT_COMMIT_REF === 'security/pr00-a2d-staging-db-attestation-20261118'
-  ) {
+  // authentication, CRM, integrations, webhooks, tracking and background handlers.
+  // This is a PR-only hard lockdown: do NOT merge this middleware into main.
+  // Fail-closed for every Preview build of this specific PR code, even if
+  // VERCEL_GIT_COMMIT_REF is not injected into the edge runtime.
+  if (process.env.VERCEL_ENV === 'preview') {
     if (
       process.env.VERCEL_PROJECT_ID !== 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu'
       || req.method !== 'GET'
