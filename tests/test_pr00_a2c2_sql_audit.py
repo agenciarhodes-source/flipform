@@ -38,7 +38,7 @@ class OfflineAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "destructive or unauthorized"):
                     audit_sql(sql, SCHEMA)
 
-    def test_accepts_synthetic_baseline_92_plus_five_exact_pr01_tables(self):
+    def test_accepts_synthetic_baseline_92_plus_eight_exact_pr01_tables(self):
         blocks = re.findall(r"(?ms)^model\s+\w+\s*\{(.*?)^\}", SCHEMA)
         names = [re.search(r'@@map\("([^"]+)"\)', block).group(1) for block in blocks]
         enums = re.findall(r"(?m)^enum\s+(\w+)\s*\{", SCHEMA)
@@ -47,7 +47,7 @@ class OfflineAuditTests(unittest.TestCase):
         sql += f'CREATE INDEX "fixture_idx" ON "{names[0]}" ("id");\n'
         sql += f'ALTER TABLE "{names[0]}" ADD CONSTRAINT "fixture_fk" FOREIGN KEY ("id") REFERENCES "{names[0]}" ("id") ON DELETE CASCADE;\n'
         result = audit_sql(sql, SCHEMA)
-        self.assertEqual(result["tables"], 97)
+        self.assertEqual(result["tables"], 100)
         self.assertEqual(result["enums"], 10)
         self.assertTrue(result["pass_additive_sql_review"])
         self.assertTrue(result["NOT_AUTHORIZED_FOR_EXECUTION"])
