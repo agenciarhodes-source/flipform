@@ -54,6 +54,8 @@ GUARDED = {
     "internal/jobs/post-sale/route.ts": CRON,
     "internal/jobs/whatsapp-ai/route.ts": CRON,
     "health/readiness/route.ts": "INTERNAL_JOB_SECRET",
+    # PR00 A2-D: staging-only diagnostic, fail-closed project/connection gate AND token.
+    "internal/pr00/staging-identity/route.ts": "stagingIdentityGateEnabled(process.env)",
     "webhooks/whatsapp/message/route.ts": "INTERNAL_JOB_SECRET",
     # Webhooks: the provider's signature or token.
     "webhooks/meta/whatsapp/route.ts": "x-hub-signature",
@@ -96,6 +98,22 @@ def test_every_route_is_wrapped_or_has_a_listed_guard():
             continue
         assert GUARDED[path] in text, (path, GUARDED[path])
     assert not unguarded, f"Routes without a known guard: {unguarded}"
+
+
+
+def test_pr00_staging_identity_route_preserves_both_auth_gates_and_read_only_sql():
+    text = (API / "internal/pr00/staging-identity/route.ts").read_text(encoding="utf-8")
+    # Project/URL allowlist checked before the token, and both checks precede SQL.
+    env_guard = text.index("if (!stagingIdentityGateEnabled(process.env))")
+    token_guard = text.index("if (!matchesStagingIdentityToken(")
+    sql = text.index("SELECT current_database() AS database_name, current_user AS role_name")
+    assert env_guard < token_guard < sql
+    assert "PR00_STAGING_ATTESTATION_TOKEN" in text
+    assert "return reply(404, 'not_found')" in text
+    assert "return reply(503, 'identity_mismatch')" in text
+    assert "return reply(503, 'identity_unavailable')" in text
+    assert "INSERT " not in text and "UPDATE " not in text and "DELETE " not in text
+    assert "prisma.$queryRaw" in text
 
 
 def test_listed_routes_still_exist():
