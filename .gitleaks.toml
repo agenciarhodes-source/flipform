@@ -24,15 +24,12 @@ paths = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
-description = "PR01 false positives: three exact model-to-table constant mappings"
+description = "PR01: exact constant model-to-table mappings only in offline SQL auditor"
 condition = "AND"
 regexTarget = "line"
 paths = ['''^scripts/pr00_a2c2_audit_sql\.py$''']
 regexes = [
-  '''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*
-'',
-  '''^\s*\("ApiIntegration",\s*"api_v1_integrations"\),?\s*
-'',
-  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*
-'',
+  '''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*$''',
+  '''^\s*\("ApiIntegration",\s*"api_v1_integrations"\),?\s*$''',
+  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*$''',
 ]
