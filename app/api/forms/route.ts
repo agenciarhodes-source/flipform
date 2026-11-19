@@ -31,7 +31,7 @@ export const GET = withPermission('FORMS_VIEW', async (req, session) => {
 
   return NextResponse.json({
     forms: forms.map((form) => {
-      const urlState = buildPublicFormUrlState({ slug: form.slug, primaryDomain, appDomain });
+      const urlState = buildPublicFormUrlState({ slug: form.slug, formId: form.id, primaryDomain, appDomain });
       return {
         ...form,
         publicUrl: urlState.activeUrl,

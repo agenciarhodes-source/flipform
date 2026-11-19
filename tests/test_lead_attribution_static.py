@@ -49,7 +49,7 @@ def test_browser_capture_preserves_real_url_and_expected_params():
 
 
 def test_backend_values_are_server_derived_tenant_safe_and_resilient():
-    route = read("app/api/public/forms/[slug]/submit/route.ts")
+    route = read("lib/forms/public-submit-handler.ts")
     assert "tenantId: form.tenantId" in route
     assert "leadId: lead.id" in route
     assert "getClientIp(req)" in route

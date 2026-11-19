@@ -28,7 +28,9 @@ def test_custom_domain_public_resolution_uses_only_active_verified_domains():
 
 def test_public_url_helper_uses_fallback_until_domain_is_active():
     helper = read('lib/forms/public-form-url.ts')
-    assert 'https://${appDomain}/f/${cleanSlug}' in helper
+    assert 'https://${appDomain}/f/id/${encodeURIComponent(params.formId)}/${cleanSlug}' in helper
+    assert 'formId: string;' in helper
+    assert 'legacyFallbackUrl' not in helper
     assert 'https://${primaryDomain}/${cleanSlug}' in helper
     assert "state: 'custom_pending'" in helper
     assert "state: 'custom_active'" in helper
@@ -173,14 +175,14 @@ def test_custom_domain_public_route_resolves_by_active_host_and_ssl_gate():
     assert "where: { domain: host, status: 'active', verificationStatus: 'verified', sslStatus: 'active' }" in page
     assert 'tenantId: customDomain.tenantId' in page
     assert 'slug: params.slug' in page
-    submit = read('app/api/public/forms/[slug]/submit/route.ts')
+    submit = read('lib/forms/resolve-public-form-identity.ts')
     assert "sslStatus: 'active'" in submit
 
 
 def test_forms_page_has_preview_and_functional_active_link_copy():
     page = read('app/(app)/forms/page.tsx')
     assert 'copyLink(f.publicUrl)' in page
-    assert 'href={f.publicUrl || `/f/${f.slug}`}' in page
+    assert 'href={f.publicUrl || `/f/id/${f.id}/${f.slug}`}' in page
     assert 'Domínio personalizado pendente' in page
     assert 'Domínio pendente' in page
 

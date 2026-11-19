@@ -204,7 +204,7 @@ async function main() {
 
   console.log('✅ Seed completo!');
   console.log('   Login: demo@leadflow.com / demo123');
-  console.log(`   Form público: /f/${form.slug}`);
+  console.log(`   Form público: /f/id/${form.id}/${form.slug}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

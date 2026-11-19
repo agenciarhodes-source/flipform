@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / 'components/form-builder.tsx'
-SUBMIT = ROOT / 'app/api/public/forms/[slug]/submit/route.ts'
+SUBMIT = ROOT / 'lib/forms/public-submit-handler.ts'
 GUARD = ROOT / 'lib/form-duplicate-lead.ts'
 TRACKING = ROOT / 'lib/tracking.ts'
 SCHEMA = ROOT / 'prisma/schema.prisma'

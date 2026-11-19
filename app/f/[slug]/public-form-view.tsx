@@ -32,7 +32,7 @@ export function PublicFormView({
 
     let res: Response;
     try {
-      res = await fetch(`/api/public/forms/${form.slug}/submit`, {
+      res = await fetch(form.submitEndpoint || `/api/public/forms/${form.slug}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -21,7 +21,7 @@ def test_schema_and_migration_define_form_lead_source():
 
 
 def test_public_submission_uses_persisted_form_source_only():
-    route = text('app/api/public/forms/[slug]/submit/route.ts')
+    route = text('lib/forms/public-submit-handler.ts')
     assert "const leadSource = form.leadSource?.trim() || 'formulario';" in route
     assert 'source: leadSource,' in route
     form_audit = route.split("action: 'form.submitted'", 1)[1].split('});', 1)[0]

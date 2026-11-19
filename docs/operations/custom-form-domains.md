@@ -21,5 +21,5 @@ A configuração de domínios personalizados é gerenciada pelo backoffice nesta
 - Não exibir `VERCEL_TOKEN`, `VERCEL_PROJECT_ID` ou `VERCEL_TEAM_ID` para clientes.
 - Não exibir `cname.vercel-dns.com` como fallback para clientes.
 - Apenas um domínio principal pode existir por tenant; ao marcar um domínio como principal, os demais são desmarcados.
-- Links públicos usam `app.flipform.com.br/f/{slug}` enquanto o domínio personalizado não estiver ativo.
+- **Após homologação e merge do PR #624:** o link padrão usa `app.flipform.com.br/f/id/{formId}/{slug}` enquanto não houver domínio personalizado ativo. Links antigos `/f/{slug}` exigem mapeamento histórico auditado antes do deploy. Esta alteração permanece somente na branch Draft.
 - Links públicos usam `https://leads.dominio.com.br/{slug}` somente quando status, verificação e SSL estiverem ativos.

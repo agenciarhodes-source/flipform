@@ -166,7 +166,7 @@ export default function FormsPage() {
                   <Button size="sm" variant="outline" onClick={() => copyLink(f.publicUrl)} className="flex-1">
                     <Copy className="w-3 h-3 mr-1.5" />Link
                   </Button>
-                  <Link href={f.publicUrl || `/f/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
+                  <Link href={f.publicUrl || `/f/id/${f.id}/${f.slug}`} target="_blank"><Button size="sm" variant="outline"><ExternalLink className="w-3 h-3" /></Button></Link>
                   {f.canDuplicate && (
                     <Button size="sm" variant="outline" title="Duplicar formulário" aria-label={`Duplicar formulário ${f.name}`} onClick={() => duplicateForm(f)} disabled={duplicatingId === f.id}>
                       {duplicatingId === f.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CopyPlus className="w-3 h-3" />}
