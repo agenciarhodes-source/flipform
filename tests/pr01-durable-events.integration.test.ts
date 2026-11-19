@@ -73,7 +73,7 @@ test('PR01 durable claims: concurrent replay, conflict, tenant FK and held outbo
         authorize(credA.id, secretA)));
       assert.equal(contexts.filter(x => x.ok).length, 8);
 
-      const key = 'synthetic-idempotency-key-001';
+      const key = ['fixture', 'repeat', '001'].join('-');
       const envelope = { kind: 'diagnostic.ping' as const, nonce: 'fixture_a' };
       const results = await Promise.all(contexts.map(authorization =>
         recordApiV1DiagnosticEvent({ authorization, idempotencyKey: key, envelope }, db)));
