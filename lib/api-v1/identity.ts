@@ -30,6 +30,7 @@ export interface ApiV1CredentialRepository {
   consumeQuota(params: {
     tenantId: string;
     integrationId: string;
+    credentialId: string;
     operation: string;
   }): Promise<boolean>;
 }
@@ -65,7 +66,7 @@ export async function authorizeApiV1Request(
   args: { authorizationHeader: string | null; scope: ApiV1Scope; operation: string; now?: Date },
   repository: ApiV1CredentialRepository | null,
 ): Promise<ApiV1Authorization> {
-  if (!repository) return UNAVAILABLE; // DB credential repository is not implemented in this phase.
+  if (!repository) return UNAVAILABLE; // No backing store configured.
   if (!isApiV1Scope(args.scope) || !args.operation || args.operation.length > 120) {
     return { ok: false, status: 403, code: 'permission_denied' };
   }
@@ -93,6 +94,7 @@ export async function authorizeApiV1Request(
     const quotaAvailable = await repository.consumeQuota({
       tenantId: credential.tenantId,
       integrationId: credential.integrationId,
+      credentialId: credential.id,
       operation: args.operation,
     });
     if (!quotaAvailable) return { ok: false, status: 429, code: 'rate_limited' };
