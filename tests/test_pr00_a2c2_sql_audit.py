@@ -57,7 +57,7 @@ class OfflineAuditTests(unittest.TestCase):
         unapproved = SCHEMA + '\nmodel UnexpectedPR01Table {\n  id String @id\n  @@map("unapproved_pr01_table")\n}\n'
         with self.assertRaisesRegex(ValueError, "92 baseline"):
             audit_sql(TEST_SQL, unapproved)
-        incomplete = re.sub(r"(?ms)^model ApiCredential \\{.*?^\\}\\n", "", SCHEMA)
+        incomplete = re.sub(r"(?ms)^model ApiCredential \{.*?^\}\n", "", SCHEMA)
         with self.assertRaisesRegex(ValueError, "Incomplete"):
             audit_sql(TEST_SQL, incomplete)
         changed_map = SCHEMA.replace('@@map("api_v1_credentials")', '@@map("other_table")')
