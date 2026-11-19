@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 // Non-secret identifiers for the separately provisioned Neon staging project.
 export const PR00_STAGING = Object.freeze({
   vercelProjectId: 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu',
+  previewBranch: 'security/pr00-a2d-staging-db-attestation-20261118',
   neonHost: 'ep-morning-heart-bcj72cwl.c-16.us-east-1.aws.neon.tech',
   databaseName: 'flipform_staging',
   roleName: 'flipform_staging_owner',
@@ -28,12 +29,13 @@ function matchesExpectedConnection(raw: string | undefined): boolean {
 
 /**
  * Fail-closed: can only be activated in the staging Vercel project.
- * A 'production' target inside flipform-staging is NOT the FlipForm production project.
+ * Use ONLY a preview deployment of the exact PR00 branch in the staging project.
  * The Neon staging endpoint currently has connection pooling disabled.
  */
 export function stagingIdentityGateEnabled(env: Environment): boolean {
   return env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
-    && env.VERCEL_ENV === 'production'
+    && env.VERCEL_ENV === 'preview'
+    && env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch
     && env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId
     && env.NODE_ENV === 'production'
     && Boolean(env.PR00_STAGING_ATTESTATION_TOKEN)
