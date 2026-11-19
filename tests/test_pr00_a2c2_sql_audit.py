@@ -38,7 +38,7 @@ class OfflineAuditTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "destructive or unauthorized"):
                     audit_sql(sql, SCHEMA)
 
-    def test_accepts_only_synthetic_additive_baseline_with_92_mapped_tables(self):
+    def test_accepts_synthetic_baseline_92_plus_three_exact_pr01_tables(self):
         blocks = re.findall(r"(?ms)^model\s+\w+\s*\{(.*?)^\}", SCHEMA)
         names = [re.search(r'@@map\("([^"]+)"\)', block).group(1) for block in blocks]
         enums = re.findall(r"(?m)^enum\s+(\w+)\s*\{", SCHEMA)
@@ -47,10 +47,22 @@ class OfflineAuditTests(unittest.TestCase):
         sql += f'CREATE INDEX "fixture_idx" ON "{names[0]}" ("id");\n'
         sql += f'ALTER TABLE "{names[0]}" ADD CONSTRAINT "fixture_fk" FOREIGN KEY ("id") REFERENCES "{names[0]}" ("id") ON DELETE CASCADE;\n'
         result = audit_sql(sql, SCHEMA)
-        self.assertEqual(result["tables"], 92)
+        self.assertEqual(result["tables"], 95)
         self.assertEqual(result["enums"], 10)
         self.assertTrue(result["pass_additive_sql_review"])
         self.assertTrue(result["NOT_AUTHORIZED_FOR_EXECUTION"])
+
+    def test_pr01_additive_allowlist_denies_unknown_or_incomplete_models(self):
+        # The original 92 remain required; no silent, arbitrary schema expansion.
+        unapproved = SCHEMA + '\nmodel UnexpectedPR01Table {\n  id String @id\n  @@map("unapproved_pr01_table")\n}\n'
+        with self.assertRaisesRegex(ValueError, "92 baseline"):
+            audit_sql(TEST_SQL, unapproved)
+        incomplete = re.sub(r"(?ms)^model ApiCredential \\{.*?^\\}\\n", "", SCHEMA)
+        with self.assertRaisesRegex(ValueError, "Incomplete"):
+            audit_sql(TEST_SQL, incomplete)
+        changed_map = SCHEMA.replace('@@map("api_v1_credentials")', '@@map("other_table")')
+        with self.assertRaisesRegex(ValueError, "Unexpected physical table"):
+            audit_sql(TEST_SQL, changed_map)
 
     def test_guard_preserved_for_both_audit_branches(self):
         config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
