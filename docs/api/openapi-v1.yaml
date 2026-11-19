@@ -1,0 +1,67 @@
+openapi: 3.1.0
+info:
+  title: FlipForm Native API
+  version: 1.0.0-draft
+  description: |
+    PR01 API v1 foundation. Phase 1 is intentionally not enabled.
+    Only a fail-closed placeholder exists in the application at present.
+    Business resources and pipeline CRUD belong to PR02; do not publish.
+servers:
+  - url: https://example.invalid
+    description: Documentation-only placeholder; NOT a live service
+tags:
+  - name: Foundation
+    description: API foundation lifecycle; no business data
+paths:
+  /api/v1/status:
+    get:
+      tags: [Foundation]
+      operationId: getApiV1FoundationStatus
+      summary: Disabled placeholder (not a public health endpoint)
+      description: |
+        Feature flag is off by default. Returns 404 when disabled.
+        While the M2M credential repository is not implemented, even an
+        explicit feature flag returns 503. It never returns company data.
+      responses:
+        '404':
+          description: Foundation not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiV1Error'
+        '503':
+          description: M2M persistence not ready; fail closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiV1Error'
+components:
+  securitySchemes:
+    M2MKey:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        Reserved for future authorized M2M endpoints. No live key issuance or
+        credential repository exists in this PR01 Phase 1.
+  schemas:
+    ApiV1Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+          enum:
+            - api_unavailable
+            - invalid_credential
+            - permission_denied
+            - rate_limited
+            - dependency_unavailable
+            - invalid_request
+            - idempotency_conflict
+        message:
+          type: string
+        requestId:
+          type: string
+          format: uuid
