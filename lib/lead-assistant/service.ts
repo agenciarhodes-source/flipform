@@ -497,10 +497,24 @@ export async function applyLeadPlan(session: Session, plan: ResolvedLeadAssistan
     const distribution = await computeDistribution(tx, session.tenantId, plan);
     if (distribution.changes.length !== expectedMoves) throw new LeadAssistantError(409, STALE_PREVIEW);
     if (!distribution.changes.length) return { batchId: null, moves: 0 };
-    const byTarget = new Map<string, string[]>();
-    for (const change of distribution.changes) byTarget.set(change.to, [...(byTarget.get(change.to) || []), change.leadId]);
-    for (const [to, ids] of byTarget) {
-      await tx.lead.updateMany({ where: { tenantId: session.tenantId, status: 'open', id: { in: ids } }, data: { assignedTo: to } });
+    // CAS each assignment against its observed owner and lead state. A single
+    // conflict aborts the whole transaction, preventing false success audits.
+    const observed = new Map(distribution.leads.map((lead) => [lead.id, lead]));
+    for (const change of distribution.changes) {
+      const lead = observed.get(change.leadId);
+      if (!lead) throw new LeadAssistantError(409, STALE_PREVIEW);
+      const updated = await tx.lead.updateMany({
+        where: {
+          id: change.leadId,
+          tenantId: session.tenantId,
+          pipelineId: lead.pipelineId,
+          stageId: lead.stageId,
+          status: 'open',
+          assignedTo: change.from,
+        },
+        data: { assignedTo: change.to },
+      });
+      if (updated.count !== 1) throw new LeadAssistantError(409, STALE_PREVIEW);
     }
     await tx.auditLog.createMany({
       data: distribution.changes.map((change) => ({
@@ -673,20 +687,23 @@ export async function undoLeadBatch(session: Session, batchId: string) {
         const lead = byId.get(change.l);
         return lead && lead.status === 'open' && lead.assignedTo === change.t;
       });
-      const groups = new Map<string, string[]>();
-      for (const change of restore) groups.set(change.f || '', [...(groups.get(change.f || '') || []), change.l]);
-      for (const [from, ids] of groups) {
-        await tx.lead.updateMany({ where: { tenantId: session.tenantId, id: { in: ids } }, data: { assignedTo: from || null } });
+      const confirmed: AssignChange[] = [];
+      for (const change of restore) {
+        const updated = await tx.lead.updateMany({
+          where: { tenantId: session.tenantId, id: change.l, status: 'open', assignedTo: change.t },
+          data: { assignedTo: change.f },
+        });
+        if (updated.count === 1) confirmed.push(change);
       }
-      if (restore.length) {
+      if (confirmed.length) {
         await tx.auditLog.createMany({
-          data: restore.map((change) => ({
+          data: confirmed.map((change) => ({
             tenantId: session.tenantId, userId: session.userId, entityType: 'lead', entityId: change.l, action: 'lead.updated',
             metadata: { changes: ['assignedTo'], assignedTo: change.f, previousAssignedTo: change.t, message: 'Distribuição do Assistente de leads desfeita.' },
           })),
         });
       }
-      restored = restore.length;
+      restored = confirmed.length;
     }
 
     const skipped = list.length - restored;
