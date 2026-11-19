@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { selectUniquePublicForm } from '../lib/forms/public-form-identity-policy';
 import { getVerifiedLegacyFormAlias } from '../lib/forms/verified-legacy-form-aliases';
+import { buildPublicFormUrlState } from '../lib/forms/public-form-url';
 
 const a = { id: 'a-id', tenantId: 'tenant-a', slug: 'maternidade' };
 const b = { id: 'b-id', tenantId: 'tenant-b', slug: 'maternidade' };
@@ -55,4 +56,32 @@ test('invalid, missing-evidence, duplicated or oversized alias manifests deny ev
   for (const input of invalid) {
     assert.equal(getVerifiedLegacyFormAlias('maternidade', input), null, input.slice(0, 40));
   }
+});
+
+
+test('public URL builder always generates immutable platform URL while preserving verified custom host', () => {
+  const fallback = buildPublicFormUrlState({
+    slug: 'maternidade', formId: formA, appDomain: 'app.flipform.com.br',
+  });
+  assert.equal(fallback.activeUrl, 'https://app.flipform.com.br/f/id/' + formA + '/maternidade');
+  assert.equal(fallback.state, 'default');
+
+  const pending = buildPublicFormUrlState({
+    slug: 'maternidade', formId: formA, appDomain: 'app.flipform.com.br',
+    primaryDomain: {
+      domain: 'leads.example.invalid', status: 'active',
+      verificationStatus: 'verified', sslStatus: 'pending',
+    },
+  });
+  assert.equal(pending.activeUrl, fallback.activeUrl);
+
+  const active = buildPublicFormUrlState({
+    slug: 'maternidade', formId: formA, appDomain: 'app.flipform.com.br',
+    primaryDomain: {
+      domain: 'leads.example.invalid', status: 'active',
+      verificationStatus: 'verified', sslStatus: 'active',
+    },
+  });
+  assert.equal(active.activeUrl, 'https://leads.example.invalid/maternidade');
+  assert.equal(active.state, 'custom_active');
 });
