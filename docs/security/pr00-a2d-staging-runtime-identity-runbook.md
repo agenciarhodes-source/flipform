@@ -24,6 +24,13 @@
 - Para o teste pontual autorizado, as três variáveis temporárias são **somente Preview e somente na branch exata PR00 A2-D**. Após o teste, atualizar a flag para `false`, invalidar o token e colocar a data no passado; adicionalmente revogar qualquer share link. A cópia antiga do Preview perde a validade automaticamente na data, independentemente de redeploy.
 - Não interpretar essa camada como autorização de deploy genérico, merge, migração, CRM, credenciais produtivas ou transferência de dados.
 
+## Reforço de lockdown de rotas (20/11/2026)
+
+- A branch PR00 A2-D agora bloqueia **todas** as rotas em contexto Vercel, mesmo com `VERCEL_ENV` ausente ou configuração parcial. Somente o GET exato da rota de identidade é encaminhado quando `VERCEL_ENV=preview` e `VERCEL_PROJECT_ID` corresponde ao projeto staging. O endpoint ainda aplica seus próprios controles de expiração, token, branch e banco.
+- O bloqueio aplica-se apenas às requisições HTTP que passam pelo middleware, não a egress de build, tarefas agendadas ou código executado fora do ciclo HTTP. Esses riscos permanecem pendentes.
+- `tests/pr00-staging-route-lockdown.test.ts` verifica negação de CRM, integrações, webhooks e APIs, métodos não GET, URLs semelhantes e contextos Vercel parciais; o CI executa esse teste offline junto aos testes de identidade.
+- **Esse middleware é temporário, específico da branch de diagnóstico e não pode ser incorporado à main.** A mudança não reativa o Preview automático, não solicita deploy, nem certifica runtime.
+
 ## Ativação futura (ainda NÃO autorizada)
 
 1. Revisar CI, diff, endpoint/guards, ausência de side-effects e as regras do projeto staging. **Não** alterar o projeto `flipform` de produção.
