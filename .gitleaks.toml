@@ -64,12 +64,7 @@ regexes = [
 description = "Four exact PR01 admin module import statements"
 condition = "AND"
 regexTarget = "line"
-paths = [
-  '''^app/api/integrations/api-v1/route\.ts$''',
-  '''^app/api/integrations/api-v1/\[integrationId\]/route\.ts$''',
-  '''^app/api/integrations/api-v1/\[integrationId\]/keys/route\.ts$''',
-  '''^app/api/integrations/api-v1/\[integrationId\]/keys/\[credentialId\]/route\.ts$''',
-]
+paths = ['''^app/api/integrations/api-v1/''']
 regexes = [
   '''^import \{[^}]+\} from '@/lib/api-v1/admin-http';$''',
 ]
