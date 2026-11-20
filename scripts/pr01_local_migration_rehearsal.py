@@ -96,7 +96,8 @@ def assert_sentinel():
 def rehearsal(baseline_schema, candidate_schema, baseline_sql, delta_sql):
     # Validate every generated statement against the already-reviewed schemas
     # BEFORE touching the disposable database.
-    sql_report = audit(baseline_schema, candidate_schema, delta_sql)
+    delta_text = Path(delta_sql).read_text(encoding="utf-8")
+    sql_report = audit(baseline_schema, candidate_schema, delta_text)
     if len(NEW_TABLES) != 10 or set(DROP_ORDER) != set(NEW_TABLES):
         raise ValueError("Rollback table inventory mismatch")
     if table_count() != 0:
@@ -196,7 +197,7 @@ def main():
         Path(args.baseline_schema).read_text(encoding="utf-8"),
         Path(args.candidate_schema).read_text(encoding="utf-8"),
         args.baseline_sql,
-        Path(args.delta_sql).read_text(encoding="utf-8"),
+        args.delta_sql,
     )
     Path(args.report).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print("PR01 LOCAL migration+rollback rehearsal succeeded; production remains BLOCKED")
