@@ -71,6 +71,8 @@ GUARDED = {
     "health/route.ts": "GET",
     # PR01 Phase 1: always 404 when OFF; 503 when no M2M repository exists.
     "v1/status/route.ts": "apiV1Enabled(process.env)",
+    # M2M route: bearer identity, tenant entitlement and distributed quota on every GET.
+    "v1/capabilities/route.ts": "authorizeApiV1Request({",
     # Test helper: answers only when NODE_ENV is "test".
     "test/otp/latest/route.ts": "process.env.NODE_ENV !== 'test'",
     # Same handlers as integrations/events (withPermission).

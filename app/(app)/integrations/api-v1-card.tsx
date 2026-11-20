@@ -164,7 +164,7 @@ export function ApiV1Card() {
                 <div key={key.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border-t pt-2">
                   <span className="break-all">
                     {key.id.slice(0, 8)}… · {key.revokedAt ? 'Revogada'
-                      : key.expiresAt && new Date(key.expiresAt) <= new Date() ? 'Expirada' : 'Ativa'}
+                      : key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now() ? 'Expirada' : 'Ativa'}
                   </span>
                   <div className="flex gap-2">
                     <button type="button" disabled={busy || !!key.revokedAt || item.status !== 'active'}
