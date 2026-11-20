@@ -66,16 +66,3 @@ paths = ['''^scripts/pr01_retention_release_gate\.py$''']
 regexes = [
   '''^\s*"api_v1_inbox_events": "api_v1_idempotency_records",\s*$''',
 ]
-
-# PR01 staging readiness check: SARIF from commit 3c757322 flags a single
-# list of three STATIC Prisma table identifiers as generic-api-key.
-# This exact historical line contains no token or credential. Keep all
-# other lines and rules scanned; do not disable or widen the generic rule.
-[[rules.allowlists]]
-description = "Exact PR01 synthetic schema table names, not an API key"
-condition = "AND"
-regexTarget = "line"
-paths = ['''^scripts/pr01_staging_no_go_gate\.py$''']
-regexes = [
-  '''^\s*"api_v1_integrations", "api_v1_credentials", "tenant_entitlement_grants",\s*$''',
-]

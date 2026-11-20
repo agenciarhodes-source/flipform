@@ -9,3 +9,7 @@
 774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/[integrationId]/keys/route.ts:generic-api-key:4
 774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/[integrationId]/keys/[credentialId]/route.ts:generic-api-key:3
 774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/route.ts:generic-api-key:3
+
+# PR01 staging NO-GO gate: verified static Prisma TABLE NAMES only, no credential.
+# Exact SARIF fingerprint from commit 3c757322; scanner remains active for all others.
+3c75732281b0406b538048e1eee22cceab80c1cd:scripts/pr01_staging_no_go_gate.py:generic-api-key:32
