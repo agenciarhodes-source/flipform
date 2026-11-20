@@ -45,7 +45,7 @@ def split_statements(content):
         raise ValueError("Empty SQL output")
     return statements
 
-# PR00 baseline remains 92 models; PR01 can add only these eight specific tables.
+# PR00 baseline remains 92 models; PR01 can add only these nine specific tables.
 PR01_ADDITIVE_MODELS = dict([
     ("ApiIntegration", "api_v1_integrations"),
     ("ApiCredential", "api_v1_credentials"),
@@ -55,6 +55,7 @@ PR01_ADDITIVE_MODELS = dict([
     ("ApiV1IdempotencyRecord", "api_v1_idempotency_records"),
     ("ApiV1InboxEvent", "api_v1_inbox_events"),
     ("ApiV1OutboxEvent", "api_v1_outbox_events"),
+    ("ApiV1WebhookReplay", "api_v1_webhook_replays"),
 ])
 
 def parse_expected_tables(schema):
