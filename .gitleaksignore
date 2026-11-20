@@ -2,3 +2,10 @@
 # .env.example linha 118 no commit indicado, sem valores de credenciais.
 # Escopo: um finding específico, sem desligar scanner, arquivos ou regras.
 279142490aef7d79d92172bbd70034c5e70ed09e:.env.example:generic-api-key:118
+
+# PR01: exactly four historical imports misidentified as generic-api-key.
+# Verified in Gitleaks SARIF on 2026-11-20; not real credentials.
+774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/[integrationId]/route.ts:generic-api-key:3
+774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/[integrationId]/keys/route.ts:generic-api-key:4
+774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/[integrationId]/keys/[credentialId]/route.ts:generic-api-key:3
+774011dd819cfde8f67053856756d6e12182c0a9:app/api/integrations/api-v1/route.ts:generic-api-key:3

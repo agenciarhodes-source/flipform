@@ -58,17 +58,6 @@ regexes = [
   '''^\s*"api_v1_webhook_replays": "api_v1_integrations",\s*$''',
 ]
 
-# PR01: the above source lines are static imports and FK names, NOT secrets.
-# Exact path and full-line matching only. The generic-api-key rule stays active.
-[[rules.allowlists]]
-description = "Four exact PR01 admin module import statements"
-condition = "AND"
-regexTarget = "line"
-paths = ['''^app/api/integrations/api-v1/''']
-regexes = [
-  '''^import \{[^}]+\} from '@/lib/api-v1/admin-http';$''',
-]
-
 [[rules.allowlists]]
 description = "Exact historical PR01 inbox->idempotency FK graph line"
 condition = "AND"
