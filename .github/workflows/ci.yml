@@ -230,6 +230,16 @@ jobs:
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-delivery-state.integration.test.ts
 
+      # PR01 Phase 7: CI-only synthetic retention, no real records or auto-cleanup.
+      - name: PR01 retention and observability (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-retention-observability.integration.test.ts
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
