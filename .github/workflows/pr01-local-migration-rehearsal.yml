@@ -7,6 +7,9 @@ on:
       - '.github/workflows/pr01-local-migration-rehearsal.yml'
       - 'scripts/pr01_local_migration_rehearsal.py'
       - 'scripts/pr01_cascade_risk_review.py'
+      - 'scripts/pr01_retention_release_gate.py'
+      - 'tests/test_pr01_phase9_retention_gate.py'
+      - 'docs/security/pr01-phase9-retention-decision-matrix.json'
       - 'scripts/pr01_offline_sql_diff_audit.py'
       - 'scripts/pr00_a2c2_audit_sql.py'
       - 'prisma/schema.prisma'
@@ -82,6 +85,14 @@ jobs:
           python3 scripts/pr01_cascade_risk_review.py \
             --sql pr01-migration-rehearsal/additive.sql \
             --report pr01-migration-rehearsal/cascade-risk-report.json
+
+          # A successful check explicitly verifies NO-GO for real migrations.
+          # Approval cannot be self-granted by changing a JSON status.
+          python3 -m unittest discover -s tests -p 'test_pr01_phase9_retention_gate.py' -v
+          python3 scripts/pr01_retention_release_gate.py \
+            --policy docs/security/pr01-phase9-retention-decision-matrix.json \
+            --fk-report pr01-migration-rehearsal/cascade-risk-report.json \
+            --report pr01-migration-rehearsal/phase9-retention-release-hold.json
 
       - name: Start runner-only PostgreSQL with pgvector
         shell: bash
