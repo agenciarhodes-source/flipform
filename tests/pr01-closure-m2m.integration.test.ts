@@ -109,6 +109,39 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
         + (issued.bearerToken.endsWith('a') ? 'b' : 'a');
       assert.equal((await call(altered)).status, 401);
 
+      // Suspension is a reversible status update, not a hard delete. With
+      // API rows present, credentials must stop working while audit survives.
+      await db.tenant.update({ where: { id: a.id }, data: { status: 'suspended' } });
+      assert.equal((await call(issued.bearerToken)).status, 403);
+      assert.equal(await db.apiCredential.count({
+        where: { tenantId: a.id, integrationId: integration.id },
+      }), 1);
+      assert.equal(await db.apiCredentialAudit.count({
+        where: { tenantId: a.id, integrationId: integration.id },
+      }), 1);
+      await db.tenant.update({ where: { id: a.id }, data: { status: 'active' } });
+      assert.equal((await call(issued.bearerToken)).status, 200);
+
+      // A tenant with exactly one PR01 child (and no legacy children) must
+      // reject physical deletion. This specifically tests the new FK, not a
+      // pre-existing subscription/user FK that could mask a missing RESTRICT.
+      const protectedTenant = await db.tenant.create({
+        data: { name: 'PR01 restricted tenant', slug: 'restricted-' + suffix },
+      });
+      tenants.push(protectedTenant.id);
+      const protectedIntegration = await db.apiIntegration.create({
+        data: {
+          tenantId: protectedTenant.id, displayName: 'FK-only synthetic child',
+          status: 'disabled',
+        },
+      });
+      await assert.rejects(
+        db.tenant.delete({ where: { id: protectedTenant.id } }),
+        (error: unknown) => (error as { code?: string })?.code === 'P2003',
+      );
+      assert.ok(await db.tenant.findUnique({ where: { id: protectedTenant.id } }));
+      assert.ok(await db.apiIntegration.findUnique({ where: { id: protectedIntegration.id } }));
+
       const rotated = await rotateApiV1Key(ownerA, issued.credentialId, {
         integrationId: integration.id, expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       }, db);
