@@ -4,6 +4,7 @@ import {
   PR00_STAGING,
   stagingIdentityBuildGateEnabled,
   stagingIdentityGateEnabled,
+  stagingIdentityExpiryValid,
   matchesStagingIdentityToken,
   matchesLiveDatabaseIdentity,
 } from '../lib/security/pr00-staging-db-identity';
@@ -15,6 +16,7 @@ const token = 'A'.repeat(48);
 const env = {
   PR00_STAGING_ATTESTATION_ENABLED: 'true',
   PR00_STAGING_ATTESTATION_TOKEN: token,
+  PR00_STAGING_ATTESTATION_EXPIRES_AT: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
   VERCEL_ENV: 'preview',
   VERCEL_GIT_COMMIT_REF: PR00_STAGING.previewBranch,
   VERCEL_PROJECT_ID: PR00_STAGING.vercelProjectId,
@@ -60,6 +62,23 @@ test('wrong host / database / role / TLS / password blocks before any SQL', () =
     assert.equal(stagingIdentityGateEnabled({ ...env, DATABASE_URL: other }), false);
     assert.equal(stagingIdentityGateEnabled({ ...env, DIRECT_URL: other }), false);
   }
+});
+
+test('staging identity Preview token expires even if deployment env remains immutable', () => {
+  assert.equal(stagingIdentityExpiryValid(env), true);
+  for (const raw of [
+    undefined,
+    'invalid',
+    new Date(Date.now() - 1000).toISOString(),
+    new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+    '2026-11-20',
+  ]) {
+    assert.equal(stagingIdentityGateEnabled({
+      ...env, PR00_STAGING_ATTESTATION_EXPIRES_AT: raw,
+    }), false);
+  }
+  const expiry = Date.parse(env.PR00_STAGING_ATTESTATION_EXPIRES_AT);
+  assert.equal(stagingIdentityExpiryValid(env, expiry + 1), false);
 });
 
 test('token is required, compared exactly and must be at least 32 UTF8 bytes', () => {

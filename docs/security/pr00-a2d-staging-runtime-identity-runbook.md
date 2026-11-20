@@ -17,6 +17,13 @@
 - Middleware desta PR bloqueia toda requisição no Preview exceto **GET** da rota de diagnóstico. Esse bloqueio é específico do código desta branch e **não deve ser mesclado à `main`**.
 - O script `scripts/pr00-staging-build-attest.ts` foi incluído no `npm run build` somente nesta PR: nos builds Vercel ele exige exatamente o projeto/branch/host/banco/usuário de staging e executa uma única consulta `SELECT current_database(), current_user`. Em CI/local não acessa banco Neon. Se a identidade divergir, **o deployment falha antes da publicação**.
 
+## Salvaguarda adicional de expiração (20/11/2026 — antes do teste autorizado)
+
+- O endpoint exige também `PR00_STAGING_ATTESTATION_EXPIRES_AT`, uma data ISO UTC completa (com milissegundos e `Z`), posterior ao relógio do servidor e no máximo 45 minutos adiante.
+- Essa checagem é realizada **a cada requisição**, pois um Preview Vercel já publicado conserva as variáveis originais mesmo quando elas são modificadas no painel. Sem a data, com data expirada ou distante demais, a resposta é 404.
+- Para o teste pontual autorizado, as três variáveis temporárias são **somente Preview e somente na branch exata PR00 A2-D**. Após o teste, atualizar a flag para `false`, invalidar o token e colocar a data no passado; adicionalmente revogar qualquer share link. A cópia antiga do Preview perde a validade automaticamente na data, independentemente de redeploy.
+- Não interpretar essa camada como autorização de deploy genérico, merge, migração, CRM, credenciais produtivas ou transferência de dados.
+
 ## Ativação futura (ainda NÃO autorizada)
 
 1. Revisar CI, diff, endpoint/guards, ausência de side-effects e as regras do projeto staging. **Não** alterar o projeto `flipform` de produção.

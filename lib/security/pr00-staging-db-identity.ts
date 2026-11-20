@@ -51,8 +51,22 @@ export function stagingIdentityBuildGateEnabled(env: Environment): boolean {
   return Object.values(stagingIdentityPreflightChecks(env)).every(Boolean);
 }
 
+/**
+ * The READY Preview retains an immutable copy of its original environment.
+ * Changing Vercel variables later is NOT enough to revoke that copy. An
+ * explicit, short-lived expiry checked on every request closes this gap.
+ * The expiry is public configuration, never a credential.
+ */
+export function stagingIdentityExpiryValid(env: Environment, now = Date.now()): boolean {
+  const raw = env.PR00_STAGING_ATTESTATION_EXPIRES_AT;
+  if (!raw || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(raw)) return false;
+  const expires = Date.parse(raw);
+  return Number.isFinite(expires) && expires > now && expires - now <= 45 * 60 * 1000;
+}
+
 export function stagingIdentityGateEnabled(env: Environment): boolean {
-  return env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
+  return stagingIdentityExpiryValid(env)
+    && env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
     && Boolean(env.PR00_STAGING_ATTESTATION_TOKEN)
     && Buffer.byteLength(env.PR00_STAGING_ATTESTATION_TOKEN || '', 'utf8') >= 32
     && stagingIdentityBuildGateEnabled(env);
