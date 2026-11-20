@@ -16,7 +16,7 @@ from pr00_a2c2_audit_sql import PR01_ADDITIVE_MODELS, split_statements
 MODEL = re.compile(r"(?ms)^model\s+(\w+)\s*\{(.*?)^\}")
 ENUM = re.compile(r"(?ms)^enum\s+(\w+)\s*\{(.*?)^\}")
 TABLE = re.compile(r'^CREATE\s+TABLE\s+(?:"public"\.)?"([^"]+)"\s*\(', re.I | re.S)
-INDEX = re.compile(r'^CREATE\s+(?:UNIQUE\s+)?INDEX\s+"[^"]+"\s+ON\s+(?:"public"\.)?"([^"]+)"\b', re.I | re.S)
+INDEX = re.compile(r'^CREATE\s+(?:UNIQUE\s+)?INDEX\s+"[^"]+"\s+ON\s+(?:"public"\.)?"([^"]+)"(?=\s|\()', re.I | re.S)
 FK = re.compile(
     r'^ALTER\s+TABLE\s+(?:"public"\.)?"([^"]+)"\s+ADD\s+CONSTRAINT\s+"[^"]+"\s+FOREIGN\s+KEY\b',
     re.I | re.S,
