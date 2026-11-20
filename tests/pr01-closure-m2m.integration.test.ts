@@ -118,6 +118,25 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
       assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integration.id, db), true);
       assert.equal((await call(rotated.bearerToken)).status, 401);
 
+      // The five-active-key limit must also hold under simultaneous requests.
+      // Two old keys above were revoked, so four fresh sequential keys leave one slot.
+      for (let i = 0; i < 4; i++) {
+        const next = await issueApiV1Key(ownerA, {
+          integrationId: integration.id, scopes: ['integrations.read'],
+          expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+        }, db);
+        assert.ok(next);
+      }
+      const competingKeys = await Promise.all(Array.from({ length: 3 }, () => issueApiV1Key(ownerA, {
+        integrationId: integration.id, scopes: ['integrations.read'],
+        expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+      }, db)));
+      assert.equal(competingKeys.filter(Boolean).length, 1);
+      assert.equal(await db.apiCredential.count({ where: {
+        tenantId: a.id, integrationId: integration.id, revokedAt: null,
+        expiresAt: { gt: new Date() },
+      } }), 5);
+
       const other = await db.apiIntegration.create({ data: {
         tenantId: b.id, displayName: 'Synthetic B integration', status: 'active',
       } });
@@ -129,6 +148,16 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
       }, db), null);
       const disabled = await setApiV1IntegrationState(ownerA, integration.id, 'disabled', db);
       assert.equal(disabled?.status, 'disabled');
+
+      // A tenant cap needs the same protection; only one of three races may
+      // occupy the fourth slot after two additional sequential integrations.
+      for (let i = 0; i < 2; i++) {
+        assert.ok(await createApiV1Integration(ownerA, `Supplementary ${i}`, db));
+      }
+      const competingIntegrations = await Promise.all(Array.from({ length: 3 }, (_, i) =>
+        createApiV1Integration(ownerA, `Concurrent ${i}`, db)));
+      assert.equal(competingIntegrations.filter(Boolean).length, 1);
+      assert.equal((await listApiV1Integrations(ownerA, db))?.length, 4);
 
       process.env.FLIPFORM_API_V1_ENABLED = 'false';
       assert.equal((await call(rotated.bearerToken)).status, 404);

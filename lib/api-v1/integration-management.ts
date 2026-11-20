@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { apiV1Enabled } from './policy';
+import { apiV1Enabled, API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION } from './policy';
 import { mayManageApiV1Credentials } from './prisma-credential-repository';
 import type { ApiV1KeyActor } from './credential-lifecycle';
 
@@ -38,6 +38,12 @@ export async function createApiV1Integration(
   try {
     return await db.$transaction(async tx => {
       if (!await mayManageApiV1Credentials(actor, actor.tenantId, tx)) return null;
+      // Serialize all integration creations for this tenant before count+insert.
+      // READ COMMITTED transactions without this lock could exceed the cap.
+      const lockedTenant = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM tenants WHERE id = ${actor.tenantId} FOR UPDATE
+      `;
+      if (lockedTenant.length !== 1) return null;
       const count = await tx.apiIntegration.count({ where: { tenantId: actor.tenantId } });
       if (count >= MAX_INTEGRATIONS_PER_TENANT) return null;
       const row = await tx.apiIntegration.create({
@@ -120,6 +126,6 @@ export async function belowApiV1KeyLimit(
       where: { tenantId: actor.tenantId, integrationId, revokedAt: null,
         OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
     });
-    return count < 5;
+    return count < API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION;
   } catch { return false; }
 }

@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { digestApiV1Secret } from './identity';
-import { apiV1Enabled, isApiV1Scope, type ApiV1Scope } from './policy';
+import { apiV1Enabled, isApiV1Scope, API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION, type ApiV1Scope } from './policy';
 import { mayManageApiV1Credentials } from './prisma-credential-repository';
 
 /**
@@ -59,11 +59,26 @@ export async function issueApiV1Key(
   try {
     return await db.$transaction(async (tx) => {
       if (!await mayManageApiV1Credentials(actor, actor.tenantId, tx)) return null;
+      // Lock the stable parent row; all issuers and rotators must serialize here.
+      // The route's pre-check is a convenience, not a concurrency safeguard.
+      const lockedIntegration = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM api_v1_integrations
+        WHERE id = ${options.integrationId} AND tenant_id = ${actor.tenantId}
+        FOR UPDATE
+      `;
+      if (lockedIntegration.length !== 1) return null;
       const integration = await tx.apiIntegration.findFirst({
         where: { id: options.integrationId, tenantId: actor.tenantId, status: 'active' },
         select: { id: true },
       });
       if (!integration) return null;
+      const activeKeys = await tx.apiCredential.count({
+        where: {
+          tenantId: actor.tenantId, integrationId: integration.id, revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+      });
+      if (activeKeys >= API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION) return null;
       await tx.apiCredential.create({
         data: {
           id: generated.credentialId, tenantId: actor.tenantId, integrationId: integration.id,
@@ -98,6 +113,13 @@ export async function rotateApiV1Key(
   try {
     return await db.$transaction(async (tx) => {
       if (!await mayManageApiV1Credentials(actor, actor.tenantId, tx)) return null;
+      // Coordinate rotations with concurrent issuance on the same integration.
+      const lockedIntegration = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM api_v1_integrations
+        WHERE id = ${options.integrationId} AND tenant_id = ${actor.tenantId}
+        FOR UPDATE
+      `;
+      if (lockedIntegration.length !== 1) return null;
       const old = await tx.apiCredential.findFirst({
         where: {
           id: oldCredentialId, tenantId: actor.tenantId, integrationId: options.integrationId,

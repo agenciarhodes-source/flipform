@@ -2,6 +2,9 @@
  * PR01 / API v1 -- pure security policy. No Prisma, outbound I/O or production flags.
  * The credential, not a request body, determines the tenant.
  */
+/** Enforced within the issuance transaction, not only the HTTP pre-check. */
+export const API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION = 5;
+
 export const API_V1_SCOPES = [
   'integrations.read',
   'events.read',
