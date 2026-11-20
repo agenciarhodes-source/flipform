@@ -220,6 +220,16 @@ jobs:
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-webhook-replay.integration.test.ts
 
+      # PR01 Phase 6: NO HTTP, no worker, no Neon; synthetic state transitions only.
+      - name: PR01 synthetic delivery lease and DLQ (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-delivery-state.integration.test.ts
+
       - name: Run Flip AI database isolation tests
         env:
           CI: "true"
