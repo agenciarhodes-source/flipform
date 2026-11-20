@@ -3,7 +3,7 @@
 
 This module refuses any other DB. Production/Neon migrations and rollback are
 not implemented. This rehearsal verifies the SQL, inserts harmless fixtures,
-demonstrates audit cascade risk, and drops ONLY empty PR01 tables in local CI.
+proves RESTRICT preserves audit and attempts, then drops ONLY empty PR01 tables in local CI.
 """
 import argparse
 import json
@@ -32,7 +32,7 @@ DROP_ORDER = (
     "api_v1_integrations",
 )
 SENTINEL_ID = "7196e855-f764-4f56-a951-63ba13d97472"
-CASCADE_ID = "986d31cc-785d-455c-95fa-7a3915e66fc2"
+FIXTURE_TENANT_ID = "986d31cc-785d-455c-95fa-7a3915e66fc2"
 INTEGRATION_ID = "8328b79c-67f3-4a4d-88a3-685ae411b79a"
 
 
@@ -124,38 +124,86 @@ def rehearsal(baseline_schema, candidate_schema, baseline_sql, delta_sql):
     assert_table_set(True)
     assert_sentinel()
     added_list = ", ".join("'" + t + "'" for t in NEW_TABLES)
-    cascade_count = scalar(
+    restrict_count = scalar(
         "SELECT COUNT(*) FROM pg_constraint c "
         "JOIN pg_class t ON c.conrelid=t.oid "
         "JOIN pg_namespace n ON t.relnamespace=n.oid "
         f"WHERE n.nspname='public' AND t.relname IN ({added_list}) "
-        "AND c.contype='f' AND c.confdeltype='c';"
+        "AND c.contype='f' AND c.confdeltype='r';"
     )
-    if cascade_count != 10:
-        raise ValueError("Cascade FK count differs from reviewed PR01 schema")
+    if restrict_count != 10:
+        raise ValueError("Expected ten RESTRICT FKs in additive PR01 schema")
 
-    # Demonstrate high-priority risk, WITHOUT touching any existing customer:
-    # deleting a tenant removes their credential audit via ON DELETE CASCADE.
+    # Only fake records on isolated loopback PostgreSQL, never production.
+    # Both the tenant->audit and outbox->attempt deletion MUST fail.
     psql(f"""INSERT INTO tenants (id, name, slug, updated_at)
-             VALUES ('{CASCADE_ID}', 'PR01 synthetic cascade risk',
-                     'pr01-rehearsal-cascade', NOW());""")
+             VALUES ('{FIXTURE_TENANT_ID}', 'PR01 restricted deletion fixture',
+                     'pr01-rehearsal-restrict', NOW());""")
     psql(f"""INSERT INTO api_v1_integrations
              (id, tenant_id, display_name, status, updated_at)
-             VALUES ('{INTEGRATION_ID}', '{CASCADE_ID}',
-                     'synthetic cascade review', 'disabled', NOW());""")
+             VALUES ('{INTEGRATION_ID}', '{FIXTURE_TENANT_ID}',
+                     'synthetic retention guard', 'disabled', NOW());""")
     psql(f"""INSERT INTO api_v1_credential_audits
              (id, tenant_id, integration_id, credential_id, actor_user_id, action)
              VALUES ('a7804b77-4149-4f0e-88df-2f6ea847ff13',
-                     '{CASCADE_ID}', '{INTEGRATION_ID}', 'synthetic-credential',
+                     '{FIXTURE_TENANT_ID}', '{INTEGRATION_ID}', 'synthetic-credential',
                      'synthetic-actor', 'issued');""")
-    if scalar(f"SELECT COUNT(*) FROM api_v1_credential_audits WHERE tenant_id='{CASCADE_ID}'") != 1:
-        raise ValueError("Audit fixture was not persisted")
-    psql(f"DELETE FROM tenants WHERE id='{CASCADE_ID}';")
-    audit_lost = scalar(
-        f"SELECT COUNT(*) FROM api_v1_credential_audits WHERE tenant_id='{CASCADE_ID}'"
-    ) == 0
-    if not audit_lost:
-        raise ValueError("Expected synthetic audit cascade risk not reproduced")
+    idem_id = "51d89f18-b8fa-48b5-88ed-aa70a2d93413"
+    inbox_id = "3c221347-96a2-4314-a9b2-778d917ee148"
+    outbox_id = "bf4b51c5-b07d-4e3c-8c42-14eaed763d0a"
+    attempt_id = "44a805e4-6d0a-4966-b298-219e6b1a0a30"
+    psql(f"""INSERT INTO api_v1_idempotency_records
+             (id, tenant_id, integration_id, operation, key_hash, fingerprint)
+             VALUES ('{idem_id}', '{FIXTURE_TENANT_ID}', '{INTEGRATION_ID}',
+                     'diagnostic.ping', repeat('a', 64), repeat('b', 64));""")
+    psql(f"""INSERT INTO api_v1_inbox_events
+             (id, tenant_id, integration_id, idempotency_record_id, event_type, payload_hash)
+             VALUES ('{inbox_id}', '{FIXTURE_TENANT_ID}', '{INTEGRATION_ID}',
+                     '{idem_id}', 'diagnostic.ping', repeat('c', 64));""")
+    psql(f"""INSERT INTO api_v1_outbox_events
+             (id, tenant_id, integration_id, inbox_event_id, event_type, updated_at)
+             VALUES ('{outbox_id}', '{FIXTURE_TENANT_ID}', '{INTEGRATION_ID}',
+                     '{inbox_id}', 'diagnostic.ping', NOW());""")
+    psql(f"""INSERT INTO api_v1_delivery_attempts
+             (id, tenant_id, integration_id, outbox_event_id, attempt_no)
+             VALUES ('{attempt_id}', '{FIXTURE_TENANT_ID}', '{INTEGRATION_ID}',
+                     '{outbox_id}', 1);""")
+    def assert_restricted_delete(table, identifier):
+        # A PostgreSQL FK violation is the ONLY accepted reason for denial.
+        psql(f"""DO $restricted$
+        BEGIN
+          BEGIN
+            DELETE FROM "{table}" WHERE id = '{identifier}';
+            RAISE EXCEPTION 'PR01_UNEXPECTED_DELETE_ALLOWED';
+          EXCEPTION WHEN foreign_key_violation THEN
+            NULL;
+          END;
+        END $restricted$;""")
+
+    assert_restricted_delete("tenants", FIXTURE_TENANT_ID)
+    assert_restricted_delete("api_v1_outbox_events", outbox_id)
+    audit_preserved = scalar(
+        f"SELECT COUNT(*) FROM api_v1_credential_audits WHERE tenant_id='{FIXTURE_TENANT_ID}'"
+    ) == 1
+    attempts_preserved = scalar(
+        f"SELECT COUNT(*) FROM api_v1_delivery_attempts WHERE outbox_event_id='{outbox_id}'"
+    ) == 1
+    if not audit_preserved or not attempts_preserved:
+        raise ValueError("PR01 protected history was silently deleted")
+    if scalar(f"SELECT COUNT(*) FROM tenants WHERE id='{FIXTURE_TENANT_ID}'") != 1:
+        raise ValueError("Parent deleted despite RESTRICT")
+
+    # CI-only explicit cleanup of fake rows, in dependent-to-parent order.
+    # No hard-delete code path is added to the running application.
+    psql(f"""BEGIN;
+             DELETE FROM api_v1_delivery_attempts WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM api_v1_outbox_events WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM api_v1_inbox_events WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM api_v1_idempotency_records WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM api_v1_credential_audits WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM api_v1_integrations WHERE tenant_id='{FIXTURE_TENANT_ID}';
+             DELETE FROM tenants WHERE id='{FIXTURE_TENANT_ID}';
+             COMMIT;""")
     assert_sentinel()
 
     # ROLLBACK REHEARSAL: NEVER used in production, never DROP with CASCADE.
@@ -176,9 +224,12 @@ def rehearsal(baseline_schema, candidate_schema, baseline_sql, delta_sql):
         "applied_tables": BASELINE_TABLES + len(NEW_TABLES),
         "rollback_tables": BASELINE_TABLES,
         "baseline_sentinel_preserved": True,
-        "cascade_foreign_keys": cascade_count,
-        "audit_deleted_on_synthetic_tenant_delete": audit_lost,
-        "audit_cascade_requires_policy_decision": True,
+        "restrict_foreign_keys": restrict_count,
+        "tenant_delete_rejected_by_fk": True,
+        "outbox_delete_rejected_by_fk": True,
+        "audit_preserved": audit_preserved,
+        "delivery_attempts_preserved": attempts_preserved,
+        "retention_policy_still_pending": True,
         "local_sql_audit": sql_report,
         "production_rollback_not_implemented": True,
     }

@@ -20,14 +20,14 @@ def inventory_fixture():
         "inventory_complete": True,
         "production_migration_authorized": False,
         "fk_count": len(EXPECTED_GRAPH),
-        "fk_cascades": [
+        "fk_edges": [
             {
                 "child_table": child,
                 "parent_table": parent,
                 "constraint": "synthetic_" + str(i) + "_fk",
                 "child_columns": ['"tenant_id"'],
                 "parent_columns": ['"id"'],
-                "on_delete": "CASCADE",
+                "on_delete": "RESTRICT",
             }
             for i, (child, parent) in enumerate(EXPECTED_GRAPH.items())
         ],
@@ -38,7 +38,7 @@ class Phase9PolicyGateTests(unittest.TestCase):
     def test_all_ten_real_proposed_rules_remain_unapproved(self):
         result = check_gate(policy_fixture(), inventory_fixture())
         self.assertTrue(result["ci_test_passed"])
-        self.assertEqual(result["cascade_edges_still_present"], 10)
+        self.assertEqual(result["restrict_edges_present"], 10)
         self.assertEqual(result["pending_decisions"], 10)
         self.assertFalse(result["production_release_authorized"])
         self.assertFalse(result["migration_authorized"])
@@ -73,7 +73,7 @@ class Phase9PolicyGateTests(unittest.TestCase):
         p["fk_decisions"][0]["parent_table"] = "other"
         variants.append(p)
         p = policy_fixture()
-        p["fk_decisions"][0]["expected_action"] = "RESTRICT"
+        p["fk_decisions"][0]["expected_action"] = "CASCADE"
         variants.append(p)
         p = policy_fixture()
         p["fk_decisions"][-1] = copy.deepcopy(p["fk_decisions"][0])
@@ -99,19 +99,19 @@ class Phase9PolicyGateTests(unittest.TestCase):
     def test_sql_graph_drift_and_unknown_deletion_policy_block(self):
         cases = []
         r = inventory_fixture()
-        r["fk_cascades"][0]["parent_table"] = "not_tenants"
+        r["fk_edges"][0]["parent_table"] = "not_tenants"
         cases.append(r)
         r = inventory_fixture()
-        r["fk_cascades"][0]["on_delete"] = "SET NULL"
+        r["fk_edges"][0]["on_delete"] = "SET NULL"
         cases.append(r)
         r = inventory_fixture()
-        r["fk_cascades"].pop()
+        r["fk_edges"].pop()
         cases.append(r)
         r = inventory_fixture()
-        r["fk_cascades"][-1] = copy.deepcopy(r["fk_cascades"][0])
+        r["fk_edges"][-1] = copy.deepcopy(r["fk_edges"][0])
         cases.append(r)
         r = inventory_fixture()
-        r["fk_cascades"][0]["constraint"] = ""
+        r["fk_edges"][0]["constraint"] = ""
         cases.append(r)
         r = inventory_fixture()
         r["production_migration_authorized"] = True

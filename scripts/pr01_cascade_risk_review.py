@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only PR01 foreign-key cascade inventory; NEVER approves migration."""
+"""Read-only PR01 foreign-key referential integrity inventory; NEVER approves migration."""
 import argparse
 import json
 import re
@@ -26,7 +26,7 @@ def assess(sql):
         child, constraint, columns, parent, ref_columns, on_delete = found.groups()
         if child not in names:
             raise ValueError("FK modifies an existing/non-PR01 table")
-        if on_delete.upper() != "CASCADE":
+        if on_delete.upper() != "RESTRICT":
             raise ValueError("FK action changed from the currently reviewed baseline")
         fk_rows.append({
             "child_table": child,
@@ -42,14 +42,13 @@ def assess(sql):
         "inventory_complete": True,
         "production_migration_authorized": False,
         "fk_count": len(fk_rows),
-        "fk_cascades": fk_rows,
+        "fk_edges": fk_rows,
+        "restrict_edges": len(fk_rows),
         "release_blockers": [
-            "Deleting tenant cascades into api_v1_credential_audits; audit history would be lost",
-            "Deleting an integration cascades into credential, quota, event, and attempt history",
-            "Deleting parent inbox/outbox or idempotency record may delete related attempt history",
-            "Establish retention/legal-hold and tenant-deletion policy before accepting cascade behavior",
-            "Confirm baseline schema and target database identity independently; disposable CI is not staging",
-            "Review snapshot/backup, restore and forward-only rollback; no automatic production DROP TABLE",
+            "RESTRICT prevents silent parent deletion while PR01 descendants exist",
+            "Preexisting tenant and integration deletion workflows require compatibility review",
+            "Retention policy, LGPD, legal-hold and final migration approval remain unresolved",
+            "Target database identity, backup, staging test and rollback remain unverified",
         ],
     }
 
@@ -61,9 +60,9 @@ def main():
     try:
         report = assess(Path(args.sql).read_text(encoding="utf-8"))
     except ValueError as exc:
-        raise SystemExit(f"CASCADE REVIEW BLOCKED: {exc}") from None
+        raise SystemExit(f"FK REVIEW BLOCKED: {exc}") from None
     Path(args.report).write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print("PR01 CASCADE inventory complete: 10 FKs; production release remains BLOCKED")
+    print("PR01 FK inventory complete: 10 RESTRICT FKs; production release remains BLOCKED")
 
 if __name__ == "__main__":
     main()

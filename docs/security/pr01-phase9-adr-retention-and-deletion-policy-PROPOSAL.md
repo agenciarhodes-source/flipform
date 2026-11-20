@@ -55,3 +55,7 @@ O workflow `PR01 - Local migration rehearsal (DISPOSABLE ONLY)` agora executa ta
 - **Nenhum novo endpoint de exclusão**, worker, migration, deploy, merge ou configuração produtiva faz parte desta fase.
 
 **Status final do ADR:** PROPOSTA. Sem decisões de retenção ou regras definitivas homologadas, o PR #627 permanece em Draft e a migração real continua bloqueada.
+
+## Adendo — salvaguarda do schema Draft em 20/11/2026
+
+A branch foi atualizada para substituir **todas as dez FKs novas do PR01** de `ON DELETE CASCADE` para **`ON DELETE RESTRICT`**, sem tocar nas 92 tabelas preexistentes. Os riscos históricos reproduzidos nas fases 8–9 permanecem como evidência do problema original. O novo ensaio deve demonstrar que o banco **recusa** excluir tenant/outbox com dependências, mantendo intactas auditorias e tentativas. Essa medida impede eliminação involuntária; não decide por si só prazos de retenção, legal hold, LGPD ou fluxo de exclusão. A mudança também exige inspeção de compatibilidade com rotas existentes de exclusão. Sem migrations Neon, deploy, merge ou liberação de produção.

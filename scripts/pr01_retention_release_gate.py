@@ -53,7 +53,7 @@ def check_gate(policy, inventory):
             "FK inventory cannot be interpreted as release authorization")
     _assert(inventory.get("fk_count") == 10, "Expected exactly 10 FK relationships")
     decisions = policy.get("fk_decisions")
-    edges = inventory.get("fk_cascades")
+    edges = inventory.get("fk_edges")
     _assert(isinstance(decisions, list) and len(decisions) == 10,
             "All 10 pending decisions required")
     _assert(isinstance(edges, list) and len(edges) == 10,
@@ -67,7 +67,7 @@ def check_gate(policy, inventory):
                 "Duplicate or unexpected PR01 table in policy")
         _assert(item.get("parent_table") == EXPECTED_GRAPH[child],
                 "Parent relationship differs from reviewed PR01 graph")
-        _assert(item.get("expected_action") == "CASCADE"
+        _assert(item.get("expected_action") == "RESTRICT"
                 and item.get("decision") == "PENDING",
                 "Unreviewed FK action or policy decision")
         _assert(isinstance(item.get("category"), str)
@@ -91,7 +91,7 @@ def check_gate(policy, inventory):
         _assert(child in EXPECTED_GRAPH and child not in found
                 and parent == EXPECTED_GRAPH[child],
                 "Generated FK topology drifted from reviewed PR01 graph")
-        _assert(edge.get("on_delete") == "CASCADE",
+        _assert(edge.get("on_delete") == "RESTRICT",
                 "Unreviewed FK delete action; regeneration and approval required")
         _assert(isinstance(constraint, str) and constraint.strip()
                 and constraint not in constraints,
@@ -115,15 +115,15 @@ def check_gate(policy, inventory):
         "hard_delete_authorized": False,
         "decision_status": "UNRESOLVED",
         "fk_relationships_checked": 10,
-        "cascade_edges_still_present": 10,
+        "restrict_edges_present": 10,
+        "cascade_edges_still_present": 0,
         "pending_decisions": 10,
         "critical_audit_tables": sorted(CRITICAL_HISTORY),
         "release_blockers": [
-            "Credential audit rows can be removed by tenant deletion",
-            "Delivery attempt history can be removed by event/parent deletion",
-            "All ten FK retention decisions and legal-hold policy are pending",
-            "The schema's CASCADE actions are unchanged; no approved mitigation is deployed",
-            "A green CI release gate means safe detection, NOT production approval",
+            "Draft RESTRICT FKs block accidental parent deletes, but retention and legal hold remain unapproved",
+            "Existing tenant/integration hard-delete functionality requires compatibility review",
+            "Target database identity, staging migration, backup and rollback are not authorized",
+            "Green CI means verified safeguards, NOT approval to enable or deploy",
         ],
         "requires_explicit_next_decision": True,
     }
@@ -148,7 +148,7 @@ def main():
         raise SystemExit("PR01 retention gate rejected unreviewed change") from None
     Path(args.report).write_text(json.dumps(result, indent=2) + "\n",
                                  encoding="utf-8")
-    print("PR01 retention risk graph verified: 10 unresolved FKs; RELEASE BLOCKED")
+    print("PR01 retention review: 10 RESTRICT FKs, policy still pending; RELEASE BLOCKED")
 
 if __name__ == "__main__":
     main()

@@ -14,7 +14,7 @@
 ## O que permanece NO-GO, mesmo com CI verde
 
 1. O schema com 10 modelos PR01 foi **apenas ensaiado em PostgreSQL descartável**, jamais migrado em Neon. A API ficará desativada até aprovação separada de migration, staging e rollout. Não habilitar `FLIPFORM_API_V1_ENABLED` nos ambientes reais.
-2. **Crítico:** `ON DELETE CASCADE` ainda permite excluir `api_v1_credential_audits` e `api_v1_delivery_attempts`. A ADR de retenção/LGPD/legal hold permanece **PROPOSTA, não aprovada**. Resolver FKs e política de exclusão ANTES de migration.
+2. **Crítico:** no novo código Draft, as dez relações novas do PR01 usam `ON DELETE RESTRICT` para impedir hard-delete implícito de pais com dependências. Isso preserva registros de auditoria, mas pode bloquear rotas existentes de exclusão de empresa. A ADR de retenção/LGPD/legal hold permanece **PROPOSTA, não aprovada**, e a compatibilidade de exclusões precisa ser revisada antes de qualquer migration.
 3. Operação produtiva de webhooks, filas, retries externos, observabilidade/exportação, portais terceiros, PR02 pipeline CRUD, Meta/Ads/Pixel, WhatsApp, Stripe e ERP estão **fora desta entrega** e não podem ser considerados integrados.
 4. A UI é um formulário mínimo e ainda exige testes de navegação e aceitação com tenant fictício em staging isolado comprovado. Nenhuma chave real emitida.
 5. O sistema de billing `business_group` continua explicitamente **sem entitlement automático**, a menos que um grant auditado seja aprovado.

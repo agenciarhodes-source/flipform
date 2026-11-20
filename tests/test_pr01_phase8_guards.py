@@ -41,21 +41,21 @@ class Pr01Phase8Guards(unittest.TestCase):
         self.assertEqual(DROP_ORDER[-1], "api_v1_integrations")
         self.assertEqual(DROP_ORDER[0], "api_v1_delivery_attempts")
 
-    def test_cascade_review_exposes_all_ten_foreign_keys_as_unapproved(self):
+    def test_restrict_review_exposes_all_ten_foreign_keys_as_unapproved(self):
         rows = list(PR01_ADDITIVE_MODELS.values())
         sql = "".join(
             f'ALTER TABLE "{name}" ADD CONSTRAINT "{name}_fk" '
             f'FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") '
-            'ON DELETE CASCADE ON UPDATE CASCADE;\n'
+            'ON DELETE RESTRICT ON UPDATE CASCADE;\n'
             for name in rows
         )
         review = assess(sql)
         self.assertEqual(review["fk_count"], 10)
         self.assertFalse(review["production_migration_authorized"])
-        self.assertEqual(len(review["fk_cascades"]), 10)
-        self.assertTrue(any("credential_audits" in x for x in review["release_blockers"]))
+        self.assertEqual(len(review["fk_edges"]), 10)
+        self.assertEqual(review["restrict_edges"], 10)
         with self.assertRaisesRegex(ValueError, "action changed"):
-            assess(sql.replace("ON DELETE CASCADE", "ON DELETE RESTRICT", 1))
+            assess(sql.replace("ON DELETE RESTRICT", "ON DELETE CASCADE", 1))
         with self.assertRaisesRegex(ValueError, "Expected exactly 10"):
             assess(sql.split(";", 1)[1])
 
