@@ -69,6 +69,12 @@ jobs:
       - name: PR01 API v1 security foundation tests (offline)
         run: npx tsx --test tests/pr01-api-foundation.test.ts
 
+      # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
+      - name: PR01 webhook HMAC and SSRF policy tests (offline)
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr01-webhook-security.test.ts
+
       - name: Prisma generate
         run: npx prisma generate
 
@@ -203,6 +209,16 @@ jobs:
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-durable-events.integration.test.ts
+
+      # PR01 Phase 5: synthetic HMAC replay nonce test; ONLY local PostgreSQL.
+      - name: PR01 signed webhook replay isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-webhook-replay.integration.test.ts
 
       - name: Run Flip AI database isolation tests
         env:
