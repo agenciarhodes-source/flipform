@@ -8,6 +8,10 @@ on:
       - 'scripts/pr01_local_migration_rehearsal.py'
       - 'scripts/pr01_cascade_risk_review.py'
       - 'scripts/pr01_retention_release_gate.py'
+      - 'scripts/pr01_staging_no_go_gate.py'
+      - 'tests/test_pr01_staging_no_go_gate.py'
+      - 'docs/security/pr01-staging-release-gates-DRAFT.json'
+      - 'vercel.json'
       - 'tests/test_pr01_phase9_retention_gate.py'
       - 'docs/security/pr01-phase9-retention-decision-matrix.json'
       - 'scripts/pr01_offline_sql_diff_audit.py'
@@ -93,6 +97,16 @@ jobs:
             --policy docs/security/pr01-phase9-retention-decision-matrix.json \
             --fk-report pr01-migration-rehearsal/cascade-risk-report.json \
             --report pr01-migration-rehearsal/phase9-retention-release-hold.json
+
+      # This is an offline NO-GO proof, not a claim of staging readiness.
+      - name: PR01 staging release NO-GO preflight (offline only)
+        run: |
+          python3 -m unittest discover -s tests -p 'test_pr01_staging_no_go_gate.py' -v
+          python3 scripts/pr01_staging_no_go_gate.py \
+            --manifest docs/security/pr01-staging-release-gates-DRAFT.json \
+            --vercel vercel.json \
+            --retention docs/security/pr01-phase9-retention-decision-matrix.json \
+            --report pr01-migration-rehearsal/staging-no-go-report.json
 
       - name: Start runner-only PostgreSQL with pgvector
         shell: bash

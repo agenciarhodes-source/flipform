@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "pr_number": 627,
+  "head_branch": "feature/pr01-global-api-foundation",
+  "decision": "NO_GO",
+  "production_release_authorized": false,
+  "staging_deployment_authorized": false,
+  "neon_migration_authorized": false,
+  "api_activation_authorized": false,
+  "retention_and_lgpd_approved": false,
+  "legal_hold_approved": false,
+  "runtime_db_identity_attested": false,
+  "staging_egress_isolation_attested": false,
+  "staging_backup_restore_accepted": false,
+  "staging_tenant_ab_regressions_accepted": false,
+  "production_rollback_plan_approved": false,
+  "release_approval_reference": null,
+  "note": "Draft-only machine-checked hold. Every approval requires an independent reviewed change and separate explicit authorization."
+}
