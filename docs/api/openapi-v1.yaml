@@ -1,67 +1,193 @@
 openapi: 3.1.0
 info:
-  title: FlipForm Native API
+  title: FlipForm Native API v1 — Draft
   version: 1.0.0-draft
   description: |
-    PR01 API v1 foundation. Phase 1 is intentionally not enabled.
-    Only a fail-closed placeholder exists in the application at present.
-    Business resources and pipeline CRUD belong to PR02; do not publish.
+    PR01 multi-tenant M2M foundation. Code exists only on a Draft branch.
+    Feature flag FLIPFORM_API_V1_ENABLED is OFF by default. No live endpoints
+    or production database migrations have been approved. This contract is
+    documentation of the proposed API, not evidence of a deployed service.
+    No lead, CRM, orders, campaigns, pipeline CRUD or ERP operation in PR01.
 servers:
-  - url: https://example.invalid
-    description: Documentation-only placeholder; NOT a live service
+  - url: /
+    description: Same-origin only after a separately authorized deployment
 tags:
-  - name: Foundation
-    description: API foundation lifecycle; no business data
+  - name: M2M Foundation
+  - name: Administration
+    description: Owner's verified login session and same-origin browser requests
 paths:
   /api/v1/status:
     get:
-      tags: [Foundation]
-      operationId: getApiV1FoundationStatus
-      summary: Disabled placeholder (not a public health endpoint)
-      description: |
-        Feature flag is off by default. Returns 404 when disabled.
-        While the M2M credential repository is not implemented, even an
-        explicit feature flag returns 503. It never returns company data.
+      tags: [M2M Foundation]
+      operationId: getApiV1Placeholder
+      summary: Disabled placeholder — never returns success
       responses:
-        '404':
-          description: Foundation not enabled
+        '404': { description: API disabled }
+        '503': { description: Placeholder not implemented for public health }
+  /api/v1/capabilities:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1Capabilities
+      summary: Read scoped tenant and integration identity (no CRM data)
+      security:
+        - M2MKey: []
+      responses:
+        '200':
+          description: Valid tenant-bound credential, active integration, entitlement and quota
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiV1Error'
-        '503':
-          description: M2M persistence not ready; fail closed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiV1Error'
+                type: object
+                additionalProperties: false
+                required: [version, capability, tenantId, integrationId, businessData]
+                properties:
+                  version: { type: string, const: v1 }
+                  capability: { type: string, const: integrations.read }
+                  tenantId: { type: string, format: uuid }
+                  integrationId: { type: string, format: uuid }
+                  businessData: { type: boolean, const: false }
+        '401': { description: Invalid, expired or revoked bearer token }
+        '403': { description: Tenant inactive, not entitled or scope denied }
+        '404': { description: API feature disabled }
+        '429': { description: Credential operation quota reached }
+        '503': { description: Database or quota unavailable }
+  /api/integrations/api-v1:
+    get:
+      tags: [Administration]
+      operationId: listApiV1TenantIntegrations
+      summary: List only the logged-in owner's tenant integrations
+      security:
+        - OwnerSession: []
+      responses:
+        '200': { description: List without secrets }
+        '403': { description: Not an eligible verified owner }
+        '404': { description: API feature disabled }
+    post:
+      tags: [Administration]
+      operationId: createApiV1TenantIntegration
+      summary: Create a disabled integration; never accepts a tenant override
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName]
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 80 }
+      responses:
+        '201': { description: Created, initially disabled }
+        '403': { description: Not an eligible owner or request not from same origin }
+        '409': { description: Limit reached }
+  /api/integrations/api-v1/{integrationId}:
+    patch:
+      tags: [Administration]
+      operationId: toggleApiV1TenantIntegration
+      summary: Activate or disable a tenant-owned integration (never hard delete)
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        '200': { description: New integration state }
+        '403': { description: Forbidden }
+        '404': { description: Not found in current tenant }
+  /api/integrations/api-v1/{integrationId}/keys:
+    get:
+      tags: [Administration]
+      operationId: listApiV1TenantKeys
+      summary: List key metadata without secret hashes or bearer tokens
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      responses:
+        '200': { description: Key metadata only }
+    post:
+      tags: [Administration]
+      operationId: issueApiV1TenantKey
+      summary: Issue a 30-day read-only key, shown once to the authenticated owner
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scopes]
+              properties:
+                scopes:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  prefixItems: [{ type: string, const: integrations.read }]
+                  items: false
+      responses:
+        '201': { description: One-time key; never returned again }
+        '403': { description: Forbidden }
+        '429': { description: Key count limit reached }
+  /api/integrations/api-v1/{integrationId}/keys/{credentialId}:
+    post:
+      tags: [Administration]
+      operationId: rotateApiV1TenantKey
+      summary: Revoke old key and atomically create replacement; show once
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '201': { description: New key shown once }
+        '409': { description: Already revoked, expired or missing }
+    delete:
+      tags: [Administration]
+      operationId: revokeApiV1TenantKey
+      summary: Revoke key without deleting its metadata/audit trail
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '200': { description: Key revoked }
+        '409': { description: Already revoked or missing }
 components:
+  parameters:
+    IntegrationId:
+      name: integrationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CredentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
   securitySchemes:
     M2MKey:
       type: http
       scheme: bearer
       bearerFormat: opaque
-      description: |
-        Reserved for future authorized M2M endpoints. No live key issuance or
-        credential repository exists in this PR01 Phase 1.
-  schemas:
-    ApiV1Error:
-      type: object
-      additionalProperties: false
-      required: [code, message, requestId]
-      properties:
-        code:
-          type: string
-          enum:
-            - api_unavailable
-            - invalid_credential
-            - permission_denied
-            - rate_limited
-            - dependency_unavailable
-            - invalid_request
-            - idempotency_conflict
-        message:
-          type: string
-        requestId:
-          type: string
-          format: uuid
+      description: 'Bearer ffv1.<key-id>.<random-secret>, 32 random bytes, issued once'
+    OwnerSession:
+      type: apiKey
+      in: cookie
+      name: flipform_token
+      description: Verified database session of tenant owner, plus same-origin mutation

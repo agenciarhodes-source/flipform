@@ -44,3 +44,16 @@ paths = ['''^tests/pr01-durable-events\.integration\.test\.ts$''']
 regexes = [
   '''^\s*const key = 'synthetic-idempotency-key-001';\s*$''',
 ]
+
+# PR01 consolidation: ONLY three static child->parent FK graph literals,
+# confirmed in the SARIF output. No generic-api-key rule is disabled.
+[[rules.allowlists]]
+description = "PR01 exact FK graph constants, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^scripts/pr01_retention_release_gate\.py$''']
+regexes = [
+  '''^\s*"api_v1_credentials": "api_v1_integrations",\s*$''',
+  '''^\s*"api_v1_idempotency_records": "api_v1_integrations",\s*$''',
+  '''^\s*"api_v1_webhook_replays": "api_v1_integrations",\s*$''',
+]

@@ -199,6 +199,16 @@ jobs:
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-m2m-persistence.integration.test.ts
 
+      # PR01 closure: one full owner/M2M tenant circuit with disposable data.
+      - name: PR01 owner integration + authenticated capabilities (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-closure-m2m.integration.test.ts
+
       # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
       # No external endpoints, workers, real credentials or Neon access.
       - name: PR01 durable held event replay (disposable PostgreSQL)

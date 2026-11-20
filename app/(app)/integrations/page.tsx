@@ -4,6 +4,8 @@ import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
+import { ApiV1Card } from './api-v1-card';
+import { apiV1Enabled } from '@/lib/api-v1/policy';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
 import { WhatsAppNumbersCard } from './whatsapp-numbers-card';
 import { WhatsAppTemplatesCard } from './whatsapp-templates-card';
@@ -34,6 +36,7 @@ export default async function IntegrationsPage() {
   return <>
     <ClientConnectionOnboarding />
     <IntegrationsClient />
+    {session.role === 'owner' && apiV1Enabled(process.env) && <ApiV1Card />}
     <div id="google-funnel" className="scroll-mt-24">
       <GoogleFunnelCard />
     </div>
