@@ -2404,19 +2404,26 @@ model ApiV1InboxEvent {
 /// PR01 Phase 4: held outbound envelope, *not* a delivery/dispatch worker.
 /// Its parent inbox event must belong to exactly the same tenant and integration.
 model ApiV1OutboxEvent {
-  id            String   @id @default(uuid())
-  tenantId      String   @map("tenant_id")
-  integrationId String   @map("integration_id")
-  inboxEventId  String   @map("inbox_event_id")
-  eventType     String   @map("event_type")
-  state         String   @default("held")
-  attempts      Int      @default(0)
-  createdAt     DateTime @default(now()) @map("created_at")
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  integrationId  String    @map("integration_id")
+  inboxEventId   String    @map("inbox_event_id")
+  eventType      String    @map("event_type")
+  state          String    @default("held")
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime? @map("next_attempt_at")
+  leaseToken     String?   @map("lease_token")
+  leaseUntil     DateTime? @map("lease_until")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   inbox ApiV1InboxEvent @relation(fields: [tenantId, integrationId, inboxEventId], references: [tenantId, integrationId, id], onDelete: Cascade)
+  deliveryAttempts ApiV1DeliveryAttempt[]
 
   @@unique([tenantId, integrationId, inboxEventId])
-  @@index([tenantId, state, createdAt])
+  @@unique([tenantId, integrationId, id])
+  @@index([tenantId, state, nextAttemptAt])
+  @@index([tenantId, state, leaseUntil])
   @@map("api_v1_outbox_events")
 }
 
@@ -2438,4 +2445,25 @@ model ApiV1WebhookReplay {
   @@unique([tenantId, integrationId, nonceHash])
   @@index([expiresAt])
   @@map("api_v1_webhook_replays")
+}
+
+
+/// PR01 Phase 6: append-only-ish, synthetic-only attempt ledger.
+/// No real HTTP delivery is permitted and no customer payload is stored.
+model ApiV1DeliveryAttempt {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  outboxEventId String   @map("outbox_event_id")
+  attemptNo     Int      @map("attempt_no")
+  result        String   @default("leased")
+  httpStatus    Int?     @map("http_status")
+  createdAt     DateTime @default(now()) @map("created_at")
+  finishedAt    DateTime? @map("finished_at")
+
+  outbox ApiV1OutboxEvent @relation(fields: [tenantId, integrationId, outboxEventId], references: [tenantId, integrationId, id], onDelete: Cascade)
+
+  @@unique([tenantId, integrationId, outboxEventId, attemptNo])
+  @@index([tenantId, result, createdAt])
+  @@map("api_v1_delivery_attempts")
 }
