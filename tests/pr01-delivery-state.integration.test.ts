@@ -153,7 +153,9 @@ test('PR01 Phase 6: atomic leases, stale ack, retries, DLQ, expiry, tenant isola
           const outcome = await settleDiagnosticOutboxForCi(
             scopeA, outExpired.id, current, 503, db, at(t, 1_000));
           assert.equal(outcome.status, 'retry');
-          if (outcome.status !== 'retry') throw new Error('synthetic retry absent');
+          if (outcome.status !== 'retry' || !(outcome.nextAttemptAt instanceof Date)) {
+            throw new Error('synthetic retry schedule absent');
+          }
           t = outcome.nextAttemptAt;
         } else {
           assert.equal(await exhaustExpiredDiagnosticLeaseForCi(scopeA, outExpired.id, db,
