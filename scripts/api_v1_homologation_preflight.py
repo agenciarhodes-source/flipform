@@ -84,6 +84,17 @@ def verify(root: Path = ROOT) -> dict:
             and neon.get("observed_public_table_count") == 0
             and neon.get("observed_api_v1_table_count") == 0,
             "Dated read-only staging evidence misrepresented")
+    lab = neon.get("homologation_lab", {})
+    require(lab.get("project_id") == "holy-fog-36254823"
+            and lab.get("parent_branch_id") == "br-icy-glitter-bcisq63l"
+            and lab.get("branch_id") == "br-nameless-art-bc6k4c5g"
+            and lab.get("branch_name") == "api-v1-pr629-homologation-lab-20261121"
+            and lab.get("verified_state") == "ready"
+            and lab.get("created_without_compute") is True
+            and lab.get("schema_applied") is False
+            and lab.get("application_deployed") is False
+            and lab.get("is_default") is False,
+            "Lab branch evidence cannot be interpreted as schema/bootstrap completion")
     require(neon.get("application_runtime_database_identity_attested") is False
             and neon.get("backup_restore_test_on_application_schema_completed") is False,
             "Missing app runtime/restore evidence")
