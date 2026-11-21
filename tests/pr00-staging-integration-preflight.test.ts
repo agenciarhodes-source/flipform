@@ -53,6 +53,8 @@ test('reject external provider and background job secret configuration', () => {
     'WHATSAPP_ACCESS_TOKEN', 'STRIPE_SECRET_KEY', 'ZAPSIGN_API_TOKEN',
     'NEXT_PUBLIC_FACEBOOK_APP_ID', 'UPSTASH_REDIS_REST_TOKEN',
     'MONGODB_URI', 'RESEND_API_KEY', 'CRON_SECRET', 'INTERNAL_JOB_SECRET',
+    'SENTRY_DSN', 'NEXT_PUBLIC_SENTRY_DSN', 'SENTRY_AUTH_TOKEN',
+    'OTEL_EXPORTER_OTLP_ENDPOINT', 'POSTHOG_API_KEY', 'DATADOG_API_KEY',
   ]) {
     assert.equal(
       pr00StagingIntegrationPreflightApproved({ ...env, [key]: 'synthetic-test-only' }, config),
