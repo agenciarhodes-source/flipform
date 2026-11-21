@@ -70,10 +70,10 @@ jobs:
         run: npx tsx --test tests/pr01-api-foundation.test.ts
 
       # PR02: bounded parser and cross-tenant denial, no DB or outbound I/O.
-      - name: PR02 read-only pipeline policy tests (offline)
+      - name: PR02 read-only catalog policy tests (offline)
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/pr02-pipelines-read.test.ts
+        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts
 
       # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
       - name: PR01 webhook HMAC and SSRF policy tests (offline)
@@ -224,6 +224,15 @@ jobs:
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr02-pipelines-read.integration.test.ts
+
+      - name: PR02 tenant-isolated forms catalog read (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-forms-catalog.integration.test.ts
 
       # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
       # No external endpoints, workers, real credentials or Neon access.
