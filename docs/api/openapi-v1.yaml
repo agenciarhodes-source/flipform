@@ -8,8 +8,9 @@ info:
     or production database migrations have been approved. This contract is
     documentation of the proposed API, not evidence of a deployed service.
     PR02 adds read-only pipeline, stage, active form and form field definitions and
-    aggregated lead counts per active pipeline stage with a separate scope. No individual
-    lead records, contacts, orders, campaigns, pipeline mutations or ERP operations are exposed.
+    aggregated lead counts plus a narrowly scoped catalog of lead routing metadata.
+    Lead identifiers can still be linked to individuals; no contact fields, answers,
+    orders, campaign details, mutations or ERP operations are exposed.
 servers:
   - url: /
     description: Same-origin only after a separately authorized deployment
@@ -157,6 +158,61 @@ paths:
         '404': { description: Pipeline missing, archived, other tenant or feature flag OFF }
         '429': { description: Distributed credential quota exceeded }
         '503': { description: Dependency unavailable or stage limit exceeded }
+  /api/v1/leads:
+    get:
+      tags: [M2M Foundation]
+      operationId: listApiV1LeadMetadata
+      summary: Read tenant-bound lead routing metadata without contact details
+      description: |
+        Requires a dedicated leads.metadata.read scope, tenant entitlement and
+        durable operation quota. UUIDs are pseudonymous, NOT anonymous; legal
+        retention, purpose limitations and rollout require separate approval.
+        This endpoint returns no name, email, phone, answers, notes, documents,
+        conversations, arbitrary source strings or sale values. No mutations.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pipelineId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tenant-scoped, ascending UUID paginated lead metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, items, nextCursor]
+                properties:
+                  version: { type: string, const: v1 }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+                  items:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, formId, pipelineId, stageId, status, createdAt]
+                      properties:
+                        id: { type: string, format: uuid }
+                        formId: { type: [string, 'null'], format: uuid }
+                        pipelineId: { type: string, format: uuid }
+                        stageId: { type: string, format: uuid }
+                        status: { type: string }
+                        createdAt: { type: string, format: date-time }
+        '400': { description: Invalid, duplicate or unexpected query parameter }
+        '401': { description: Missing, expired or revoked bearer token }
+        '403': { description: Incorrect scope, tenant suspended or entitlement missing }
+        '404': { description: Global API disabled }
+        '429': { description: Credential operation quota exceeded }
+        '503': { description: Database or quota unavailable }
   /api/v1/forms:
     get:
       tags: [M2M Foundation]
@@ -347,7 +403,7 @@ paths:
                   type: array
                   minItems: 1
                   maxItems: 1
-                  prefixItems: [{ type: string, enum: [integrations.read, pipelines.read, forms.read, pipelines.metrics.read] }]
+                  prefixItems: [{ type: string, enum: [integrations.read, pipelines.read, forms.read, pipelines.metrics.read, leads.metadata.read] }]
                   items: false
       responses:
         '201': { description: One-time key; never returned again }
