@@ -30,8 +30,8 @@ test('metadata reader uses credential tenant and a minimal explicit SELECT',asyn
   try {
     const recorded:unknown[]=[];
     const sample=[
-      {id:A,formId:null,pipelineId:B,stageId:A,status:'open',createdAt:new Date('2026-01-01T00:00:00Z')},
-      {id:B,formId:null,pipelineId:B,stageId:B,status:'open',createdAt:new Date('2026-01-02T00:00:00Z')},
+      {id:A,formId:null,pipelineId:B,stageId:A,status:'open',createdAt:new Date('2026-01-01T00:00:00Z'),updatedAt:new Date('2026-01-01T00:00:00Z')},
+      {id:B,formId:null,pipelineId:B,stageId:B,status:'open',createdAt:new Date('2026-01-02T00:00:00Z'),updatedAt:new Date('2026-01-02T00:00:00Z')},
     ];
     const db = {lead:{findMany:async(q:unknown)=>{recorded.push(q);return sample;}}} as unknown as Pick<PrismaClient,'lead'>;
     const result=await listApiV1LeadMetadata(AUTH,{limit:1,after:null,pipelineId:B},db);
@@ -41,7 +41,7 @@ test('metadata reader uses credential tenant and a minimal explicit SELECT',asyn
     assert.deepEqual(query.where,{tenantId:'tenant-a',pipelineId:B});
     assert.equal(query.take,2);
     assert.deepEqual(Object.keys(query.select).sort(),
-      ['id','formId','pipelineId','stageId','status','createdAt'].sort());
+      ['id','formId','pipelineId','stageId','status','createdAt','updatedAt'].sort());
     for(const sensitive of ['name','email','phone','answers','messages','notes','tags','documents','saleValueCents']) {
       assert.equal(Object.prototype.hasOwnProperty.call(query.select,sensitive),false);
     }

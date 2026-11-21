@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { GET as getLeads } from '../app/api/v1/leads/route';
+import { GET as getLeadDetail } from '../app/api/v1/leads/[leadId]/route';
 import { digestApiV1Secret } from '../lib/api-v1/identity';
 
 function requireDisposableDb(): void {
@@ -89,7 +90,7 @@ test('lead metadata list: two-tenant isolation, pagination, scopes, suspension a
     assert.equal(a1.items.length,1);
     assert.equal(a1.items[0].id,sortedA[0]);
     assert.deepEqual(Object.keys(a1.items[0]).sort(),
-      ['id','formId','pipelineId','stageId','status','createdAt'].sort());
+      ['id','formId','pipelineId','stageId','status','createdAt','updatedAt'].sort());
     assert.equal(a1.nextCursor,sortedA[0]);
     const next=await request(tokenA,'?limit=1&after='+a1.nextCursor);
     assert.equal(next.status,200);
@@ -107,13 +108,37 @@ test('lead metadata list: two-tenant isolation, pagination, scopes, suspension a
     assert.equal(noCross.status,200);
     const noCrossBody=await noCross.json() as {items:unknown[]};
     assert.deepEqual(noCrossBody.items,[]);
+    // Point lookup reuses the credential and never returns private contact fields.
+    const detailRequest=(leadId:string,token:string|null,query='')=>getLeadDetail(
+      new Request('https://example.invalid/api/v1/leads/'+leadId+query,{
+        headers:token?{authorization:'Bearer '+token}:{},
+      }),{params:Promise.resolve({leadId})});
+    assert.equal((await detailRequest(leadA1.id,null)).status,401);
+    assert.equal((await detailRequest(leadA1.id,tokenDenied)).status,403);
+    assert.equal((await detailRequest(leadA1.id,tokenA,'?includeAnswers=true')).status,400);
+    assert.equal((await detailRequest('bad-id',tokenA)).status,400);
+    assert.equal((await detailRequest(leadB.id,tokenA)).status,404);
+    assert.equal((await detailRequest(leadA1.id,tokenB)).status,404);
+    const detailResponse=await detailRequest(leadA1.id,tokenA);
+    assert.equal(detailResponse.status,200);
+    assert.equal(detailResponse.headers.get('Cache-Control'),'private, no-store');
+    const detail=await detailResponse.json() as {version:string;item:Record<string,unknown>};
+    assert.equal(detail.version,'v1');
+    assert.equal(detail.item.id,leadA1.id);
+    assert.deepEqual(Object.keys(detail.item).sort(),
+      ['id','formId','pipelineId','stageId','status','createdAt','updatedAt'].sort());
+    assert.equal(JSON.stringify(detail).includes('SECRET A1'),false);
+    assert.equal(JSON.stringify(detail).includes('secret-a1@example.invalid'),false);
     await db.tenant.update({where:{id:tenantA.id},data:{status:'suspended'}});
     assert.equal((await request(tokenA)).status,403);
+    assert.equal((await detailRequest(leadA1.id,tokenA)).status,403);
     await db.tenant.update({where:{id:tenantA.id},data:{status:'active'}});
     await db.apiCredential.update({where:{id:keyA.id},data:{revokedAt:new Date()}});
     assert.equal((await request(tokenA)).status,401);
+    assert.equal((await detailRequest(leadA1.id,tokenA)).status,401);
     process.env.FLIPFORM_API_V1_ENABLED='false';
     assert.equal((await request(tokenB)).status,404);
+    assert.equal((await detailRequest(leadB.id,tokenB)).status,404);
   } finally {
     if(tenantIds.length) {
       const where={tenantId:{in:tenantIds}};

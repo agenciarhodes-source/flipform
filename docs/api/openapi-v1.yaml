@@ -199,7 +199,7 @@ paths:
                     items:
                       type: object
                       additionalProperties: false
-                      required: [id, formId, pipelineId, stageId, status, createdAt]
+                      required: [id, formId, pipelineId, stageId, status, createdAt, updatedAt]
                       properties:
                         id: { type: string, format: uuid }
                         formId: { type: [string, 'null'], format: uuid }
@@ -207,11 +207,58 @@ paths:
                         stageId: { type: string, format: uuid }
                         status: { type: string }
                         createdAt: { type: string, format: date-time }
+                        updatedAt: { type: string, format: date-time }
         '400': { description: Invalid, duplicate or unexpected query parameter }
         '401': { description: Missing, expired or revoked bearer token }
         '403': { description: Incorrect scope, tenant suspended or entitlement missing }
         '404': { description: Global API disabled }
         '429': { description: Credential operation quota exceeded }
+        '503': { description: Database or quota unavailable }
+  /api/v1/leads/{leadId}:
+    get:
+      tags: [M2M Foundation]
+      operationId: getApiV1LeadMetadata
+      summary: Read a single lead's operational metadata (no personal contact data)
+      description: |
+        Requires leads.metadata.read, M2M tenant entitlement and distributed quota.
+        UUIDs remain linkable personal data: this is NOT an anonymous endpoint.
+        No name, phone, email, notes, forms answers, messages or attachments.
+        No lead movement, updates or outbound calls.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: One lead owned by the authenticated tenant only
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, item]
+                properties:
+                  version: { type: string, const: v1 }
+                  item:
+                    type: object
+                    additionalProperties: false
+                    required: [id, formId, pipelineId, stageId, status, createdAt, updatedAt]
+                    properties:
+                      id: { type: string, format: uuid }
+                      formId: { type: [string, 'null'], format: uuid }
+                      pipelineId: { type: string, format: uuid }
+                      stageId: { type: string, format: uuid }
+                      status: { type: string }
+                      createdAt: { type: string, format: date-time }
+                      updatedAt: { type: string, format: date-time }
+        '400': { description: Invalid lead ID or unexpected query parameters }
+        '401': { description: Missing, invalid, expired or revoked bearer }
+        '403': { description: Scope, entitlement or tenant status denied }
+        '404': { description: Disabled API, missing lead or different tenant }
+        '429': { description: Durable credential quota exceeded }
         '503': { description: Database or quota unavailable }
   /api/v1/forms:
     get:

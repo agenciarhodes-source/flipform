@@ -73,7 +73,7 @@ jobs:
       - name: PR02 read-only catalog policy tests (offline)
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-form-fields-read.test.ts tests/pr02-pipeline-metrics.test.ts tests/pr02-leads-metadata.test.ts
+        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-form-fields-read.test.ts tests/pr02-pipeline-metrics.test.ts tests/pr02-leads-metadata.test.ts tests/pr02-lead-detail.test.ts
 
       # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
       - name: PR01 webhook HMAC and SSRF policy tests (offline)

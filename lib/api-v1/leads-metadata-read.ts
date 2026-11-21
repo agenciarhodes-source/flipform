@@ -16,7 +16,7 @@ export type LeadsMetadataQuery = {
 };
 export type LeadMetadata = {
   id: string; formId: string | null; pipelineId: string;
-  stageId: string; status: string; createdAt: Date;
+  stageId: string; status: string; createdAt: Date; updatedAt: Date;
 };
 export type LeadsMetadataPage = { items: LeadMetadata[]; nextCursor: string | null };
 
@@ -70,7 +70,7 @@ export async function listApiV1LeadMetadata(
       take: query.limit + 1,
       select: {
         id: true, formId: true, pipelineId: true, stageId: true,
-        status: true, createdAt: true,
+        status: true, createdAt: true, updatedAt: true,
       },
     });
     const items: LeadMetadata[] = rows.slice(0, query.limit);
@@ -80,5 +80,45 @@ export async function listApiV1LeadMetadata(
     };
   } catch {
     return null;
+  }
+}
+
+export type LeadMetadataDetailResult =
+  | { kind: 'ok'; item: LeadMetadata }
+  | { kind: 'not_found' }
+  | { kind: 'denied' }
+  | { kind: 'unavailable' };
+
+/** Reject every query parameter, including tenant selectors and PII expansion. */
+export function validLeadMetadataDetailRequest(rawUrl: string, leadId: string): boolean {
+  try {
+    return UUID.test(leadId) && new URL(rawUrl).searchParams.size === 0;
+  } catch { return false; }
+}
+
+/**
+ * Point lookup for a single tenant-owned lead. Identifiers are pseudonymous,
+ * never public; PII and related records are intentionally excluded.
+ */
+export async function readApiV1LeadMetadata(
+  authorization: ApiV1Authorization,
+  leadId: string,
+  db: Pick<PrismaClient, 'lead'> = prisma,
+): Promise<LeadMetadataDetailResult> {
+  if (!apiV1Enabled(process.env) || !authorization.ok
+    || authorization.scope !== 'leads.metadata.read'
+    || !authorization.tenantId || !authorization.integrationId
+    || !UUID.test(leadId)) return { kind: 'denied' };
+  try {
+    const item = await db.lead.findFirst({
+      where: { id: leadId.toLowerCase(), tenantId: authorization.tenantId },
+      select: {
+        id: true, formId: true, pipelineId: true, stageId: true,
+        status: true, createdAt: true, updatedAt: true,
+      },
+    });
+    return item ? { kind: 'ok', item } : { kind: 'not_found' };
+  } catch {
+    return { kind: 'unavailable' };
   }
 }
