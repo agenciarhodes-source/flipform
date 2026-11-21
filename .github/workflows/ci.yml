@@ -69,6 +69,12 @@ jobs:
       - name: PR01 API v1 security foundation tests (offline)
         run: npx tsx --test tests/pr01-api-foundation.test.ts
 
+      # PR02: bounded parser and cross-tenant denial, no DB or outbound I/O.
+      - name: PR02 read-only pipeline policy tests (offline)
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr02-pipelines-read.test.ts
+
       # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
       - name: PR01 webhook HMAC and SSRF policy tests (offline)
         env:
@@ -208,6 +214,16 @@ jobs:
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr01-closure-m2m.integration.test.ts
+
+      # PR02 first useful read-only API route; strictly synthetic and local DB.
+      - name: PR02 tenant-isolated pipeline read (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-pipelines-read.integration.test.ts
 
       # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
       # No external endpoints, workers, real credentials or Neon access.

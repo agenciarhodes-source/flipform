@@ -91,10 +91,10 @@ export function ApiV1Card() {
     await perform(() => apiFetch(ROOT + '/' + item.id, 'PATCH',
       { status: item.status === 'active' ? 'disabled' : 'active' }));
   }
-  async function issue(item: ApiIntegration) {
+  async function issue(item: ApiIntegration, scope: 'integrations.read' | 'pipelines.read') {
     await perform(async () => {
       const response = await apiFetch<{ key: OneTimeKey }>(
-        ROOT + '/' + item.id + '/keys', 'POST', { scopes: ['integrations.read'] });
+        ROOT + '/' + item.id + '/keys', 'POST', { scopes: [scope] });
       // Do not let perform's refresh discard the one-time secret.
       setVisibleToken(response.key);
     });
@@ -123,7 +123,7 @@ export function ApiV1Card() {
         <h2 className="text-xl font-semibold">Integrações e API</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Credenciais por empresa. A conexão começa desativada; esta versão oferece apenas uma consulta técnica,
-          sem acesso a leads, contratos, campanhas ou pipelines.
+          sem acesso a leads, contratos ou campanhas. Leitura de nomes de pipelines e etapas, quando autorizada.
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -153,17 +153,22 @@ export function ApiV1Card() {
                   {item.status === 'active' ? 'Desativar' : 'Ativar'}
                 </button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={busy || item.status !== 'active'}
-                  onClick={() => void issue(item)}
+                  onClick={() => void issue(item, 'integrations.read')}
                   className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
-                  Gerar chave de leitura
+                  Chave de diagnóstico
+                </button>
+                <button type="button" disabled={busy || item.status !== 'active'}
+                  onClick={() => void issue(item, 'pipelines.read')}
+                  className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
+                  Chave de leitura de pipelines
                 </button>
               </div>
               {(keys[item.id] || []).map(key => (
                 <div key={key.id} className="flex flex-wrap items-center justify-between gap-2 text-sm border-t pt-2">
                   <span className="break-all">
-                    {key.id.slice(0, 8)}… · {key.revokedAt ? 'Revogada'
+                    {key.id.slice(0, 8)}… · {key.scopes.join(', ')} · {key.revokedAt ? 'Revogada'
                       : key.expiresAt && new Date(key.expiresAt).getTime() <= Date.now() ? 'Expirada' : 'Ativa'}
                   </span>
                   <div className="flex gap-2">

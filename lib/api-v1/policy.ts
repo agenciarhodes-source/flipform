@@ -7,6 +7,7 @@ export const API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION = 5;
 
 export const API_V1_SCOPES = [
   'integrations.read',
+  'pipelines.read',
   'events.read',
   'events.write',
   'webhooks.manage',

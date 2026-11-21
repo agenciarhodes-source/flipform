@@ -7,7 +7,8 @@ info:
     Feature flag FLIPFORM_API_V1_ENABLED is OFF by default. No live endpoints
     or production database migrations have been approved. This contract is
     documentation of the proposed API, not evidence of a deployed service.
-    No lead, CRM, orders, campaigns, pipeline CRUD or ERP operation in PR01.
+    PR02 adds read-only pipeline and stage metadata; no leads, contacts, orders,
+    campaign data, pipeline mutations, or ERP operations are exposed.
 servers:
   - url: /
     description: Same-origin only after a separately authorized deployment
@@ -50,6 +51,62 @@ paths:
         '403': { description: Tenant inactive, not entitled or scope denied }
         '404': { description: API feature disabled }
         '429': { description: Credential operation quota reached }
+        '503': { description: Database or quota unavailable }
+  /api/v1/pipelines:
+    get:
+      tags: [M2M Foundation]
+      operationId: listApiV1Pipelines
+      summary: Paginated read of this credential's tenant pipelines and active stages
+      description: |
+        Tenant is resolved only from the authenticated M2M credential.
+        No leads, customer records, forms, or other CRM data are returned.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Pipelines in stable ID order, without archived records
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, items, nextCursor]
+                properties:
+                  version: { type: string, const: v1 }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name, isDefault, stages]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        isDefault: { type: boolean }
+                        stages:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: false
+                            required: [id, name, color, orderIndex]
+                            properties:
+                              id: { type: string, format: uuid }
+                              name: { type: string }
+                              color: { type: string }
+                              orderIndex: { type: integer }
+        '400': { description: Invalid or unexpected query parameter }
+        '401': { description: Invalid, expired or revoked bearer }
+        '403': { description: Suspended tenant, missing entitlement or scope }
+        '404': { description: Feature flag disabled }
+        '429': { description: Credential quota exceeded }
         '503': { description: Database or quota unavailable }
   /api/integrations/api-v1:
     get:

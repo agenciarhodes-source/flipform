@@ -26,11 +26,12 @@ export const POST = withAuth(async (req, session, ctx: { params: { integrationId
   const integrationId = ctx.params.integrationId;
   if (!validApiV1Uuid(integrationId)) return adminV1Error(400);
   const body = await readApiV1Json(req);
-  // PR01 closure exposes only the one scope with an implemented endpoint.
-  // No events.write / webhook rights until separate production review.
-  if (!body || Object.keys(body).length !== 1
-    || !Array.isArray(body.scopes) || body.scopes.length !== 1
-    || body.scopes[0] !== 'integrations.read') return adminV1Error(400);
+  // Exactly one READ-only scope. Event writes and webhooks remain blocked.
+  const scope = body && Array.isArray(body.scopes) && body.scopes.length === 1
+    && (body.scopes[0] === 'integrations.read' || body.scopes[0] === 'pipelines.read')
+      ? body.scopes[0] as 'integrations.read' | 'pipelines.read'
+      : null;
+  if (!body || Object.keys(body).length !== 1 || !scope) return adminV1Error(400);
   if (!await belowApiV1KeyLimit(actor, integrationId)) return adminV1Error(429);
   const integration = await prisma.apiIntegration.findFirst({
     where: { id: integrationId, tenantId: actor.tenantId, status: 'active' },
@@ -38,7 +39,7 @@ export const POST = withAuth(async (req, session, ctx: { params: { integrationId
   }).catch(() => null);
   if (!integration) return adminV1Error(409);
   const issued = await issueApiV1Key(actor, {
-    integrationId, scopes: ['integrations.read'],
+    integrationId, scopes: [scope],
     expiresAt: new Date(Date.now() + MAX_AGE_MS),
   });
   if (!issued) return adminV1Error(503);
