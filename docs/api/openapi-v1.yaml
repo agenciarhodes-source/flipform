@@ -347,7 +347,7 @@ paths:
                   type: array
                   minItems: 1
                   maxItems: 1
-                  prefixItems: [{ type: string, const: integrations.read }]
+                  prefixItems: [{ type: string, enum: [integrations.read, pipelines.read, forms.read, pipelines.metrics.read] }]
                   items: false
       responses:
         '201': { description: One-time key; never returned again }
