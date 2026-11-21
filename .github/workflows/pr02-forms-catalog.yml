@@ -1,0 +1,84 @@
+name: PR02 - Forms catalog development (disposable only)
+
+on:
+  push:
+    branches:
+      - feature/pr02-forms-catalog-read
+
+permissions:
+  contents: read
+
+jobs:
+  pr02:
+    name: PR02 scoped forms API / TypeScript / disposable PostgreSQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      CI: 'true'
+      JWT_SECRET_CURRENT: staging-local-secret
+      NEXT_PUBLIC_MARKETING_URL: https://flipform.com.br
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_ADMIN_URL: http://localhost:3000/admin
+      APP_HOSTNAME: localhost
+      ADMIN_HOSTNAME: admin.flipform.com.br
+      EMAIL_PROVIDER: none
+      EMAIL_FROM: atendimento@flipform.com.br
+      EMAIL_REPLY_TO: atendimento@flipform.com.br
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
+      CRON_SECRET: test-placeholder
+      INTERNAL_JOB_SECRET: test-placeholder
+      FLIPFORM_API_V1_ENABLED: 'false'
+      NODE_OPTIONS: --conditions=react-server
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Guard disposable DB and branch only
+        run: |
+          test "$CI" = "true"
+          test "$GITHUB_REF_NAME" = "feature/pr02-forms-catalog-read"
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          test ! -e .env
+          test ! -e .env.local
+          test ! -e .env.production
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run isolated policy and credential tests
+        run: |
+          npx tsx --test tests/pr01-api-foundation.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-pipelines-read.test.ts
+      - name: Validate Prisma and typecheck
+        run: |
+          npx prisma generate
+          npx prisma validate
+          npm run typecheck
+      - name: Verify route security registry
+        run: |
+          python -m pip install --disable-pip-version-check pytest
+          python -m pytest tests/test_security_t2_route_guards_static.py -q
+      - name: Start runner-only PostgreSQL with pgvector
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          PG_MAJOR="$(pg_lsclusters -h | awk 'NR==1 {print $1}')"
+          sudo apt-get update -y
+          sudo apt-get install -y "postgresql-${PG_MAJOR}-pgvector"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo -u postgres createdb flipform_ci
+          pg_isready -h 127.0.0.1 -p 5432
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d flipform_ci -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
+      - name: Materialize synthetic local schema ONLY
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx prisma db push --skip-generate
+      - name: Integration test with two synthetic tenants
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-forms-catalog.integration.test.ts

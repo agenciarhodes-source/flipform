@@ -91,7 +91,7 @@ export function ApiV1Card() {
     await perform(() => apiFetch(ROOT + '/' + item.id, 'PATCH',
       { status: item.status === 'active' ? 'disabled' : 'active' }));
   }
-  async function issue(item: ApiIntegration, scope: 'integrations.read' | 'pipelines.read') {
+  async function issue(item: ApiIntegration, scope: 'integrations.read' | 'pipelines.read' | 'forms.read') {
     await perform(async () => {
       const response = await apiFetch<{ key: OneTimeKey }>(
         ROOT + '/' + item.id + '/keys', 'POST', { scopes: [scope] });
@@ -123,7 +123,7 @@ export function ApiV1Card() {
         <h2 className="text-xl font-semibold">Integrações e API</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Credenciais por empresa. A conexão começa desativada; esta versão oferece apenas uma consulta técnica,
-          sem acesso a leads, contratos ou campanhas. Leitura de nomes de pipelines e etapas, quando autorizada.
+          sem acesso a leads, contratos ou campanhas. Leitura de pipelines, etapas e catálogo de formulários, mediante autorização específica.
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
@@ -163,6 +163,11 @@ export function ApiV1Card() {
                   onClick={() => void issue(item, 'pipelines.read')}
                   className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
                   Chave de leitura de pipelines
+                </button>
+                <button type="button" disabled={busy || item.status !== 'active'}
+                  onClick={() => void issue(item, 'forms.read')}
+                  className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
+                  Chave de leitura de formulários
                 </button>
               </div>
               {(keys[item.id] || []).map(key => (
