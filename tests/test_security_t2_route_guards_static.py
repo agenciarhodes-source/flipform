@@ -77,6 +77,7 @@ GUARDED = {
     "v1/pipelines/route.ts": "authorizeApiV1Request({",
     # PR02 forms metadata: no session bypass; independently verified M2M token.
     "v1/forms/route.ts": "authorizeApiV1Request({",
+    "v1/forms/[formId]/fields/route.ts": "authorizeApiV1Request({",
     # Test helper: answers only when NODE_ENV is "test".
     "test/otp/latest/route.ts": "process.env.NODE_ENV !== 'test'",
     # Same handlers as integrations/events (withPermission).

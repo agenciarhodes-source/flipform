@@ -8,6 +8,7 @@ Esta branch deriva do HEAD do PR01. A comparação foi temporariamente alterada 
 ### Entrega
 
 - `GET /api/v1/forms`: identifica somente formulários ativos da empresa vinculada à credencial.
+- `GET /api/v1/forms/{formId}/fields`: retorna apenas estrutura mínima dos campos de formulário ativo da empresa autenticada (`id`, `label`, `fieldType`, `isRequired`, `orderIndex`), em ordem estável e no máximo 100 campos. `truncated` indica quando há mais campos. Sem respostas, dados de leads, opções, regras detalhadas ou URLs públicas. Requer `forms.read` e rejeita consulta entre empresas (404 genérico).
 - Campos retornados: `id`, `name`, `pipelineId`, `initialStageId`, `leadSource`. Excluídos os campos de clientes, respostas, formulários, links públicos, configurações detalhadas e dados pessoais.
 - Escopo dedicado `forms.read`, chave M2M vinculada à integração/empresa, validade, revogação, entitlement e quota transacional.
 - Parametrização paginada `limit=1..50` e cursor `after` UUID. Recusa parâmetros inesperados, inclusive `tenantId`.

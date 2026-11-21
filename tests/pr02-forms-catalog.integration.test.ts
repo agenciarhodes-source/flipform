@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { GET as getForms } from '../app/api/v1/forms/route';
+import { GET as getFormFields } from '../app/api/v1/forms/[formId]/fields/route';
 import { digestApiV1Secret } from '../lib/api-v1/identity';
 
 function requireDisposableDb(): void {
@@ -56,6 +57,11 @@ test('forms endpoint isolates two tenants and denies wrong scopes, suspended and
         db.form.create({ data: { tenantId: b.id, name: 'B private', publicTitle: 'Private B',
           slug: 'b-'+suffix, pipelineId: bPipe.id, initialStageId: bStage.id } }),
       ]);
+      await db.formField.createMany({ data: [
+        { formId: activeA.id, label: 'Synthetic contact type', fieldType: 'select', orderIndex: 1, isRequired: true },
+        { formId: activeA.id, label: 'Synthetic description', fieldType: 'text', orderIndex: 0 },
+        { formId: activeB.id, label: 'B private field', fieldType: 'text', orderIndex: 0 },
+      ] });
       const [intA,intB] = await Promise.all([
         db.apiIntegration.create({ data: { tenantId: a.id, displayName: 'Forms A', status: 'active' } }),
         db.apiIntegration.create({ data: { tenantId: b.id, displayName: 'Forms B', status: 'active' } }),
@@ -94,13 +100,45 @@ test('forms endpoint isolates two tenants and denies wrong scopes, suspended and
       assert.equal(JSON.stringify(body).includes('A inactive'), false);
       assert.equal(JSON.stringify(body).includes('slug'), false);
       assert.equal(JSON.stringify(body).includes('publicTitle'), false);
+      // Mapping metadata: only the owned active form definition is visible.
+      const readFields = (token: string | null, formId: string, query = '') =>
+        getFormFields(new Request('https://example.invalid/api/v1/forms/'+formId+'/fields'+query,{
+          headers: token ? { authorization: 'Bearer '+token } : {},
+        }), { params: Promise.resolve({ formId }) });
+      assert.equal((await readFields(null, activeA.id)).status, 401);
+      assert.equal((await readFields(tokenA, 'not-a-uuid')).status, 400);
+      assert.equal((await readFields(tokenA, activeA.id, '?tenantId='+b.id)).status, 400);
+      assert.equal((await readFields(tokenA, inactiveA.id)).status, 404);
+      assert.equal((await readFields(tokenA, activeB.id)).status, 404);
+      assert.equal((await readFields(tokenB, activeB.id)).status, 403);
+      const fieldsResponse=await readFields(tokenA,activeA.id);
+      assert.equal(fieldsResponse.status,200);
+      assert.equal(fieldsResponse.headers.get('Cache-Control'),'private, no-store');
+      const definition=await fieldsResponse.json() as {
+        version:string;formId:string;fields:Array<Record<string,unknown>>;truncated:boolean;
+      };
+      assert.equal(definition.version,'v1');
+      assert.equal(definition.formId,activeA.id);
+      assert.equal(definition.truncated,false);
+      assert.deepEqual(definition.fields.map(x=>x.label),['Synthetic description','Synthetic contact type']);
+      assert.deepEqual(Object.keys(definition.fields[0]).sort(),
+        ['id','label','fieldType','isRequired','orderIndex'].sort());
+      assert.equal(JSON.stringify(definition).includes('B private field'),false);
+      assert.equal(JSON.stringify(definition).includes('answer'),false);
+      // A valid forms.read key for the other company sees only that company's fields.
+      await db.apiCredential.update({where:{id:keyB.id},data:{scopes:['forms.read']}});
+      assert.equal((await readFields(tokenB,activeA.id)).status,404);
+      assert.equal((await readFields(tokenB,activeB.id)).status,200);
       await db.tenant.update({ where: { id: a.id }, data: { status: 'suspended' } });
       assert.equal((await request(tokenA)).status, 403);
+      assert.equal((await readFields(tokenA,activeA.id)).status,403);
       await db.tenant.update({ where: { id: a.id }, data: { status: 'active' } });
       await db.apiCredential.update({ where: { id: keyA.id }, data: { revokedAt: new Date() } });
       assert.equal((await request(tokenA)).status, 401);
+      assert.equal((await readFields(tokenA,activeA.id)).status, 401);
       process.env.FLIPFORM_API_V1_ENABLED = 'false';
       assert.equal((await request(tokenA)).status, 404);
+      assert.equal((await readFields(tokenA,activeA.id)).status, 404);
       void inactiveA; void activeB; // fixtures included to prove filtering.
     } finally {
       if (tenants.length) {

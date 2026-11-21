@@ -7,7 +7,7 @@ info:
     Feature flag FLIPFORM_API_V1_ENABLED is OFF by default. No live endpoints
     or production database migrations have been approved. This contract is
     documentation of the proposed API, not evidence of a deployed service.
-    PR02 adds read-only pipeline, stage and active form metadata; no leads, contacts, orders,
+    PR02 adds read-only pipeline, stage, active form and form field definitions; no leads, contacts, orders,
     campaign data, pipeline mutations, or ERP operations are exposed.
 servers:
   - url: /
@@ -156,6 +156,56 @@ paths:
         '404': { description: Feature flag off }
         '429': { description: Distributed quota exceeded }
         '503': { description: Credential or database dependency unavailable }
+  /api/v1/forms/{formId}/fields:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1FormFields
+      summary: Read a tenant-owned active form's field definitions (never answers)
+      description: |
+        Credential must have forms.read, an active tenant and integration, and
+        available distributed quota. Only definition metadata is selected.
+        Fields are ordered by orderIndex/id and capped at 100 per form.
+        Response returns truncated=true if additional fields exist.
+        No validationRules, options, responses, leads or public form URLs.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current tenant's active form definition
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, formId, fields, truncated]
+                properties:
+                  version: { type: string, const: v1 }
+                  formId: { type: string, format: uuid }
+                  truncated: { type: boolean }
+                  fields:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, label, fieldType, isRequired, orderIndex]
+                      properties:
+                        id: { type: string, format: uuid }
+                        label: { type: string }
+                        fieldType: { type: string }
+                        isRequired: { type: boolean }
+                        orderIndex: { type: integer }
+        '400': { description: Invalid path UUID or unrecognized query parameters }
+        '401': { description: Invalid or revoked credential }
+        '403': { description: Wrong scope or blocked tenant }
+        '404': { description: Form missing, inactive or belongs to another tenant; or global API disabled }
+        '429': { description: Credential quota exceeded }
+        '503': { description: Database unavailable }
   /api/integrations/api-v1:
     get:
       tags: [Administration]

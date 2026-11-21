@@ -7,6 +7,7 @@ export type ApiV1ErrorCode =
   | 'rate_limited'
   | 'dependency_unavailable'
   | 'invalid_request'
+  | 'resource_not_found'
   | 'idempotency_conflict';
 
 const PUBLIC_MESSAGES: Record<ApiV1ErrorCode, string> = {
@@ -16,6 +17,7 @@ const PUBLIC_MESSAGES: Record<ApiV1ErrorCode, string> = {
   rate_limited: 'Limite de requisições atingido.',
   dependency_unavailable: 'Serviço temporariamente indisponível.',
   invalid_request: 'Solicitação inválida.',
+  resource_not_found: 'Recurso não encontrado.',
   idempotency_conflict: 'Chave de idempotência já utilizada para outra solicitação.',
 };
 
