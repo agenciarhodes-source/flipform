@@ -39,6 +39,13 @@
 - **Limitação decisiva:** validação de configuração e bloqueio HTTP não são firewall de saída; código SSR, inicialização, build e qualquer execução fora do middleware podem fazer conexões externas sem credencial. Não declarar `staging_egress_isolation_attested` como true no PR01 com base só nesses checks. Para GO final de egress, exigir controle de rede verificável ou revisão independente específica das chamadas outbound e dos gatilhos automáticos, com evidência sanitizada.
 - A mudança não configura, agenda ou executa qualquer job, não altera produção, nem autoriza ativação do PR01.
 
+## PR00 A2-F — startup de telemetria em Preview de diagnóstico (20/11/2026)
+
+- Em `instrumentation.ts`, a inicialização de `sentry.server.config` e `sentry.edge.config` ocorre durante o boot do runtime e configura um SDK de telemetria. A presença ou ausência de DSN não é prova de isolamento.
+- Na branch PR00 A2-D exclusivamente, o helper `lib/security/pr00-staging-instrumentation-policy.ts` avalia Vercel env/projeto e branch antes de importar os módulos de Sentry. Preview correto retorna cedo e não importa Sentry; projeto/target/branch divergente ou parcial lança erro genérico **antes de importar**. No Edge, a ausência de git ref é tolerada somente no projeto/target exatos, já que o endpoint individual continua validando a branch. Local/CI sem marcadores Vercel mantém comportamento anterior.
+- Testes negativos offline cobrem ambientes inválidos e garantem que o runtime não carregue Sentry nesses casos. Isso complementa o lockdown HTTP, mas **não equivale a firewall de rede** nem comprova bloqueio de cron, transportes HTTP alternativos, conexões nativas ou egress em build.
+- Nenhum projeto de produção, DSN, token, cron, API externa ou PR01 foi ativado por esta mudança. **Nunca incorporar o instrumentation temporário em main.**
+
 ## Ativação futura (ainda NÃO autorizada)
 
 1. Revisar CI, diff, endpoint/guards, ausência de side-effects e as regras do projeto staging. **Não** alterar o projeto `flipform` de produção.
