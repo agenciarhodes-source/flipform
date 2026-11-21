@@ -1,9 +1,9 @@
 name: PR02 - Forms catalog development (disposable only)
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/pr02-forms-catalog-read
+      - feature/pr01-global-api-foundation
 
 permissions:
   contents: read
