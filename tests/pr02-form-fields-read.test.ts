@@ -36,11 +36,11 @@ test('form field definition query is minimal, scoped, ordered and capped', async
     assert.deepEqual(result,{kind:'ok',formId:ID,fields:sample.fields,truncated:false,nextOffset:null});
     const q=calls[0] as {
       where:{tenantId:string;id:string;isActive:boolean};
-      select:{id:boolean;fields:{take:number;select:Record<string,boolean>}};
+      select:{id:boolean;fields:{take:number;skip:number;select:Record<string,boolean>}};
     };
     assert.deepEqual(q.where,{id:ID,tenantId:'tenant-a',isActive:true});
     assert.equal(q.select.fields.take,101);
-    assert.equal((q.select.fields as {skip:number}).skip,0);
+    assert.equal(q.select.fields.skip,0);
     assert.deepEqual(Object.keys(q.select.fields.select).sort(),
       ['id','label','fieldType','isRequired','orderIndex'].sort());
     assert.equal(JSON.stringify(q).includes('answers'),false);
