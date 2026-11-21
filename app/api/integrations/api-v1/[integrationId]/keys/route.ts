@@ -28,8 +28,8 @@ export const POST = withAuth(async (req, session, ctx: { params: { integrationId
   const body = await readApiV1Json(req);
   // Exactly one READ-only scope. Event writes and webhooks remain blocked.
   const scope = body && Array.isArray(body.scopes) && body.scopes.length === 1
-    && (body.scopes[0] === 'integrations.read' || body.scopes[0] === 'pipelines.read' || body.scopes[0] === 'forms.read')
-      ? body.scopes[0] as 'integrations.read' | 'pipelines.read' | 'forms.read'
+    && (body.scopes[0] === 'integrations.read' || body.scopes[0] === 'pipelines.read' || body.scopes[0] === 'forms.read' || body.scopes[0] === 'pipelines.metrics.read')
+      ? body.scopes[0] as 'integrations.read' | 'pipelines.read' | 'forms.read' | 'pipelines.metrics.read'
       : null;
   if (!body || Object.keys(body).length !== 1 || !scope) return adminV1Error(400);
   if (!await belowApiV1KeyLimit(actor, integrationId)) return adminV1Error(429);
