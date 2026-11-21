@@ -123,7 +123,7 @@ export function ApiV1Card() {
         <h2 className="text-xl font-semibold">Integrações e API</h2>
         <p className="text-sm text-muted-foreground mt-1">
           Credenciais por empresa. A conexão começa desativada; esta versão oferece apenas uma consulta técnica,
-          sem acesso a leads, contratos ou campanhas. Leitura de pipelines, etapas e catálogo de formulários, mediante autorização específica.
+          sem exportação de dados pessoais, contratos ou campanhas. Leitura de pipelines, etapas, formulários e contagens agregadas de leads, com permissões separadas.
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
