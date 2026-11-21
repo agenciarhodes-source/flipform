@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-11-21",
+  "purpose": "API v1 PR01/PR02 staging homologation evidence: read-only discovery only",
+  "decision": "NO_GO",
+  "not_authorization": true,
+  "staging_deployment_authorized": false,
+  "production_deployment_authorized": false,
+  "neon_migration_authorized": false,
+  "enable_api_authorized": false,
+  "activate_maintenance_workflows_authorized": false,
+  "sources": {
+    "github": {
+      "repo": "agenciarhodes-source/flipform",
+      "pr01": 627,
+      "pr02": 628,
+      "pr00_security": 623,
+      "pr01_head": "0491f415061d1760dc6d1c2fac0ddc746b952c39",
+      "pr02_head": "25675ad1ca5b5de9acb6c49b84b0148d65800c2c",
+      "pr01_ci": "success",
+      "pr02_ci": "success",
+      "pr01_playwright": "success",
+      "pr02_playwright": "success",
+      "pr01_draft": true,
+      "pr02_draft": true,
+      "pr00_draft": true,
+      "pr02_based_on": "feature/pr01-global-api-foundation"
+    },
+    "neon_staging": {
+      "project_id": "holy-fog-36254823",
+      "project_name": "flipform-staging-isolated",
+      "branch_id": "br-icy-glitter-bcisq63l",
+      "branch_name": "staging",
+      "database_name": "flipform_staging",
+      "postgres_major": 17,
+      "observed_public_table_count": 0,
+      "observed_api_v1_table_count": 0,
+      "observed_api_v1_fk_count": 0,
+      "observation": "Direct read-only SELECTs against isolated Neon staging database",
+      "credentials_inspected": false,
+      "application_runtime_database_identity_attested": false,
+      "backup_restore_test_on_application_schema_completed": false,
+      "snapshot_inventory_note": "Manual Neon snapshots exist from 2026-11-17; presence alone does not prove restoration of the current API schema"
+    },
+    "vercel_staging": {
+      "project_id": "prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu",
+      "project_name": "flipform-staging",
+      "env_variable_names_observed": [
+        "DATABASE_URL",
+        "DIRECT_URL"
+      ],
+      "env_target_scopes_observed": [
+        "production",
+        "preview"
+      ],
+      "secret_values_read": false,
+      "runtime_database_host_verified": false,
+      "current_pr02_commit_deployed": false,
+      "deployed_git_ref_observed": "security/pr00-a2d-staging-db-attestation-20261118",
+      "deployed_api_v1_staging_routes_tested": false,
+      "egress_isolation_tested": false,
+      "observation": "Read-only Vercel project, env metadata and deployment history queries"
+    }
+  },
+  "gates": {
+    "ci_pr01_and_pr02": "PASS",
+    "baseline_staging_schema": "BLOCKED_EMPTY_DATABASE",
+    "staging_deploy_matches_pr02": "BLOCKED_NOT_DEPLOYED",
+    "privacy_and_retention": "BLOCKED_DECISION_UNRESOLVED",
+    "runtime_db_identity": "NOT_ATTESTED",
+    "staging_outbound_egress": "NOT_ATTESTED",
+    "restore_and_rollback_of_current_schema": "NOT_ATTESTED",
+    "two_tenant_staging_regression": "NOT_RUN",
+    "separate_release_authorization": "NOT_GRANTED",
+    "production_api_enablement": "NOT_AUTHORIZED"
+  },
+  "required_next_evidence": [
+    "Approved retention, lawful basis, recipient and legal hold policy for ten API v1 FK categories",
+    "Explicit isolated staging bootstrap/migration approval with verified target identity",
+    "Staging deployment of exact approved application commit and validated feature flag OFF by default",
+    "Runtime-only DB fingerprint and egress/secret isolation evidence",
+    "Backup/restore proof from current application schema, rollback and two-tenant synthetic regression",
+    "Separate authorized decision for production rollout, maintenance workflow controls and API activation"
+  ]
+}
