@@ -65,6 +65,9 @@ jobs:
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
+      - name: PR00 staging database identity guard tests (offline)
+        run: npx tsx --test tests/pr00-staging-db-identity.test.ts tests/pr00-staging-route-lockdown.test.ts tests/pr00-staging-integration-preflight.test.ts tests/pr00-staging-instrumentation-policy.test.ts
+
       - name: Prisma generate
         run: npx prisma generate
 

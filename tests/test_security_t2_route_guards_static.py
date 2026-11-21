@@ -54,6 +54,8 @@ GUARDED = {
     "internal/jobs/post-sale/route.ts": CRON,
     "internal/jobs/whatsapp-ai/route.ts": CRON,
     "health/readiness/route.ts": "INTERNAL_JOB_SECRET",
+    # PR00 A2-D: staging-only diagnostic, fail-closed project/connection gate AND token.
+    "internal/pr00/staging-identity/route.ts": "stagingIdentityGateEnabled(process.env)",
     "webhooks/whatsapp/message/route.ts": "INTERNAL_JOB_SECRET",
     # Webhooks: the provider's signature or token.
     "webhooks/meta/whatsapp/route.ts": "x-hub-signature",
@@ -96,6 +98,49 @@ def test_every_route_is_wrapped_or_has_a_listed_guard():
             continue
         assert GUARDED[path] in text, (path, GUARDED[path])
     assert not unguarded, f"Routes without a known guard: {unguarded}"
+
+
+
+def test_pr00_staging_identity_route_preserves_both_auth_gates_and_read_only_sql():
+    text = (API / "internal/pr00/staging-identity/route.ts").read_text(encoding="utf-8")
+    # Project/URL allowlist checked before the token, and both checks precede SQL.
+    env_guard = text.index("if (!stagingIdentityGateEnabled(process.env))")
+    token_guard = text.index("if (!matchesStagingIdentityToken(")
+    sql = text.index("SELECT current_database() AS database_name, current_user AS role_name")
+    assert env_guard < token_guard < sql
+    assert "PR00_STAGING_ATTESTATION_TOKEN" in text
+    assert "return reply(404, 'not_found')" in text
+    assert "return reply(503, 'identity_mismatch')" in text
+    assert "return reply(503, 'identity_unavailable')" in text
+    assert "INSERT " not in text and "UPDATE " not in text and "DELETE " not in text
+    assert "prisma.$queryRaw" in text
+
+
+def test_pr00_preview_lockdown_blocks_every_route_except_attestation():
+    # The middleware delegates to the tested pure policy. Check BOTH the
+    # early interception and the fail-closed restrictions in that policy.
+    middleware = (ROOT / "middleware.ts").read_text(encoding="utf-8")
+    policy = (ROOT / "lib/security/pr00-staging-route-lockdown.ts").read_text(encoding="utf-8")
+
+    assert "pr00StagingRoutePolicy(process.env" in middleware
+    assert "if (diagnosticRoutePolicy === 'deny')" in middleware
+    assert "if (diagnosticRoutePolicy === 'allow') return NextResponse.next()" in middleware
+    assert "return NextResponse.json({ ok: false, code: 'not_found' }" in middleware
+    assert middleware.index("pr00StagingRoutePolicy(process.env") < middleware.index("if (!isPlatformHost")
+
+    # If any Vercel marker is present, a missing or wrong project/target
+    # cannot fall back to CRM and webhook routes.
+    assert "env.VERCEL === '1'" in policy
+    assert "env.VERCEL_ENV !== undefined" in policy
+    assert "env.VERCEL_PROJECT_ID !== undefined" in policy
+    assert "env.VERCEL_ENV === 'preview'" in policy
+    assert "env.VERCEL_PROJECT_ID === PR00_STAGING_PREVIEW_PROJECT_ID" in policy
+    assert "request.method !== 'GET'" in policy
+    assert "request.pathname !== PR00_STAGING_IDENTITY_PATH" in policy
+    assert "return 'deny'" in policy
+    assert "return 'allow'" in policy
+    assert "PR00_STAGING_IDENTITY_PATH = '/api/internal/pr00/staging-identity'" in policy
+    assert "PR00_STAGING_PREVIEW_PROJECT_ID = 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu'" in policy
 
 
 def test_listed_routes_still_exist():

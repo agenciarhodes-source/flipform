@@ -1,0 +1,93 @@
+import { timingSafeEqual } from 'node:crypto';
+
+// Non-secret identifiers for the separately provisioned Neon staging project.
+export const PR00_STAGING = Object.freeze({
+  vercelProjectId: 'prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu',
+  previewBranch: 'security/pr00-a2d-staging-db-attestation-20261118',
+  neonHost: 'ep-morning-heart-bcj72cwl.c-16.us-east-1.aws.neon.tech',
+  databaseName: 'flipform_staging',
+  roleName: 'flipform_staging_owner',
+});
+
+type Environment = Record<string, string | undefined>;
+
+function matchesExpectedConnection(raw: string | undefined): boolean {
+  if (!raw || raw.length > 8192) return false;
+
+  try {
+    const parsed = new URL(raw);
+    return ['postgres:', 'postgresql:'].includes(parsed.protocol)
+      && parsed.hostname.toLowerCase() === PR00_STAGING.neonHost
+      && decodeURIComponent(parsed.pathname) === '/' + PR00_STAGING.databaseName
+      && decodeURIComponent(parsed.username) === PR00_STAGING.roleName
+      && Boolean(parsed.password)
+      && ['require', 'verify-ca', 'verify-full'].includes(parsed.searchParams.get('sslmode') || '');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fail-closed: can only be activated in the staging Vercel project.
+ * Use ONLY a preview deployment of the exact PR00 branch in the staging project.
+ * The Neon staging endpoint currently has connection pooling disabled.
+ */
+/**
+ * Safe booleans for deployment failure diagnosis. Never print raw env values,
+ * connection-string fragments, hostnames, usernames or passwords.
+ */
+export function stagingIdentityPreflightChecks(env: Environment) {
+  return {
+    previewTarget: env.VERCEL_ENV === 'preview',
+    exactBranch: env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch,
+    correctProject: env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId,
+    nextRuntime: env.NODE_ENV === 'production',
+    databaseUrlAllowlisted: matchesExpectedConnection(env.DATABASE_URL),
+    directUrlAllowlisted: matchesExpectedConnection(env.DIRECT_URL),
+  };
+}
+
+export function stagingIdentityBuildGateEnabled(env: Environment): boolean {
+  return Object.values(stagingIdentityPreflightChecks(env)).every(Boolean);
+}
+
+/**
+ * The READY Preview retains an immutable copy of its original environment.
+ * Changing Vercel variables later is NOT enough to revoke that copy. An
+ * explicit, short-lived expiry checked on every request closes this gap.
+ * The expiry is public configuration, never a credential.
+ */
+export function stagingIdentityExpiryValid(env: Environment, now = Date.now()): boolean {
+  const raw = env.PR00_STAGING_ATTESTATION_EXPIRES_AT;
+  if (!raw || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(raw)) return false;
+  const expires = Date.parse(raw);
+  return Number.isFinite(expires) && expires > now && expires - now <= 45 * 60 * 1000;
+}
+
+export function stagingIdentityGateEnabled(env: Environment): boolean {
+  return stagingIdentityExpiryValid(env)
+    && env.PR00_STAGING_ATTESTATION_ENABLED === 'true'
+    && Boolean(env.PR00_STAGING_ATTESTATION_TOKEN)
+    && Buffer.byteLength(env.PR00_STAGING_ATTESTATION_TOKEN || '', 'utf8') >= 32
+    && stagingIdentityBuildGateEnabled(env);
+}
+
+/** Exact token match without timing leaks or any diagnostic logging. */
+export function matchesStagingIdentityToken(
+  presented: string | null,
+  expected: string | undefined,
+): boolean {
+  if (!presented || !expected || presented.length > 1024 || expected.length > 1024) return false;
+  const a = Buffer.from(presented, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length < 32 || b.length < 32 || a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+export function matchesLiveDatabaseIdentity(row: {
+  database_name?: string | null;
+  role_name?: string | null;
+} | undefined): boolean {
+  return row?.database_name === PR00_STAGING.databaseName
+    && row?.role_name === PR00_STAGING.roleName;
+}

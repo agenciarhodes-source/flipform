@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { isAdminHostname } from '@/lib/host-routing';
+import { pr00StagingRoutePolicy } from '@/lib/security/pr00-staging-route-lockdown';
 
 const COOKIE = 'flipform_token';
 
@@ -30,6 +31,20 @@ async function verifyJWT(token: string): Promise<any | null> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // PR00 temporary lockdown: fail closed on ANY Vercel deployment marker,
+  // even if VERCEL_ENV is absent. This must NEVER be merged into main.
+  const diagnosticRoutePolicy = pr00StagingRoutePolicy(process.env, {
+    method: req.method,
+    pathname,
+  });
+  if (diagnosticRoutePolicy === 'deny') {
+    return NextResponse.json({ ok: false, code: 'not_found' }, {
+      status: 404,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+  if (diagnosticRoutePolicy === 'allow') return NextResponse.next();
+
   const host = req.headers.get('host');
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-pathname', pathname);
