@@ -8,7 +8,7 @@ import { apiV1Entitled, isApiV1Scope, type ApiV1Entitlement, type ApiV1Scope } f
  */
 const BEARER = /^Bearer ffv1\.([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.([A-Za-z0-9_-]{43})$/i;
 const HASH = /^[a-f0-9]{64}$/i;
-const SCOPE_SET = new Set(['integrations.read', 'pipelines.read', 'forms.read', 'events.read', 'events.write', 'webhooks.manage']);
+const SCOPE_SET = new Set(['integrations.read', 'pipelines.read', 'forms.read', 'pipelines.metrics.read', 'events.read', 'events.write', 'webhooks.manage']);
 
 export interface ApiV1CredentialRecord {
   id: string;
