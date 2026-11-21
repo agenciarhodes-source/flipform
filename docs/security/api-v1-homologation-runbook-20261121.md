@@ -36,3 +36,12 @@ python3 -m unittest discover -s tests -p test_api_v1_homologation_preflight.py -
 python3 scripts/api_v1_homologation_preflight.py --report /tmp/api-v1-homologation-preflight.json
 ```
 Nenhum dos comandos acima altera Neon, Vercel, GitHub Actions ou dados de clientes.
+
+## Progresso desta etapa — branch descartável preparada (21/11/2026)
+- No projeto Neon separado `holy-fog-36254823` (`flipform-staging-isolated`), criada e conferida a branch **`api-v1-pr629-homologation-lab-20261121`** (`br-nameless-art-bc6k4c5g`), filha de `staging` (`br-icy-glitter-bcisq63l`).
+- O estado da branch foi consultado e retornou `ready`. Ela **não** é a default nem é protegida; foi criada **sem compute** para não ligar recursos de processamento sem necessidade. Não recebeu schema, fixtures, migrations, chave nem deployment.
+- Uma primeira tentativa de criar compute com timeout de suspensão de 60 s foi recusada com HTTP 412 devido às condições do plano; não houve compute nessa tentativa. A criação posterior sem compute funcionou.
+- Os metadados do projeto Vercel staging continuam listando `DATABASE_URL` e `DIRECT_URL` como `sensitive`. A consulta com pedido de descriptografia retornou `decrypted: false`; valores em branco **não provam que as variáveis estejam vazias**. Não houve leitura do host ou do segredo; identidade do runtime continua pendente.
+- O script de preflight pode validar a identidade declarada da branch, mas não substitui consulta futura do banco, conexão segura ou teste de aplicação executada.
+
+**Operação seguinte, ainda não executada:** ligar compute *somente nessa branch descartável*, verificar alvo/role/DB, gerar e inspecionar o SQL exato do esquema, aplicar ensaio não destrutivo à branch e recolher prova de testes A/B, sem configurar Vercel nem tocar produção. Exige autorização específica para aplicar o esquema.
