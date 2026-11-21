@@ -77,5 +77,23 @@ class HomologationPreflightTest(unittest.TestCase):
             self.make_tree(root,retention=original)
             with self.assertRaises(ValueError): verify(root)
 
+    def test_qa_lab_cannot_claim_runtime_homologation(self):
+        snapshot=json.loads(EVIDENCE.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(snapshot)
+            fake["sources"]["neon_staging"]["full_schema_qa_lab"]["end_to_end_deployed_app_tested"]=True
+            root=Path(tmp)
+            self.make_tree(root,evidence=fake)
+            with self.assertRaises(ValueError): verify(root)
+
+    def test_qa_lab_counts_must_match_structure(self):
+        snapshot=json.loads(EVIDENCE.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(snapshot)
+            fake["sources"]["neon_staging"]["full_schema_qa_lab"]["api_foreign_keys_on_delete_restrict"]=9
+            root=Path(tmp)
+            self.make_tree(root,evidence=fake)
+            with self.assertRaises(ValueError): verify(root)
+
 if __name__=="__main__":
     unittest.main()

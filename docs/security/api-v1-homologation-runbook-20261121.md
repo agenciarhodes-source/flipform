@@ -45,3 +45,15 @@ Nenhum dos comandos acima altera Neon, Vercel, GitHub Actions ou dados de client
 - O script de preflight pode validar a identidade declarada da branch, mas não substitui consulta futura do banco, conexão segura ou teste de aplicação executada.
 
 **Operação seguinte, ainda não executada:** ligar compute *somente nessa branch descartável*, verificar alvo/role/DB, gerar e inspecionar o SQL exato do esquema, aplicar ensaio não destrutivo à branch e recolher prova de testes A/B, sem configurar Vercel nem tocar produção. Exige autorização específica para aplicar o esquema.
+
+## Laboratório completo de esquema — evidência adicional (21/11/2026)
+
+**Branch extra exclusiva de QA, distinta da staging default:** `api-v1-pr629-full-schema-lab-20261121` (Neon `br-snowy-band-bcb0auy6`) clonada da branch de ensaio histórico `pr00-a2c3-ddl-rehearsal-20261117` (`br-rough-bread-bc1ulrnc`), no projeto isolado `holy-fog-36254823`.
+- PostgreSQL validou antes da execução: base de **92 tabelas**, `tenants=0`, `leads=0`, `users=0`, 0 tabelas da API e extensão `vector` presente.
+- Recuperado artefato `pr01-disposable-migration-rehearsal-evidence` do CI da PR01 (run `44913393211`), HEAD `0491f415...`; conferido SHA256 do `additive.sql` (`4cb34ee60e93cb81f45ee9c13da67bb598589a66f0063c49629552a95bf2c369`), SQL com **10 CREATE TABLE**, 20 índices adicionais e 10 FKs `ON DELETE RESTRICT`, sem `DROP/TRUNCATE/DELETE` DML.
+- **Atenção à fidelidade:** o laboratório recebeu **40 comandos DDL reconstruídos/transcritos a partir do artefato**, em uma transação pelo conector Neon, não uma execução byte-a-byte do arquivo do CI. O inventário do PostgreSQL foi conferido e corresponde em quantidade e nomes de 10 novas tabelas, 20 índices adicionais + 10 PK e 10 FKs `RESTRICT`; a equivalência completa do SQL deve ser verificada antes do aceite final de migração.
+- Após o commit SQL: **102 tabelas públicas; 10 FKs da API, todas `RESTRICT` e 0 `CASCADE`**; as tabelas de empresas, usuários, leads, integrações e credenciais continuam vazias.
+- Compute QA limitado a **0,25 CU**, suspensão configurada para **300 segundos**. Nenhum deploy Vercel, nenhuma chave M2M real, nenhum SQL em produção ou na branch staging default. A outra branch vazia `br-nameless-art-bc6k4c5g` permanece com sua finalidade de isolamento separada.
+- **Ainda não é homologação ponta a ponta:** faltam runtime PR02 na Vercel staging, ligação segura à branch QA com varíaveis isoladas, regressão A/B end-to-end, egress, política de retenção, backup/restore de schema atual e autorização de release. O snapshot formal mantém `decision: NO_GO`.
+
+**Próxima execução:** revisar a equivalência do DDL do artefato, garantir roteamento estritamente staging, e executar validações sintéticas de leitura/escopos. Não elevar flags de liberação pelo sucesso desse ensaio.

@@ -95,6 +95,28 @@ def verify(root: Path = ROOT) -> dict:
             and lab.get("application_deployed") is False
             and lab.get("is_default") is False,
             "Lab branch evidence cannot be interpreted as schema/bootstrap completion")
+    qa = neon.get("full_schema_qa_lab", {})
+    require(qa.get("project_id") == "holy-fog-36254823"
+            and qa.get("branch_id") == "br-snowy-band-bcb0auy6"
+            and qa.get("source_parent_branch_id") == "br-rough-bread-bc1ulrnc"
+            and qa.get("database_name") == "flipform_staging"
+            and qa.get("baseline_tables_verified") == 92
+            and qa.get("current_total_public_tables") == 102
+            and qa.get("api_tables_added") == 10
+            and qa.get("api_foreign_keys") == 10
+            and qa.get("api_foreign_keys_on_delete_restrict") == 10
+            and qa.get("api_foreign_keys_on_delete_cascade") == 0
+            and qa.get("current_tenants") == 0 and qa.get("current_leads") == 0
+            and qa.get("current_api_credentials") == 0
+            and qa.get("structural_postgresql_catalog_checked") is True
+            and qa.get("byte_identical_migration_artifact_applied") is False
+            and qa.get("end_to_end_deployed_app_tested") is False
+            and qa.get("backup_restore_with_current_schema_proved") is False
+            and qa.get("staging_default_branch_modified") is False
+            and qa.get("production_project_modified") is False,
+            "QA lab schema rehearsal cannot be confused with staging production readiness")
+    require(gates.get("isolated_schema_rehearsal") == "PASS_STRUCTURAL_ONLY",
+            "Lab schema rehearsal does not attest runtime or production release")
     require(neon.get("application_runtime_database_identity_attested") is False
             and neon.get("backup_restore_test_on_application_schema_completed") is False,
             "Missing app runtime/restore evidence")
