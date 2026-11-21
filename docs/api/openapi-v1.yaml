@@ -7,8 +7,9 @@ info:
     Feature flag FLIPFORM_API_V1_ENABLED is OFF by default. No live endpoints
     or production database migrations have been approved. This contract is
     documentation of the proposed API, not evidence of a deployed service.
-    PR02 adds read-only pipeline, stage, active form and form field definitions; no leads, contacts, orders,
-    campaign data, pipeline mutations, or ERP operations are exposed.
+    PR02 adds read-only pipeline, stage, active form and form field definitions and
+    aggregated lead counts per active pipeline stage with a separate scope. No individual
+    lead records, contacts, orders, campaigns, pipeline mutations or ERP operations are exposed.
 servers:
   - url: /
     description: Same-origin only after a separately authorized deployment
@@ -108,6 +109,54 @@ paths:
         '404': { description: Feature flag disabled }
         '429': { description: Credential quota exceeded }
         '503': { description: Database or quota unavailable }
+  /api/v1/pipelines/{pipelineId}/metrics:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1PipelineMetrics
+      summary: Read lead counts by active stage, without individual lead data
+      description: |
+        Requires a dedicated pipelines.metrics.read credential, not pipelines.read.
+        Counts only current tenant leads in non-archived stages of a non-archived
+        tenant-owned pipeline. No names, emails, phones, documents or lead IDs.
+        Maximum 200 active stages. Feature is globally OFF pending release gates.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: pipelineId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tenant-isolated aggregate counts
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, pipelineId, total, stages]
+                properties:
+                  version: { type: string, const: v1 }
+                  pipelineId: { type: string, format: uuid }
+                  total: { type: integer, minimum: 0 }
+                  stages:
+                    type: array
+                    maxItems: 200
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [stageId, name, orderIndex, count]
+                      properties:
+                        stageId: { type: string, format: uuid }
+                        name: { type: string }
+                        orderIndex: { type: integer }
+                        count: { type: integer, minimum: 0 }
+        '400': { description: Invalid UUID or unexpected query parameters }
+        '401': { description: Missing, expired or revoked credential }
+        '403': { description: Wrong scope, suspended tenant or entitlement missing }
+        '404': { description: Pipeline missing, archived, other tenant or feature flag OFF }
+        '429': { description: Distributed credential quota exceeded }
+        '503': { description: Dependency unavailable or stage limit exceeded }
   /api/v1/forms:
     get:
       tags: [M2M Foundation]
