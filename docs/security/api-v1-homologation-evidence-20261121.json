@@ -40,7 +40,20 @@
       "credentials_inspected": false,
       "application_runtime_database_identity_attested": false,
       "backup_restore_test_on_application_schema_completed": false,
-      "snapshot_inventory_note": "Manual Neon snapshots exist from 2026-11-17; presence alone does not prove restoration of the current API schema"
+      "snapshot_inventory_note": "Manual Neon snapshots exist from 2026-11-17; presence alone does not prove restoration of the current API schema",
+      "homologation_lab": {
+        "branch_id": "br-nameless-art-bc6k4c5g",
+        "branch_name": "api-v1-pr629-homologation-lab-20261121",
+        "parent_branch_id": "br-icy-glitter-bcisq63l",
+        "project_id": "holy-fog-36254823",
+        "verified_state": "ready",
+        "is_default": false,
+        "protected": false,
+        "created_without_compute": true,
+        "schema_applied": false,
+        "application_deployed": false,
+        "purpose": "Disposable branch reserved for later, separately authorized staging schema rehearsal"
+      }
     },
     "vercel_staging": {
       "project_id": "prj_UOvo8lKGiIvp7IuBS4vtL9CnSZIu",
@@ -59,7 +72,8 @@
       "deployed_git_ref_observed": "security/pr00-a2d-staging-db-attestation-20261118",
       "deployed_api_v1_staging_routes_tested": false,
       "egress_isolation_tested": false,
-      "observation": "Read-only Vercel project, env metadata and deployment history queries"
+      "observation": "Read-only Vercel project, env metadata and deployment history queries",
+      "secret_value_verification": "NOT_ATTESTED: API marks the sensitive env values as not decrypted; no URL contents were read"
     }
   },
   "gates": {
@@ -75,6 +89,7 @@
     "production_api_enablement": "NOT_AUTHORIZED"
   },
   "required_next_evidence": [
+    "Assign a separately authorized test compute to no-compute lab branch (not production), then run strictly scoped schema rehearsal on its own database",
     "Approved retention, lawful basis, recipient and legal hold policy for ten API v1 FK categories",
     "Explicit isolated staging bootstrap/migration approval with verified target identity",
     "Staging deployment of exact approved application commit and validated feature flag OFF by default",
