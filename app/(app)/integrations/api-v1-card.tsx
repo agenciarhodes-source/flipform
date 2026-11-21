@@ -91,7 +91,7 @@ export function ApiV1Card() {
     await perform(() => apiFetch(ROOT + '/' + item.id, 'PATCH',
       { status: item.status === 'active' ? 'disabled' : 'active' }));
   }
-  async function issue(item: ApiIntegration, scope: 'integrations.read' | 'pipelines.read' | 'forms.read') {
+  async function issue(item: ApiIntegration, scope: 'integrations.read' | 'pipelines.read' | 'forms.read' | 'pipelines.metrics.read') {
     await perform(async () => {
       const response = await apiFetch<{ key: OneTimeKey }>(
         ROOT + '/' + item.id + '/keys', 'POST', { scopes: [scope] });
@@ -168,6 +168,11 @@ export function ApiV1Card() {
                   onClick={() => void issue(item, 'forms.read')}
                   className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
                   Chave de leitura de formulários
+                </button>
+                <button type="button" disabled={busy || item.status !== 'active'}
+                  onClick={() => void issue(item, 'pipelines.metrics.read')}
+                  className="rounded-md border px-3 py-2 text-sm disabled:opacity-50">
+                  Chave de métricas do funil
                 </button>
               </div>
               {(keys[item.id] || []).map(key => (
