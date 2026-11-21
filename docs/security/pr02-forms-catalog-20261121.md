@@ -3,7 +3,7 @@
 ## Escopo concluído em código, pendente de CI
 
 Branch `feature/pr02-forms-catalog-read`, **dependente da fundação PR01/#627**.
-Esta branch deriva do HEAD do PR01, de modo que o diff do PR02 contém apenas alterações incrementais.
+Esta branch deriva do HEAD do PR01. A comparação foi temporariamente alterada para `main` para executar os checks existentes; até o merge do PR01, o diff mostrado pelo GitHub inclui também toda a fundação PR01. Nunca mesclar PR02 antes de PR01.
 
 ### Entrega
 
