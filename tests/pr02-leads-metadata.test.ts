@@ -33,8 +33,7 @@ test('metadata reader uses credential tenant and a minimal explicit SELECT',asyn
       {id:A,formId:null,pipelineId:B,stageId:A,status:'open',createdAt:new Date('2026-01-01T00:00:00Z')},
       {id:B,formId:null,pipelineId:B,stageId:B,status:'open',createdAt:new Date('2026-01-02T00:00:00Z')},
     ];
-    const db={lead:{findMany:async(q:unknown)=>{recorded.push(q);return sample;}}}
-      as unknown as Pick<PrismaClient,'lead'>;
+    const db = {lead:{findMany:async(q:unknown)=>{recorded.push(q);return sample;}}} as unknown as Pick<PrismaClient,'lead'>;
     const result=await listApiV1LeadMetadata(AUTH,{limit:1,after:null,pipelineId:B},db);
     assert.deepEqual(result,{items:[sample[0]],nextCursor:A});
     const query=recorded[0] as {where:{tenantId:string;pipelineId:string;id?:unknown};
@@ -61,8 +60,7 @@ test('metadata reader enforces cursor and fails closed on database errors',async
   const old=process.env.FLIPFORM_API_V1_ENABLED;
   process.env.FLIPFORM_API_V1_ENABLED='true';
   try {
-    const db={lead:{findMany:async()=>{throw Error('private database');}}}
-      as unknown as Pick<PrismaClient,'lead'>;
+    const db = {lead:{findMany:async()=>{throw Error('private database');}}} as unknown as Pick<PrismaClient,'lead'>;
     assert.equal(await listApiV1LeadMetadata(AUTH,{limit:20,after:null,pipelineId:null},db),null);
     assert.equal(await listApiV1LeadMetadata(AUTH,{limit:1000,after:null,pipelineId:null},db),null);
     assert.equal(await listApiV1LeadMetadata(AUTH,{limit:1,after:'bad',pipelineId:null},db),null);
