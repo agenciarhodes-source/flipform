@@ -72,8 +72,7 @@ test('PR02 refuses DB errors and impossible page bounds', async () => {
   const previous = process.env.FLIPFORM_API_V1_ENABLED;
   process.env.FLIPFORM_API_V1_ENABLED = 'true';
   try {
-    const db = { pipeline: { findMany: async () => { throw Error('private db URL'); } } }
-      as unknown as Pick<PrismaClient, 'pipeline'>;
+    const db = { pipeline: { findMany: async () => { throw Error('private db URL'); } } } as unknown as Pick<PrismaClient, 'pipeline'>;
     assert.equal(await listApiV1Pipelines(AUTH, { limit: 1, after: null }, db), null);
     assert.equal(await listApiV1Pipelines(AUTH, { limit: 1000, after: null }, db), null);
     assert.equal(await listApiV1Pipelines(AUTH, { limit: 1, after: ID_B }, db), null);
