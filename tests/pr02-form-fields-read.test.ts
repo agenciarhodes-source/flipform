@@ -13,7 +13,7 @@ const AUTH: ApiV1Authorization = {
 
 test('form definition endpoint validates ID and refuses query-based tenant injection', () => {
   assert.equal(validApiV1FormId(ID), true);
-  assert.equal(validApiV1FormId('abc'), null);
+  assert.equal(validApiV1FormId('abc'), false);
   assert.equal(parseFormFieldsOffset('https://example.invalid/api/v1/forms/'+ID+'/fields'), 0);
   assert.equal(parseFormFieldsOffset('https://example.invalid/api/v1/forms/'+ID+'/fields?offset=100'), 100);
   assert.equal(parseFormFieldsOffset('https://example.invalid/api/v1/forms/'+ID+'/fields?tenantId=b'), null);
