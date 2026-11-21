@@ -3,7 +3,7 @@ import { apiV1Error } from '@/lib/api-v1/errors';
 import { authorizeApiV1Request } from '@/lib/api-v1/identity';
 import { PrismaApiV1CredentialRepository } from '@/lib/api-v1/prisma-credential-repository';
 import {
-  noFormFieldsQueryParameters, readApiV1FormFields, validApiV1FormId,
+  parseFormFieldsOffset, readApiV1FormFields, validApiV1FormId,
 } from '@/lib/api-v1/form-fields-read';
 
 export const runtime = 'nodejs';
@@ -15,7 +15,8 @@ export async function GET(
 ): Promise<Response> {
   if (!apiV1Enabled(process.env)) return apiV1Error('api_unavailable', 404);
   const { formId } = await ctx.params;
-  if (!validApiV1FormId(formId) || !noFormFieldsQueryParameters(req.url)) {
+  const offset = parseFormFieldsOffset(req.url);
+  if (!validApiV1FormId(formId) || offset === null) {
     return apiV1Error('invalid_request', 400);
   }
   const repository = new PrismaApiV1CredentialRepository(undefined, {
@@ -26,7 +27,7 @@ export async function GET(
     scope: 'forms.read', operation: 'GET /api/v1/forms/:formId/fields',
   }, repository);
   if (!authorization.ok) return apiV1Error(authorization.code, authorization.status);
-  const result = await readApiV1FormFields(authorization, formId);
+  const result = await readApiV1FormFields(authorization, formId, undefined, offset);
   if (result.kind === 'denied') return apiV1Error('permission_denied', 403);
   if (result.kind === 'not_found') return apiV1Error('resource_not_found', 404);
   if (result.kind === 'unavailable') return apiV1Error('dependency_unavailable', 503);
@@ -35,6 +36,7 @@ export async function GET(
     formId: result.formId,
     fields: result.fields,
     truncated: result.truncated,
+    nextOffset: result.nextOffset,
   }, {
     status: 200,
     headers: {
