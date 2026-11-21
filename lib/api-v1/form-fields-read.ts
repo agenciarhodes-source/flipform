@@ -16,7 +16,7 @@ export type ApiV1FormFieldDefinition = {
   orderIndex: number;
 };
 export type ApiV1FormFieldsResult =
-  | { kind: 'ok'; formId: string; fields: ApiV1FormFieldDefinition[]; truncated: boolean }
+  | { kind: 'ok'; formId: string; fields: ApiV1FormFieldDefinition[]; truncated: boolean; nextOffset: number | null }
   | { kind: 'not_found' }
   | { kind: 'unavailable' }
   | { kind: 'denied' };
@@ -26,12 +26,16 @@ export function validApiV1FormId(formId: string): boolean {
   return UUID.test(formId);
 }
 
-export function noFormFieldsQueryParameters(url: string): boolean {
+export function parseFormFieldsOffset(url: string): number | null {
   try {
-    return Array.from(new URL(url).searchParams.keys()).length === 0;
-  } catch {
-    return false;
-  }
+    const params = new URL(url).searchParams;
+    if (Array.from(params.keys()).some(k => k !== 'offset') || params.getAll('offset').length > 1) return null;
+    const raw = params.get('offset');
+    if (raw === null) return 0;
+    if (!/^(0|[1-9][0-9]{0,4})$/.test(raw)) return null;
+    const offset = Number(raw);
+    return offset <= 10000 ? offset : null;
+  } catch { return null; }
 }
 
 /**
@@ -44,11 +48,13 @@ export async function readApiV1FormFields(
   authorization: ApiV1Authorization,
   formId: string,
   db: Pick<PrismaClient, 'form'> = prisma,
+  offset = 0,
 ): Promise<ApiV1FormFieldsResult> {
   if (!apiV1Enabled(process.env) || !authorization.ok
     || authorization.scope !== 'forms.read'
     || !authorization.tenantId || !authorization.integrationId
-    || !validApiV1FormId(formId)) return { kind: 'denied' };
+    || !validApiV1FormId(formId) || !Number.isSafeInteger(offset)
+    || offset < 0 || offset > 10000) return { kind: 'denied' };
   try {
     const form = await db.form.findFirst({
       where: {
@@ -61,6 +67,7 @@ export async function readApiV1FormFields(
         fields: {
           orderBy: [{ orderIndex: 'asc' }, { id: 'asc' }],
           take: MAX_FIELDS + 1,
+          skip: offset,
           select: {
             id: true,
             label: true,
@@ -77,6 +84,7 @@ export async function readApiV1FormFields(
       formId: form.id,
       fields: form.fields.slice(0, MAX_FIELDS),
       truncated: form.fields.length > MAX_FIELDS,
+      nextOffset: form.fields.length > MAX_FIELDS ? offset + MAX_FIELDS : null,
     };
   } catch {
     return { kind: 'unavailable' };
