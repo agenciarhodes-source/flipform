@@ -164,8 +164,10 @@ paths:
       description: |
         Credential must have forms.read, an active tenant and integration, and
         available distributed quota. Only definition metadata is selected.
-        Fields are ordered by orderIndex/id and capped at 100 per form.
-        Response returns truncated=true if additional fields exist.
+        Fields are ordered by orderIndex/id and returned 100 at a time.
+        Use offset=nextOffset to fetch more fields, up to offset 10000.
+        For changing schemas, clients should restart pagination.
+        Response returns truncated=true when additional fields exist.
         No validationRules, options, responses, leads or public form URLs.
       security:
         - M2MKey: []
@@ -174,6 +176,9 @@ paths:
           in: path
           required: true
           schema: { type: string, format: uuid }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
       responses:
         '200':
           description: Current tenant's active form definition
@@ -182,11 +187,12 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [version, formId, fields, truncated]
+                required: [version, formId, fields, truncated, nextOffset]
                 properties:
                   version: { type: string, const: v1 }
                   formId: { type: string, format: uuid }
                   truncated: { type: boolean }
+                  nextOffset: { type: [integer, 'null'], minimum: 0 }
                   fields:
                     type: array
                     maxItems: 100
