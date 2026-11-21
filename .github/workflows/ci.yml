@@ -73,7 +73,7 @@ jobs:
       - name: PR02 read-only catalog policy tests (offline)
         env:
           NODE_OPTIONS: --conditions=react-server
-        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-form-fields-read.test.ts tests/pr02-pipeline-metrics.test.ts
+        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-form-fields-read.test.ts tests/pr02-pipeline-metrics.test.ts tests/pr02-leads-metadata.test.ts
 
       # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
       - name: PR01 webhook HMAC and SSRF policy tests (offline)
@@ -243,6 +243,16 @@ jobs:
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/pr02-pipeline-metrics.integration.test.ts
+
+      # PR02 protected lead metadata; only synthetic tenants on disposable localhost DB.
+      - name: PR02 tenant-isolated lead metadata catalog (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-leads-metadata.integration.test.ts
 
       # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
       # No external endpoints, workers, real credentials or Neon access.
