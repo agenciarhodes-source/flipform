@@ -17,7 +17,9 @@ export type ApiV1FormFieldDefinition = {
 };
 export type ApiV1FormFieldsResult =
   | { kind: 'ok'; formId: string; fields: ApiV1FormFieldDefinition[]; truncated: boolean }
-  | { kind: 'not_found' | 'unavailable' | 'denied' };
+  | { kind: 'not_found' }
+  | { kind: 'unavailable' }
+  | { kind: 'denied' };
 
 /** Identifier has no tenant semantics; source of tenant identity is the bearer credential only. */
 export function validApiV1FormId(formId: string): boolean {
