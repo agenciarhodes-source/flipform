@@ -23,8 +23,7 @@ test('detail selects only operational metadata and tenant-owned row',async()=>{
     const item={id:ID,formId:null,pipelineId:ID,stageId:ID,status:'open',
       createdAt:new Date('2026-01-01T00:00:00Z'),updatedAt:new Date('2026-01-02T00:00:00Z')};
     const calls:unknown[]=[];
-    const db={lead:{findFirst:async(q:unknown)=>{calls.push(q);return item;}}}
-      as unknown as Pick<PrismaClient,'lead'>;
+    const db={lead:{findFirst:async(q:unknown)=>{calls.push(q);return item;}}} as unknown as Pick<PrismaClient,'lead'>;
     assert.deepEqual(await readApiV1LeadMetadata(AUTH,ID,db),{kind:'ok',item});
     const query=calls[0] as {where:{id:string;tenantId:string};select:Record<string,boolean>};
     assert.deepEqual(query.where,{id:ID,tenantId:'tenant-a'});
@@ -50,8 +49,7 @@ test('other-tenant missing resource, DB failure and malformed identifiers fail c
   try {
     const missing={lead:{findFirst:async()=>null}} as unknown as Pick<PrismaClient,'lead'>;
     assert.deepEqual(await readApiV1LeadMetadata(AUTH,ID,missing),{kind:'not_found'});
-    const broken={lead:{findFirst:async()=>{throw Error('private connection');}}}
-      as unknown as Pick<PrismaClient,'lead'>;
+    const broken={lead:{findFirst:async()=>{throw Error('private connection');}}} as unknown as Pick<PrismaClient,'lead'>;
     assert.deepEqual(await readApiV1LeadMetadata(AUTH,ID,broken),{kind:'unavailable'});
     assert.deepEqual(await readApiV1LeadMetadata(AUTH,'bad',broken),{kind:'denied'});
   } finally {
