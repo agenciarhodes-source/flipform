@@ -75,6 +75,8 @@ GUARDED = {
     "v1/capabilities/route.ts": "authorizeApiV1Request({",
     # PR02: independently authenticated M2M bearer, tenant entitlement and quota.
     "v1/pipelines/route.ts": "authorizeApiV1Request({",
+    # PR02 aggregate metrics: separate M2M scope and tenant-bound quota on every GET.
+    "v1/pipelines/[pipelineId]/metrics/route.ts": "authorizeApiV1Request({",
     # PR02 forms metadata: no session bypass; independently verified M2M token.
     "v1/forms/route.ts": "authorizeApiV1Request({",
     "v1/forms/[formId]/fields/route.ts": "authorizeApiV1Request({",
