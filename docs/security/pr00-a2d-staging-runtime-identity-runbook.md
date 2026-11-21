@@ -31,6 +31,14 @@
 - `tests/pr00-staging-route-lockdown.test.ts` verifica negação de CRM, integrações, webhooks e APIs, métodos não GET, URLs semelhantes e contextos Vercel parciais; o CI executa esse teste offline junto aos testes de identidade.
 - **Esse middleware é temporário, específico da branch de diagnóstico e não pode ser incorporado à main.** A mudança não reativa o Preview automático, não solicita deploy, nem certifica runtime.
 
+## PR00 A2-E — preflight contra integrações externas no Preview (20/11/2026)
+
+- As rotas já existentes incluem cron de cobranças, anexos e conversões do Google; jobs internos e webhooks Meta, WhatsApp, Stripe e ZapSign. Existência da rota **não** significa execução agendada. A ausência de entradas `crons` no `vercel.json` da branch é evidência limitada ao agendamento pelo deploy desta branch.
+- O helper `lib/security/pr00-staging-integration-preflight.ts` recusa configuração de agendamentos cron, redeploy automático da branch de diagnóstico e presença de nomes de variáveis de credenciais de provedores externos ou jobs no ambiente do build. Executa no build **apenas da branch PR00**, antes da consulta read-only ao Neon. Falha de verificação interrompe o build com resultados booleanos, sem expor nomes/valores de secrets.
+- Os testes `tests/pr00-staging-integration-preflight.test.ts` exercitam os bloqueios offline no CI. O inventário read-only da Vercel encontrou zero connections de conectores e zero registros de webhooks da própria Vercel para o projeto. Isso **não** demonstra inexistência de configurações externas nos provedores nem de processos fora do runtime do Preview.
+- **Limitação decisiva:** validação de configuração e bloqueio HTTP não são firewall de saída; código SSR, inicialização, build e qualquer execução fora do middleware podem fazer conexões externas sem credencial. Não declarar `staging_egress_isolation_attested` como true no PR01 com base só nesses checks. Para GO final de egress, exigir controle de rede verificável ou revisão independente específica das chamadas outbound e dos gatilhos automáticos, com evidência sanitizada.
+- A mudança não configura, agenda ou executa qualquer job, não altera produção, nem autoriza ativação do PR01.
+
 ## Ativação futura (ainda NÃO autorizada)
 
 1. Revisar CI, diff, endpoint/guards, ausência de side-effects e as regras do projeto staging. **Não** alterar o projeto `flipform` de produção.

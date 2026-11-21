@@ -1,4 +1,6 @@
 import { PrismaClient } from '@prisma/client';
+import { readFileSync } from 'node:fs';
+import { pr00StagingIntegrationPreflightChecks } from '../lib/security/pr00-staging-integration-preflight';
 import { matchesLiveDatabaseIdentity, stagingIdentityBuildGateEnabled, stagingIdentityPreflightChecks } from '../lib/security/pr00-staging-db-identity';
 
 // Executed ONLY by this Draft branch build command, never by main.
@@ -18,6 +20,22 @@ async function main() {
       process.stderr.write('PR00 staging preflight ' + name + ': ' + (ok ? 'pass' : 'blocked') + '\n');
     }
     throw new Error('PR00 staging build blocked: identity preflight denied');
+  }
+
+  // Fail-closed before any staging database query if an integration credential,
+  // cron schedule or automatic Preview deployment was introduced into this PR.
+  let projectConfig: unknown;
+  try {
+    projectConfig = JSON.parse(readFileSync('vercel.json', 'utf8'));
+  } catch {
+    throw new Error('PR00 staging build blocked: deployment config unreadable');
+  }
+  const isolationChecks = pr00StagingIntegrationPreflightChecks(process.env, projectConfig);
+  if (!Object.values(isolationChecks).every(Boolean)) {
+    for (const [name, passed] of Object.entries(isolationChecks)) {
+      process.stderr.write('PR00 staging integration config ' + name + ': ' + (passed ? 'pass' : 'blocked') + '\\n');
+    }
+    throw new Error('PR00 staging build blocked: integration isolation preflight denied');
   }
 
   const prisma = new PrismaClient({ log: ['error'] });
