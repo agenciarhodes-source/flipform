@@ -33,7 +33,7 @@ async function main() {
   const isolationChecks = pr00StagingIntegrationPreflightChecks(process.env, projectConfig);
   if (!Object.values(isolationChecks).every(Boolean)) {
     for (const [name, passed] of Object.entries(isolationChecks)) {
-      process.stderr.write('PR00 staging integration config ' + name + ': ' + (passed ? 'pass' : 'blocked') + '\\n');
+      process.stderr.write('PR00 staging integration config ' + name + ': ' + (passed ? 'pass' : 'blocked') + '\n');
     }
     throw new Error('PR00 staging build blocked: integration isolation preflight denied');
   }

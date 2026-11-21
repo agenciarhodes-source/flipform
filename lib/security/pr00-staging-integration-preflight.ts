@@ -19,7 +19,9 @@ const BACKGROUND_JOB_CREDENTIALS = new Set([
   'INTERNAL_WORKER_SECRET',
 ]);
 
-export function pr00StagingIntegrationPreflightChecks(env: Env, config: PreviewConfig | null | undefined) {
+export function pr00StagingIntegrationPreflightChecks(env: Env, config: unknown) {
+  const parsed: PreviewConfig | undefined = config && typeof config === 'object' && !Array.isArray(config)
+    ? config as PreviewConfig : undefined;
   const keys = Object.keys(env);
   const forbiddenIntegrationCredentialsAbsent = keys.every(
     (key) => !PROVIDER_CREDENTIAL_PREFIX.test(key) && !BACKGROUND_JOB_CREDENTIALS.has(key),
@@ -28,14 +30,14 @@ export function pr00StagingIntegrationPreflightChecks(env: Env, config: PreviewC
     exactIsolatedProject: env.VERCEL_PROJECT_ID === PR00_STAGING.vercelProjectId,
     exactDiagnosticBranch: env.VERCEL_GIT_COMMIT_REF === PR00_STAGING.previewBranch,
     previewOnly: env.VERCEL_ENV === 'preview',
-    noScheduledCronInRepoConfig: Boolean(config)
-      && (config?.crons === undefined || (Array.isArray(config.crons) && config.crons.length === 0)),
-    automaticDiagnosticDeployDisabled: Boolean(config)
-      && config?.git?.deploymentEnabled?.[PR00_STAGING.previewBranch] === false,
+    noScheduledCronInRepoConfig: Boolean(parsed)
+      && (parsed?.crons === undefined || (Array.isArray(parsed.crons) && parsed.crons.length === 0)),
+    automaticDiagnosticDeployDisabled: Boolean(parsed)
+      && parsed?.git?.deploymentEnabled?.[PR00_STAGING.previewBranch] === false,
     forbiddenIntegrationCredentialsAbsent,
   };
 }
 
-export function pr00StagingIntegrationPreflightApproved(env: Env, config: PreviewConfig | null | undefined): boolean {
+export function pr00StagingIntegrationPreflightApproved(env: Env, config: unknown): boolean {
   return Object.values(pr00StagingIntegrationPreflightChecks(env, config)).every(Boolean);
 }
