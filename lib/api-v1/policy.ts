@@ -9,6 +9,7 @@ export const API_V1_SCOPES = [
   'integrations.read',
   'pipelines.read',
   'forms.read',
+  'pipelines.metrics.read',
   'events.read',
   'events.write',
   'webhooks.manage',
