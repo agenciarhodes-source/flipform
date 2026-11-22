@@ -57,3 +57,28 @@ Nenhum dos comandos acima altera Neon, Vercel, GitHub Actions ou dados de client
 - **Ainda não é homologação ponta a ponta:** faltam runtime PR02 na Vercel staging, ligação segura à branch QA com varíaveis isoladas, regressão A/B end-to-end, egress, política de retenção, backup/restore de schema atual e autorização de release. O snapshot formal mantém `decision: NO_GO`.
 
 **Próxima execução:** revisar a equivalência do DDL do artefato, garantir roteamento estritamente staging, e executar validações sintéticas de leitura/escopos. Não elevar flags de liberação pelo sucesso desse ensaio.
+
+
+## Ensaio de recuperação e plano operacional de rollback — 22/11/2026
+
+### Evidências de recuperação isolada — TESTE DE CLONAGEM (não PITR)
+- Origem: projeto Neon de **staging isolado** `holy-fog-36254823`, branch `br-snowy-band-bcb0auy6` (`api-v1-pr629-full-schema-lab-20261121`). O banco de origem tem exclusivamente fixtures de QA: 2 tenants, 3 leads, 3 credenciais revogadas e 0 integrações ativas.
+- Derivação criada **sem compute por padrão**: `api-v1-pr629-recovery-check-20261122`, id `br-curly-smoke-bck076qv`, parent `br-snowy-band-bcb0auy6`. Compute de leitura/validação independente `ep-round-paper-bclr72y6` limitado a 0,25 CU com suspensão automática em 300 s.
+- Consultas PostgreSQL executadas independentemente sobre origem e clone. Ambas retornaram **102 tabelas públicas, 30 índices da API (incluindo PK), 10 FKs da API**, 10 `RESTRICT`, 0 `CASCADE`, 2 tenants, 3 leads, 3 credenciais revogadas, 0 não revogadas, 0 integrações ativas, 10 registros de quota. A comparação dos contadores foi idêntica.
+- Evidência: cópia consistente por **branch clone** do mesmo projeto, com leitura independente. **Não** é uma operação de `restore_snapshot`, nem demonstra restauração de incidente, tempo real de recuperação (RTO), perda máxima (RPO), integridade byte a byte de todas as linhas ou recuperação do Neon de produção. `create_snapshot` da branch QA não-root foi recusado pelo provedor; não alterar default/prod para contornar.
+- Permanecem pendentes: drill **PITR/backup** independente e verificações de integridade e temporização acordadas, incluindo eventual reconexão Vercel ao ramo restaurado, antes de autorizar publicação.
+
+### Isolamento de saída / egress
+- Inspeção estática do commit `6ee6a1349d6ac05b9165b60d430c7e11c4cf5dfd` contemplou as **8 rotas `app/api/v1/**/route.ts`** e os módulos de leituras M2M de `lib/api-v1` vinculados. Não foi localizado uso direto de `fetch(`, Axios ou URL HTTP de serviço externo nas rotas/leitores consultados. A palavra `webhook` em capacidades/escopos é descritiva, não uma chamada observada.
+- Os endpoints testados eram GET com escopo do tenant e foram exercitados com leads sintéticos. **Inspeção de código não demonstra egress de todo o aplicativo**, de integrações indiretas, jobs/crons, SDKs, outros endpoints ou infraestrutura compartilhada. Não alterar nem desabilitar Meta/Google/Ads/Pixel de produção para testar.
+- Critério futuro de aceite: inventário runtime de todos os destinos externos e jobs habilitados no deployment, garantia de isolamento por ambiente, monitoramento DNS/HTTP/egress durante operação sintética e ausência de env/credenciais produtivas no ambiente de QA. Até lá: `staging_outbound_egress = NOT_ATTESTED`.
+
+### Plano de rollback operacional — documentado, **não aprovado para produção**
+1. **Congelar ativação:** manter `FLIPFORM_API_V1_ENABLED=false` no projeto e ambiente afetados; bloquear emissão de novas chaves e revogar quaisquer credenciais de integração ativas afetadas se houver incidente. Não remover registros de auditoria.
+2. **Se apenas preview:** voltar a variável **específica da branch** para `false` e fazer novo build do mesmo commit para uma implantação OFF. Referência QA comprovada: `dpl_99XS55EfneZMzKjBRyEm19Byde53`, estado READY; GET `/api/v1/forms` e `/api/v1/leads` retornaram 404 `api_unavailable`. A alteração de env **não é retroativa** para deployments imutáveis já criados; estes só ficam inertes para acesso autenticado após revogação de chaves.
+3. **Se produção no futuro:** manter feature flag OFF e revogar chaves primeiro; utilizar somente deployment produtivo anterior, **identificado e aprovado no momento do incidente**, com teste de compatibilidade do schema aditivo. Não executar rollback Vercel sem autorização, nem restaurar dump/banco sobre produção automaticamente.
+4. **Banco:** as 10 tabelas API usam FKs `RESTRICT` e migração aditiva; não usar `DROP TABLE`/reverter estrutura em rollback rápido. Manter dados e evidências, corrigir adiante mediante migração revisada. Restauração PITR, swap de branch, mudança de URL de banco ou migração em Neon de produção exigem protocolo separado.
+5. **Pós-contenção:** conferir respostas 404 com flag OFF, chaves revogadas, erros e logs sem segredo, integridade das tabelas/tenants, indicadores de exfiltração, monitorar estabilidade e criar registro de aprovação/retroanálise.
+6. **Gates não liberados:** faltam retenção/LGPD/legal hold, aceitação de PITR/RPO/RTO, egress real e aprovação de deploy/rollback por responsável. `NO_GO` permanece explícito. Quatro workflows de manutenção continuam Disabled.
+
+Este documento descreve um procedimento de contingência e evidência técnica de staging; não altera a matriz de aprovação nem é autorização de produção.
