@@ -30,3 +30,12 @@ Leitura do projeto **Vercel staging**, sem descriptografar segredos:
 4. Revisar a política de retenção das dez categorias no workbook, com responsáveis e aprovação formal. Só depois reavaliar rollout e rollback de produção, em decisão explícita.
 
 **Estado resumido:** clonagem QA PASS; PITR/backup com schema API NOT_PROVEN; egress de rotas API v1 sem envio direto observado, egress geral de staging NOT_ATTESTED; política LGPD PENDING; produção NO_GO.
+
+## 4. Restauração independente de snapshot real — 22/11/2026 (sem substituição)
+
+- Invocada `restore_snapshot` do snapshot manual de staging `snap-dry-voice-bckept4c` (`pr00-a2c3-current-staging-vector087-before-aux-ddl-20261117`) em **nova branch isolada** `br-rapid-cherry-bcizfy2x` (`pr629-snapshot-restore-readonly-20261122`) no projeto Neon separado `holy-fog-36254823`, com `finalize=false`. Nenhuma branch existente foi substituída ou promovida.
+- O Neon registrou `restore_status=restored` e a branch ficou `ready`. Leitura independente com PostgreSQL no banco `flipform_staging` recuperado: **0 tabelas públicas, 0 tabelas da API, extensão `vector` presente**, como esperado para o snapshot histórico da branch raiz anterior à API.
+- O compute temporário `ep-winter-haze-bca4h70a` foi suspenso após leitura.
+- **Resultado estritamente comprovado:** mecanismo de restauração Neon de snapshot *histórico* funcionou com `finalize=false`, sem afetar staging default ou produção. **Não** atesta restauração do esquema da API v1 (102 tabelas), RPO/RTO, consistência completa de dados ou disponibilidade da aplicação restaurada.
+- Nova tentativa de instalação de `pg_dump`/`pg_restore` no sandbox independente `sbx_mbAaLCUxD51YzJcD9h6cULpAv9Xg` também falhou; sandbox encerrado. Nenhum dump foi obtido. Evitar novos ciclos de instalação até haver imagem com cliente PostgreSQL pré-instalado.
+- A evidência anterior sobre snapshots continua válida: snapshot raiz histórico não substitui backup atual. Política LGPD e gate de egress permanecem sem autorização.
