@@ -10,6 +10,8 @@ on:
       - 'tests/test_api_v1_homologation_preflight.py'
       - 'docs/security/api-v1-homologation-evidence-20261121.json'
       - 'docs/security/api-v1-homologation-runbook-20261121.md'
+      - 'docs/security/api-v1-retention-decision-workbook-20261122.json'
+      - 'docs/security/api-v1-retention-approval-guide-20261122.md'
       - 'vercel.json'
 
 permissions:

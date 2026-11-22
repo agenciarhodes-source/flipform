@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from api_v1_homologation_preflight import verify, EVIDENCE, VERCEL, PR01_HOLD, RETENTION
+from api_v1_homologation_preflight import verify, EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL
 
 class HomologationPreflightTest(unittest.TestCase):
     def test_snapshot_is_a_hold_not_release(self):
@@ -20,12 +20,12 @@ class HomologationPreflightTest(unittest.TestCase):
         self.assertFalse(result["staging_schema_ready"])
         self.assertEqual(result["pending_fk_retention_decisions"], 10)
 
-    def make_tree(self, folder, evidence=None, vercel=None, hold=None, retention=None):
-        for file in (EVIDENCE, VERCEL, PR01_HOLD, RETENTION):
+    def make_tree(self, folder, evidence=None, vercel=None, hold=None, retention=None, proposal=None):
+        for file in (EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL):
             target = folder / file.relative_to(ROOT)
             target.parent.mkdir(parents=True, exist_ok=True)
             original = json.loads(file.read_text(encoding="utf-8"))
-            replacement = {EVIDENCE:evidence, VERCEL:vercel, PR01_HOLD:hold, RETENTION:retention}[file]
+            replacement = {EVIDENCE:evidence, VERCEL:vercel, PR01_HOLD:hold, RETENTION:retention, PROPOSAL:proposal}[file]
             target.write_text(json.dumps(original if replacement is None else replacement))
         for path in (
             "app/api/v1/capabilities/route.ts",
@@ -93,6 +93,39 @@ class HomologationPreflightTest(unittest.TestCase):
             fake["sources"]["neon_staging"]["full_schema_qa_lab"]["api_foreign_keys_on_delete_restrict"]=9
             root=Path(tmp)
             self.make_tree(root,evidence=fake)
+            with self.assertRaises(ValueError): verify(root)
+
+    def test_retention_workbook_covers_all_pending_decisions(self):
+        result = verify()
+        self.assertEqual(result["pending_fk_retention_decisions"], 10)
+
+    def test_cannot_fake_privacy_approval_in_workbook(self):
+        original=json.loads(PROPOSAL.read_text())
+        for key, value in (
+            ("retention_and_lgpd_approved", True),
+            ("review_status", "APPROVED"),
+            ("approved_by", "unverified actor"),
+        ):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
+                fake=copy.deepcopy(original)
+                fake[key]=value
+                root=Path(tmp)
+                self.make_tree(root, proposal=fake)
+                with self.assertRaises(ValueError): verify(root)
+
+    def test_retention_workbook_rejects_missing_row_and_fabricated_period(self):
+        original=json.loads(PROPOSAL.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(original)
+            fake["items"].pop()
+            root=Path(tmp)
+            self.make_tree(root, proposal=fake)
+            with self.assertRaises(ValueError): verify(root)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(original)
+            fake["items"][0]["retention_period"]=365
+            root=Path(tmp)
+            self.make_tree(root, proposal=fake)
             with self.assertRaises(ValueError): verify(root)
 
 if __name__=="__main__":

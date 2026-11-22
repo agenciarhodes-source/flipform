@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "docs/security/api-v1-homologation-evidence-20261121.json"
 PR01_HOLD = ROOT / "docs/security/pr01-staging-release-gates-DRAFT.json"
 RETENTION = ROOT / "docs/security/pr01-phase9-retention-decision-matrix.json"
+PROPOSAL = ROOT / "docs/security/api-v1-retention-decision-workbook-20261122.json"
 VERCEL = ROOT / "vercel.json"
 BRANCH = "security/api-v1-homologation-20261121"
 
@@ -56,6 +57,7 @@ def verify(root: Path = ROOT) -> dict:
     evidence = load(root / EVIDENCE.relative_to(ROOT))
     manifest = load(root / PR01_HOLD.relative_to(ROOT))
     retention = load(root / RETENTION.relative_to(ROOT))
+    proposal = load(root / PROPOSAL.relative_to(ROOT))
     vercel = load(root / VERCEL.relative_to(ROOT))
     require(evidence.get("schema_version") == 1 and evidence.get("decision") == "NO_GO",
             "Homologation evidence must remain a dated NO_GO snapshot")
@@ -132,6 +134,44 @@ def verify(root: Path = ROOT) -> dict:
             "PR approvals cannot be inferred from passing CI")
     require(github.get("pr02_based_on") == "feature/pr01-global-api-foundation",
             "PR02 stacking order changed")
+    require(proposal.get("schema_version") == 1
+            and proposal.get("state") == "PROPOSAL_ONLY"
+            and proposal.get("decision") == "NO_GO"
+            and proposal.get("review_status") == "PENDING_REVIEW",
+            "Retention workbook must remain an unapproved proposal")
+    for key in ("production_release_authorized", "retention_and_lgpd_approved",
+                "legal_hold_policy_approved", "hard_delete_endpoint_authorized"):
+        require(proposal.get(key) is False, "Retention proposal cannot authorize: " + key)
+    for key in ("approved_by", "approval_reference", "approved_at"):
+        require(proposal.get(key) is None, "Retention proposal cannot contain approval: " + key)
+    proposed_items = proposal.get("items")
+    source_items = retention.get("fk_decisions", [])
+    require(isinstance(proposed_items, list) and len(proposed_items) == 10,
+            "Retention workbook must cover exactly ten relationships")
+    known = {(x.get("child_table"), x.get("parent_table"), x.get("category"))
+             for x in source_items}
+    actual = set()
+    for item in proposed_items:
+        require(isinstance(item, dict), "Malformed proposal item")
+        link = (item.get("child_table"), item.get("parent_table"), item.get("category"))
+        require(link in known and link not in actual
+                and item.get("foreign_key_action") == "RESTRICT"
+                and item.get("existing_source_decision") == "PENDING"
+                and item.get("decision") == "PENDING",
+                "Unreviewed or mismatched retention item")
+        for field in ("retention_period", "retention_period_unit", "lawful_basis",
+                      "legal_hold_rule", "data_subject_request_handling",
+                      "owner_for_approval", "decision_reference"):
+            require(item.get(field) is None,
+                    "Unapproved retention value must not be treated as final: " + field)
+        for field in ("processing_purpose", "data_minimization_proposal",
+                      "retention_start_event_proposal", "deletion_or_anonymization_proposal",
+                      "technical_dependencies"):
+            require(isinstance(item.get(field), str) and len(item[field].strip()) > 15,
+                    "Incomplete proposal rationale: " + field)
+        actual.add(link)
+    require(len(actual) == 10 and len(known) == 10,
+            "Retention proposal is missing source-matrix decisions")
     check_no_go(manifest, vercel, retention)
     require(vercel.get("git", {}).get("deploymentEnabled", {}).get(BRANCH) is False,
             "Automatic deployment must be disabled for this homologation PR")
