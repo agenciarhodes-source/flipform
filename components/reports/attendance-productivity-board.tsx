@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { formatDuration } from '@/lib/reports/attendance-productivity-rules';
+import { formatDuration, goalProgress } from '@/lib/reports/attendance-productivity-rules';
 
 type Row = {
   userId: string;
@@ -14,6 +14,8 @@ type Row = {
   medianResponseMs: number | null;
   firstResponseMedianMs: number | null;
   within15MinPct: number | null;
+  initiated: number;
+  initiatedAnswered: number;
   waitingNow: number;
   leadsReceived: number;
   leadsAdvanced: number;
@@ -27,7 +29,75 @@ type Review = {
   summary: string;
   attendants: Array<{ userId: string; name: string; score: number; strengths: string[]; improvements: string[]; example: string | null }>;
 };
-type Report = { days: number; truncated: boolean; rows: Row[]; review: Review | null; canReview: boolean };
+type Week = { from: string; current: boolean; initiated: number; initiatedAnswered: number; conversations: number; messages: number };
+type Goals = { weeklyInitiated: number | null; weeklyConversations: number | null };
+type GoalRow = { userId: string; name: string; weeks: Week[]; goal: Goals; average: Goals };
+type Report = {
+  days: number; truncated: boolean; rows: Row[]; review: Review | null; canReview: boolean;
+  goals: GoalRow[];
+};
+
+const dayMonth = (iso: string) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+
+function GoalBar({ label, value, goal, hint }: { label: string; value: number; goal: number | null; hint: string }) {
+  const progress = goalProgress(value, goal);
+  const color = progress === null ? 'bg-muted-foreground/40' : progress >= 100 ? 'bg-emerald-500' : progress >= 60 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className="space-y-1" title={hint}>
+      <div className="flex items-baseline justify-between gap-2 text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-semibold">{value}{goal ? <span className="font-normal text-muted-foreground"> / meta {goal}</span> : null}</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${progress ?? 0}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** One person: this week against the weekly goal, and the previous weeks. */
+function GoalCard({ row }: { row: GoalRow }) {
+  const week = row.weeks[0];
+  const previous = row.weeks.slice(1);
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <p className="font-medium">{row.name}</p>
+      <GoalBar label="Conversas iniciadas" value={week.initiated} goal={row.goal.weeklyInitiated}
+        hint="Conversas em que a pessoa escreveu primeiro, com o cliente sem escrever havia mais de 24 h (novo contato, follow-up ou reativação)" />
+      <GoalBar label="Conversas atendidas" value={week.conversations} goal={row.goal.weeklyConversations}
+        hint="Conversas em que a pessoa mandou ao menos uma mensagem na semana" />
+      <p className="text-xs text-muted-foreground">
+        Esta semana: {week.messages} mensagens · {week.initiatedAnswered} de {week.initiated} iniciadas tiveram retorno do cliente
+      </p>
+      <table className="w-full text-xs">
+        <thead className="text-muted-foreground">
+          <tr>
+            <th className="text-left font-normal">Semana</th>
+            <th className="text-right font-normal">Iniciadas</th>
+            <th className="text-right font-normal">Retorno</th>
+            <th className="text-right font-normal">Atendidas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {previous.map((item) => (
+            <tr key={item.from} className="border-t">
+              <td className="py-1">de {dayMonth(item.from)}</td>
+              <td className="py-1 text-right">{item.initiated}</td>
+              <td className="py-1 text-right">{item.initiatedAnswered}</td>
+              <td className="py-1 text-right">{item.conversations}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted-foreground">
+        {row.average.weeklyInitiated === null && row.average.weeklyConversations === null
+          ? 'Ainda sem semana completa: a meta aparece depois da primeira semana fechada.'
+          : `Média por semana: ${row.average.weeklyInitiated ?? 0} iniciadas e ${row.average.weeklyConversations ?? 0} atendidas.`}
+      </p>
+    </div>
+  );
+}
 
 const PERIODS = [7, 30, 90];
 
@@ -104,6 +174,24 @@ export function AttendanceProductivityBoard() {
         {loading ? <span className="text-xs text-muted-foreground">Carregando...</span> : null}
       </div>
 
+      {report?.goals?.length ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="font-semibold">Metas semanais</h2>
+            <p className="text-sm text-muted-foreground">
+              Semana atual (segunda a domingo) contra a meta de cada pessoa. &quot;Iniciadas&quot; são conversas em que a pessoa escreveu
+              primeiro, com o cliente sem escrever havia mais de 24 h; &quot;retorno&quot; é quando o cliente respondeu. A meta é a média
+              das semanas completas (últimas 3, sem contar as paradas) + 10%.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {report.goals.map((row) => (
+              <GoalCard key={row.userId} row={row} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {rows.length > 1 ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border p-3">
@@ -130,6 +218,8 @@ export function AttendanceProductivityBoard() {
             <tr>
               <th className="p-2 text-left">Atendente</th>
               <th className="p-2 text-right" title="Conversas de WhatsApp em que a pessoa respondeu no período">Conversas</th>
+              <th className="p-2 text-right" title="Conversas em que a pessoa escreveu primeiro, com o cliente sem escrever havia mais de 24 h">Iniciadas</th>
+              <th className="p-2 text-right" title="Conversas iniciadas em que o cliente respondeu">Retorno</th>
               <th className="p-2 text-right">Mensagens</th>
               <th className="p-2 text-right" title="Tempo até a primeira resposta da conversa (mediana)">1ª resposta</th>
               <th className="p-2 text-right" title="Tempo entre a mensagem do cliente e a resposta (mediana)">Tempo de resposta</th>
@@ -147,6 +237,8 @@ export function AttendanceProductivityBoard() {
               <tr key={row.userId} className="border-t">
                 <td className="p-2 font-medium">{row.name}</td>
                 <td className="p-2 text-right">{row.conversations}</td>
+                <td className="p-2 text-right">{row.initiated}</td>
+                <td className="p-2 text-right">{row.initiatedAnswered}</td>
                 <td className="p-2 text-right">{row.messages}</td>
                 <td className="p-2 text-right">{formatDuration(row.firstResponseMedianMs)}</td>
                 <td className="p-2 text-right">{formatDuration(row.medianResponseMs)}</td>
@@ -160,7 +252,7 @@ export function AttendanceProductivityBoard() {
               </tr>
             ))}
             {!loading && rows.length === 0 ? (
-              <tr><td className="p-4 text-muted-foreground" colSpan={12}>Nenhum atendimento da equipe no período.</td></tr>
+              <tr><td className="p-4 text-muted-foreground" colSpan={14}>Nenhum atendimento da equipe no período.</td></tr>
             ) : null}
           </tbody>
         </table>
