@@ -2269,6 +2269,7 @@ model ApiIntegration {
   tenantId    String   @map("tenant_id")
   displayName String   @map("display_name")
   status      String   @default("disabled")
+  disabledAt  DateTime? @map("disabled_at")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -2350,6 +2351,7 @@ model ApiV1QuotaBucket {
   credentialId  String   @map("credential_id")
   operation     String
   windowStart   DateTime @map("window_start")
+  windowEnd     DateTime? @map("window_end")
   consumed      Int      @default(0)
   createdAt     DateTime @default(now()) @map("created_at")
 
@@ -2370,6 +2372,7 @@ model ApiV1IdempotencyRecord {
   operation     String
   keyHash       String   @map("key_hash")
   fingerprint   String
+  completedAt   DateTime? @map("completed_at")
   createdAt     DateTime @default(now()) @map("created_at")
 
   integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Restrict)
@@ -2390,6 +2393,7 @@ model ApiV1InboxEvent {
   eventType           String   @map("event_type")
   payloadHash         String   @map("payload_hash")
   state               String   @default("held")
+  finalizedAt         DateTime? @map("finalized_at")
   createdAt           DateTime @default(now()) @map("created_at")
 
   idempotencyRecord ApiV1IdempotencyRecord @relation(fields: [tenantId, integrationId, idempotencyRecordId], references: [tenantId, integrationId, id], onDelete: Restrict)
@@ -2411,6 +2415,7 @@ model ApiV1OutboxEvent {
   eventType      String    @map("event_type")
   state          String    @default("held")
   attempts       Int       @default(0)
+  finalizedAt    DateTime? @map("finalized_at")
   nextAttemptAt  DateTime? @map("next_attempt_at")
   leaseToken     String?   @map("lease_token")
   leaseUntil     DateTime? @map("lease_until")

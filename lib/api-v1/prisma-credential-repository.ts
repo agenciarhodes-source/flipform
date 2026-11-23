@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { canManageApiV1Keys, apiV1Enabled, apiV1Entitled, type ApiV1Entitlement } from './policy';
 import type { ApiV1CredentialRecord, ApiV1CredentialRepository } from './identity';
+import { apiV1QuotaWindowEnd } from './lifecycle-clocks';
 
 /**
  * PR01 Phase 3: read-only M2M identity, tenant entitlement and guarded quota store.
@@ -109,6 +110,7 @@ export class PrismaApiV1CredentialRepository implements ApiV1CredentialRepositor
     const now = (policy.now ?? (() => new Date()))();
     if (!Number.isFinite(now.getTime())) throw new Error('API_V1_QUOTA_INVALID_CLOCK');
     const windowStart = new Date(Math.floor(now.getTime() / policy.windowMs) * policy.windowMs);
+    const windowEnd = apiV1QuotaWindowEnd(windowStart, policy.windowMs);
     const where = {
       tenantId: params.tenantId,
       integrationId: params.integrationId,
@@ -119,7 +121,8 @@ export class PrismaApiV1CredentialRepository implements ApiV1CredentialRepositor
     try {
       // First caller creates one shared row; a competing create fails on the
       // compound primary key. Never silently switch to a process-local counter.
-      await this.db.apiV1QuotaBucket.create({ data: { ...where, consumed: 1 } });
+      // Pin the end at creation; a future policy change must not move the old clock.
+      await this.db.apiV1QuotaBucket.create({ data: { ...where, windowEnd, consumed: 1 } });
       return true;
     } catch (error) {
       // Only duplicate-key conflict can fall through to atomic update.

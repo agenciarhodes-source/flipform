@@ -20,6 +20,13 @@ on:
       - 'scripts/pr629_retention_clock_gate.py'
       - 'tests/test_pr629_retention_clock_gate.py'
       - 'prisma/schema.prisma'
+      - 'prisma/migrations/20261123170000_api_v1_lifecycle_clocks/migration.sql'
+      - 'lib/api-v1/lifecycle-clocks.ts'
+      - 'lib/api-v1/integration-management.ts'
+      - 'lib/api-v1/prisma-credential-repository.ts'
+      - 'lib/api-v1/diagnostic-delivery-state.ts'
+      - 'docs/security/api-v1-lifecycle-clock-implementation-20261123.md'
+      - 'tests/pr629-lifecycle-clocks.test.ts'
       - 'docs/security/api-v1-pitr-egress-review-20261122.md'
       - 'scripts/api_v1_egress_static_guard.py'
       - 'tests/test_api_v1_egress_static_guard.py'
@@ -96,6 +103,10 @@ jobs:
         env:
           NODE_OPTIONS: --conditions=react-server
         run: npx tsx --test tests/pr629-external-egress-runtime.test.ts
+      - name: Test lifecycle clock transitions offline
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-lifecycle-clocks.test.ts
       - name: Test M2M policies, read-only scopes and existing provider transports
         env:
           NODE_OPTIONS: --conditions=react-server

@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { apiV1Enabled } from './policy';
 import { planWebhookRetry } from './webhook-delivery-policy';
+import { diagnosticOutboxFinalizedAt } from './lifecycle-clocks';
 
 /**
  * PR01 Phase 6: synthetic-only state-machine rehearsal. This is NOT a worker.
@@ -164,6 +165,8 @@ export async function settleDiagnosticOutboxForCi(
         },
         data: {
           state: nextState, leaseToken: null, leaseUntil: null, nextAttemptAt,
+          // Dead-letter/retry remain unresolved, only simulated success is final.
+          finalizedAt: diagnosticOutboxFinalizedAt(nextState, now),
         },
       });
       if (updated.count !== 1) return { status: 'stale' } as const;

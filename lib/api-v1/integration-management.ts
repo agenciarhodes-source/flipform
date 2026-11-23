@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { apiV1Enabled, API_V1_MAX_ACTIVE_KEYS_PER_INTEGRATION } from './policy';
 import { mayManageApiV1Credentials } from './prisma-credential-repository';
 import type { ApiV1KeyActor } from './credential-lifecycle';
+import { nextApiIntegrationDisabledAt } from './lifecycle-clocks';
 
 const MAX_INTEGRATIONS_PER_TENANT = 4;
 const NAME = /^[^<>\x00-\x1f\x7f]{2,80}$/;
@@ -77,7 +78,9 @@ export async function setApiV1IntegrationState(
       if (existing.status !== state) {
         const changed = await tx.apiIntegration.updateMany({
           where: { id: integrationId, tenantId: actor.tenantId, status: existing.status },
-          data: { status: state },
+          // Creates initially disabled with NULL; transition active→disabled gets a timestamp.
+          // Reactivation clears this clock, while auditLog preserves prior transitions.
+          data: { status: state, disabledAt: nextApiIntegrationDisabledAt(state, new Date()) },
         });
         if (changed.count !== 1) return null;
         await tx.auditLog.create({ data: {

@@ -3,7 +3,7 @@
   "created_at": "2026-11-23",
   "project": "PR629 isolated staging QA",
   "scope": "Current 10 API v1 tables only; not lead personal data, backups or the rest of FlipForm",
-  "evidence": "Read-only information_schema.columns in Neon QA br-snowy-band-bcb0auy6, verified against Prisma schema model mappings",
+  "evidence": "Baseline Neon QA read-only as of 2026-11-23: absent fields on QA. PR629 now STAGES nullable fields in Prisma+migration; not applied to Neon or production.",
   "status": "BLOCKED_FOR_AUTOMATED_PURGE",
   "candidate_source": "docs/security/api-v1-retention-candidate-periods-20261123.json",
   "all_retention_periods_unapproved": true,
@@ -22,18 +22,20 @@
     {
       "table": "api_v1_integrations",
       "prisma_model": "ApiIntegration",
-      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "technical_clock_state": "SCHEMA_MARKER_STAGED_NO_ELIGIBILITY_AUTOMATION",
       "observed_prisma_fields": [
         "status",
         "updatedAt"
       ],
-      "missing_recommended_prisma_fields": [
-        "disabledAt"
-      ],
-      "technical_evidence": "updatedAt is changed by many edits; cannot prove actual definitive disablement",
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "updatedAt is changed by many edits; cannot prove actual definitive disablement; staged nullable marker still unapplied in QA or production and does not authorize cleanup",
       "technical_precondition": "Write immutable disabledAt on active→disabled and define reactivation/resets before retention begins",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [
+        "disabledAt"
+      ],
+      "staged_nullable_clock_field": "disabledAt"
     },
     {
       "table": "api_v1_credentials",
@@ -47,7 +49,9 @@
       "technical_evidence": "Revocation and expiration dates exist; only inactive keys qualify",
       "technical_precondition": "Use conservative later applicable event, verify no live keys, quota references, security investigations or legal holds",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [],
+      "staged_nullable_clock_field": null
     },
     {
       "table": "tenant_entitlement_grants",
@@ -61,7 +65,9 @@
       "technical_evidence": "Grant expiration/revocation timestamps recorded",
       "technical_precondition": "Verify grants actually ended, preserve approval evidence and any outstanding obligations",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [],
+      "staged_nullable_clock_field": null
     },
     {
       "table": "api_v1_credential_audits",
@@ -75,70 +81,80 @@
       "technical_evidence": "Audit event has timestamp, but the relevant last activity is across related audit events",
       "technical_precondition": "Aggregate MAX(createdAt) by credential with tenant isolation; no purge during incidents or legal hold",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [],
+      "staged_nullable_clock_field": null
     },
     {
       "table": "api_v1_quota_buckets",
       "prisma_model": "ApiV1QuotaBucket",
-      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "technical_clock_state": "SCHEMA_MARKER_STAGED_NO_ELIGIBILITY_AUTOMATION",
       "observed_prisma_fields": [
         "windowStart"
       ],
-      "missing_recommended_prisma_fields": [
-        "windowEnd"
-      ],
-      "technical_evidence": "No durable per-bucket window end; configured duration could evolve across operations and releases",
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "No durable per-bucket window end; configured duration could evolve across operations and releases; staged nullable marker still unapplied in QA or production and does not authorize cleanup",
       "technical_precondition": "Persist verified windowEnd or separately version windows per operation, never reset live quotas",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [
+        "windowEnd"
+      ],
+      "staged_nullable_clock_field": "windowEnd"
     },
     {
       "table": "api_v1_idempotency_records",
       "prisma_model": "ApiV1IdempotencyRecord",
-      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "technical_clock_state": "SCHEMA_MARKER_STAGED_NO_ELIGIBILITY_AUTOMATION",
       "observed_prisma_fields": [
         "createdAt"
       ],
-      "missing_recommended_prisma_fields": [
-        "completedAt"
-      ],
-      "technical_evidence": "Creation does not attest end of dedupe horizon or connected delivery chain",
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Creation does not attest end of dedupe horizon or connected delivery chain; staged nullable marker still unapplied in QA or production and does not authorize cleanup",
       "technical_precondition": "Record terminal completion and check inbox/outbox/delivery descendants before any purge",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [
+        "completedAt"
+      ],
+      "staged_nullable_clock_field": "completedAt"
     },
     {
       "table": "api_v1_inbox_events",
       "prisma_model": "ApiV1InboxEvent",
-      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "technical_clock_state": "SCHEMA_MARKER_STAGED_NO_ELIGIBILITY_AUTOMATION",
       "observed_prisma_fields": [
         "createdAt",
         "state"
       ],
-      "missing_recommended_prisma_fields": [
-        "finalizedAt"
-      ],
-      "technical_evidence": "State without a durable transition timestamp cannot anchor retention after completion",
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "State without a durable transition timestamp cannot anchor retention after completion; staged nullable marker still unapplied in QA or production and does not authorize cleanup",
       "technical_precondition": "Record terminal finalizedAt, confirm outbox/retries settled and evidence preserved",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [
+        "finalizedAt"
+      ],
+      "staged_nullable_clock_field": "finalizedAt"
     },
     {
       "table": "api_v1_outbox_events",
       "prisma_model": "ApiV1OutboxEvent",
-      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "technical_clock_state": "SCHEMA_MARKER_STAGED_NO_ELIGIBILITY_AUTOMATION",
       "observed_prisma_fields": [
         "updatedAt",
         "state",
         "leaseUntil"
       ],
-      "missing_recommended_prisma_fields": [
-        "finalizedAt"
-      ],
-      "technical_evidence": "updatedAt is not proof of completed/dlq reconciled event, and leaseUntil is not finalization",
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "updatedAt is not proof of completed/dlq reconciled event, and leaseUntil is not finalization; staged nullable marker still unapplied in QA or production and does not authorize cleanup",
       "technical_precondition": "Store terminal finalizedAt and document DLQ resolution/retries and attempt dependencies",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [
+        "finalizedAt"
+      ],
+      "staged_nullable_clock_field": "finalizedAt"
     },
     {
       "table": "api_v1_webhook_replays",
@@ -151,7 +167,9 @@
       "technical_evidence": "Verifier expiry already stored; candidate 24h afterward exists only in synthetic CI",
       "technical_precondition": "Approve actual replay window and anti-abuse extensions before any timed pruning",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [],
+      "staged_nullable_clock_field": null
     },
     {
       "table": "api_v1_delivery_attempts",
@@ -165,7 +183,10 @@
       "technical_evidence": "Each finished attempt has a timestamp, but parent chain can remain open",
       "technical_precondition": "Require finishedAt and terminal parent outbox state; compute last attempt after all retries are resolved",
       "legal_and_owner_approval": "PENDING",
-      "cleanup_authorized": false
+      "cleanup_authorized": false,
+      "missing_in_qa_baseline_fields": [],
+      "staged_nullable_clock_field": null
     }
-  ]
+  ],
+  "current_schema_change": "STAGED_ADDITIVE_NULLABLE_CLOCKS_NOT_DEPLOYED"
 }
