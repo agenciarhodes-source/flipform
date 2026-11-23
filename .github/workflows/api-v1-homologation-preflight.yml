@@ -15,6 +15,11 @@ on:
       - 'docs/security/api-v1-retention-owner-review-20261123.md'
       - 'docs/security/api-v1-retention-candidate-periods-20261123.json'
       - 'docs/security/api-v1-retention-candidate-periods-20261123.md'
+      - 'docs/security/api-v1-retention-clock-feasibility-20261123.json'
+      - 'docs/security/api-v1-retention-clock-feasibility-20261123.md'
+      - 'scripts/pr629_retention_clock_gate.py'
+      - 'tests/test_pr629_retention_clock_gate.py'
+      - 'prisma/schema.prisma'
       - 'docs/security/api-v1-pitr-egress-review-20261122.md'
       - 'scripts/api_v1_egress_static_guard.py'
       - 'tests/test_api_v1_egress_static_guard.py'
@@ -50,6 +55,8 @@ jobs:
           python3 -m unittest discover -s tests -p test_api_v1_egress_static_guard.py -v
           python3 scripts/api_v1_egress_static_guard.py
           python3 -m unittest discover -s tests -p test_pr629_external_egress_guard.py -v
+          python3 -m unittest discover -s tests -p test_pr629_retention_clock_gate.py -v
+          python3 scripts/pr629_retention_clock_gate.py
       - name: Upload non-sensitive hold evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7

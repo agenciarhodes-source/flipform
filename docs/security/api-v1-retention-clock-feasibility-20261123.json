@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-11-23",
+  "project": "PR629 isolated staging QA",
+  "scope": "Current 10 API v1 tables only; not lead personal data, backups or the rest of FlipForm",
+  "evidence": "Read-only information_schema.columns in Neon QA br-snowy-band-bcb0auy6, verified against Prisma schema model mappings",
+  "status": "BLOCKED_FOR_AUTOMATED_PURGE",
+  "candidate_source": "docs/security/api-v1-retention-candidate-periods-20261123.json",
+  "all_retention_periods_unapproved": true,
+  "production_release_authorized": false,
+  "automated_purge_authorized": false,
+  "legal_review_completed": false,
+  "read_only_technical_inspection_only": true,
+  "blocked_missing_clock_tables": [
+    "api_v1_integrations",
+    "api_v1_quota_buckets",
+    "api_v1_idempotency_records",
+    "api_v1_inbox_events",
+    "api_v1_outbox_events"
+  ],
+  "items": [
+    {
+      "table": "api_v1_integrations",
+      "prisma_model": "ApiIntegration",
+      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "observed_prisma_fields": [
+        "status",
+        "updatedAt"
+      ],
+      "missing_recommended_prisma_fields": [
+        "disabledAt"
+      ],
+      "technical_evidence": "updatedAt is changed by many edits; cannot prove actual definitive disablement",
+      "technical_precondition": "Write immutable disabledAt on active→disabled and define reactivation/resets before retention begins",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_credentials",
+      "prisma_model": "ApiCredential",
+      "technical_clock_state": "DERIVABLE_WITH_DEPENDENCY_GATES",
+      "observed_prisma_fields": [
+        "revokedAt",
+        "expiresAt"
+      ],
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Revocation and expiration dates exist; only inactive keys qualify",
+      "technical_precondition": "Use conservative later applicable event, verify no live keys, quota references, security investigations or legal holds",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "tenant_entitlement_grants",
+      "prisma_model": "TenantEntitlementGrant",
+      "technical_clock_state": "DERIVABLE_WITH_DEPENDENCY_GATES",
+      "observed_prisma_fields": [
+        "expiresAt",
+        "revokedAt"
+      ],
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Grant expiration/revocation timestamps recorded",
+      "technical_precondition": "Verify grants actually ended, preserve approval evidence and any outstanding obligations",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_credential_audits",
+      "prisma_model": "ApiCredentialAudit",
+      "technical_clock_state": "DERIVABLE_WITH_DEPENDENCY_GATES",
+      "observed_prisma_fields": [
+        "createdAt",
+        "credentialId"
+      ],
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Audit event has timestamp, but the relevant last activity is across related audit events",
+      "technical_precondition": "Aggregate MAX(createdAt) by credential with tenant isolation; no purge during incidents or legal hold",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_quota_buckets",
+      "prisma_model": "ApiV1QuotaBucket",
+      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "observed_prisma_fields": [
+        "windowStart"
+      ],
+      "missing_recommended_prisma_fields": [
+        "windowEnd"
+      ],
+      "technical_evidence": "No durable per-bucket window end; configured duration could evolve across operations and releases",
+      "technical_precondition": "Persist verified windowEnd or separately version windows per operation, never reset live quotas",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_idempotency_records",
+      "prisma_model": "ApiV1IdempotencyRecord",
+      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "observed_prisma_fields": [
+        "createdAt"
+      ],
+      "missing_recommended_prisma_fields": [
+        "completedAt"
+      ],
+      "technical_evidence": "Creation does not attest end of dedupe horizon or connected delivery chain",
+      "technical_precondition": "Record terminal completion and check inbox/outbox/delivery descendants before any purge",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_inbox_events",
+      "prisma_model": "ApiV1InboxEvent",
+      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "observed_prisma_fields": [
+        "createdAt",
+        "state"
+      ],
+      "missing_recommended_prisma_fields": [
+        "finalizedAt"
+      ],
+      "technical_evidence": "State without a durable transition timestamp cannot anchor retention after completion",
+      "technical_precondition": "Record terminal finalizedAt, confirm outbox/retries settled and evidence preserved",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_outbox_events",
+      "prisma_model": "ApiV1OutboxEvent",
+      "technical_clock_state": "BLOCKED_MISSING_EVENT_CLOCK",
+      "observed_prisma_fields": [
+        "updatedAt",
+        "state",
+        "leaseUntil"
+      ],
+      "missing_recommended_prisma_fields": [
+        "finalizedAt"
+      ],
+      "technical_evidence": "updatedAt is not proof of completed/dlq reconciled event, and leaseUntil is not finalization",
+      "technical_precondition": "Store terminal finalizedAt and document DLQ resolution/retries and attempt dependencies",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_webhook_replays",
+      "prisma_model": "ApiV1WebhookReplay",
+      "technical_clock_state": "CLOCK_RECORDED_POLICY_PENDING",
+      "observed_prisma_fields": [
+        "expiresAt"
+      ],
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Verifier expiry already stored; candidate 24h afterward exists only in synthetic CI",
+      "technical_precondition": "Approve actual replay window and anti-abuse extensions before any timed pruning",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    },
+    {
+      "table": "api_v1_delivery_attempts",
+      "prisma_model": "ApiV1DeliveryAttempt",
+      "technical_clock_state": "DERIVABLE_WITH_DEPENDENCY_GATES",
+      "observed_prisma_fields": [
+        "finishedAt",
+        "outboxEventId"
+      ],
+      "missing_recommended_prisma_fields": [],
+      "technical_evidence": "Each finished attempt has a timestamp, but parent chain can remain open",
+      "technical_precondition": "Require finishedAt and terminal parent outbox state; compute last attempt after all retries are resolved",
+      "legal_and_owner_approval": "PENDING",
+      "cleanup_authorized": false
+    }
+  ]
+}
