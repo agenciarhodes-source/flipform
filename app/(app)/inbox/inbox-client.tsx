@@ -246,9 +246,6 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   const metadata = message.metadata as Record<string, unknown>;
   const src = `/api/inbox/messages/${encodeURIComponent(message.id)}/media`;
   const fileName = typeof metadata.mediaFileName === 'string' ? metadata.mediaFileName : 'Documento';
-  if (failed) {
-    return <p className="mb-1 text-xs italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Arquivo'} indisponível (a Meta guarda os arquivos por 30 dias).</p>;
-  }
   // A plain link (no new tab): phones save the file with its name.
   const save = (
     <a href={`${src}?download=1`} download className={`mb-1 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
@@ -264,6 +261,23 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
             className={`${message.type === 'sticker' ? 'h-28 w-28 object-contain' : 'max-h-72 w-auto max-w-full rounded-lg object-cover'}`} />
         </a>
         {message.type === 'image' && <div className="mt-1">{save}</div>}
+      </div>
+    );
+  }
+  if (failed && message.type === 'audio') {
+    // WhatsApp voice notes are OGG/Opus: Safari (iPhone, iPad, older Macs) may not play them here.
+    return (
+      <div className="mb-1 space-y-1">
+        <p className="text-xs italic opacity-75">Este navegador não conseguiu tocar o áudio. Baixe para ouvir, ou abra o FlipForm no Google Chrome.</p>
+        {save}
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div className="mb-1 space-y-1">
+        <p className="text-xs italic opacity-75">Não foi possível mostrar este arquivo aqui. Tente baixar.</p>
+        {save}
       </div>
     );
   }
