@@ -43,7 +43,7 @@ import { conversationDocumentContext, documentNote, readWhatsAppDocument } from 
 import { extractTeamTask, TEAM_TASK_INSTRUCTION } from './team-task-rules';
 import { TEAM_VOICE_RULE } from '@/lib/flip-ai/team-voice';
 import { createWhatsAppTeamTask } from './team-task';
-import { customerAsksVideoCall, extractVideoCall, VIDEO_CALL_INSTRUCTION, VIDEO_CALL_REPLY } from './video-call-rules';
+import { customerAsksVideoCall, extractVideoCall, VIDEO_CALL_INSTRUCTION } from './video-call-rules';
 import { handOffForVideoCall } from './video-call';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
@@ -565,6 +565,14 @@ export async function replyToWhatsAppConversation(input: {
         : context.messages,
     };
 
+    // The customer asked for a video call: a person of the team calls. The AI says nothing, only
+    // creates the urgent task for the lead's attendant and leaves the conversation to her.
+    if (customerAsksVideoCall(turnText)) {
+      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id, agentId: runtime.id });
+      await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_VIDEO_CALL_HANDOFF' }, 'response');
+      return { replied: false, reason: 'video_call_handoff' };
+    }
+
     const raw = await executeFlipAiConversationResponse({
       tenantId: input.tenantId,
       conversationId: conversation.id,
@@ -577,11 +585,12 @@ export async function replyToWhatsAppConversation(input: {
     // A task for the team never reaches the customer: it is taken out of the reply here.
     const teamTask = extractTeamTask(parsed.reply);
     parsed.reply = teamTask.reply;
-    // A video call is made by the attendant: the AI confirms and hands the conversation over.
-    const videoCall = extractVideoCall(parsed.reply);
-    parsed.reply = videoCall.reply;
-    const wantsVideoCall = videoCall.requested || customerAsksVideoCall(turnText);
-    if (wantsVideoCall && (!videoCall.requested || !parsed.reply.trim())) parsed.reply = VIDEO_CALL_REPLY;
+    // The customer accepted the video call: same as asking for it, nothing is sent.
+    if (extractVideoCall(parsed.reply).requested) {
+      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id, agentId: runtime.id });
+      await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_VIDEO_CALL_HANDOFF' }, 'response');
+      return { replied: false, reason: 'video_call_handoff' };
+    }
     const closingSend = extractSendDocuments(parsed.reply);
     parsed.reply = closingSend.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
@@ -678,10 +687,6 @@ export async function replyToWhatsAppConversation(input: {
       agentId: runtime.id,
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
-    if (wantsVideoCall) {
-      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id })
-        .catch((error) => console.error('WhatsApp AI video call handoff failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
-    }
     if (teamTask.task) {
       await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task, urgent: teamTask.urgent })
         .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));

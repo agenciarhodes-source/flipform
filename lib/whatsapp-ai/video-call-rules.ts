@@ -1,7 +1,7 @@
 /**
- * Video call on WhatsApp: a customer who asks for one (or accepts the one offered) is handed to the
- * lead's attendant at once. The AI confirms in one short message and stops answering in the
- * conversation; the attendant gets an URGENT task with an on-screen reminder to call now.
+ * Video call on WhatsApp: a customer who asks for one (or accepts the one offered) is for a person
+ * of the team. The AI sends nothing: it creates an URGENT task with an on-screen reminder for the
+ * lead's attendant (or the next one of the queue) and stops answering in the conversation.
  * Pure rules, easy to test.
  */
 
@@ -19,15 +19,9 @@ const ASKS = new RegExp([
 ].join('|'), 'i');
 
 export const VIDEO_CALL_INSTRUCTION = [
-  'CHAMADA DE VÍDEO: se o cliente pedir uma chamada de vídeo (ou aceitar a chamada de vídeo que você ofereceu), quem faz é a',
-  'nossa atendente. Responda numa mensagem curta confirmando que a atendente vai chamar por vídeo neste WhatsApp em instantes',
-  '(por exemplo: "Perfeito! Nossa atendente vai te chamar por vídeo aqui neste WhatsApp em instantes."), sem fazer novas',
-  'perguntas e sem marcar horário, e escreva no FIM, numa linha separada: [CHAMADA_VIDEO]. O cliente não vê essa linha.',
-  'Depois disso a atendente assume a conversa.',
+  'CHAMADA DE VÍDEO: se o cliente aceitar uma chamada de vídeo (ou pedir uma), quem faz é a nossa equipe. Não escreva nada',
+  'para o cliente: responda somente [CHAMADA_VIDEO]. Nunca diga que vai chamar ou transferir para alguém.',
 ].join(' ');
-
-/** What the customer sees when the AI hands the conversation over without a reply of its own. */
-export const VIDEO_CALL_REPLY = 'Perfeito! Nossa atendente vai te chamar por vídeo aqui neste WhatsApp em instantes.';
 
 /** "Não quero chamada de vídeo", "sem vídeo": a refusal is not a request. */
 const REFUSES = /(^|[^a-zà-ú])(n[ãa]o|nem|sem)\s[^.!?\n]{0,25}v[ií]deo/i;
@@ -54,7 +48,7 @@ export function videoCallTask(input: { customerName: string; conversationId: str
     title: `URGENTE · Chamada de vídeo: ${input.customerName}`.slice(0, 190),
     description: [
       'O cliente pediu uma chamada de vídeo no WhatsApp. Ligue por vídeo agora, pelo WhatsApp da empresa.',
-      'A IA confirmou que a atendente vai chamar em instantes e parou de responder nesta conversa: ela é sua.',
+      'A IA não respondeu nada ao cliente e parou de responder nesta conversa: ela é sua.',
       `Conversa: ${base}/inbox?conversationId=${encodeURIComponent(input.conversationId)}`,
       input.leadId ? `Lead: ${base}/leads?leadId=${encodeURIComponent(input.leadId)}` : '',
       'Depois da chamada, conclua esta tarefa. Para a IA voltar a responder, devolva a conversa para a IA no Inbox.',
