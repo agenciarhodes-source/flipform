@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from api_v1_homologation_preflight import verify, EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL
+from api_v1_homologation_preflight import verify, EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL, CANDIDATES
 
 class HomologationPreflightTest(unittest.TestCase):
     def test_snapshot_is_a_hold_not_release(self):
@@ -20,12 +20,12 @@ class HomologationPreflightTest(unittest.TestCase):
         self.assertFalse(result["staging_schema_ready"])
         self.assertEqual(result["pending_fk_retention_decisions"], 10)
 
-    def make_tree(self, folder, evidence=None, vercel=None, hold=None, retention=None, proposal=None):
-        for file in (EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL):
+    def make_tree(self, folder, evidence=None, vercel=None, hold=None, retention=None, proposal=None, candidates=None):
+        for file in (EVIDENCE, VERCEL, PR01_HOLD, RETENTION, PROPOSAL, CANDIDATES):
             target = folder / file.relative_to(ROOT)
             target.parent.mkdir(parents=True, exist_ok=True)
             original = json.loads(file.read_text(encoding="utf-8"))
-            replacement = {EVIDENCE:evidence, VERCEL:vercel, PR01_HOLD:hold, RETENTION:retention, PROPOSAL:proposal}[file]
+            replacement = {EVIDENCE:evidence, VERCEL:vercel, PR01_HOLD:hold, RETENTION:retention, PROPOSAL:proposal, CANDIDATES:candidates}[file]
             target.write_text(json.dumps(original if replacement is None else replacement))
         for path in (
             "app/api/v1/capabilities/route.ts",
@@ -142,6 +142,42 @@ class HomologationPreflightTest(unittest.TestCase):
                 root=Path(tmp)
                 self.make_tree(root,proposal=fake)
                 with self.assertRaises(ValueError): verify(root)
+
+    def test_candidate_retention_is_not_policy(self):
+        record = json.loads(CANDIDATES.read_text())
+        self.assertEqual(record["state"], "DISCUSSION_DRAFT")
+        self.assertEqual(len(record["items"]), 10)
+        self.assertFalse(record["may_enable_cleanup"])
+        self.assertFalse(record["may_enable_production"])
+
+    def test_fake_candidate_release_must_fail(self):
+        original = json.loads(CANDIDATES.read_text())
+        for field,value in (("state", "APPROVED"),
+                            ("legal_review_completed", True),
+                            ("owner_final_approval", True),
+                            ("may_enable_cleanup", True)):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                fake = copy.deepcopy(original)
+                fake[field] = value
+                root = Path(tmp)
+                self.make_tree(root,candidates=fake)
+                with self.assertRaises(ValueError): verify(root)
+
+    def test_candidate_missing_row_or_unbounded_retention_fails(self):
+        original=json.loads(CANDIDATES.read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(original)
+            fake["items"].pop()
+            root=Path(tmp)
+            self.make_tree(root,candidates=fake)
+            with self.assertRaises(ValueError): verify(root)
+        with tempfile.TemporaryDirectory() as tmp:
+            fake=copy.deepcopy(original)
+            fake["items"][0]["candidate_retention_days"]=0
+            root=Path(tmp)
+            self.make_tree(root,candidates=fake)
+            with self.assertRaises(ValueError): verify(root)
+
 
 if __name__=="__main__":
     unittest.main()

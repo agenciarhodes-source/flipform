@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "title": "PR629 - candidate retention periods for API v1 only",
+  "created_at": "2026-11-23",
+  "state": "DISCUSSION_DRAFT",
+  "review_status": "NEEDS_OWNER_AND_LEGAL_REVIEW",
+  "is_binding_policy": false,
+  "legal_review_completed": false,
+  "owner_final_approval": false,
+  "may_enable_production": false,
+  "may_enable_cleanup": false,
+  "may_change_release_gates": false,
+  "source_workbook": "docs/security/api-v1-retention-decision-workbook-20261122.json",
+  "scope": "Somente 10 tabelas novas da API v1, NAO os dados de lead do CRM, backups, fiscal, marketing ou conteudos de saude",
+  "notice": "Valores propostos como ponto de partida e NAO prazos previstos em lei. Dependencias, operacao, contrato e revisao juridica podem exigir outros prazos ou eliminar antes.",
+  "exceptions_policy": "Nao expurgar dados sob reclamacao, ordem legal, litígio, auditoria ou integracao dependente; qualquer excecao requer motivo, responsavel e data de reavaliacao e nao autoriza guarda indefinida",
+  "roles_requiring_review": [
+    "Controladora vs operadora: destino, contratos e instrucoes do cliente",
+    "Bases legais dos arts. 7 e 11 quando aplicavel, sem presumir legitimo interesse para dados sensiveis",
+    "Exclusao/anomizacao e acesso dos titulares inclusive direitos do art. 18",
+    "Fluxos de hard delete e FKs RESTRICT nas 10 tabelas",
+    "Prazo razoavel de hold e revisao periôdica"
+  ],
+  "official_references": [
+    "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm",
+    "https://www.gov.br/anpd/pt-br/acesso-a-informacao/perguntas-frequentes",
+    "https://www.gov.br/anpd/pt-br/centrais-de-conteudo/materiais-educativos-e-publicacoes/guia-orientativo-para-definicoes-dos-agentes-de-tratamento-de-dados-pessoais-e-do-encarregado"
+  ],
+  "items": [
+    {
+      "table": "api_v1_integrations",
+      "category": "integration_configuration",
+      "source_parent_table": "tenants",
+      "candidate_retention_days": 90,
+      "candidate_start_event": "Desativação definitiva da integração, após conciliação de todas as dependências",
+      "technical_rationale": "Janela curta para desfazer erros administrativos ou resolver encerramento contratual; configuração desvinculada depois de cessada a finalidade",
+      "do_not_purge_if": [
+        "Credenciais ou eventos dependentes pendentes",
+        "Retenção obrigatória ou litígio individualmente documentados"
+      ],
+      "suggested_disposal": "Excluir configuração ou reduzir vínculos após análise de FKs; não eliminar auditoria crítica em cascata",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_credentials",
+      "category": "credential_history",
+      "source_parent_table": "api_v1_integrations",
+      "candidate_retention_days": 180,
+      "candidate_start_event": "Revogação ou expiração efetiva da chave, o que ocorrer por último",
+      "technical_rationale": "Permitir investigação de abuso e correlação de chaves usadas; nunca conservar token bruto",
+      "do_not_purge_if": [
+        "Chave ainda ativa",
+        "Investigação de segurança aberta",
+        "Auditoria/quotas dependentes ainda retidas"
+      ],
+      "suggested_disposal": "Eliminar hash e metadados após prazo/pendências; trilhas de auditoria seguem prazo próprio",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "tenant_entitlement_grants",
+      "category": "access_grant_evidence",
+      "source_parent_table": "tenants",
+      "candidate_retention_days": 365,
+      "candidate_start_event": "Fim/revogação de concessão excepcional",
+      "technical_rationale": "Comprovação de quem autorizou acesso excepcional e tratamento de contestação; reduzir justificativas com identificadores",
+      "do_not_purge_if": [
+        "Reclamação ou contestação aberta",
+        "Base legal contratual/regulatória específica a avaliar"
+      ],
+      "suggested_disposal": "Eliminar ou anonimizar concessão e justificativa quando nenhuma evidência obrigatória restar",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_credential_audits",
+      "category": "security_audit_critical",
+      "source_parent_table": "tenants",
+      "candidate_retention_days": 365,
+      "candidate_start_event": "Último evento relevante de emissão, rotação ou revogação associado",
+      "technical_rationale": "Trilha operacional de segurança para esclarecer eventos e revogações; proteção por acesso restrito",
+      "do_not_purge_if": [
+        "Incidente ou investigação em aberto",
+        "Preservação específica legal documentada"
+      ],
+      "suggested_disposal": "Expurgo auditado ou arquivo minimizado conforme base legal aprovada, não por cascade",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_quota_buckets",
+      "category": "rate_limit_integrity",
+      "source_parent_table": "api_v1_credentials",
+      "candidate_retention_days": 7,
+      "candidate_start_event": "Fim efetivo da janela de limitação (window_start + duração configurada)",
+      "technical_rationale": "Registro transitório necessário para evitar zerar contadores e permitir diagnóstico operacional curto",
+      "do_not_purge_if": [
+        "Janela ainda vigente",
+        "Evento de abuso pendente documentado"
+      ],
+      "suggested_disposal": "Limpeza por lotes com limites de tenant e logs de contagem, após janela segura",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_idempotency_records",
+      "category": "idempotency_integrity",
+      "source_parent_table": "api_v1_integrations",
+      "candidate_retention_days": 30,
+      "candidate_start_event": "Conclusão da operação e encerramento da deduplicação, sem entregas ou retries pendentes",
+      "technical_rationale": "Reduzir duplicações após reenvio sem reter hashes indefinidamente",
+      "do_not_purge_if": [
+        "Inbox/outbox dependente",
+        "Retry, DLQ, entrega ou disputa em aberto"
+      ],
+      "suggested_disposal": "Expurgo após fechamento da cadeia referencial, em ordem segura",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_inbox_events",
+      "category": "event_chain_evidence",
+      "source_parent_table": "api_v1_idempotency_records",
+      "candidate_retention_days": 90,
+      "candidate_start_event": "Evento concluído e conciliado, sem dependentes/pendências",
+      "technical_rationale": "Janela limitada de suporte e diagnóstico pós-processamento de eventos",
+      "do_not_purge_if": [
+        "Evento held, queued, retry ou em investigação",
+        "Outbox/entregas dependentes não concluídas"
+      ],
+      "suggested_disposal": "Expurgo/anonimização sem perder eventos necessários ao suporte e auditoria",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_outbox_events",
+      "category": "delivery_chain_evidence",
+      "source_parent_table": "api_v1_inbox_events",
+      "candidate_retention_days": 90,
+      "candidate_start_event": "Entrega concluída e reconciliada ou DLQ resolvida formalmente",
+      "technical_rationale": "Reconciliar entregas, retries e estados, evitando retenção sem conclusão",
+      "do_not_purge_if": [
+        "Lease ativo, retry pendente ou DLQ não resolvida",
+        "Tentativa ou auditoria crítica dependente"
+      ],
+      "suggested_disposal": "Expurgo de estado final após conciliação e fechamento dos dependentes",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_webhook_replays",
+      "category": "webhook_replay_defense",
+      "source_parent_table": "api_v1_integrations",
+      "candidate_retention_days": 1,
+      "candidate_start_event": "Expiração do nonce do webhook (expires_at)",
+      "technical_rationale": "Proteção adicional candidata de 24h pós-expiração, inspirada apenas pelo ensaio sintético PR01, não homologada para produção",
+      "do_not_purge_if": [
+        "Período antirreplay ainda ativo",
+        "Tentativa de abuso sob investigação"
+      ],
+      "suggested_disposal": "Remoção por lotes de hashes expirados com proteção contra replay e contagem auditada",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    },
+    {
+      "table": "api_v1_delivery_attempts",
+      "category": "delivery_audit_critical",
+      "source_parent_table": "api_v1_outbox_events",
+      "candidate_retention_days": 180,
+      "candidate_start_event": "Última tentativa concluída, após o encerramento do evento/outbox",
+      "technical_rationale": "Histórico de erro e entrega para investigação com menor exposição de payload",
+      "do_not_purge_if": [
+        "Falha ou disputa aberta",
+        "Evento de origem ainda ativo ou legal hold individual"
+      ],
+      "suggested_disposal": "Arquivo minimizado ou expurgo controlado por lote sem apagar auditoria exigida",
+      "legal_basis_for_review": null,
+      "contract_role_review": "Verificar se Pollo atua como controladora deste registro de segurança ou operadora sob instruções do cliente",
+      "retention_policy_status": "NOT_APPROVED",
+      "cleanup_job_authorized": false,
+      "hard_delete_authorized": false
+    }
+  ]
+}

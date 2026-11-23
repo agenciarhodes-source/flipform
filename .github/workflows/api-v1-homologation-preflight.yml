@@ -13,6 +13,8 @@ on:
       - 'docs/security/api-v1-retention-decision-workbook-20261122.json'
       - 'docs/security/api-v1-retention-approval-guide-20261122.md'
       - 'docs/security/api-v1-retention-owner-review-20261123.md'
+      - 'docs/security/api-v1-retention-candidate-periods-20261123.json'
+      - 'docs/security/api-v1-retention-candidate-periods-20261123.md'
       - 'docs/security/api-v1-pitr-egress-review-20261122.md'
       - 'scripts/api_v1_egress_static_guard.py'
       - 'tests/test_api_v1_egress_static_guard.py'

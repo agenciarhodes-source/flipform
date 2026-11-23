@@ -17,6 +17,7 @@ EVIDENCE = ROOT / "docs/security/api-v1-homologation-evidence-20261121.json"
 PR01_HOLD = ROOT / "docs/security/pr01-staging-release-gates-DRAFT.json"
 RETENTION = ROOT / "docs/security/pr01-phase9-retention-decision-matrix.json"
 PROPOSAL = ROOT / "docs/security/api-v1-retention-decision-workbook-20261122.json"
+CANDIDATES = ROOT / "docs/security/api-v1-retention-candidate-periods-20261123.json"
 VERCEL = ROOT / "vercel.json"
 BRANCH = "security/api-v1-homologation-20261121"
 
@@ -58,6 +59,7 @@ def verify(root: Path = ROOT) -> dict:
     manifest = load(root / PR01_HOLD.relative_to(ROOT))
     retention = load(root / RETENTION.relative_to(ROOT))
     proposal = load(root / PROPOSAL.relative_to(ROOT))
+    candidates = load(root / CANDIDATES.relative_to(ROOT))
     vercel = load(root / VERCEL.relative_to(ROOT))
     require(evidence.get("schema_version") == 1 and evidence.get("decision") == "NO_GO",
             "Homologation evidence must remain a dated NO_GO snapshot")
@@ -156,6 +158,47 @@ def verify(root: Path = ROOT) -> dict:
             and governance.get("personal_data_officer_appointed_by_this_record") is False
             and governance.get("final_release_authorized") is False,
             "Owner designation must not be mistaken for legal review or release approval")
+    require(candidates.get("schema_version") == 1
+            and candidates.get("created_at") == "2026-11-23"
+            and candidates.get("state") == "DISCUSSION_DRAFT"
+            and candidates.get("review_status") == "NEEDS_OWNER_AND_LEGAL_REVIEW"
+            and candidates.get("source_workbook") == str(PROPOSAL.relative_to(ROOT)),
+            "Retention periods are only discussion candidates")
+    for attr in ("is_binding_policy", "legal_review_completed",
+                 "owner_final_approval", "may_enable_production",
+                 "may_enable_cleanup", "may_change_release_gates"):
+        require(candidates.get(attr) is False,
+                "Candidate retention cannot silently authorize: " + attr)
+    source_rows = proposal.get("items", [])
+    candidate_rows = candidates.get("items", [])
+    require(isinstance(candidate_rows, list)
+            and len(candidate_rows) == len(source_rows) == 10,
+            "Candidate retention must cover all 10 API relationships")
+    source_by_table = {x["child_table"]: x for x in source_rows}
+    seen_tables = set()
+    for row in candidate_rows:
+        require(isinstance(row, dict), "Invalid retention candidate")
+        table = row.get("table")
+        require(table in source_by_table and table not in seen_tables
+                and row.get("category") == source_by_table[table]["category"]
+                and row.get("source_parent_table") == source_by_table[table]["parent_table"],
+                "Retention candidate does not match source matrix")
+        require(type(row.get("candidate_retention_days")) is int
+                and 1 <= row["candidate_retention_days"] <= 3660,
+                "Retention proposal must contain a bounded candidate in days")
+        require(row.get("retention_policy_status") == "NOT_APPROVED"
+                and row.get("legal_basis_for_review") is None
+                and row.get("cleanup_job_authorized") is False
+                and row.get("hard_delete_authorized") is False,
+                "Candidate cannot become an approved retention rule")
+        require(isinstance(row.get("technical_rationale"), str)
+                and len(row["technical_rationale"]) >= 30
+                and isinstance(row.get("candidate_start_event"), str)
+                and len(row["candidate_start_event"]) >= 20
+                and isinstance(row.get("do_not_purge_if"), list)
+                and len(row["do_not_purge_if"]) >= 1,
+                "Candidate rationale or dependency missing")
+        seen_tables.add(table)
     proposed_items = proposal.get("items")
     source_items = retention.get("fk_decisions", [])
     require(isinstance(proposed_items, list) and len(proposed_items) == 10,
