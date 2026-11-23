@@ -43,6 +43,8 @@ import { conversationDocumentContext, documentNote, readWhatsAppDocument } from 
 import { extractTeamTask, TEAM_TASK_INSTRUCTION } from './team-task-rules';
 import { TEAM_VOICE_RULE } from '@/lib/flip-ai/team-voice';
 import { createWhatsAppTeamTask } from './team-task';
+import { customerAsksVideoCall, extractVideoCall, VIDEO_CALL_INSTRUCTION, VIDEO_CALL_REPLY } from './video-call-rules';
+import { handOffForVideoCall } from './video-call';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
@@ -163,6 +165,7 @@ function whatsappInstructions(input: {
     'Se o cliente pedir para falar com alguém, responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE.',
     TEAM_VOICE_RULE,
     TEAM_TASK_INSTRUCTION,
+    VIDEO_CALL_INSTRUCTION,
     'NÃO SE REPITA: antes de responder, leia as suas últimas mensagens. Não repita frases, pedidos ou explicações que você já deu.'
       + ' Se o cliente só agradeceu, confirmou ("certo", "ok, obrigada") ou disse que vai mandar depois, responda curto (uma frase),'
       + ' sem repetir o pedido, e respeite o prazo que ele deu (por exemplo: "Combinado! Fico no aguardo.").',
@@ -574,6 +577,11 @@ export async function replyToWhatsAppConversation(input: {
     // A task for the team never reaches the customer: it is taken out of the reply here.
     const teamTask = extractTeamTask(parsed.reply);
     parsed.reply = teamTask.reply;
+    // A video call is made by the attendant: the AI confirms and hands the conversation over.
+    const videoCall = extractVideoCall(parsed.reply);
+    parsed.reply = videoCall.reply;
+    const wantsVideoCall = videoCall.requested || customerAsksVideoCall(turnText);
+    if (wantsVideoCall && (!videoCall.requested || !parsed.reply.trim())) parsed.reply = VIDEO_CALL_REPLY;
     const closingSend = extractSendDocuments(parsed.reply);
     parsed.reply = closingSend.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
@@ -670,6 +678,10 @@ export async function replyToWhatsAppConversation(input: {
       agentId: runtime.id,
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    if (wantsVideoCall) {
+      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id })
+        .catch((error) => console.error('WhatsApp AI video call handoff failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
+    }
     if (teamTask.task) {
       await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task, urgent: teamTask.urgent })
         .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
