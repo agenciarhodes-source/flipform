@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { attendantSpeed, formatDuration, median, parseAttendantReview } from '../lib/reports/attendance-productivity-rules';
+import {
+  attendantSpeed, formatDuration, goalProgress, median, parseAttendantReview, recentWeeks, suggestedGoal, weekStart,
+} from '../lib/reports/attendance-productivity-rules';
 
 const at = (minutes: number) => new Date(Date.UTC(2026, 9, 20, 12, 0) + minutes * 60_000);
 const range = { from: at(-60), to: at(1_000) };
@@ -66,4 +68,62 @@ test('a avaliação só aceita pessoas enviadas e limita nota e listas', () => {
   assert.equal(parsed.attendants[0].score, 10);
   assert.equal(parsed.attendants[0].strengths.length, 3);
   assert.equal(parsed.attendants[0].name, 'Ana');
+});
+
+const HOUR = 60;
+const msg = (conversationId: string, direction: string, minutes: number, sentByUserId: string | null = null, fromAi = false) => (
+  { conversationId, direction, sentByUserId, fromAi, at: at(minutes) }
+);
+
+test('conversa iniciada: a pessoa escreve com o cliente quieto há mais de 24 h; retorno quando ele responde', () => {
+  const wide = { from: at(-10 * 24 * HOUR), to: at(10 * 24 * HOUR) };
+  const stats = attendantSpeed([
+    // c1: first contact, customer answers, the person replies (not a new initiative).
+    msg('c1', 'outbound', 0, 'u1'),
+    msg('c1', 'outbound', 1, 'u1'),
+    msg('c1', 'inbound', 30),
+    msg('c1', 'outbound', 40, 'u1'),
+    // c2: the customer wrote 2 h ago: answering is not starting a conversation.
+    msg('c2', 'inbound', -2 * HOUR),
+    msg('c2', 'outbound', 0, 'u1'),
+    // c3: follow-ups on two different days, no answer.
+    msg('c3', 'inbound', -3 * 24 * HOUR),
+    msg('c3', 'outbound', 0, 'u1'),
+    msg('c3', 'outbound', 2 * HOUR, 'u1'),
+    msg('c3', 'outbound', 25 * HOUR, 'u1'),
+    // c4: the AI writes first: nobody started it.
+    msg('c4', 'outbound', 0, null, true),
+  ], wide);
+  const u1 = stats.get('u1')!;
+  assert.equal(u1.initiated, 3);
+  assert.equal(u1.initiatedAnswered, 1);
+  assert.equal(u1.conversations, 3);
+});
+
+test('iniciada fora do período não conta, mas a anterior ao período evita contar de novo', () => {
+  const stats = attendantSpeed([
+    msg('c1', 'outbound', -30, 'u1'),
+    msg('c1', 'outbound', 10, 'u1'),
+  ], { from: at(0), to: at(100) });
+  assert.equal(stats.get('u1')!.initiated, 0);
+  assert.equal(stats.get('u1')!.messages, 1);
+});
+
+test('semana começa na segunda 00:00 de São Paulo', () => {
+  // Monday 23/11/2026 02:00 UTC is still Sunday 22/11 23:00 in São Paulo.
+  assert.equal(weekStart(new Date('2026-11-23T02:00:00Z')).toISOString(), '2026-11-16T03:00:00.000Z');
+  assert.equal(weekStart(new Date('2026-11-23T15:00:00Z')).toISOString(), '2026-11-23T03:00:00.000Z');
+  const weeks = recentWeeks(new Date('2026-11-25T15:00:00Z'), 3);
+  assert.deepEqual(weeks.map((week) => week.from.toISOString()), ['2026-11-23T03:00:00.000Z', '2026-11-16T03:00:00.000Z', '2026-11-09T03:00:00.000Z']);
+  assert.equal(weeks[0].current, true);
+  assert.equal(weeks[1].to.toISOString(), '2026-11-23T02:59:59.999Z');
+});
+
+test('meta sugerida e progresso', () => {
+  assert.equal(suggestedGoal([]), null);
+  assert.equal(suggestedGoal([0, 0]), null);
+  assert.equal(suggestedGoal([10, 20, 0]), 17);
+  assert.equal(goalProgress(5, 10), 50);
+  assert.equal(goalProgress(15, 10), 100);
+  assert.equal(goalProgress(5, null), null);
 });
