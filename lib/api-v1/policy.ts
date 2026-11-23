@@ -41,6 +41,30 @@ export function apiV1Enabled(env: Record<string, string | undefined>): boolean {
   return env.FLIPFORM_API_V1_ENABLED === 'true';
 }
 
+/**
+ * Fail-closed tenant pilot gate for deployed builds.
+ * A global enabled flag is never authorization to expose all paid tenants.
+ *
+ * Set FLIPFORM_API_V1_PILOT_TENANT_IDS to up to 10 approved tenant UUIDs,
+ * comma-separated. Empty, wildcard, malformed and duplicate lists deny all.
+ * This is independent of subscription and scoped credential checks.
+ */
+export function apiV1PilotTenantAllowed(
+  tenantId: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  if (!apiV1Enabled(env) || !tenantId) return false;
+  // Keep existing isolated tests and explicit local test doubles usable.
+  if (env.NODE_ENV === 'test') return true;
+  const configured = env.FLIPFORM_API_V1_PILOT_TENANT_IDS;
+  if (!configured || configured.length > 400) return false;
+  const entries = configured.split(',').map(value => value.trim().toLowerCase());
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+  if (entries.length > 10 || entries.some(value => !uuid.test(value))
+      || new Set(entries).size !== entries.length) return false;
+  return entries.includes(tenantId.toLowerCase());
+}
+
 /** An entitlement must be derived by trusted backend DB queries every request. */
 export function apiV1Entitled(tenantId: string, e: ApiV1Entitlement | null): boolean {
   if (!tenantId || !e || e.tenantId !== tenantId || !e.featureEnabled) return false;
