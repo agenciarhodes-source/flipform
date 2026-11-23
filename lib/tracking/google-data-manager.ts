@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { selectGoogleClickIdentifier, type GoogleClickIds } from './google-click-ids';
@@ -186,6 +187,7 @@ export async function getGoogleDataManagerAccessToken(
   serviceAccount: { clientEmail: string; privateKey: string },
   options: { fetchImpl?: FetchLike; nowMs?: number } = {},
 ): Promise<string | null> {
+  assertPr629NoExternalEgress('google-oauth');
   const nowMs = options.nowMs ?? Date.now();
   if (cachedToken && cachedToken.clientEmail === serviceAccount.clientEmail && cachedToken.expiresAtMs - 60_000 > nowMs) {
     return cachedToken.accessToken;
@@ -247,6 +249,7 @@ export async function sendGoogleConversionIngest(
 ): Promise<GoogleConversionSendOutcome> {
   let response: Response;
   try {
+    assertPr629NoExternalEgress('google-conversions');
     response = await (options.fetchImpl || fetch)(GOOGLE_DATA_MANAGER_INGEST_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },

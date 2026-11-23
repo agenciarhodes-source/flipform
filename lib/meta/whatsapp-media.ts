@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { META_PLATFORM_GRAPH_API_VERSION } from './oauth';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 /** Meta keeps a received file for 30 days; the largest WhatsApp document is 100 MB. */
 export const WHATSAPP_MEDIA_MAX_BYTES = 100 * 1024 * 1024;
@@ -16,6 +17,7 @@ export class WhatsAppMediaError extends Error {
  * Meta first returns a short-lived address for the file, which is then read with the same token.
  */
 export async function downloadWhatsAppMedia(input: { mediaId: string; accessToken: string }) {
+  assertPr629NoExternalEgress('whatsapp-media-download');
   if (!/^\d{1,64}$/.test(input.mediaId)) throw new WhatsAppMediaError('NOT_FOUND');
   const headers = { Authorization: `Bearer ${input.accessToken}` };
 
@@ -57,6 +59,7 @@ export async function uploadWhatsAppMedia(input: {
   mimeType: string;
   fileName: string;
 }) {
+  assertPr629NoExternalEgress('whatsapp-media-upload');
   if (!/^\d{1,64}$/.test(input.phoneNumberId)) throw new WhatsAppMediaError('UNAVAILABLE');
   const form = new FormData();
   form.append('messaging_product', 'whatsapp');

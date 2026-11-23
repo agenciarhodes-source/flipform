@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "context": "PR01 Draft safeguard with ten RESTRICT FK relations; final retention decisions and production approval remain pending",
+  "decision_status": "UNRESOLVED",
+  "production_release_authorized": false,
+  "approved_retention_periods": false,
+  "legal_hold_policy_approved": false,
+  "hard_delete_endpoint_authorized": false,
+  "approval_reference": null,
+  "default_deletion_strategy": "disable_or_revoke_not_delete; future implementation only; does not cover existing application routes",
+  "privacy_review_required": true,
+  "fk_decisions": [
+    {
+      "child_table": "api_v1_integrations",
+      "parent_table": "tenants",
+      "expected_action": "RESTRICT",
+      "category": "integration_configuration",
+      "decision": "PENDING",
+      "proposed_control": "Disable integration and revoke credentials first; forbid direct hard-delete until dependency and retention review"
+    },
+    {
+      "child_table": "api_v1_credentials",
+      "parent_table": "api_v1_integrations",
+      "expected_action": "RESTRICT",
+      "category": "credential_history",
+      "decision": "PENDING",
+      "proposed_control": "Revoke credentials, preserve key lifecycle evidence; hard-delete only via later approved retention process"
+    },
+    {
+      "child_table": "tenant_entitlement_grants",
+      "parent_table": "tenants",
+      "expected_action": "RESTRICT",
+      "category": "access_grant_evidence",
+      "decision": "PENDING",
+      "proposed_control": "Preserve approvals and revocations under reviewed legal hold and minimization policy"
+    },
+    {
+      "child_table": "api_v1_credential_audits",
+      "parent_table": "tenants",
+      "expected_action": "RESTRICT",
+      "category": "security_audit_critical",
+      "decision": "PENDING",
+      "proposed_control": "Remove implicit cascade before release or provide independently retained and access-controlled audit archive"
+    },
+    {
+      "child_table": "api_v1_quota_buckets",
+      "parent_table": "api_v1_credentials",
+      "expected_action": "RESTRICT",
+      "category": "rate_limit_integrity",
+      "decision": "PENDING",
+      "proposed_control": "Retain unexpired windows to prevent quota-reset abuse; define eventual cleanup separately"
+    },
+    {
+      "child_table": "api_v1_idempotency_records",
+      "parent_table": "api_v1_integrations",
+      "expected_action": "RESTRICT",
+      "category": "idempotency_integrity",
+      "decision": "PENDING",
+      "proposed_control": "Define dedupe horizon and prohibit deletion while linked events or retries are live"
+    },
+    {
+      "child_table": "api_v1_inbox_events",
+      "parent_table": "api_v1_idempotency_records",
+      "expected_action": "RESTRICT",
+      "category": "event_chain_evidence",
+      "decision": "PENDING",
+      "proposed_control": "No cascade deletion while event chain is held, pending, or under investigation"
+    },
+    {
+      "child_table": "api_v1_outbox_events",
+      "parent_table": "api_v1_inbox_events",
+      "expected_action": "RESTRICT",
+      "category": "delivery_chain_evidence",
+      "decision": "PENDING",
+      "proposed_control": "No cascade deletion before reconciliation of pending and dead-letter delivery"
+    },
+    {
+      "child_table": "api_v1_webhook_replays",
+      "parent_table": "api_v1_integrations",
+      "expected_action": "RESTRICT",
+      "category": "webhook_replay_defense",
+      "decision": "PENDING",
+      "proposed_control": "Preserve nonce deduplication during its security window; cleanup only by reviewed TTL"
+    },
+    {
+      "child_table": "api_v1_delivery_attempts",
+      "parent_table": "api_v1_outbox_events",
+      "expected_action": "RESTRICT",
+      "category": "delivery_audit_critical",
+      "decision": "PENDING",
+      "proposed_control": "Preserve attempt and failure evidence outside implicit parent-deletion cascades"
+    }
+  ]
+}

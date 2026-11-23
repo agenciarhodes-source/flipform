@@ -15,3 +15,54 @@ regexes = [
 paths = [
   '''package-lock\.json''',
 ]
+
+# PR01: a constant Prisma model->table mapping was flagged as generic-api-key
+# in commit ca1cc74e... (SARIF rule generic-api-key at auditor line 50).
+# This is not a credential. Suppress only the exact historical line and
+# two newly detected constant mapping lines in this audit file, not the rule.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "PR01 exact model-to-table constants in offline SQL auditor, no credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^scripts/pr00_a2c2_audit_sql\.py$''']
+regexes = [
+  '''^\s*"ApiIntegration":\s*"api_v1_integrations",?\s*$''',
+  '''^\s*\("ApiIntegration",\s*"api_v1_integrations"\),?\s*$''',
+  '''^\s*\("ApiV1QuotaBucket",\s*"api_v1_quota_buckets"\),?\s*$''',
+  '''^\s*\("ApiV1IdempotencyRecord",\s*"api_v1_idempotency_records"\),?\s*$''',
+  '''^\s*\("ApiV1DeliveryAttempt",\s*"api_v1_delivery_attempts"\),?\s*$''',
+]
+
+[[rules.allowlists]]
+description = "Exact historical synthetic fixture in unit test, not a real key"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^tests/pr01-durable-events\.integration\.test\.ts$''']
+regexes = [
+  '''^\s*const key = 'synthetic-idempotency-key-001';\s*$''',
+]
+
+# PR01 consolidation: ONLY three static child->parent FK graph literals,
+# confirmed in the SARIF output. No generic-api-key rule is disabled.
+[[rules.allowlists]]
+description = "PR01 exact FK graph constants, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^scripts/pr01_retention_release_gate\.py$''']
+regexes = [
+  '''^\s*"api_v1_credentials": "api_v1_integrations",\s*$''',
+  '''^\s*"api_v1_idempotency_records": "api_v1_integrations",\s*$''',
+  '''^\s*"api_v1_webhook_replays": "api_v1_integrations",\s*$''',
+]
+
+[[rules.allowlists]]
+description = "Exact historical PR01 inbox->idempotency FK graph line"
+condition = "AND"
+regexTarget = "line"
+paths = ['''^scripts/pr01_retention_release_gate\.py$''']
+regexes = [
+  '''^\s*"api_v1_inbox_events": "api_v1_idempotency_records",\s*$''',
+]

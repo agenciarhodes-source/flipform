@@ -65,6 +65,22 @@ jobs:
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
+      # PR01 Phase 1: pure M2M policies/credential verification, NO database connections.
+      - name: PR01 API v1 security foundation tests (offline)
+        run: npx tsx --test tests/pr01-api-foundation.test.ts
+
+      # PR02: bounded parser and cross-tenant denial, no DB or outbound I/O.
+      - name: PR02 read-only catalog policy tests (offline)
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr02-pipelines-read.test.ts tests/pr02-forms-catalog.test.ts tests/pr02-form-fields-read.test.ts tests/pr02-pipeline-metrics.test.ts tests/pr02-leads-metadata.test.ts tests/pr02-lead-detail.test.ts
+
+      # PR01 Phase 5: pure HMAC and SSRF policy. No DB or outbound traffic.
+      - name: PR01 webhook HMAC and SSRF policy tests (offline)
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr01-webhook-security.test.ts
+
       - name: Prisma generate
         run: npx prisma generate
 
@@ -177,6 +193,107 @@ jobs:
 
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
+
+      # PR01 Phase 2: synthetic-only isolation on the runner's disposable PostgreSQL.
+      # Never use Neon, Vercel, or external integrations in this suite.
+      - name: PR01 M2M persistence and tenant isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-m2m-persistence.integration.test.ts tests/pr629-key-list-active-visibility.test.ts
+
+      # PR01 closure: one full owner/M2M tenant circuit with disposable data.
+      - name: PR01 owner integration + authenticated capabilities (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-closure-m2m.integration.test.ts
+
+      # PR02 first useful read-only API route; strictly synthetic and local DB.
+      - name: PR02 tenant-isolated pipeline read (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-pipelines-read.integration.test.ts
+
+      - name: PR02 tenant-isolated forms catalog read (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-forms-catalog.integration.test.ts
+
+      # PR02 read-only lead stage counts. No PII leaves the endpoint; disposable DB only.
+      - name: PR02 tenant-isolated pipeline metrics (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-pipeline-metrics.integration.test.ts
+
+      # PR02 protected lead metadata; only synthetic tenants on disposable localhost DB.
+      - name: PR02 tenant-isolated lead metadata catalog (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr02-leads-metadata.integration.test.ts
+
+      # PR01 Phase 4: synthetic-only event replay and cross-tenant FK constraints.
+      # No external endpoints, workers, real credentials or Neon access.
+      - name: PR01 durable held event replay (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-durable-events.integration.test.ts
+
+      # PR01 Phase 5: synthetic HMAC replay nonce test; ONLY local PostgreSQL.
+      - name: PR01 signed webhook replay isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-webhook-replay.integration.test.ts
+
+      # PR01 Phase 6: NO HTTP, no worker, no Neon; synthetic state transitions only.
+      - name: PR01 synthetic delivery lease and DLQ (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-delivery-state.integration.test.ts
+
+      # PR01 Phase 7: CI-only synthetic retention, no real records or auto-cleanup.
+      - name: PR01 retention and observability (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          FLIPFORM_API_V1_ENABLED: "false"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/pr01-retention-observability.integration.test.ts
 
       - name: Run Flip AI database isolation tests
         env:

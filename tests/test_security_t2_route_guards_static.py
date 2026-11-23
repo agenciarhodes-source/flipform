@@ -69,6 +69,22 @@ GUARDED = {
     "flip-ai/public/[slug]/realtime/session/route.ts": "slug",
     "flip-ai/public/[slug]/speech/route.ts": "rateLimit(",
     "health/route.ts": "GET",
+    # PR629 temporary diagnostics: preview-only, exact branch, expiring bearer and QA database target.
+    "pr629-qa/db-target/route.ts": "isPr629DbAttestationAllowed(process.env)",
+    # PR01 Phase 1: always 404 when OFF; 503 when no M2M repository exists.
+    "v1/status/route.ts": "apiV1Enabled(process.env)",
+    # M2M route: bearer identity, tenant entitlement and distributed quota on every GET.
+    "v1/capabilities/route.ts": "authorizeApiV1Request({",
+    # PR02: independently authenticated M2M bearer, tenant entitlement and quota.
+    "v1/pipelines/route.ts": "authorizeApiV1Request({",
+    # PR02 aggregate metrics: separate M2M scope and tenant-bound quota on every GET.
+    "v1/pipelines/[pipelineId]/metrics/route.ts": "authorizeApiV1Request({",
+    # PR02 forms metadata: no session bypass; independently verified M2M token.
+    "v1/forms/route.ts": "authorizeApiV1Request({",
+    "v1/forms/[formId]/fields/route.ts": "authorizeApiV1Request({",
+    # PR02 lead metadata: never trust tenant inputs, authenticate M2M with a separate scope.
+    "v1/leads/route.ts": "authorizeApiV1Request({",
+    "v1/leads/[leadId]/route.ts": "authorizeApiV1Request({",
     # Test helper: answers only when NODE_ENV is "test".
     "test/otp/latest/route.ts": "process.env.NODE_ENV !== 'test'",
     # Same handlers as integrations/events (withPermission).
@@ -96,6 +112,26 @@ def test_every_route_is_wrapped_or_has_a_listed_guard():
             continue
         assert GUARDED[path] in text, (path, GUARDED[path])
     assert not unguarded, f"Routes without a known guard: {unguarded}"
+
+
+
+def test_pr01_v1_status_never_opens_without_real_m2m_repository():
+    route = (API / "v1/status/route.ts").read_text(encoding="utf-8")
+    assert "if (!apiV1Enabled(process.env))" in route
+    assert "apiV1Error('api_unavailable', 404)" in route
+    assert "apiV1Error('dependency_unavailable', 503)" in route
+    assert "prisma." not in route
+    assert "fetch(" not in route
+    assert "NextResponse.json({ ok: true" not in route
+
+
+def test_pr629_temporary_db_diagnostic_is_fail_closed():
+    source = (API / "pr629-qa/db-target/route.ts").read_text(encoding="utf-8")
+    assert "if (!isPr629DbAttestationAllowed(process.env) || !authorized(req))" in source
+    assert "if (!pr629DbTargetsMatchApprovedQa(process.env))" in source
+    assert "timingSafeEqual(expectedBytes, suppliedBytes)" in source
+    assert "SELECT current_database()::text AS database_name" in source
+    assert "prisma.$queryRaw" in source
 
 
 def test_listed_routes_still_exist():

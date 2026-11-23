@@ -153,6 +153,11 @@ model Tenant {
   leadStageSuggestions LeadStageSuggestion[]
   documentChecklists   DocumentChecklist[]
 
+  // PR01 additive API foundation. No production schema change is authorized here.
+  apiV1Integrations ApiIntegration[]
+  apiV1EntitlementGrants TenantEntitlementGrant[]
+  apiV1CredentialAudits ApiCredentialAudit[]
+
   @@index([accountKind])
   @@map("tenants")
 }
@@ -2255,4 +2260,215 @@ model WhatsAppNumberAccess {
   @@id([connectionId, userId])
   @@index([tenantId, userId])
   @@map("whatsapp_number_access")
+}
+
+
+/// PR01: disabled by default. Generic per-tenant integration, never provider-specific.
+model ApiIntegration {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  displayName String   @map("display_name")
+  status      String   @default("disabled")
+  disabledAt  DateTime? @map("disabled_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  credentials ApiCredential[]
+  idempotencyRecords ApiV1IdempotencyRecord[]
+  webhookReplays ApiV1WebhookReplay[]
+
+  // Compound identity is needed for tenant-safe credential references.
+  @@unique([tenantId, id])
+  @@index([tenantId, status])
+  @@map("api_v1_integrations")
+}
+
+/// PR01: stores only the digest of a high-entropy bearer secret, never plaintext.
+model ApiCredential {
+  id            String    @id @default(uuid())
+  tenantId      String    @map("tenant_id")
+  integrationId String    @map("integration_id")
+  secretHashHex String    @map("secret_hash_hex")
+  scopes        String[]  @default([])
+  expiresAt     DateTime? @map("expires_at")
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // A credential cannot point to another tenant's integration.
+  integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Restrict)
+  quotaBuckets ApiV1QuotaBucket[]
+
+  // Isolates quota bucket references by tenant + integration + credential.
+  @@unique([tenantId, integrationId, id])
+  @@index([tenantId, integrationId])
+  @@map("api_v1_credentials")
+}
+
+/// PR01: explicit, tenant-local exception. Not inherited from a group or platform role.
+/// No UI or write endpoint is enabled in this phase.
+model TenantEntitlementGrant {
+  id         String    @id @default(uuid())
+  tenantId   String    @map("tenant_id")
+  feature    String
+  enabled    Boolean   @default(false)
+  reason     String
+  approvedBy String    @map("approved_by")
+  startsAt   DateTime  @map("starts_at")
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, feature, enabled, revokedAt])
+  @@map("tenant_entitlement_grants")
+}
+
+
+/// PR01 Phase 3: append-only audit trail for key issuance, rotation and revocation.
+/// No raw bearer token, authorization header, or secret is stored here.
+model ApiCredentialAudit {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  credentialId  String   @map("credential_id")
+  actorUserId   String   @map("actor_user_id")
+  action        String
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, credentialId, createdAt])
+  @@map("api_v1_credential_audits")
+}
+
+/// PR01 Phase 3: shared PostgreSQL quota bucket, never an in-memory counter.
+/// Values are supplied by server-side policy, without an arbitrary default.
+model ApiV1QuotaBucket {
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  credentialId  String   @map("credential_id")
+  operation     String
+  windowStart   DateTime @map("window_start")
+  windowEnd     DateTime? @map("window_end")
+  consumed      Int      @default(0)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  credential ApiCredential @relation(fields: [tenantId, integrationId, credentialId], references: [tenantId, integrationId, id], onDelete: Restrict)
+
+  @@id([tenantId, integrationId, credentialId, operation, windowStart])
+  @@index([createdAt])
+  @@map("api_v1_quota_buckets")
+}
+
+
+/// PR01 Phase 4: durable idempotency claim, unique within one tenant/integration/operation.
+/// Only a SHA-256 digest of the caller key and a request fingerprint are saved.
+model ApiV1IdempotencyRecord {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  operation     String
+  keyHash       String   @map("key_hash")
+  fingerprint   String
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Restrict)
+  inbox       ApiV1InboxEvent?
+
+  @@unique([tenantId, integrationId, operation, keyHash])
+  @@unique([tenantId, integrationId, id])
+  @@map("api_v1_idempotency_records")
+}
+
+/// PR01 Phase 4: diagnostic-only inbox envelope; no customer payload is persisted.
+/// State is always held while the feature remains Draft, with no worker enabled.
+model ApiV1InboxEvent {
+  id                  String   @id @default(uuid())
+  tenantId            String   @map("tenant_id")
+  integrationId       String   @map("integration_id")
+  idempotencyRecordId String   @map("idempotency_record_id")
+  eventType           String   @map("event_type")
+  payloadHash         String   @map("payload_hash")
+  state               String   @default("held")
+  finalizedAt         DateTime? @map("finalized_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  idempotencyRecord ApiV1IdempotencyRecord @relation(fields: [tenantId, integrationId, idempotencyRecordId], references: [tenantId, integrationId, id], onDelete: Restrict)
+  outbox            ApiV1OutboxEvent?
+
+  @@unique([tenantId, integrationId, id])
+  @@unique([tenantId, integrationId, idempotencyRecordId])
+  @@index([tenantId, state, createdAt])
+  @@map("api_v1_inbox_events")
+}
+
+/// PR01 Phase 4: held outbound envelope, *not* a delivery/dispatch worker.
+/// Its parent inbox event must belong to exactly the same tenant and integration.
+model ApiV1OutboxEvent {
+  id             String    @id @default(uuid())
+  tenantId       String    @map("tenant_id")
+  integrationId  String    @map("integration_id")
+  inboxEventId   String    @map("inbox_event_id")
+  eventType      String    @map("event_type")
+  state          String    @default("held")
+  attempts       Int       @default(0)
+  finalizedAt    DateTime? @map("finalized_at")
+  nextAttemptAt  DateTime? @map("next_attempt_at")
+  leaseToken     String?   @map("lease_token")
+  leaseUntil     DateTime? @map("lease_until")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  inbox ApiV1InboxEvent @relation(fields: [tenantId, integrationId, inboxEventId], references: [tenantId, integrationId, id], onDelete: Restrict)
+  deliveryAttempts ApiV1DeliveryAttempt[]
+
+  @@unique([tenantId, integrationId, inboxEventId])
+  @@unique([tenantId, integrationId, id])
+  @@index([tenantId, state, nextAttemptAt])
+  @@index([tenantId, state, leaseUntil])
+  @@map("api_v1_outbox_events")
+}
+
+
+/// PR01 Phase 5: only SHA-256 nonce/body digests; never provider secrets.
+/// A replay claim is unique to the tenant + integration, even across workers.
+/// No live webhook endpoint or delivery worker consumes this model.
+model ApiV1WebhookReplay {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  nonceHash     String   @map("nonce_hash")
+  bodyHash      String   @map("body_hash")
+  receivedAt    DateTime @default(now()) @map("received_at")
+  expiresAt     DateTime @map("expires_at")
+
+  integration ApiIntegration @relation(fields: [tenantId, integrationId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, integrationId, nonceHash])
+  @@index([expiresAt])
+  @@map("api_v1_webhook_replays")
+}
+
+
+/// PR01 Phase 6: append-only-ish, synthetic-only attempt ledger.
+/// No real HTTP delivery is permitted and no customer payload is stored.
+model ApiV1DeliveryAttempt {
+  id            String   @id @default(uuid())
+  tenantId      String   @map("tenant_id")
+  integrationId String   @map("integration_id")
+  outboxEventId String   @map("outbox_event_id")
+  attemptNo     Int      @map("attempt_no")
+  result        String   @default("leased")
+  httpStatus    Int?     @map("http_status")
+  createdAt     DateTime @default(now()) @map("created_at")
+  finishedAt    DateTime? @map("finished_at")
+
+  outbox ApiV1OutboxEvent @relation(fields: [tenantId, integrationId, outboxEventId], references: [tenantId, integrationId, id], onDelete: Restrict)
+
+  @@unique([tenantId, integrationId, outboxEventId, attemptNo])
+  @@index([tenantId, result, createdAt])
+  @@map("api_v1_delivery_attempts")
 }

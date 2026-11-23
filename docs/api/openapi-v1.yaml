@@ -1,0 +1,506 @@
+openapi: 3.1.0
+info:
+  title: FlipForm Native API v1 — Draft
+  version: 1.0.0-draft
+  description: |
+    PR01 multi-tenant M2M foundation. Code exists only on a Draft branch.
+    Feature flag FLIPFORM_API_V1_ENABLED is OFF by default. No live endpoints
+    or production database migrations have been approved. This contract is
+    documentation of the proposed API, not evidence of a deployed service.
+    PR02 adds read-only pipeline, stage, active form and form field definitions and
+    aggregated lead counts plus a narrowly scoped catalog of lead routing metadata.
+    Lead identifiers can still be linked to individuals; no contact fields, answers,
+    orders, campaign details, mutations or ERP operations are exposed.
+servers:
+  - url: /
+    description: Same-origin only after a separately authorized deployment
+tags:
+  - name: M2M Foundation
+  - name: Administration
+    description: Owner's verified login session and same-origin browser requests
+paths:
+  /api/v1/status:
+    get:
+      tags: [M2M Foundation]
+      operationId: getApiV1Placeholder
+      summary: Disabled placeholder — never returns success
+      responses:
+        '404': { description: API disabled }
+        '503': { description: Placeholder not implemented for public health }
+  /api/v1/capabilities:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1Capabilities
+      summary: Read scoped tenant and integration identity (no CRM data)
+      security:
+        - M2MKey: []
+      responses:
+        '200':
+          description: Valid tenant-bound credential, active integration, entitlement and quota
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, capability, tenantId, integrationId, businessData]
+                properties:
+                  version: { type: string, const: v1 }
+                  capability: { type: string, const: integrations.read }
+                  tenantId: { type: string, format: uuid }
+                  integrationId: { type: string, format: uuid }
+                  businessData: { type: boolean, const: false }
+        '401': { description: Invalid, expired or revoked bearer token }
+        '403': { description: Tenant inactive, not entitled or scope denied }
+        '404': { description: API feature disabled }
+        '429': { description: Credential operation quota reached }
+        '503': { description: Database or quota unavailable }
+  /api/v1/pipelines:
+    get:
+      tags: [M2M Foundation]
+      operationId: listApiV1Pipelines
+      summary: Paginated read of this credential's tenant pipelines and active stages
+      description: |
+        Tenant is resolved only from the authenticated M2M credential.
+        No leads, customer records, forms, or other CRM data are returned.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Pipelines in stable ID order, without archived records
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, items, nextCursor]
+                properties:
+                  version: { type: string, const: v1 }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name, isDefault, stages]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        isDefault: { type: boolean }
+                        stages:
+                          type: array
+                          items:
+                            type: object
+                            additionalProperties: false
+                            required: [id, name, color, orderIndex]
+                            properties:
+                              id: { type: string, format: uuid }
+                              name: { type: string }
+                              color: { type: string }
+                              orderIndex: { type: integer }
+        '400': { description: Invalid or unexpected query parameter }
+        '401': { description: Invalid, expired or revoked bearer }
+        '403': { description: Suspended tenant, missing entitlement or scope }
+        '404': { description: Feature flag disabled }
+        '429': { description: Credential quota exceeded }
+        '503': { description: Database or quota unavailable }
+  /api/v1/pipelines/{pipelineId}/metrics:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1PipelineMetrics
+      summary: Read lead counts by active stage, without individual lead data
+      description: |
+        Requires a dedicated pipelines.metrics.read credential, not pipelines.read.
+        Counts only current tenant leads in non-archived stages of a non-archived
+        tenant-owned pipeline. No names, emails, phones, documents or lead IDs.
+        Maximum 200 active stages. Feature is globally OFF pending release gates.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: pipelineId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tenant-isolated aggregate counts
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, pipelineId, total, stages]
+                properties:
+                  version: { type: string, const: v1 }
+                  pipelineId: { type: string, format: uuid }
+                  total: { type: integer, minimum: 0 }
+                  stages:
+                    type: array
+                    maxItems: 200
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [stageId, name, orderIndex, count]
+                      properties:
+                        stageId: { type: string, format: uuid }
+                        name: { type: string }
+                        orderIndex: { type: integer }
+                        count: { type: integer, minimum: 0 }
+        '400': { description: Invalid UUID or unexpected query parameters }
+        '401': { description: Missing, expired or revoked credential }
+        '403': { description: Wrong scope, suspended tenant or entitlement missing }
+        '404': { description: Pipeline missing, archived, other tenant or feature flag OFF }
+        '429': { description: Distributed credential quota exceeded }
+        '503': { description: Dependency unavailable or stage limit exceeded }
+  /api/v1/leads:
+    get:
+      tags: [M2M Foundation]
+      operationId: listApiV1LeadMetadata
+      summary: Read tenant-bound lead routing metadata without contact details
+      description: |
+        Requires a dedicated leads.metadata.read scope, tenant entitlement and
+        durable operation quota. UUIDs are pseudonymous, NOT anonymous; legal
+        retention, purpose limitations and rollout require separate approval.
+        This endpoint returns no name, email, phone, answers, notes, documents,
+        conversations, arbitrary source strings or sale values. No mutations.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pipelineId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tenant-scoped, ascending UUID paginated lead metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, items, nextCursor]
+                properties:
+                  version: { type: string, const: v1 }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+                  items:
+                    type: array
+                    maxItems: 50
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, formId, pipelineId, stageId, status, createdAt, updatedAt]
+                      properties:
+                        id: { type: string, format: uuid }
+                        formId: { type: [string, 'null'], format: uuid }
+                        pipelineId: { type: string, format: uuid }
+                        stageId: { type: string, format: uuid }
+                        status: { type: string }
+                        createdAt: { type: string, format: date-time }
+                        updatedAt: { type: string, format: date-time }
+        '400': { description: Invalid, duplicate or unexpected query parameter }
+        '401': { description: Missing, expired or revoked bearer token }
+        '403': { description: Incorrect scope, tenant suspended or entitlement missing }
+        '404': { description: Global API disabled }
+        '429': { description: Credential operation quota exceeded }
+        '503': { description: Database or quota unavailable }
+  /api/v1/leads/{leadId}:
+    get:
+      tags: [M2M Foundation]
+      operationId: getApiV1LeadMetadata
+      summary: Read a single lead's operational metadata (no personal contact data)
+      description: |
+        Requires leads.metadata.read, M2M tenant entitlement and distributed quota.
+        UUIDs remain linkable personal data: this is NOT an anonymous endpoint.
+        No name, phone, email, notes, forms answers, messages or attachments.
+        No lead movement, updates or outbound calls.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: One lead owned by the authenticated tenant only
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, item]
+                properties:
+                  version: { type: string, const: v1 }
+                  item:
+                    type: object
+                    additionalProperties: false
+                    required: [id, formId, pipelineId, stageId, status, createdAt, updatedAt]
+                    properties:
+                      id: { type: string, format: uuid }
+                      formId: { type: [string, 'null'], format: uuid }
+                      pipelineId: { type: string, format: uuid }
+                      stageId: { type: string, format: uuid }
+                      status: { type: string }
+                      createdAt: { type: string, format: date-time }
+                      updatedAt: { type: string, format: date-time }
+        '400': { description: Invalid lead ID or unexpected query parameters }
+        '401': { description: Missing, invalid, expired or revoked bearer }
+        '403': { description: Scope, entitlement or tenant status denied }
+        '404': { description: Disabled API, missing lead or different tenant }
+        '429': { description: Durable credential quota exceeded }
+        '503': { description: Database or quota unavailable }
+  /api/v1/forms:
+    get:
+      tags: [M2M Foundation]
+      operationId: listApiV1Forms
+      summary: Tenant-scoped paginated catalog of active form routing metadata
+      description: |
+        Only a verified M2M key with forms.read can read active form IDs, names,
+        linked pipeline IDs, initial stage IDs, and source labels.
+        No form answers, fields, public URLs, lead content or personal data.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+        - name: after
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Current tenant's active forms in stable ID order
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, items, nextCursor]
+                properties:
+                  version: { type: string, const: v1 }
+                  nextCursor: { type: [string, 'null'], format: uuid }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name, pipelineId, initialStageId, leadSource]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        pipelineId: { type: string, format: uuid }
+                        initialStageId: { type: string, format: uuid }
+                        leadSource: { type: string }
+        '400': { description: Invalid or unexpected query parameters }
+        '401': { description: Missing, invalid, expired or revoked key }
+        '403': { description: Tenant suspended, missing scope or entitlement }
+        '404': { description: Feature flag off }
+        '429': { description: Distributed quota exceeded }
+        '503': { description: Credential or database dependency unavailable }
+  /api/v1/forms/{formId}/fields:
+    get:
+      tags: [M2M Foundation]
+      operationId: readApiV1FormFields
+      summary: Read a tenant-owned active form's field definitions (never answers)
+      description: |
+        Credential must have forms.read, an active tenant and integration, and
+        available distributed quota. Only definition metadata is selected.
+        Fields are ordered by orderIndex/id and returned 100 at a time.
+        Use offset=nextOffset to fetch more fields, up to offset 10000.
+        For changing schemas, clients should restart pagination.
+        Response returns truncated=true when additional fields exist.
+        No validationRules, options, responses, leads or public form URLs.
+      security:
+        - M2MKey: []
+      parameters:
+        - name: formId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 10000, default: 0 }
+      responses:
+        '200':
+          description: Current tenant's active form definition
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [version, formId, fields, truncated, nextOffset]
+                properties:
+                  version: { type: string, const: v1 }
+                  formId: { type: string, format: uuid }
+                  truncated: { type: boolean }
+                  nextOffset: { type: [integer, 'null'], minimum: 0 }
+                  fields:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, label, fieldType, isRequired, orderIndex]
+                      properties:
+                        id: { type: string, format: uuid }
+                        label: { type: string }
+                        fieldType: { type: string }
+                        isRequired: { type: boolean }
+                        orderIndex: { type: integer }
+        '400': { description: Invalid path UUID or unrecognized query parameters }
+        '401': { description: Invalid or revoked credential }
+        '403': { description: Wrong scope or blocked tenant }
+        '404': { description: Form missing, inactive or belongs to another tenant; or global API disabled }
+        '429': { description: Credential quota exceeded }
+        '503': { description: Database unavailable }
+  /api/integrations/api-v1:
+    get:
+      tags: [Administration]
+      operationId: listApiV1TenantIntegrations
+      summary: List only the logged-in owner's tenant integrations
+      security:
+        - OwnerSession: []
+      responses:
+        '200': { description: List without secrets }
+        '403': { description: Not an eligible verified owner }
+        '404': { description: API feature disabled }
+    post:
+      tags: [Administration]
+      operationId: createApiV1TenantIntegration
+      summary: Create a disabled integration; never accepts a tenant override
+      security:
+        - OwnerSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName]
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 80 }
+      responses:
+        '201': { description: Created, initially disabled }
+        '403': { description: Not an eligible owner or request not from same origin }
+        '409': { description: Limit reached }
+  /api/integrations/api-v1/{integrationId}:
+    patch:
+      tags: [Administration]
+      operationId: toggleApiV1TenantIntegration
+      summary: Activate or disable a tenant-owned integration (never hard delete)
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, disabled] }
+      responses:
+        '200': { description: New integration state }
+        '403': { description: Forbidden }
+        '404': { description: Not found in current tenant }
+  /api/integrations/api-v1/{integrationId}/keys:
+    get:
+      tags: [Administration]
+      operationId: listApiV1TenantKeys
+      summary: List key metadata without secret hashes or bearer tokens
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      responses:
+        '200': { description: Key metadata only }
+    post:
+      tags: [Administration]
+      operationId: issueApiV1TenantKey
+      summary: Issue a 30-day read-only key, shown once to the authenticated owner
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scopes]
+              properties:
+                scopes:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  prefixItems: [{ type: string, enum: [integrations.read, pipelines.read, forms.read, pipelines.metrics.read, leads.metadata.read] }]
+                  items: false
+      responses:
+        '201': { description: One-time key; never returned again }
+        '403': { description: Forbidden }
+        '429': { description: Key count limit reached }
+  /api/integrations/api-v1/{integrationId}/keys/{credentialId}:
+    post:
+      tags: [Administration]
+      operationId: rotateApiV1TenantKey
+      summary: Revoke old key and atomically create replacement; show once
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '201': { description: New key shown once }
+        '409': { description: Already revoked, expired or missing }
+    delete:
+      tags: [Administration]
+      operationId: revokeApiV1TenantKey
+      summary: Revoke key without deleting its metadata/audit trail
+      security:
+        - OwnerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IntegrationId'
+        - $ref: '#/components/parameters/CredentialId'
+      responses:
+        '200': { description: Key revoked }
+        '409': { description: Already revoked or missing }
+components:
+  parameters:
+    IntegrationId:
+      name: integrationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CredentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  securitySchemes:
+    M2MKey:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: 'Bearer ffv1.<key-id>.<random-secret>, 32 random bytes, issued once'
+    OwnerSession:
+      type: apiKey
+      in: cookie
+      name: flipform_token
+      description: Verified database session of tenant owner, plus same-origin mutation
