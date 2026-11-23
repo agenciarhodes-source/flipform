@@ -55,7 +55,7 @@ export function apiV1PilotTenantAllowed(
 ): boolean {
   if (!apiV1Enabled(env) || !tenantId) return false;
   // Keep existing isolated tests and explicit local test doubles usable.
-  if (env.NODE_ENV === 'test') return true;
+  if (env.NODE_ENV === 'test' && !env.VERCEL_ENV) return true;
   const configured = env.FLIPFORM_API_V1_PILOT_TENANT_IDS;
   if (!configured || configured.length > 400) return false;
   const entries = configured.split(',').map(value => value.trim().toLowerCase());
