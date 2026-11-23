@@ -39,3 +39,34 @@ export function contentDisposition(kind: 'inline' | 'attachment', name: string) 
   const ascii = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeRfc5987(name)}`;
 }
+
+/**
+ * Files up to this size are sent by FlipForm itself (below the 4.5 MB response limit of the
+ * server), so a player that asks for parts of an audio or video later still gets them. Larger
+ * files go straight from the storage.
+ */
+export const SERVE_INLINE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The part of the file a player asked for ("Range: bytes=start-end"): null for the whole file,
+ * 'invalid' when the part is outside the file (answered with 416).
+ */
+export function requestedRange(header: string | null, size: number): { start: number; end: number } | null | 'invalid' {
+  if (!header || size <= 0) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (!match[1] && !match[2])) return null;
+  let start: number;
+  let end: number;
+  if (!match[1]) {
+    // "bytes=-500": the last 500 bytes.
+    const suffix = Number(match[2]);
+    if (!suffix) return 'invalid';
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  }
+  if (start >= size || end < start) return 'invalid';
+  return { start, end };
+}
