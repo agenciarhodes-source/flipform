@@ -6,6 +6,7 @@ import {
   AttendanceReviewError,
   latestAttendanceReview,
   reviewAttendanceApproach,
+  weeklyGoals,
 } from '@/lib/reports/attendance-productivity';
 
 export const runtime = 'nodejs';
@@ -20,14 +21,18 @@ function scopeOf(session: { role: string; userId: string }) {
 export const GET = withPermission('REPORTS_VIEW', async (req: NextRequest, session) => {
   const days = Number(new URL(req.url).searchParams.get('days')) || 30;
   const onlyUserId = scopeOf(session);
-  const [report, review] = await Promise.all([
+  const [report, review, goals] = await Promise.all([
     attendanceProductivity(session.tenantId, { days, onlyUserId }),
     latestAttendanceReview(session.tenantId),
+    weeklyGoals(session.tenantId, { onlyUserId }),
   ]);
   const visibleReview = review && onlyUserId
     ? { ...review, summary: '', attendants: review.attendants.filter((entry) => entry.userId === onlyUserId) }
     : review;
-  return NextResponse.json({ ...report, review: visibleReview, canReview: can(session.role, 'FLIP_AI_MANAGE') });
+  return NextResponse.json({
+    ...report, review: visibleReview, canReview: can(session.role, 'FLIP_AI_MANAGE'),
+    goals,
+  });
 });
 
 const REVIEW_ERRORS: Record<AttendanceReviewError['code'], { status: number; error: string }> = {

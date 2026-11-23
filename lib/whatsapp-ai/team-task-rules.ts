@@ -18,7 +18,7 @@ export const TEAM_TASK_INSTRUCTION = [
   '[TAREFA_EQUIPE: o que a equipe deve fazer, em uma frase]. O cliente não vê essa linha. Nunca coloque senha, CPF ou',
   'outros números de documento nela. Quando o cliente estiver TRAVADO (não consegue um documento, não consegue o gov.br, não',
   'sabe fazer), use [TAREFA_EQUIPE_URGENTE: ...]: uma pessoa ajuda em poucos minutos. Nunca diga ao cliente que',
-  '"encaminhou para um atendente": diga que o nosso time vai ajudar e continue a conversa normalmente.',
+  '"encaminhou para um atendente": fale como a empresa ("vamos te ajudar com isso") e continue a conversa normalmente.',
 ].join(' ');
 
 /** The reply without the marker, and what the team must do (null when there is no task). */

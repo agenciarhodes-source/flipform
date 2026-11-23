@@ -20,7 +20,8 @@ export const GET = withPermission('LEAD_ASSIGNMENT_ROTATION_VIEW', async (_req, 
     isEnabled: rotation?.isEnabled ?? false,
     strategy: 'round_robin',
     currentIndex: rotation?.currentIndex ?? 0,
-    members: (rotation?.members || []).map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, role: 'agent', orderIndex: m.orderIndex, isActive: m.isActive })),
+    // Who left the company or stopped being an agent drops off the list, so saving it again works.
+    members: (rotation?.members || []).filter((m) => m.user.tenantUsers.some((t) => t.role === 'agent' && t.status === 'active')).map((m) => ({ userId: m.userId, name: m.user.name, email: m.user.email, role: 'agent', orderIndex: m.orderIndex, isActive: m.isActive })),
     availableAgents: agents.map((a) => ({ userId: a.userId, name: a.user.name, email: a.user.email })),
   });
 });

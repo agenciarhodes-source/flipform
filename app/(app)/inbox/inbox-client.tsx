@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { ConversationActions } from './conversation-actions';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { VoiceRecorder } from '@/components/inbox/voice-recorder';
+import { FileAttachButton } from '@/components/inbox/file-attach-button';
 import { MessageCorrectionDialog, MessageEditHistoryDialog } from '@/components/inbox/message-correction';
 import { isCorrectionText } from '@/lib/inbox/correction-rules';
 import { toast } from 'sonner';
@@ -245,9 +246,6 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   const metadata = message.metadata as Record<string, unknown>;
   const src = `/api/inbox/messages/${encodeURIComponent(message.id)}/media`;
   const fileName = typeof metadata.mediaFileName === 'string' ? metadata.mediaFileName : 'Documento';
-  if (failed) {
-    return <p className="mb-1 text-xs italic opacity-75">{MESSAGE_TYPE_LABELS[message.type] || 'Arquivo'} indisponível (a Meta guarda os arquivos por 30 dias).</p>;
-  }
   // A plain link (no new tab): phones save the file with its name.
   const save = (
     <a href={`${src}?download=1`} download className={`mb-1 inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${outbound ? 'border-white/30' : 'bg-muted/40'}`}>
@@ -263,6 +261,23 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
             className={`${message.type === 'sticker' ? 'h-28 w-28 object-contain' : 'max-h-72 w-auto max-w-full rounded-lg object-cover'}`} />
         </a>
         {message.type === 'image' && <div className="mt-1">{save}</div>}
+      </div>
+    );
+  }
+  if (failed && message.type === 'audio') {
+    // WhatsApp voice notes are OGG/Opus: Safari (iPhone, iPad, older Macs) may not play them here.
+    return (
+      <div className="mb-1 space-y-1">
+        <p className="text-xs italic opacity-75">Este navegador não conseguiu tocar o áudio. Baixe para ouvir, ou abra o FlipForm no Google Chrome.</p>
+        {save}
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div className="mb-1 space-y-1">
+        <p className="text-xs italic opacity-75">Não foi possível mostrar este arquivo aqui. Tente baixar.</p>
+        {save}
       </div>
     );
   }
@@ -839,6 +854,43 @@ export function InboxClient({
     }
   }
 
+  /** Sends a document, photo or video: uploaded straight to the private storage, then sent. */
+  async function sendFile(file: File) {
+    if (!selected || selected.channel !== 'whatsapp' || !canSendWhatsApp) return false;
+    const conversationId = selected.id;
+    const base = `/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp-file`;
+    setError(null);
+    setWarning(null);
+    try {
+      const prepared = await fetch(`${base}/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, mimeType: file.type, sizeBytes: file.size }),
+      });
+      const upload = await prepared.json().catch(() => ({}));
+      if (!prepared.ok || !upload.fileId || !upload.uploadUrl) throw new Error(upload.error || 'Não foi possível preparar o envio do arquivo.');
+      const stored = await fetch(upload.uploadUrl, { method: 'PUT', headers: upload.headers || {}, body: file }).catch(() => null);
+      if (!stored?.ok) throw new Error('Não foi possível carregar o arquivo. Verifique a internet e tente de novo.');
+      const response = await fetch(base, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: upload.fileId, idempotencyKey: createIdempotencyKey() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 202) throw new Error(data.error || 'Não foi possível enviar o arquivo.');
+      if (response.status === 202 && selectedIdRef.current === conversationId) {
+        setWarning(data.warning || 'O status do envio ainda está sendo confirmado.');
+      }
+      await Promise.all([loadMessages(conversationId, true), loadConversations(true)]);
+      return true;
+    } catch (sendError) {
+      if (selectedIdRef.current === conversationId) {
+        setError(sendError instanceof Error ? sendError.message : 'Não foi possível enviar o arquivo.');
+      }
+      return false;
+    }
+  }
+
   async function sendTemplate() {
     if (!selected || sending || !needsTemplate || !chosenTemplate) return;
     const conversationId = selected.id;
@@ -1236,6 +1288,9 @@ export function InboxClient({
                         className="min-h-[44px] max-h-36 flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={sending}
                       />
+                      {selected.channel === 'whatsapp' ? (
+                        <FileAttachButton disabled={sending || !canSendWhatsApp} onSend={sendFile} onError={(message) => setError(message)} />
+                      ) : null}
                       {selected.channel === 'whatsapp' ? <VoiceRecorder disabled={sending || !canSendWhatsApp} onSend={sendAudio} /> : null}
                       <Button
                         type="button"
