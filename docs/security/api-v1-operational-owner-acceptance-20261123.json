@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-11-23",
+  "record_type": "OWNER_OPERATIONAL_RESPONSIBILITY_ACCEPTANCE",
+  "source_declaration": "vamos para proxima etapa. eu aceito o operacional da API",
+  "actor_role": "Proprietário/representante da Pollo/FlipForm (autodeclaração no diálogo; sem assinatura digital)",
+  "owner_operational_acceptance": "DECLARED",
+  "scope": "Responsabilidade e coordenação do aceite operacional da API v1 e continuidade de homologação controlada",
+  "acceptance_kind": "OWNER_BUSINESS_ACCEPTANCE_NOT_TECHNICAL_ATTESTATION",
+  "operational_technical_completion": "INCOMPLETE",
+  "operational_risk_assessment": "OPEN",
+  "numeric_rpo_target_minutes": null,
+  "numeric_rto_target_minutes": null,
+  "numeric_rpo_rto_approved": false,
+  "timestamp_lsn_pitr_restoration_verified": false,
+  "snapshot_restore_current_api_schema_verified_in_isolated_lab": true,
+  "comprehensive_runtime_egress_attested": false,
+  "narrow_preview_external_transports_guarded": true,
+  "live_preview_flags_snapshot": {
+    "as_of_date": "2026-11-23",
+    "vercel_project": "flipform-staging",
+    "branch": "security/api-v1-homologation-20261121",
+    "nonsecret_flags": {
+      "FLIPFORM_API_V1_ENABLED": "false",
+      "PR629_BLOCK_EXTERNAL_EGRESS": "true",
+      "EMAIL_PROVIDER": "none",
+      "MAINTENANCE_GATE": "disabled"
+    },
+    "branch_scoped_sensitive_keys_present": [
+      "DATABASE_URL",
+      "DIRECT_URL",
+      "JWT_SECRET_CURRENT",
+      "JWT_SECRET_PREVIOUS"
+    ],
+    "decrypted_sensitive_values_read": false,
+    "general_network_firewall_verified": false
+  },
+  "qa_schema_rehearsal": {
+    "project": "holy-fog-36254823",
+    "isolated_child_branch": "br-fancy-heart-bcjoywqg",
+    "five_nullable_fields_homologated": true,
+    "production_db_unchanged": true
+  },
+  "lgpd_retention_and_legal_hold_approved": false,
+  "release_authorization": "NOT_GRANTED",
+  "merge_authorized": false,
+  "production_migration_authorized": false,
+  "production_deployment_authorized": false,
+  "api_activation_authorized": false,
+  "api_pilot_with_customer_data_authorized": false,
+  "maintenance_workflow_reenablement_authorized": false,
+  "retention_purge_authorized": false,
+  "unresolved_issues": [
+    "PITR por timestamp/LSN ainda sem execução e mensuração em branch-raiz isolada com esquema atual",
+    "RPO/RTO quantitativos e procedimentos de reconexão/contingência ainda não aprovados",
+    "Bloqueio geral de saída/egress do runtime não atestado — guardas atuais cobrem somente transportes conhecidos",
+    "Revisão formal da LGPD: 10 prazos/base legal/legal hold e execução de pedidos ainda pendentes",
+    "Autorização explícita e separada para a sequência de merges, deploy com API OFF e piloto",
+    "Homologação E2E HTTP com o esquema aditivo da última versão ainda não feita"
+  ],
+  "note": "Aceite empresarial declarado não substitui evidência técnica, parecer de privacidade, assinatura nem ordem de publicação. Manter NO_GO."
+}
