@@ -203,7 +203,7 @@ jobs:
           FLIPFORM_API_V1_ENABLED: "false"
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
-          npx tsx --test tests/pr01-m2m-persistence.integration.test.ts
+          npx tsx --test tests/pr01-m2m-persistence.integration.test.ts tests/pr629-key-list-active-visibility.test.ts
 
       # PR01 closure: one full owner/M2M tenant circuit with disposable data.
       - name: PR01 owner integration + authenticated capabilities (disposable PostgreSQL)

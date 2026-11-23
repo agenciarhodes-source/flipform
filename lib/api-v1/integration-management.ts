@@ -109,12 +109,32 @@ export async function listApiV1Keys(
     });
     if (!integration) return null;
     // Explicitly omit secretHashHex. Never return the original key from storage.
-    return await db.apiCredential.findMany({
-      where: { tenantId: actor.tenantId, integrationId },
-      select: { id: true, scopes: true, expiresAt: true, revokedAt: true, createdAt: true },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: 30,
-    });
+    const now = new Date();
+    const select = { id: true, scopes: true, expiresAt: true, revokedAt: true, createdAt: true } as const;
+    // Active credentials are not part of the bounded history window. Otherwise
+    // 30+ rotations can hide a still-active key from the owner's revoke controls.
+    const [active, history] = await Promise.all([
+      db.apiCredential.findMany({
+        where: {
+          tenantId: actor.tenantId, integrationId, revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        select,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 101, // hard safety bound; the issuance policy normally allows only five
+      }),
+      db.apiCredential.findMany({
+        where: {
+          tenantId: actor.tenantId, integrationId,
+          OR: [{ revokedAt: { not: null } }, { expiresAt: { lte: now } }],
+        },
+        select,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 30,
+      }),
+    ]);
+    if (active.length > 100) return null; // never truncate active credentials silently
+    return [...active, ...history];
   } catch { return null; }
 }
 
