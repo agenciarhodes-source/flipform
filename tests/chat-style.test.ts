@@ -8,7 +8,9 @@ test('style rule: no confirming the obvious, no repeating, no machine marks', ()
     assert.ok(CHAT_STYLE_RULE.includes(phrase), phrase);
   }
   assert.match(CHAT_STYLE_RULE, /ponto e vírgula, travessão/);
-  assert.match(TEAM_VOICE_RULE, /no máximo uma vez a cada várias mensagens/);
+  assert.match(TEAM_VOICE_RULE, /no máximo\s+uma vez a cada várias mensagens/);
+  assert.match(TEAM_VOICE_RULE, /primeira pessoa do plural/);
+  assert.match(TEAM_VOICE_RULE, /"nosso time vai"/);
   assert.match(TEAM_VOICE_RULE, /PROIBIDO dizer "vou encaminhar"/);
 });
 

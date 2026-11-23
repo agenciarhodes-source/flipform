@@ -21,16 +21,16 @@ export function withoutTeamMarker(reply: string) {
 }
 
 /** What is sent when the attendant only wrote the marker. */
-export const INSTAGRAM_HANDOFF_REPLY = 'Entendo. O nosso time já está cuidando disso e te responde por aqui.';
+export const INSTAGRAM_HANDOFF_REPLY = 'Entendo. Já estamos cuidando disso e te respondemos por aqui.';
 
 export const INSTAGRAM_HANDOFF_INSTRUCTION = [
   `CHAMAR A EQUIPE: escreva ${INSTAGRAM_CALL_TEAM} no fim da resposta quando a pessoa: reclamar de um serviço que já contratou`,
   'ou de um caso em andamento; cobrar retorno da empresa ou da equipe; pedir para falar com uma pessoa específica (por exemplo,',
   'o profissional que cuida do caso dela);',
   'ameaçar processar ou denunciar; ou insistir em algo que você não consegue resolver. Nesses casos, responda em uma ou duas',
-  'frases acolhedoras dizendo que o nosso time já está cuidando disso e responde por aqui. Não peça dados de novo, não',
+  'frases acolhedoras dizendo, como a empresa, que já estamos cuidando disso e respondemos por aqui. Não peça dados de novo, não',
   'prometa prazo e não mande para outro canal. Nunca diga "vou encaminhar", "vou chamar um atendente" ou "uma pessoa vai',
-  `continuar". Nunca diga que o nosso time está cuidando sem escrever ${INSTAGRAM_CALL_TEAM}: só assim o time é avisado de verdade.`,
+  `continuar". Nunca diga que já estamos cuidando sem escrever ${INSTAGRAM_CALL_TEAM}: só assim a equipe é avisada de verdade.`,
 ].join(' ');
 
 /** Who gets the task: the conversation's attendant; otherwise the managers; otherwise the owners. */

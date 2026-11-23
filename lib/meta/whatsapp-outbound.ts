@@ -75,6 +75,8 @@ type OutboxMetadata = {
   audioVoice?: boolean;
   /** A file (PDF, Word) sent as a document: the name the customer sees. */
   documentFileName?: string;
+  /** A file sent from the Inbox as a photo or video instead of a document. */
+  mediaKind?: 'image' | 'video';
   /** Sent as a reply that quotes this WhatsApp message (a correction of it). */
   replyToProviderMessageId?: string;
 };
@@ -82,7 +84,7 @@ type OutboxMetadata = {
 /** What the Inbox shows for a voice note sent by the team. */
 export const OUTBOUND_AUDIO_TEXT = '🎤 Áudio';
 export type WhatsAppOutboundAudio = { mediaId: string; mimeType: string; voice: boolean; contentHash: string };
-export type WhatsAppOutboundDocument = { mediaId: string; mimeType: string; fileName: string; contentHash: string };
+export type WhatsAppOutboundDocument = { mediaId: string; mimeType: string; fileName: string; contentHash: string; kind?: 'document' | 'image' | 'video' };
 
 export type WhatsAppOutboundTemplate = { name: string; language: string; parameters?: string[] };
 
@@ -355,6 +357,7 @@ async function enqueueWhatsAppTextMessage(input: {
     ...(signature.skippedReason && !template ? { agentSignatureSkippedReason: signature.skippedReason } : {}),
     ...(audio ? { mediaId: audio.mediaId, mediaMimeType: audio.mimeType, audioVoice: audio.voice } : {}),
     ...(document ? { mediaId: document.mediaId, mediaMimeType: document.mimeType, documentFileName: document.fileName.slice(0, 120) } : {}),
+    ...(document?.kind === 'image' || document?.kind === 'video' ? { mediaKind: document.kind } : {}),
     ...(input.replyToProviderMessageId && !template ? { replyToProviderMessageId: input.replyToProviderMessageId } : {}),
     ...(template ? { template } : {}),
     ...(aiSender ? { aiAgentId: aiSender.agentId, aiAgentName: aiSender.agentName } : {}),
@@ -370,7 +373,7 @@ async function enqueueWhatsAppTextMessage(input: {
         channel: 'whatsapp',
         externalMessageId,
         direction: 'outbound',
-        type: audio ? 'audio' : document ? 'document' : 'text',
+        type: audio ? 'audio' : document ? (document.kind || 'document') : 'text',
         text,
         status: 'queued',
         sentByUserId: aiSender || systemSender ? null : requestedByUserId,
@@ -596,7 +599,7 @@ async function sendMetaWhatsAppText(input: {
   text: string;
   template?: WhatsAppOutboundTemplate;
   audio?: { id: string; voice: boolean };
-  document?: { id: string; fileName: string };
+  document?: { id: string; fileName: string; kind?: 'image' | 'video' };
   replyToProviderMessageId?: string;
   accessToken: string;
 }) {
@@ -605,6 +608,10 @@ async function sendMetaWhatsAppText(input: {
   const content = input.template
     ? { type: 'template', template: { name: input.template.name, language: { code: input.template.language },
       ...(parameters.length ? { components: [{ type: 'body', parameters: parameters.map(value => ({ type: 'text', text: value })) }] } : {}) } }
+    : input.document?.kind === 'image'
+      ? { type: 'image', image: { id: input.document.id } }
+    : input.document?.kind === 'video'
+      ? { type: 'video', video: { id: input.document.id } }
     : input.document
       ? { type: 'document', document: { id: input.document.id, filename: input.document.fileName } }
       : input.audio
@@ -767,7 +774,9 @@ export async function enqueueAndDispatchWhatsAppTextMessage(input: {
     text: providerText,
     template: begun.metadata.template,
     audio: begun.metadata.mediaId && !begun.metadata.documentFileName ? { id: begun.metadata.mediaId, voice: Boolean(begun.metadata.audioVoice) } : undefined,
-    document: begun.metadata.mediaId && begun.metadata.documentFileName ? { id: begun.metadata.mediaId, fileName: begun.metadata.documentFileName } : undefined,
+    document: begun.metadata.mediaId && begun.metadata.documentFileName
+      ? { id: begun.metadata.mediaId, fileName: begun.metadata.documentFileName, kind: begun.metadata.mediaKind }
+      : undefined,
     replyToProviderMessageId: begun.metadata.replyToProviderMessageId,
     accessToken,
   });
@@ -855,6 +864,49 @@ export async function enqueueAndDispatchWhatsAppAudioMessage(input: {
     text: OUTBOUND_AUDIO_TEXT,
     idempotencyKey: input.idempotencyKey,
     audio: { mediaId, mimeType: input.audio.mimeType, voice: input.audio.voice, contentHash },
+  });
+}
+
+/**
+ * A file (document, photo or video) a person of the team sends from the Inbox. It goes to Meta
+ * first, then the message is queued and sent like a text (same permissions, idempotency, statuses).
+ */
+export async function enqueueAndDispatchWhatsAppFileMessage(input: {
+  tenantId: string;
+  conversationId: string;
+  requestedByUserId: string;
+  idempotencyKey: string;
+  text: string;
+  file: { bytes: Uint8Array; mimeType: string; fileName: string; kind: 'document' | 'image' | 'video' };
+}): Promise<WhatsAppOutboundResult> {
+  const tenantId = input.tenantId.trim();
+  await assertRequesterCanSend({ tenantId, userId: input.requestedByUserId.trim(), conversationId: input.conversationId.trim() });
+  const contentHash = createHash('sha256').update(input.file.bytes).digest('hex');
+  const existing = await findExistingOutboxMessage(tenantId, localExternalMessageId(tenantId, input.idempotencyKey.trim()));
+  let mediaId = existing ? parseOutboxMetadata(existing.metadata)?.mediaId || '' : '';
+  if (!mediaId) {
+    // The file goes to the number that answers this conversation (a media id belongs to one number).
+    const connection = await numberForSend(tenantId, input.conversationId.trim());
+    if (!connection) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp is not connected for tenant');
+    const ownToken = connectionAccessToken(connection.accessTokenEncrypted);
+    const credentials = ownToken ? null : await getPlatformWhatsAppSendCredentials();
+    const accessToken = ownToken || credentials?.systemUserAccessToken;
+    if (!accessToken) throw new WhatsAppOutboundError('NOT_CONNECTED', 'WhatsApp credentials missing');
+    mediaId = await uploadWhatsAppMedia({
+      phoneNumberId: connection.phoneNumberId,
+      accessToken,
+      bytes: input.file.bytes,
+      mimeType: input.file.mimeType,
+      fileName: input.file.fileName,
+    });
+  }
+  return enqueueAndDispatchWhatsAppTextMessage({
+    tenantId,
+    conversationId: input.conversationId,
+    requestedByUserId: input.requestedByUserId,
+    text: input.text,
+    idempotencyKey: input.idempotencyKey,
+    document: { mediaId, mimeType: input.file.mimeType, fileName: input.file.fileName, contentHash, kind: input.file.kind },
   });
 }
 

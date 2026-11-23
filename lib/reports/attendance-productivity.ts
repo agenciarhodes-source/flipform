@@ -8,7 +8,10 @@ import { getFlipAiCreditBalanceForTenant } from '@/lib/flip-ai/credits';
 import { settleFlipAiUsageCharge } from '@/lib/flip-ai/usage-billing';
 import { anonymizeText } from '@/lib/flip/learning-rules';
 import { closedInPeriod, finalStageIdsForTenant } from '@/lib/period-activity';
-import { attendantSpeed, parseAttendantReview, type AttendantReview, type AttendantSpeed } from './attendance-productivity-rules';
+import {
+  attendantSpeed, parseAttendantReview, recentWeeks, suggestedGoal,
+  type AttendantReview, type AttendantSpeed, type TimelineMessage,
+} from './attendance-productivity-rules';
 
 const DAY = 86_400_000;
 export const PRODUCTIVITY_PERIODS = [7, 30, 90] as const;
@@ -40,6 +43,27 @@ export type AttendantRow = AttendantSpeed & {
   conversionPct: number | null;
 };
 
+/**
+ * The WhatsApp messages of the company in the period, oldest first. Starts a day earlier, so a reply
+ * on the first day knows when the customer wrote and a contact knows if the customer was quiet.
+ */
+async function timeline(tenantId: string, from: Date, to: Date) {
+  const rows = await prisma.message.findMany({
+    where: { tenantId, channel: 'whatsapp', createdAt: { gte: new Date(from.getTime() - DAY), lte: to } },
+    orderBy: { createdAt: 'asc' },
+    take: MAX_MESSAGES,
+    select: { conversationId: true, direction: true, sentByUserId: true, providerTimestamp: true, createdAt: true, metadata: true },
+  });
+  const messages: TimelineMessage[] = rows.map((message) => ({
+    conversationId: message.conversationId,
+    direction: message.direction,
+    sentByUserId: message.sentByUserId,
+    fromAi: typeof metadataOf(message.metadata).aiAgentId === 'string',
+    at: message.providerTimestamp || message.createdAt,
+  }));
+  return { messages, truncated: rows.length >= MAX_MESSAGES };
+}
+
 /** The people of the company who attend (viewers do not). */
 async function attendants(tenantId: string) {
   const members = await prisma.tenantUser.findMany({
@@ -57,23 +81,8 @@ export async function attendanceProductivity(tenantId: string, input: { days: nu
   const range = periodRange(input.days, input.now);
   const people = await attendants(tenantId);
 
-  // A day before the period too, so a reply on the first day knows when the customer wrote.
-  const messages = await prisma.message.findMany({
-    where: {
-      tenantId, channel: 'whatsapp',
-      createdAt: { gte: new Date(range.from.getTime() - DAY), lte: range.to },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: MAX_MESSAGES,
-    select: { conversationId: true, direction: true, sentByUserId: true, providerTimestamp: true, createdAt: true, metadata: true },
-  });
-  const speed = attendantSpeed(messages.map((message) => ({
-    conversationId: message.conversationId,
-    direction: message.direction,
-    sentByUserId: message.sentByUserId,
-    fromAi: typeof metadataOf(message.metadata).aiAgentId === 'string',
-    at: message.providerTimestamp || message.createdAt,
-  })), range);
+  const { messages, truncated } = await timeline(tenantId, range.from, range.to);
+  const speed = attendantSpeed(messages, range);
 
   const waitingRows = await prisma.conversation.findMany({
     where: { tenantId, channel: 'whatsapp', assignedTo: { not: null }, lastInboundAt: { not: null, lte: new Date(range.to.getTime() - WAITING_MS) } },
@@ -127,6 +136,8 @@ export async function attendanceProductivity(tenantId: string, input: { days: nu
       averageResponseMs: pace?.averageResponseMs ?? null,
       firstResponseMedianMs: pace?.firstResponseMedianMs ?? null,
       within15MinPct: pace?.within15MinPct ?? null,
+      initiated: pace?.initiated || 0,
+      initiatedAnswered: pace?.initiatedAnswered || 0,
       waitingNow: waiting.get(userId) || 0,
       leadsReceived: receivedBy.get(userId) || 0,
       leadsAdvanced: advancedBy.get(userId) || 0,
@@ -139,7 +150,66 @@ export async function attendanceProductivity(tenantId: string, input: { days: nu
     if (row.messages || row.waitingNow || row.leadsReceived || row.leadsAdvanced || row.sales || row.lost) rows.push(row);
   }
   rows.sort((a, b) => b.conversations - a.conversations || b.sales - a.sales);
-  return { days: range.days, from: range.from.toISOString(), to: range.to.toISOString(), truncated: messages.length >= MAX_MESSAGES, rows };
+  return { days: range.days, from: range.from.toISOString(), to: range.to.toISOString(), truncated, rows };
+}
+
+const GOAL_WEEKS = 4;
+
+export type WeeklyNumbers = { from: string; current: boolean; initiated: number; initiatedAnswered: number; conversations: number; messages: number };
+export type WeeklyGoalRow = {
+  userId: string;
+  name: string;
+  weeks: WeeklyNumbers[];
+  /** Suggested from the full weeks: their average + 10%. Null while there is no full week with activity. */
+  goal: { weeklyInitiated: number | null; weeklyConversations: number | null };
+  average: { weeklyInitiated: number | null; weeklyConversations: number | null };
+};
+
+const averageOf = (values: number[]) => {
+  const active = values.filter((value) => value > 0);
+  return active.length ? Math.round((active.reduce((sum, value) => sum + value, 0) / active.length) * 10) / 10 : null;
+};
+
+/**
+ * The current week and the three before it (Monday to Sunday, São Paulo time) of each person, with
+ * the weekly average and goal from the full weeks. `onlyUserId` limits it to one person.
+ */
+export async function weeklyGoals(tenantId: string, input: { onlyUserId?: string | null; now?: Date }) {
+  const now = input.now || new Date();
+  const weeks = recentWeeks(now, GOAL_WEEKS);
+  const [people, { messages }] = await Promise.all([
+    attendants(tenantId),
+    timeline(tenantId, weeks[weeks.length - 1].from, now),
+  ]);
+  const perWeek = weeks.map((week) => attendantSpeed(messages, week));
+
+  const rows: WeeklyGoalRow[] = [];
+  for (const [userId, name] of people) {
+    if (input.onlyUserId && userId !== input.onlyUserId) continue;
+    const numbers = weeks.map((week, index) => {
+      const pace = perWeek[index].get(userId);
+      return {
+        from: week.from.toISOString(), current: week.current,
+        initiated: pace?.initiated || 0, initiatedAnswered: pace?.initiatedAnswered || 0,
+        conversations: pace?.conversations || 0, messages: pace?.messages || 0,
+      };
+    });
+    if (numbers.every((week) => week.messages === 0)) continue;
+    const full = numbers.filter((week) => !week.current);
+    rows.push({
+      userId, name, weeks: numbers,
+      goal: {
+        weeklyInitiated: suggestedGoal(full.map((week) => week.initiated)),
+        weeklyConversations: suggestedGoal(full.map((week) => week.conversations)),
+      },
+      average: {
+        weeklyInitiated: averageOf(full.map((week) => week.initiated)),
+        weeklyConversations: averageOf(full.map((week) => week.conversations)),
+      },
+    });
+  }
+  rows.sort((a, b) => b.weeks[0].initiated - a.weeks[0].initiated || a.name.localeCompare(b.name));
+  return rows;
 }
 
 export type StoredReview = {
