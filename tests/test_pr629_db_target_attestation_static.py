@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class DbTargetAttestationSecurity(unittest.TestCase):
     def test_fail_closed_route_checks_before_query(self):
-        route = (ROOT / "app/api/_qa/pr629-db-target/route.ts").read_text()
+        route = (ROOT / "app/api/pr629-qa/db-target/route.ts").read_text()
         preview = route.index("!isPr629DbAttestationAllowed(process.env)")
         token = route.index("!authorized(req)")
         target = route.index("!pr629DbTargetsMatchApprovedQa(process.env)")
@@ -28,6 +28,8 @@ class DbTargetAttestationSecurity(unittest.TestCase):
         self.assertIn("env.VERCEL_GIT_COMMIT_REF === 'security/api-v1-homologation-20261121'", helper)
         self.assertIn("env.FLIPFORM_API_V1_ENABLED === 'false'", helper)
         self.assertIn("env.PR629_DB_ATTESTATION_ENABLED === 'true'", helper)
+        self.assertIn("env.PR629_DB_ATTESTATION_EXPIRES_AT", helper)
+        self.assertIn("expiryMs - nowMs <= 30 * 60 * 1000", helper)
         self.assertIn("env.PR629_BLOCK_EXTERNAL_EGRESS === 'true'", helper)
 
 if __name__ == "__main__":
