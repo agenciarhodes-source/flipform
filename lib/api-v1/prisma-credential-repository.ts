@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { canManageApiV1Keys, apiV1Enabled, apiV1Entitled, type ApiV1Entitlement } from './policy';
+import { canManageApiV1Keys, apiV1Enabled, apiV1PilotTenantAllowed, apiV1Entitled, type ApiV1Entitlement } from './policy';
 import type { ApiV1CredentialRecord, ApiV1CredentialRepository } from './identity';
 import { apiV1QuotaWindowEnd } from './lifecycle-clocks';
 
@@ -90,7 +90,7 @@ export class PrismaApiV1CredentialRepository implements ApiV1CredentialRepositor
       subscriptionStatus: direct?.status ?? null,
       planSlug: direct?.plan.slug ?? null,
       planActive: direct?.plan.isActive ?? false,
-      featureEnabled: apiV1Enabled(process.env),
+      featureEnabled: apiV1PilotTenantAllowed(tenantId, process.env),
       exceptionalGrantActive,
     };
   }
