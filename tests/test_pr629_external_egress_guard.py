@@ -33,7 +33,7 @@ class Pr629QaEgressSafety(unittest.TestCase):
     def test_gate_precedes_provider_network_execution(self):
         checks=[
           ("lib/tracking/meta-capi.ts","meta-capi","fetch("),
-          ("lib/tracking/google-data-manager.ts","google-conversions","(options.fetchImpl || fetch)("),
+          ("lib/tracking/google-data-manager.ts","google-conversions","response = await (options.fetchImpl || fetch)(GOOGLE_DATA_MANAGER_INGEST_URL"),
           ("lib/meta/instagram-outbound.ts","instagram-send","response = await fetch("),
           ("lib/meta/whatsapp-outbound.ts","whatsapp-send","response = await fetch("),
           ("lib/stripe/client.ts","stripe-sdk","new Stripe("),
