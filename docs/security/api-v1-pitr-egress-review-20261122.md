@@ -39,3 +39,33 @@ Leitura do projeto **Vercel staging**, sem descriptografar segredos:
 - **Resultado estritamente comprovado:** mecanismo de restauração Neon de snapshot *histórico* funcionou com `finalize=false`, sem afetar staging default ou produção. **Não** atesta restauração do esquema da API v1 (102 tabelas), RPO/RTO, consistência completa de dados ou disponibilidade da aplicação restaurada.
 - Nova tentativa de instalação de `pg_dump`/`pg_restore` no sandbox independente `sbx_mbAaLCUxD51YzJcD9h6cULpAv9Xg` também falhou; sandbox encerrado. Nenhum dump foi obtido. Evitar novos ciclos de instalação até haver imagem com cliente PostgreSQL pré-instalado.
 - A evidência anterior sobre snapshots continua válida: snapshot raiz histórico não substitui backup atual. Política LGPD e gate de egress permanecem sem autorização.
+
+
+## 5. NOVA EVIDÊNCIA — restauração de snapshot do esquema API atual (23/11/2026 UTC)
+
+**Esse ensaio supera a limitação anterior de snapshot histórico vazio descrita acima, sem autorizar produção.**
+
+### Preparação de branch-raiz isolada
+- Origem do esquema: laboratório isolado Neon `holy-fog-36254823` / `br-snowy-band-bcb0auy6`, 102 tabelas públicas, 356 índices, 139 FKs (10 da API `ON DELETE RESTRICT`), 10 tipos enum.
+- Destino: branch **raiz não default e restaurada previamente de snapshot histórico**, `br-rapid-cherry-bcizfy2x`; o banco `flipform_staging` começava com 0 tabelas e extensão `vector`.
+- A ferramenta Neon `compare_database_schema` gerou o DDL da diferença. Foram aplicadas **112 declarações de tipos/tabelas**, 102 constraints de PK, 87 índices únicos, 139 constraints FK e 167 índices comuns em transações no destino descartável. A primeira tentativa de aplicar FKs antes de índices únicos foi rejeitada e revertida pela transação; a ordem foi corrigida (índices únicos antes de FKs).
+- **Validação após reconstrução:** origem e destino com exatamente **102 tabelas, 356 índices, 139 FKs, 10 enums e 10 tabelas API**. A comparação final de esquema do Neon retornou **diff vazio / 0 caracteres**.
+- A reconstrução de estrutura utilizou o DDL de `compare_database_schema`, não `pg_dump`, e não migrou dados de clientes.
+
+### Snapshot e restauração de esquema completo
+- Criado snapshot manual `snap-ancient-river-bcpflntb` na raiz descartável `br-rapid-cherry-bcizfy2x`.
+- `restore_snapshot(..., finalize=false)` gerou a branch `br-morning-unit-bcnyf2y0` (`ready`, `restore_status=restored`, `default=false`).
+- Consultas PostgreSQL independentes em origem e restaurada: **102 tabelas, 356 índices, 139 FKs, 10 enums, 10 tabelas da API, 10 FKs API `RESTRICT`, 0 tenants/leads/credenciais**. O **diff entre esquemas foi zero**.
+- Esta prova cobre uma restauração real de **snapshot do esquema atual**, e não somente clonagem ou snapshot histórico pré-API.
+
+### Snapshot e restauração com dados sintéticos
+- No mesmo root descartável foram inseridos em transação: **1 tenant fictício, 1 integração `disabled` e 1 credencial fictícia `revoked` e expirada**. A credencial usa digest de teste, sem chave válida nem segredo bruto.
+- Criado snapshot `snap-wild-darkness-bcihg07n`; restaurado com `finalize=false` em **nova branch** `br-crimson-base-bcqvb3sx`, `ready`, `restore_status=restored`, `default=false`.
+- Leituras diretas na origem e no banco restaurado confirmaram **102 tabelas / 356 índices / 139 FKs / 10 enums**, com **1 tenant fictício, 1 integração desativada, 1 credencial revogada/expirada, 0 credenciais não revogadas** nos dois bancos. O diff dos esquemas retornou **zero**.
+- Os três computes dos ramos de teste `ep-winter-haze-bca4h70a`, `ep-dry-tree-bcd2xng5` e `ep-wispy-fog-bcreyvvg` foram suspensos após a verificação para reduzir consumo.
+
+### O que essa prova NÃO cobre
+- **PITR por timestamp/LSN**, janela real de recuperação, metas formais RPO/RTO, failover de produção ou conexão da aplicação ao banco restaurado ainda **não foram demonstrados/aceitos**.
+- Esse teste utilizou **snapshot de branch raiz descartável**, sem `finalize`, alteração da branch default ou qualquer acesso ao projeto Neon de produção `leadflow-crm`.
+- Também permanecem **pendentes a homologação de egress geral, o tratamento de credenciais compartilhadas no preview, as dez decisões LGPD/retention/legal hold e a autorização do rollout/rollback produtivo**.
+- **Gate técnico específico `current_api_schema_snapshot_restore`: PASS (scope: isolated manual snapshot + synthetic DB data). Gate `full_production_recovery`: NO_GO.**
