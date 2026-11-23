@@ -9,8 +9,13 @@ const QA_POOLER_HOST = PR629_QA_DB_HOST.replace('.c-16.', '-pooler.c-16.');
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-export function isPr629DbAttestationAllowed(env: Env): boolean {
-  return env.VERCEL_ENV === 'preview'
+export function isPr629DbAttestationAllowed(env: Env, nowMs: number = Date.now()): boolean {
+  const expiryMs = Date.parse(env.PR629_DB_ATTESTATION_EXPIRES_AT || '');
+  // Fails closed if missing/expired; never allow a diagnostic window over 30 minutes.
+  return Number.isFinite(expiryMs)
+    && expiryMs > nowMs
+    && expiryMs - nowMs <= 30 * 60 * 1000
+    && env.VERCEL_ENV === 'preview'
     && env.VERCEL_GIT_COMMIT_REF === 'security/api-v1-homologation-20261121'
     && env.PR629_DB_ATTESTATION_ENABLED === 'true'
     && env.PR629_BLOCK_EXTERNAL_EGRESS === 'true'
