@@ -69,3 +69,20 @@ Leitura do projeto **Vercel staging**, sem descriptografar segredos:
 - Esse teste utilizou **snapshot de branch raiz descartável**, sem `finalize`, alteração da branch default ou qualquer acesso ao projeto Neon de produção `leadflow-crm`.
 - Também permanecem **pendentes a homologação de egress geral, o tratamento de credenciais compartilhadas no preview, as dez decisões LGPD/retention/legal hold e a autorização do rollout/rollback produtivo**.
 - **Gate técnico específico `current_api_schema_snapshot_restore`: PASS (scope: isolated manual snapshot + synthetic DB data). Gate `full_production_recovery`: NO_GO.**
+
+
+## 6. Ensaio não destrutivo de histórico por timestamp — 23/11/2026
+
+**Objetivo:** dar sequência ao aceite operacional do proprietário com comprovação de histórico da raiz QA. **Não houve operação de instant restore nem reconstrução de dados por PITR.**
+
+- Projeto isolado `flipform-staging-isolated` (`holy-fog-36254823`), retenção de histórico observada **86.400 segundos (24h)**. A branch `br-rapid-cherry-bcizfy2x` é raiz não padrão, com 102 tabelas no banco `flipform_staging`.
+- Consulta read-only `compare_database_schema` contra **a própria raiz** em `2026-11-23T01:50:00Z`: diff de 232.785 caracteres, com **102 instruções CREATE TABLE e 10 CREATE TYPE acrescentadas** na versão atual. Mostra que a versão anterior do esquema podia ser consultada no ponto histórico.
+- Mesma comparação com ponto histórico `2026-11-23T02:06:00Z`: **diff zero**, confirmando que o esquema nesse instante já correspondia à versão atual da raiz.
+- Foi solicitada criação não destrutiva de uma raiz descartável com `restore_snapshot(finalize=false)` do snapshot de testes `snap-wild-darkness-bcihg07n`. O Neon **recusou HTTP 422 — root branches limit exceeded**. Inventário confirmou **cinco branches raiz** no projeto staging, entre elas a branch default, que não deve ser substituída.
+- **Não foram apagadas branches, alternada a branch padrão, acessado o projeto Neon produtivo, alterado esquema ou feito instant restore**. Não foi gerado custo deliberado de novas branches raiz após a recusa. O ensaio parou no bloqueio.
+
+**Distinguir duas capacidades:** foi demonstrado o acesso temporal a **esquemas históricos** e já existia restauração real de *snapshots* isolados. Porém recuperar **dados** de um timestamp específico, aferir RPO/RTO, restabelecer a aplicação e substituir uma raiz descartável por instant restore **não foram executados**. O aceite operacional do proprietário está registrado, mas o gate permanece `NO_GO`.
+
+**Próximo passo seguro:** liberar uma vaga de raiz **com autorização específica para destinar uma branch antiga** após verificar sua função e preservação das evidências, ou contratar capacidade de roots adicional. Em seguida executar um PITR real apenas sobre raiz QA descartável e medir resultado. Não apagar nenhum artefato de teste unilateralmente.
+
+**Artefato validável:** `docs/security/api-v1-pitr-timeline-readonly-20261123.json` e teste offline `tests/test_pr629_pitr_timeline_gate.py`. Ponto no tempo comprovado para esquema ≠ recuperação integral comprovada.
