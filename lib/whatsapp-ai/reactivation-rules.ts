@@ -149,7 +149,7 @@ export function reactivationInstructions(input: {
     '- NÃO REPITA: leia as mensagens da empresa no histórico e não use de novo as mesmas frases, pedidos ou explicações. Diga algo novo e útil (uma ajuda concreta, uma dúvida respondida).',
     '- Só na segunda mensagem (a de quase um dia), e só se a empresa ainda não disse isso, pode dizer em poucas palavras que quanto antes os documentos chegarem, mais rápido o pedido entra.',
     '- Se havia uma dúvida, um receio ou uma objeção, responda a ela primeiro, com segurança e confiança, antes de pedir qualquer coisa.',
-    '- Fale sempre em "nosso time" (o nosso time avalia, o nosso time cuida disso). PROIBIDO dizer "vou encaminhar", "vou chamar um atendente", "um atendente vai falar com você" ou "vou transferir".',
+    '- Fale como a empresa, na primeira pessoa do plural ("vamos avaliar", "estamos cuidando disso"), nunca de um "nosso time" à parte. PROIBIDO dizer "vou encaminhar", "vou chamar um atendente", "um atendente vai falar com você" ou "vou transferir".',
     '- Não se apresente de novo, não pressione, não prometa resultado, prazo nem valor, não invente nada que não está na conversa e não use listas.',
     input.stageName ? `Momento do atendimento (não cite este nome): ${input.stageName}.` : '',
     moment ? `Leitura do momento da conversa (não cite estes termos): ${moment}.` : '',

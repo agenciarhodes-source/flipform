@@ -162,7 +162,7 @@ function whatsappInstructions(input: {
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
-    'Se o cliente pedir para falar com alguém, responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE.',
+    'Se o cliente pedir para falar com alguém, responda como a empresa que vamos cuidar disso (veja VOZ DA EMPRESA), continue o atendimento e crie a TAREFA PARA A EQUIPE.',
     TEAM_VOICE_RULE,
     TEAM_TASK_INSTRUCTION,
     VIDEO_CALL_INSTRUCTION,
@@ -192,7 +192,7 @@ function whatsappInstructions(input: {
       'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
         + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
         + ' passos, caminho encontrado). Não refaça a triagem, não repita perguntas que a equipe já fez e nunca contradiga a'
-        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que o nosso time vai avaliar, sem decidir'
+        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que vamos avaliar com cuidado e retornar por aqui, sem decidir'
         + ' sozinho.',
     ] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
