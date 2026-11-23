@@ -2,6 +2,7 @@ import 'server-only';
 import { WHATSAPP_TEMPLATE_VARIABLES } from './whatsapp-template-variables';
 
 import { createAppSecretProof, META_PLATFORM_GRAPH_API_VERSION } from './oauth';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 const GRAPH_HOST = 'graph.facebook.com';
 const TIMEOUT_MS = 10_000;
@@ -45,6 +46,8 @@ async function metaJson(url: URL, operation: string, input: {
   method?: 'GET' | 'POST' | 'DELETE';
   body?: unknown;
 }) {
+  // Centralized helper protects all template list/create/delete calls in QA preview.
+  assertPr629NoExternalEgress('whatsapp-templates');
   let response: Response;
   try {
     response = await fetch(url, {

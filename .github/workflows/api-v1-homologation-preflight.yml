@@ -42,6 +42,12 @@ on:
       - 'lib/stripe/client.ts'
       - 'lib/email/send.ts'
       - 'tests/test_pr629_external_egress_guard.py'
+      - 'tests/test_pr629_extra_preview_transports_guard.py'
+      - 'docs/security/pr629-preview-egress-coverage-20261123.md'
+      - 'lib/meta/instagram-private-reply.ts'
+      - 'lib/meta/whatsapp-templates.ts'
+      - 'lib/meta/whatsapp-media.ts'
+      - 'lib/meta/whatsapp-typing.ts'
       - 'tests/pr629-external-egress-runtime.test.ts'
       - 'vercel.json'
 
@@ -66,6 +72,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_api_v1_egress_static_guard.py -v
           python3 scripts/api_v1_egress_static_guard.py
           python3 -m unittest discover -s tests -p test_pr629_external_egress_guard.py -v
+          python3 -m unittest discover -s tests -p test_pr629_extra_preview_transports_guard.py -v
           python3 -m unittest discover -s tests -p test_pr629_retention_clock_gate.py -v
           python3 scripts/pr629_retention_clock_gate.py
           python3 -m unittest discover -s tests -p test_pr629_operational_acceptance_gate.py -v

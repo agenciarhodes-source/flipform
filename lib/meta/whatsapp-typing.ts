@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 /**
  * Shows "digitando…" to the customer while the AI prepares the answer. Meta keeps it for up to
@@ -8,6 +9,7 @@ import { META_PLATFORM_GRAPH_API_VERSION } from '@/lib/meta/oauth';
  * a failure never stops the reply.
  */
 export async function showWhatsAppTyping(input: { phoneNumberId: string; accessToken: string; messageId: string }) {
+  assertPr629NoExternalEgress('whatsapp-typing');
   if (!/^\d{1,64}$/.test(input.phoneNumberId) || !input.messageId.startsWith('wamid.')) return false;
   try {
     const response = await fetch(`https://graph.facebook.com/${META_PLATFORM_GRAPH_API_VERSION}/${input.phoneNumberId}/messages`, {
