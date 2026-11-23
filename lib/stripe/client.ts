@@ -1,3 +1,4 @@
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 import 'server-only';
 
 import Stripe from 'stripe';
@@ -14,6 +15,7 @@ function fingerprintRestrictedKey(mode: string, key: string) {
 }
 
 export function getStripeClient() {
+  assertPr629NoExternalEgress('stripe-sdk');
   const config = requireStripeConfiguration();
   const fingerprint = fingerprintRestrictedKey(config.mode, config.restrictedKey);
 

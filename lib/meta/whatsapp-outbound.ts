@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -611,6 +612,7 @@ async function sendMetaWhatsAppText(input: {
         : { type: 'text', text: { preview_url: false, body: input.text } };
   let response: Response;
   try {
+    assertPr629NoExternalEgress('whatsapp-send');
     response = await fetch(url, {
       method: 'POST',
       cache: 'no-store',

@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
@@ -486,6 +487,7 @@ async function sendInstagramText(input: {
   try {
     let response: Response;
     try {
+      assertPr629NoExternalEgress('instagram-send');
       response = await fetch(
         `https://graph.instagram.com/${INSTAGRAM_GRAPH_VERSION}/${encodeURIComponent(input.instagramUserId)}/messages`,
         {

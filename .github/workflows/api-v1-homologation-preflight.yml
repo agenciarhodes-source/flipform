@@ -15,6 +15,14 @@ on:
       - 'docs/security/api-v1-pitr-egress-review-20261122.md'
       - 'scripts/api_v1_egress_static_guard.py'
       - 'tests/test_api_v1_egress_static_guard.py'
+      - 'lib/qa/pr629-external-egress.ts'
+      - 'lib/tracking/meta-capi.ts'
+      - 'lib/tracking/google-data-manager.ts'
+      - 'lib/meta/instagram-outbound.ts'
+      - 'lib/meta/whatsapp-outbound.ts'
+      - 'lib/stripe/client.ts'
+      - 'lib/email/send.ts'
+      - 'tests/test_pr629_external_egress_guard.py'
       - 'vercel.json'
 
 permissions:
@@ -37,6 +45,7 @@ jobs:
           python3 scripts/api_v1_homologation_preflight.py --report "$RUNNER_TEMP/api-v1-homologation-preflight.json"
           python3 -m unittest discover -s tests -p test_api_v1_egress_static_guard.py -v
           python3 scripts/api_v1_egress_static_guard.py
+          python3 -m unittest discover -s tests -p test_pr629_external_egress_guard.py -v
       - name: Upload non-sensitive hold evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
