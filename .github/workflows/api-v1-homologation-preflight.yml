@@ -23,6 +23,7 @@ on:
       - 'lib/stripe/client.ts'
       - 'lib/email/send.ts'
       - 'tests/test_pr629_external_egress_guard.py'
+      - 'tests/pr629-external-egress-runtime.test.ts'
       - 'vercel.json'
 
 permissions:
@@ -54,3 +55,48 @@ jobs:
           path: ${{ runner.temp }}/api-v1-homologation-preflight.json
           if-no-files-found: warn
           retention-days: 14
+
+  stack-validate:
+    name: Typecheck and scoped API v1 regression tests
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'security/api-v1-homologation-20261121'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET_CURRENT: pr629-ci-disposable-only
+      EMAIL_PROVIDER: none
+      FLIPFORM_API_V1_ENABLED: 'false'
+      PR629_BLOCK_EXTERNAL_EGRESS: 'false'
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pr629_disposable?schema=public
+    steps:
+      - name: Checkout without write credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and generate Prisma client offline
+        run: npm ci
+      - name: Typecheck final stacked API code
+        run: npm run typecheck
+      - name: Test preview-only outbound transport brake without network access
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-external-egress-runtime.test.ts
+      - name: Test M2M policies, read-only scopes and existing provider transports
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: |
+          npx tsx --test \
+            tests/pr01-api-foundation.test.ts \
+            tests/pr02-pipelines-read.test.ts \
+            tests/pr02-forms-catalog.test.ts \
+            tests/pr02-form-fields-read.test.ts \
+            tests/pr02-pipeline-metrics.test.ts \
+            tests/pr02-leads-metadata.test.ts \
+            tests/pr02-lead-detail.test.ts \
+            tests/google-data-manager.test.ts \
+            tests/tracking.test.ts
