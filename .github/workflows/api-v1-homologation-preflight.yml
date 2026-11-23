@@ -38,6 +38,11 @@ on:
       - 'scripts/api_v1_egress_static_guard.py'
       - 'tests/test_api_v1_egress_static_guard.py'
       - 'lib/qa/pr629-external-egress.ts'
+      - 'lib/qa/pr629-db-target-attestation.ts'
+      - 'app/api/_qa/pr629-db-target/route.ts'
+      - 'tests/pr629-db-target-attestation.test.ts'
+      - 'tests/test_pr629_db_target_attestation_static.py'
+      - 'docs/security/pr629-db-target-attestation-runbook-20261123.md'
       - 'lib/tracking/meta-capi.ts'
       - 'lib/tracking/google-data-manager.ts'
       - 'lib/meta/instagram-outbound.ts'
@@ -81,6 +86,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_pr629_operational_acceptance_gate.py -v
           python3 scripts/pr629_operational_acceptance_gate.py
           python3 -m unittest discover -s tests -p test_pr629_pitr_timeline_gate.py -v
+          python3 -m unittest discover -s tests -p test_pr629_db_target_attestation_static.py -v
           python3 scripts/pr629_pitr_timeline_gate.py
       - name: Upload non-sensitive hold evidence
         if: always()
@@ -121,6 +127,10 @@ jobs:
         env:
           NODE_OPTIONS: --conditions=react-server
         run: npx tsx --test tests/pr629-external-egress-runtime.test.ts
+      - name: Test dormant QA database target guard with synthetic URLs
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-db-target-attestation.test.ts
       - name: Test lifecycle clock transitions offline
         env:
           NODE_OPTIONS: --conditions=react-server
