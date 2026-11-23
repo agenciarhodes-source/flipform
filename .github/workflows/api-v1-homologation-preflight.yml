@@ -39,7 +39,7 @@ on:
       - 'tests/test_api_v1_egress_static_guard.py'
       - 'lib/qa/pr629-external-egress.ts'
       - 'lib/qa/pr629-db-target-attestation.ts'
-      - 'app/api/_qa/pr629-db-target/route.ts'
+      - 'app/api/pr629-qa/db-target/route.ts'
       - 'tests/pr629-db-target-attestation.test.ts'
       - 'tests/test_pr629_db_target_attestation_static.py'
       - 'docs/security/pr629-db-target-attestation-runbook-20261123.md'
