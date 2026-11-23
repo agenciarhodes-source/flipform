@@ -31,6 +31,8 @@ on:
       - 'lib/api-v1/lifecycle-clocks.ts'
       - 'lib/api-v1/integration-management.ts'
       - 'lib/api-v1/prisma-credential-repository.ts'
+      - 'lib/api-v1/policy.ts'
+      - 'tests/pr629-pilot-allowlist.test.ts'
       - 'lib/api-v1/diagnostic-delivery-state.ts'
       - 'docs/security/api-v1-lifecycle-clock-implementation-20261123.md'
       - 'tests/pr629-lifecycle-clocks.test.ts'
@@ -131,6 +133,10 @@ jobs:
         env:
           NODE_OPTIONS: --conditions=react-server
         run: npx tsx --test tests/pr629-db-target-attestation.test.ts
+      - name: Test per-tenant pilot allowlist fail closed
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-pilot-allowlist.test.ts
       - name: Test lifecycle clock transitions offline
         env:
           NODE_OPTIONS: --conditions=react-server
