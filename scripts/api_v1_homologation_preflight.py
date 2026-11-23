@@ -144,6 +144,18 @@ def verify(root: Path = ROOT) -> dict:
         require(proposal.get(key) is False, "Retention proposal cannot authorize: " + key)
     for key in ("approved_by", "approval_reference", "approved_at"):
         require(proposal.get(key) is None, "Retention proposal cannot contain approval: " + key)
+    governance = proposal.get("governance_responsibility", {})
+    require(governance.get("accountable_role") == "Proprietário/representante da Pollo/FlipForm"
+            and governance.get("owner_self_designated") is True
+            and governance.get("declaration_date") == "2026-11-23"
+            and governance.get("legal_review_required") is True
+            and governance.get("legal_review_status") == "PENDING"
+            and governance.get("legal_reviewer") is None
+            and governance.get("legal_review_reference") is None
+            and governance.get("policy_approval_status") == "PENDING"
+            and governance.get("personal_data_officer_appointed_by_this_record") is False
+            and governance.get("final_release_authorized") is False,
+            "Owner designation must not be mistaken for legal review or release approval")
     proposed_items = proposal.get("items")
     source_items = retention.get("fk_decisions", [])
     require(isinstance(proposed_items, list) and len(proposed_items) == 10,

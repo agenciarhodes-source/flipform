@@ -228,5 +228,19 @@
       "owner_for_approval": null,
       "decision_reference": null
     }
-  ]
+  ],
+  "governance_responsibility": {
+    "accountable_role": "Proprietário/representante da Pollo/FlipForm",
+    "owner_self_designated": true,
+    "declaration_date": "2026-11-23",
+    "designation_scope": "Coordenação da revisão jurídica e decisão final de retenção da API v1; sujeito à análise jurídica",
+    "legal_review_required": true,
+    "legal_review_status": "PENDING",
+    "legal_reviewer": null,
+    "legal_review_reference": null,
+    "policy_approval_status": "PENDING",
+    "personal_data_officer_appointed_by_this_record": false,
+    "final_release_authorized": false,
+    "decision_record_note": "Designação declarada pelo proprietário no diálogo do projeto; não constitui aceite de regras ou laudo jurídico"
+  }
 }

@@ -128,5 +128,20 @@ class HomologationPreflightTest(unittest.TestCase):
             self.make_tree(root, proposal=fake)
             with self.assertRaises(ValueError): verify(root)
 
+    def test_owner_designation_does_not_approve_policy_or_replace_juridical_review(self):
+        original=json.loads(PROPOSAL.read_text())
+        for field,value in (
+            ("legal_review_status", "APPROVED"),
+            ("policy_approval_status", "APPROVED"),
+            ("final_release_authorized", True),
+            ("personal_data_officer_appointed_by_this_record", True),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                fake=copy.deepcopy(original)
+                fake["governance_responsibility"][field]=value
+                root=Path(tmp)
+                self.make_tree(root,proposal=fake)
+                with self.assertRaises(ValueError): verify(root)
+
 if __name__=="__main__":
     unittest.main()
