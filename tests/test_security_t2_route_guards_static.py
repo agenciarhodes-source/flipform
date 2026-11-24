@@ -61,6 +61,11 @@ GUARDED = {
     # Flip Voice Twilio callbacks: verify provider HMAC before any DB or provider call.
     "flip-voice/twilio/inbound/route.ts": "validTwilioSignature(",
     "flip-voice/twilio/status/route.ts": "validTwilioSignature(",
+    # Dedicated Twilio webhooks: signed provider payload required, never session-free.
+    "flip-voice/whatsapp/permission/route.ts": "validTwilioSignature(",
+    "flip-voice/whatsapp/inbound/route.ts": "validTwilioSignature(",
+    "flip-voice/whatsapp/status/route.ts": "validTwilioSignature(",
+    "flip-voice/whatsapp/outbound-twiml/route.ts": "validTwilioSignature(",
     "webhooks/stripe/route.ts": "constructEvent(",
     "webhooks/zapsign/[tenantId]/route.ts": "zapSignWebhookAuthorized(",
     # Public pages (forms, site chat, checkout): published content only, with attempt limits.

@@ -48,3 +48,18 @@ test('inbound requires XML returned by provider, never redirects to untrusted en
   toNumber:'+5511987654321',fetchImpl:badFetch,
  }),/ELEVEN_TWIML_INVALID/);
 });
+
+test('register-call forwards the explicit outbound direction without changing inbound default',async()=>{
+ const fetchImpl=(async (_url:RequestInfo|URL,init?:RequestInit)=>{
+   const body=JSON.parse(String(init?.body));
+   assert.equal(body.direction,'outbound');
+   assert.equal(body.agent_id,defaults.agentId);
+   return new Response('<?xml version="1.0"?><Response><Connect><Stream url="wss://example.com/test" /></Connect></Response>',{status:200});
+ }) as typeof fetch;
+ const xml=await registerElevenTwilioInbound({
+   apiKey:defaults.apiKey,agentId:defaults.agentId,
+   fromNumber:'+558655551111',toNumber:defaults.recipientNumber,
+   direction:'outbound',fetchImpl,
+ });
+ assert.match(xml,/<Connect>/);
+});

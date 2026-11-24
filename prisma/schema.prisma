@@ -2606,6 +2606,9 @@ model FlipVoiceCall {
   reservedUsdMicros BigInt   @default(0) @map("reserved_usd_micros")
   billedUsdMicros   BigInt   @default(0) @map("billed_usd_micros")
   providerCallId    String?  @map("provider_call_id")
+  // Hash of one-time Twilio outbound callback ticket; never store plaintext.
+  outboundWebhookTicketHash String? @unique @map("outbound_webhook_ticket_hash")
+  outboundTwiMLClaimedAt DateTime? @map("outbound_twiml_claimed_at")
   startedAt         DateTime? @map("started_at")
   endedAt           DateTime? @map("ended_at")
   createdAt         DateTime @default(now()) @map("created_at")
@@ -2654,6 +2657,11 @@ model FlipVoiceLine {
   status                String   @default("disabled")
   inboundEnabled        Boolean  @default(false) @map("inbound_enabled")
   outboundEnabled       Boolean  @default(false) @map("outbound_enabled")
+  // WhatsApp Business Calling is provisioned separately; default disabled.
+  whatsappInboundEnabled Boolean @default(false) @map("whatsapp_inbound_enabled")
+  whatsappOutboundEnabled Boolean @default(false) @map("whatsapp_outbound_enabled")
+  whatsappSenderSid     String? @map("whatsapp_sender_sid")
+  whatsappRoutingMode   String @default("none") @map("whatsapp_routing_mode")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -2681,6 +2689,14 @@ model FlipVoiceContactPermission {
   expiresAt       DateTime? @map("expires_at")
   revokedAt       DateTime? @map("revoked_at")
   status          String    @default("pending")
+  // Separate proof granted by Twilio/Meta, never inferred from PSTN opt-in.
+  providerPermissionSource String? @map("provider_permission_source")
+  providerPermissionRef String? @map("provider_permission_ref")
+  // SID of the outbound VOICE_CALL_REQUEST template; not the response SID.
+  providerPermissionRequestSid String? @map("provider_permission_request_sid")
+  providerPermissionConfirmedAt DateTime? @map("provider_permission_confirmed_at")
+  outboundCallWindowStart DateTime? @map("outbound_call_window_start")
+  outboundCallsInWindow Int @default(0) @map("outbound_calls_in_window")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
