@@ -37,3 +37,7 @@ Desenvolvedor técnico por empresa, com mesmo login autorizado em várias empres
 
 ## Status
 Este DRAFT contém somente a política pura e testes básicos de autorização. Não altera permissões de produção, login, banco de dados, menu nem endpoints. É deliberadamente NÃO PRONTO para merge. Todo restante permanece no mesmo PR.
+
+## Retomada controlada dos checks (24/11/2026)
+
+O PR #643 deve manter verificações obrigatórias de CI (Install, Typecheck and Build + Smoke Test) e Playwright antes do merge. A opção Ready for review não substitui uma execução real. Quando Actions estiver habilitado, um commit de sincronização no PR solicita novamente os checks; se permanecerem Expected, conferir as permissões de Actions e o bloqueio de orçamento antes de prosseguir. Não remover proteção do branch ou mesclar com verificações ausentes. Toda execução deve respeitar orçamento com interrupção no limite.
