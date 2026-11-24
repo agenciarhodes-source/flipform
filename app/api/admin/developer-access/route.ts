@@ -6,7 +6,7 @@ import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
-const id = z.string().uuid();
+const id = z.string().guid();
 const bodySchema = z.object({ tenantId: id, userId: id }).strict();
 
 function hasRecentMfa(session: { mfaVerifiedAt?: number }) {
