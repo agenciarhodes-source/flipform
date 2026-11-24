@@ -7,6 +7,7 @@ import { validateApprovedVoice, FlipVoiceCoreError } from './agent-core';
 import {
   normalizeBrazilianDialNumber, allowedBrazilBusinessHours, estimateCallReserveMicros,
   utcMonthStart, hashCallIdentity, validRecipientPermission, validatePstnLine,
+  estimatedTerminalSpendMicros,
 } from './telephony-core';
 import { startElevenTwilioOutbound } from './telephony-provider';
 
@@ -303,10 +304,8 @@ export async function settleFlipVoiceTwilioCall(input:{
       if(!call)refuse('VOICE_CALL_NOT_FOUND');
       if(finalStatuses.has(call.status))return 'already_settled' as const;
       if(!['initiated','delivery_unknown','dispatching'].includes(call.status))return 'needs_review' as const;
-      const billedEstimate = input.status==='completed'
-        ? BigInt(Math.ceil(Math.max(1,input.durationSeconds||0)/60)) * 200_000n
-        : 0n;
-      if(billedEstimate > call.reservedUsdMicros)return 'needs_review' as const;
+      const billedEstimate=estimatedTerminalSpendMicros(input.status,input.durationSeconds,call.reservedUsdMicros);
+      if(billedEstimate===null)return 'needs_review' as const;
       const periodStart=utcMonthStart(call.createdAt);
       const updated=await db.$executeRaw(Prisma.sql`
         UPDATE "flip_voice_budgets"
