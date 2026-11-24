@@ -10,9 +10,9 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const requestSchema = z.object({
-  leadId: z.string().uuid(),
-  lineId: z.string().uuid(),
-  idempotencyKey: z.string().uuid(),
+  leadId: z.guid(),
+  lineId: z.guid(),
+  idempotencyKey: z.guid(),
 }).strict();
 
 /**
