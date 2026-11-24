@@ -4,6 +4,7 @@ import {
   WHATSAPP_CALLING_DEFAULTS, normalizeWhatsAppAddress, validateWhatsAppChannel,
   isWhatsAppCallPermitted, whatsappCallQuotaAllows,
   estimateWhatsAppCallReservationMicros, parseTwilioCallPermissionReply,
+  whatsappPermissionRequestQuotaAllows,
   validateWhatsAppHumanHandoff, validateWhatsAppTwilioAccount,
   type ProviderWhatsAppPermission,
 } from '../lib/flip-voice/whatsapp-calling-policy';
@@ -91,4 +92,15 @@ test('handoff is VoIP/SIP only and never bridges WhatsApp to PSTN',()=>{
  assert.equal(validateWhatsAppHumanHandoff({provider:'twilio',destinationKind:'sip',configured:true,approved:true}),true);
  assert.equal(validateWhatsAppHumanHandoff({provider:'twilio',destinationKind:'pstn',configured:true,approved:true}),false);
  assert.equal(validateWhatsAppHumanHandoff({provider:'elevenlabs',destinationKind:'voip',configured:false,approved:true}),false);
+});
+
+test('permission request quota is 1 per day and 2 per week, including unresolved sends',()=>{
+ assert.equal(whatsappPermissionRequestQuotaAllows([],now),true);
+ const yesterday=new Date(now.getTime()-23*3600_000);
+ assert.equal(whatsappPermissionRequestQuotaAllows([yesterday],now),false);
+ const earlier=new Date(now.getTime()-3*86400_000);
+ assert.equal(whatsappPermissionRequestQuotaAllows([earlier],now),true);
+ assert.equal(whatsappPermissionRequestQuotaAllows([earlier,new Date(now.getTime()-5*86400_000)],now),false);
+ assert.equal(whatsappPermissionRequestQuotaAllows([new Date(now.getTime()-8*86400_000)],now),true);
+ assert.equal(whatsappPermissionRequestQuotaAllows([new Date(now.getTime()+3600_000)],now),false);
 });
