@@ -61,7 +61,7 @@ def historical_pr01_candidate(current_schema: str) -> str:
 
     # New developer grant is independently reviewed with its own additive migration.
     for model, table in DEVELOPER_MODELS.items():
-        pattern = rf"(?ms)^model\\s+{re.escape(model)}\\s*\\{{(.*?)^\\}}\\n?"
+        pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
         match = re.search(pattern, projected)
         if not match or match.group(1).count(f'@@map("{table}")') != 1:
             raise ValueError(f"Missing or unapproved developer model mapping: {model}")
@@ -69,13 +69,13 @@ def historical_pr01_candidate(current_schema: str) -> str:
         if count != 1:
             raise ValueError(f"Could not isolate exactly one {model}")
     for model, fields in DEVELOPER_INVERSE.items():
-        pattern = rf"(?ms)(^model\\s+{model}\\s*\\{{)(.*?)(^\\}})"
+        pattern = rf"(?ms)(^model\s+{model}\s*\{{)(.*?)(^\}})"
         match = re.search(pattern, projected)
         if not match:
             raise ValueError(f"Missing model for developer inverse: {model}")
         body = match.group(2)
         for field in fields:
-            exact = rf"(?m)^\\s+{re.escape(field)}\\s*\\n"
+            exact = rf"(?m)^\s+{re.escape(field)}\s*\n"
             if len(re.findall(exact, body)) != 1:
                 raise ValueError(f"Missing/duplicate developer inverse: {model}.{field}")
             body = re.sub(exact, "", body, count=1)
