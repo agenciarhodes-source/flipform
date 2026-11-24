@@ -65,6 +65,10 @@ jobs:
         continue-on-error: true
         run: npm audit --omit=dev --audit-level=high
 
+      # Multiple company logins: tenant choice is password-gated and allowlist-bound.
+      - name: Multi-company login choice tests (offline)
+        run: npx tsx --test tests/tenant-login-selection.test.ts
+
       # PR01 Phase 1: pure M2M policies/credential verification, NO database connections.
       - name: PR01 API v1 security foundation tests (offline)
         run: npx tsx --test tests/pr01-api-foundation.test.ts
