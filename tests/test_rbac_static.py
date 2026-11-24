@@ -84,8 +84,8 @@ def test_frontend_uses_portuguese_labels_for_roles():
 
 def test_agent_cannot_see_or_access_domains_and_billing_account_areas():
     rbac = read('lib/rbac.ts')
-    assert "DOMAINS_VIEW: ['owner', 'admin']" in rbac
-    assert "DOMAINS_MANAGE: ['owner', 'admin']" in rbac
+    assert "DOMAINS_VIEW: ['developer']" in rbac
+    assert "DOMAINS_MANAGE: ['developer']" in rbac
     assert "BILLING_VIEW: ['owner']" in rbac
     assert "BILLING_MANAGE: ['owner']" in rbac
 
