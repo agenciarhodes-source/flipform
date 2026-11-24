@@ -1,10 +1,11 @@
 // Cliente-safe: apenas constantes, tipos e funções puras. Sem imports server-only.
-export type RoleName = 'owner' | 'admin' | 'manager' | 'agent' | 'viewer';
+export type RoleName = 'developer' | 'owner' | 'admin' | 'manager' | 'agent' | 'viewer';
 export type GlobalRoleName = 'platform_admin';
 
 export const PLATFORM_ADMIN_LABEL_PT_BR = 'Super Admin';
 
 export const ROLE_LABELS_PT_BR = {
+  developer: 'Desenvolvedor',
   owner: 'Dono da empresa',
   admin: 'Administrador',
   manager: 'Gestor',
@@ -13,7 +14,8 @@ export const ROLE_LABELS_PT_BR = {
 } as const satisfies Record<RoleName, string>;
 
 export const ROLE_DESCRIPTIONS_PT_BR = {
-  owner: 'Acesso total à empresa, usuários, relatórios, financeiro e configurações.',
+  developer: 'Acesso técnico por empresa, vinculado e protegido por autenticação de dois fatores.',
+  owner: 'Administra a empresa, usuários, relatórios e financeiro; sem configurações técnicas.',
   admin: 'Administra a operação da empresa, com acesso amplo, exceto ações críticas de propriedade.',
   manager: 'Gerencia a equipe comercial e acompanha performance, leads e tarefas.',
   agent: 'Atende e movimenta apenas os próprios leads atribuídos.',
@@ -21,7 +23,8 @@ export const ROLE_DESCRIPTIONS_PT_BR = {
 } as const satisfies Record<RoleName, string>;
 
 export const ROLE_SHORT_DESCRIPTIONS_PT_BR = {
-  owner: 'acesso total à empresa.',
+  developer: 'administração técnica de empresa autorizada.',
+  owner: 'gestão comercial, usuários e financeiro.',
   admin: 'gerencia operação e usuários abaixo dele.',
   manager: 'acompanha equipe comercial e funil.',
   agent: 'opera apenas seus próprios leads.',
@@ -34,6 +37,7 @@ export const ROLE_LEVEL = {
   manager: 30,
   admin: 40,
   owner: 50,
+  developer: 60,
 } as const satisfies Record<RoleName, number>;
 
 export function roleAtLeast(role: string, min: RoleName): boolean {
@@ -50,7 +54,7 @@ export function hasRole(session: { role?: string | null } | null | undefined, ro
 }
 
 export const PERMISSIONS = {
-  FLIP_AI_MANAGE: ['owner', 'admin'],
+  FLIP_AI_MANAGE: ['developer'],
   // Contracts by ZapSign (token and the model of each case): owner and admin.
   CONTRACTS_MANAGE: ['owner', 'admin'],
   // Lead assistant commands in the Flip bar (distribute, move stage, tags, undo): the owner only.
@@ -100,14 +104,14 @@ export const PERMISSIONS = {
   USERS_UPDATE_ROLE: ['owner', 'admin'],
   USERS_CHANGE_ROLE: ['owner', 'admin'],
   USERS_DISABLE: ['owner', 'admin'],
-  DOMAINS_VIEW: ['owner', 'admin'],
-  DOMAINS_MANAGE: ['owner', 'admin'],
-  INTEGRATIONS_VIEW: ['owner', 'admin'],
-  INTEGRATIONS_MANAGE: ['owner', 'admin'],
-  INTEGRATIONS_EDIT: ['owner', 'admin'],
-  INTEGRATIONS_TEST: ['owner', 'admin'],
-  WHATSAPP_FUNNEL_VIEW: ['owner', 'admin', 'manager'],
-  WHATSAPP_FUNNEL_MANAGE: ['owner', 'admin'],
+  DOMAINS_VIEW: ['developer'],
+  DOMAINS_MANAGE: ['developer'],
+  INTEGRATIONS_VIEW: ['developer'],
+  INTEGRATIONS_MANAGE: ['developer'],
+  INTEGRATIONS_EDIT: ['developer'],
+  INTEGRATIONS_TEST: ['developer'],
+  WHATSAPP_FUNNEL_VIEW: ['developer'],
+  WHATSAPP_FUNNEL_MANAGE: ['developer'],
   REPORTS_VIEW_ALL: ['owner', 'admin', 'manager', 'viewer'],
   REPORTS_VIEW_OWN: ['agent'],
   REPORTS_EXPORT: ['owner', 'admin'],
@@ -139,7 +143,7 @@ export const PERMISSIONS = {
 export type PermissionKey = keyof typeof PERMISSIONS;
 
 export function can(role: string, permission: PermissionKey): boolean {
-  return (PERMISSIONS[permission] as readonly RoleName[]).includes(role as RoleName);
+  return role === 'developer' || (PERMISSIONS[permission] as readonly RoleName[]).includes(role as RoleName);
 }
 
 export function hasPermission(session: { role?: string | null } | null | undefined, permission: PermissionKey): boolean {
@@ -147,6 +151,7 @@ export function hasPermission(session: { role?: string | null } | null | undefin
 }
 
 export function canManageRole(actorRole: string | null | undefined, targetRole: RoleName, actorGlobalRole?: string | null): boolean {
+  if (targetRole === 'developer') return false;
   if (actorGlobalRole === 'platform_admin') return true;
   if (targetRole === 'owner') return false;
   if (actorRole === 'owner') return ['admin', 'manager', 'agent', 'viewer'].includes(targetRole);
