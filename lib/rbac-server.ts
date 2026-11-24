@@ -7,6 +7,7 @@ import { tenantAccessAllowed, tenantPlanSlug } from './session-access';
 import { INBOX_PLAN_BLOCKED_MESSAGE, inboxPlanBlocksPermission, isInboxOnlyPlan } from './billing/inbox-plan-rules';
 import { permissionWorksWhenBlocked } from './session-access-rules';
 import { can, type PermissionKey } from './rbac';
+import { developerApiAllowed } from './developer-access/route-policy';
 
 // Re-exporta tudo do rbac client-safe para conveniencia em APIs.
 export * from './rbac';
@@ -21,6 +22,9 @@ export function withPermission<T = any>(
     // Role and access come from the database on every request (security protocol S2).
     const session = await getVerifiedSessionFromRequest(req);
     if (!session) return NextResponse.json({ error: 'Sua sessão terminou. Entre novamente.', code: 'session_revoked' }, { status: 401 });
+    if (!developerApiAllowed(req.nextUrl.pathname, session.role)) {
+      return NextResponse.json({ error: 'Configuração exclusiva do Desenvolvedor.' }, { status: 403 });
+    }
     if (!can(session.role, permission)) {
       return NextResponse.json({ error: 'Você não tem permissão para acessar esta funcionalidade.', required: permission }, { status: 403 });
     }
