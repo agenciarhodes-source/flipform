@@ -2649,6 +2649,7 @@ model FlipVoiceContactPermission {
   id              String    @id @default(uuid())
   tenantId        String    @map("tenant_id")
   leadId          String    @map("lead_id")
+  phoneHash       String    @map("phone_hash")
   channel         String    @default("pstn")
   purpose         String    @default("requested_follow_up")
   evidenceSha256  String    @map("evidence_sha256")
