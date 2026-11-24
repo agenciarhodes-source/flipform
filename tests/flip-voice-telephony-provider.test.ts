@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startElevenTwilioOutbound, registerElevenTwilioInbound } from '../lib/flip-voice/telephony-provider';
 const defaults={
- apiKey:'test-elevenlabs-nonsecret-123', agentId:'agent_valid12345678',
+ apiKey:'x'.repeat(24), agentId:'agent_valid12345678',
  agentPhoneNumberId:'phnum_valid12345678', recipientNumber:'+5586999990000',
  recordingAllowed:false as const,
 };
