@@ -62,7 +62,13 @@ export async function POST(req: Request) {
     // Um vínculo ativo com grupo empresarial é uma autorização de login por si só.
     // O usuário entra no hub do grupo sem depender de AllowedUser/TenantUser técnico.
     const groupState = await getBusinessGroupAccessesForUser(prisma, user.id);
-    const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0;
+    // A scoped developer uses the ordinary company selector, never the
+    // business-group hub as an implicit shortcut into client configurations.
+    // Grant/allowlist/tenant membership are revalidated after selection.
+    const hasDeveloperGrants = await prisma.developerTenantGrant.count({
+      where: { userId: user.id, revokedAt: null },
+    }) > 0;
+    const businessGroupAccess = groupState.schemaReady && groupState.accesses.length > 0 && !hasDeveloperGrants;
     if (businessGroupAccess) {
       const primaryGroup = groupState.accesses[0];
       const groupSessionRole = mapBusinessGroupRoleToTenantRole(primaryGroup.role);

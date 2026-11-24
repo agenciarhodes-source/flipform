@@ -110,7 +110,7 @@ async function fixture() {
   await prisma.tenantUser.create({ data: { tenantId: tenant.id, userId: user.id, role: 'owner' } });
   await prisma.subscription.create({ data: { tenantId: tenant.id, planId: plan.id, status: 'active' } });
   const pipeline = await prisma.pipeline.create({ data: { tenantId: tenant.id, name: 'Pipeline CI', stages: { create: { name: 'Novo CI', orderIndex: 0 } } }, include: { stages: true } });
-  return { tenant, user, pipeline, session: { tenantId: tenant.id, tenantSlug: tenant.slug, userId: user.id, email: user.email, name: user.name, role: 'owner' },
+  return { tenant, user, pipeline, session: { tenantId: tenant.id, tenantSlug: tenant.slug, userId: user.id, email: user.email, name: user.name, role: 'developer' },
     input: { name: 'Helena', description: 'CI', primaryColor: '#2563EB', style: 'welcoming' as const,
       slug: 'helena-' + suffix, pipelineId: pipeline.id, initialStageId: pipeline.stages[0].id, rotationId: null } };
 }

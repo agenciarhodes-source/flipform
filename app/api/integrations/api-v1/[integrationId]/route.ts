@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export const PATCH = withAuth(async (req, session, ctx: { params: { integrationId: string } }) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const integrationId = ctx.params.integrationId;
   if (!validApiV1Uuid(integrationId)) return adminV1Error(400);
   const body = await readApiV1Json(req);

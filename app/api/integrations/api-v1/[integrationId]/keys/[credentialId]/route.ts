@@ -11,7 +11,7 @@ export const POST = withAuth(async (req, session,
   ctx: { params: { integrationId: string; credentialId: string } }) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const { integrationId, credentialId } = ctx.params;
   if (!validApiV1Uuid(integrationId) || !validApiV1Uuid(credentialId)
     || !isApiV1SameOriginMutation(req)) return adminV1Error(400);
@@ -26,7 +26,7 @@ export const DELETE = withAuth(async (req, session,
   ctx: { params: { integrationId: string; credentialId: string } }) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const { integrationId, credentialId } = ctx.params;
   if (!validApiV1Uuid(integrationId) || !validApiV1Uuid(credentialId)
     || !isApiV1SameOriginMutation(req)) return adminV1Error(400);

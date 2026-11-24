@@ -74,7 +74,7 @@ export async function readApiV1Json(req: NextRequest): Promise<Record<string, un
 }
 
 /** The supplied actor is from a verified session, never from JSON. */
-export async function verifyApiV1Owner(actor: ApiV1AdminActor): Promise<boolean> {
-  return apiV1Enabled(process.env) && Boolean(actor.userId && actor.tenantId)
+export async function verifyApiV1Owner(actor: ApiV1AdminActor, verifiedSessionRole: string): Promise<boolean> {
+  return verifiedSessionRole === 'developer' && apiV1Enabled(process.env) && Boolean(actor.userId && actor.tenantId)
     && mayManageApiV1Credentials(actor, actor.tenantId);
 }

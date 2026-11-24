@@ -73,7 +73,27 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
     remember(accessCache, key, decision);
   }
   if (!decision.ok) return { ok: false, reason: decision.reason };
-  return { ok: true, session: { ...session, role: decision.role, globalRole: decision.globalRole } };
+  // Critical entitlement is never taken from JWT or the 30-second access cache.
+  // A grant is scoped to exactly one tenant and is rechecked on every verified request.
+  let role = decision.role;
+  if (session.tenantId && Number.isSafeInteger(session.mfaVerifiedAt)
+    && (session.mfaVerifiedAt ?? 0) > 0
+    && Date.now() / 1000 - (session.mfaVerifiedAt ?? 0) < 7 * 24 * 60 * 60
+    && (session.mfaVerifiedAt ?? 0) <= Date.now() / 1000 + 60) {
+    try {
+      const [grant, userMfa] = await Promise.all([
+        prisma.developerTenantGrant.findUnique({
+          where: { tenantId_userId: { tenantId: session.tenantId, userId: session.userId } },
+          select: { revokedAt: true },
+        }),
+        prisma.user.findUnique({ where: { id: session.userId }, select: { mfaEnabledAt: true } }),
+      ]);
+      if (grant && !grant.revokedAt && userMfa?.mfaEnabledAt) role = 'developer';
+    } catch {
+      // Fail closed: no technical entitlement during database errors.
+    }
+  }
+  return { ok: true, session: { ...session, role, globalRole: decision.globalRole } };
 }
 
 /** The plan slug of a company, reused for a few seconds like the other access decisions. */

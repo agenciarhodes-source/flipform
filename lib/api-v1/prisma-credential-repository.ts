@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { canManageApiV1Keys, apiV1Enabled, apiV1PilotTenantAllowed, apiV1Entitled, type ApiV1Entitlement } from './policy';
+import { apiV1Enabled, apiV1PilotTenantAllowed, apiV1Entitled, type ApiV1Entitlement } from './policy';
 import type { ApiV1CredentialRecord, ApiV1CredentialRepository } from './identity';
 import { apiV1QuotaWindowEnd } from './lifecycle-clocks';
 
@@ -11,7 +11,7 @@ import { apiV1QuotaWindowEnd } from './lifecycle-clocks';
  * The API HTTP route is NOT wired to this store, no quota default is installed, and
  * no actual API key or database migration is provisioned by this module.
  */
-type ApiV1Db = Pick<PrismaClient, 'apiCredential' | 'tenant' | 'tenantUser' | 'tenantEntitlementGrant' | 'apiV1QuotaBucket'>;
+type ApiV1Db = Pick<PrismaClient, 'apiCredential' | 'tenant' | 'tenantUser' | 'tenantEntitlementGrant' | 'apiV1QuotaBucket' | 'developerTenantGrant' | 'user'>;
 
 export type ApiV1QuotaPolicy = {
   /** Explicitly approved server-side values. Absent policy blocks every request. */
@@ -151,8 +151,15 @@ export async function mayManageApiV1Credentials(
       where: { tenantId_userId: { tenantId: targetTenantId, userId: actor.userId } },
       select: { role: true, status: true },
     });
-    if (!member || member.status !== 'active'
-      || !canManageApiV1Keys(member.role, actor.tenantId, targetTenantId)) return false;
+    if (!member || member.status !== 'active') return false;
+    const [grant, user] = await Promise.all([
+      db.developerTenantGrant.findUnique({
+        where: { tenantId_userId: { tenantId: targetTenantId, userId: actor.userId } },
+        select: { revokedAt: true },
+      }),
+      db.user.findUnique({ where: { id: actor.userId }, select: { mfaEnabledAt: true } }),
+    ]);
+    if (!grant || grant.revokedAt || !user?.mfaEnabledAt) return false;
     const entitlement = await new PrismaApiV1CredentialRepository(db).findTenantEntitlement(targetTenantId);
     return apiV1Entitled(targetTenantId, entitlement);
   } catch {

@@ -23,6 +23,8 @@ export async function POST(req: NextRequest) {
   if (!await confirmUserMfaCode(session.userId, parsed.data.code)) {
     return NextResponse.json({ error: 'Código inválido.' }, { status: 400 });
   }
+  const activeDeveloperGrants = await prisma.developerTenantGrant.count({ where: { userId: session.userId, revokedAt: null } });
+  if (activeDeveloperGrants > 0) return NextResponse.json({ error: 'Revogue as concessões de desenvolvedor antes de desativar o MFA.' }, { status: 403 });
   await prisma.user.update({
     where: { id: session.userId },
     data: {

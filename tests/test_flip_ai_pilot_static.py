@@ -19,7 +19,7 @@ def test_pilot_access_is_server_side_exact_and_migration_free():
     assert "UUID.test" in pilot
     assert "tenantIds.has" in pilot
     assert "session.tenantId" in access
-    assert "owner', 'admin" in access
+    assert "session.role === 'developer'" in access
     assert "isFlipAiPilotTenant(endpoint.agent.tenantId)" in public_agent
     assert "Modo piloto controlado" in manager
     assert "FLIP_AI_PILOT_TENANT_IDS" not in manager
