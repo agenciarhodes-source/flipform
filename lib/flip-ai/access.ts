@@ -26,6 +26,8 @@ export async function requireFlipAiAccess(
     const group = groups.accesses.find((access) => access.tenants.some((tenant) => tenant.id === session.tenantId));
     role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;
   }
+  // Role developer is derived by verifiedSession, not by the commercial TenantUser role.
+  if (session.role === 'developer') role = 'developer';
   const planAccess = Boolean(tenant && canAccessFlipAi({
     role,
     tenantStatus: tenant.status,
@@ -33,12 +35,12 @@ export async function requireFlipAiAccess(
     subscription,
   }));
   const pilotAccess = Boolean(tenant
-    && ['owner', 'admin'].includes(role || '')
+    && role === 'developer'
     && isFlipAiPilotTenant(session.tenantId, options?.pilotTenantIds)
     && canServeFlipAiPilot({ tenantStatus: tenant.status, subscription }));
   if (!tenant || (!planAccess && !pilotAccess)) {
     throw new FlipAiError('FLIP_AI_ACCESS_REQUIRED', 403,
-      'O Flip AI está disponível para donos e administradores com plano Premium ativo ou piloto autorizado.');
+      'O Flip AI está disponível para desenvolvedores autorizados com plano Premium ativo ou piloto autorizado.');
   }
   return { tenantId: session.tenantId, userId: session.userId, accessMode: planAccess ? 'plan' as const : 'pilot' as const };
 }
