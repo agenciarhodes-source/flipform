@@ -14,6 +14,9 @@
 - `lib/flip-voice/whatsapp-calling-policy.ts`: regras puras, consentimento, expiração conservadora de 7 dias e limite de 5 ligações/24h.
 - `lib/flip-voice/whatsapp-twilio-provider.ts`: adaptadores Twilio Voice Call e VOICE_CALL_REQUEST Content Template, ambos sem invocação automática.
 - `lib/flip-voice/whatsapp-inbound-service.ts`: inbound com vínculo por tenant, consentimento da voz, reserva atômica, TwiML restrito a VoIP e proteção contra duplicatas.
+- `lib/flip-voice/whatsapp-outbound-service.ts`: origem de chamada WhatsApp, sob flags desligadas, autorização do cliente confirmada em webhook Twilio, reserva transacional, limite atômico de 5 chamadas/24h e TwiML por CallSid.
+- `app/api/flip-voice/whatsapp/calls/route.ts`: chamada unitária autenticada + histórico por tenant.
+- `app/api/flip-voice/whatsapp/outbound-twiml/route.ts`: webhook de execução por CallSid, assinado e impedindo conexão PSTN.
 - `app/api/flip-voice/whatsapp/inbound/route.ts`: webhook de entrada protegido por HMAC.
 - `app/api/flip-voice/whatsapp/status/route.ts`: callback de encerramento que reconcilia **estimativa** de custo, isolado do canal PSTN.
 - `app/api/flip-voice/whatsapp/permission/route.ts`: resposta à solicitação de permissão Twilio; aceita **somente permissão pendente** de tenant e número corretos.
@@ -29,6 +32,7 @@ FLIP_VOICE_WHATSAPP_PROVIDER_VERIFIED=false
 FLIP_VOICE_WHATSAPP_PERMISSION_URL=(vazio)
 FLIP_VOICE_WHATSAPP_INBOUND_URL=(vazio)
 FLIP_VOICE_WHATSAPP_STATUS_URL=(vazio)
+FLIP_VOICE_WHATSAPP_OUTBOUND_TWIML_URL=(vazio)
 TWILIO_ACCOUNT_SID=(servidor/cofre)
 TWILIO_AUTH_TOKEN=(servidor/cofre)
 ELEVENLABS_API_KEY=(servidor/cofre)
@@ -44,8 +48,8 @@ FLIP_VOICE_CONTACT_PEPPER=(servidor/cofre)
 6. O Twilio Voice/TwiML + `register-call` ElevenLabs em WhatsApp exige **validação real de compatibilidade** com o sender e aplicativo TwiML; a rota requer `FLIP_VOICE_WHATSAPP_PROVIDER_VERIFIED=true` após aprovação.
 
 ## Pendências que NÃO podem ser ocultadas por CI verde
-- [ ] Integração de **envio de pedido de permissão** com limite persistente de frequência e estado pendente; o adaptador existe, ainda não tem API autenticada/orquestrador.
-- [ ] Fluxo de **originação WhatsApp outbound** com reserva + quota atômica + status + TwiML; há adaptador Twilio, mas ainda não existe endpoint de discagem autorizado.
+- [ ] Integração de **envio de pedido de permissão** com limite persistente de frequência e estado pendente; o adaptador existe, ainda não tem API autenticada/orquestrador. Sem isso, não é possível criar novos consentimentos verificáveis pelo fluxo de ponta a ponta.
+- [x] Núcleo de **originação WhatsApp outbound** com reserva + quota atômica + status + TwiML e endpoint autenticado. **Apenas em código; não homologado**, depende de sender ativo e teste de compatibilidade Twilio/ElevenLabs.
 - [ ] Configuração assistida de sender Twilio/WhatsApp e permissões sem SQL manual em produção, protegida por perfil desenvolvedor.
 - [ ] Transferência real para agente humano via SIP/VoIP e teste de retomada no CRM.
 - [ ] Histórico e painel operacional unificados, controles de custo com conciliação dos valores reais do fornecedor.
@@ -61,3 +65,6 @@ FLIP_VOICE_CONTACT_PEPPER=(servidor/cofre)
 - https://elevenlabs.io/docs/eleven-agents/whatsapp
 - https://elevenlabs.io/docs/eleven-agents/phone-numbers/sip-trunking
 - https://www.twilio.com/en-us/blog/developers/tutorials/integrations/ai-agent-to-human-agent-elevenlabs-call-handoffs-twilio
+
+## Importante: possível corrida na originação
+Na chamada iniciada pela API Twilio, o provedor pode solicitar o TwiML antes de o `CallSid` ter sido persistido na sessão. O webhook só aceita `CallSid` associado ao tenant e a uma chamada autorizada; nesse caso, uma tentativa prematura será rejeitada. É obrigatório reproduzir esta condição em testes E2E e escolher mecanismo transacional de correlação/compensação antes do piloto; **não ativar outbound em produção enquanto isso não estiver resolvido**.
