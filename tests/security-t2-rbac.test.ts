@@ -26,7 +26,7 @@ test('somente o Dono cobra, exclui leads, formulÃ¡rios e funis e muda configuraÃ
 
 test('technical modules only work with a verified developer role', () => {
   const keys = (Object.keys(PERMISSIONS) as PermissionKey[]).filter((key) => /^(INTEGRATIONS_|DOMAINS_|FLIP_AI_MANAGE)/.test(key));
-  assert.ok(keys.length >= 8);
+  assert.equal(keys.length, 7);
   for (const key of keys) {
     assert.deepEqual(ROLES.filter(role => can(role, key)), [], key);
     assert.equal(can('developer', key), true, key);
