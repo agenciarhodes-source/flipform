@@ -106,6 +106,7 @@ export async function startFlipVoiceOutbound(
   if (!line || !lead || !budget) refuse('VOICE_NOT_CONFIGURED');
   validatePstnLine(line, tenantId, 'outbound');
   const number = normalizeBrazilianDialNumber(lead.phone);
+  const contactHash = hashCallIdentity(tenantId + ':' + number,secret());
   const micros = estimateCallReserveMicros(settings?.maxCallSeconds || 180);
   currentSettingsOrFail(settings, micros);
   const permission = await prisma.flipVoiceContactPermission.findFirst({
@@ -116,7 +117,7 @@ export async function startFlipVoiceOutbound(
     where: { tenantId, leadId: lead.id, channel: 'pstn', revokedAt: { not: null } },
     orderBy: { revokedAt: 'desc' },
   });
-  if (!permission || !validRecipientPermission(permission,tenantId,lead.id,now) ||
+  if (!permission || !validRecipientPermission(permission,tenantId,lead.id,contactHash,now) ||
     (latestOptOut?.revokedAt && permission.verifiedAt &&
       latestOptOut.revokedAt.getTime() >= permission.verifiedAt.getTime())) {
     refuse('VOICE_CONTACT_OPT_IN_REQUIRED');
@@ -136,7 +137,6 @@ export async function startFlipVoiceOutbound(
   }, now);
   if (!decision.allowed) refuse('VOICE_CALL_DENIED_' + decision.reason);
   const requestKeyHash = hashCallIdentity(tenantId + ':' + input.idempotencyKey,secret());
-  const contactHash = hashCallIdentity(tenantId + ':' + number,secret());
 
   const hold = await prisma.$transaction(async db => {
     const previous = await db.flipVoiceCall.findFirst({
@@ -154,7 +154,7 @@ export async function startFlipVoiceOutbound(
     currentSettingsOrFail(latestSettings, micros);
     if (!latestLine || !freshLead || normalizeBrazilianDialNumber(freshLead.phone) !== number) refuse('VOICE_CONTACT_CHANGED');
     validatePstnLine(latestLine,tenantId,'outbound');
-    if (!latestPermission || !validRecipientPermission(latestPermission,tenantId,lead.id,new Date())) refuse('VOICE_OPT_IN_REVOKED');
+    if (!latestPermission || !validRecipientPermission(latestPermission,tenantId,lead.id,contactHash,new Date())) refuse('VOICE_OPT_IN_REVOKED');
     const revoked = await db.flipVoiceContactPermission.findFirst({
       where: { tenantId, leadId:lead.id, channel:'pstn', revokedAt:{not:null} },
       orderBy: { revokedAt:'desc' },
