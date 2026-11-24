@@ -24,10 +24,17 @@ test('somente o Dono cobra, exclui leads, formulários e funis e muda configura�
   for (const role of ['admin', 'manager', 'agent', 'viewer']) assert.equal(canDeleteLead(role), false, role);
 });
 
-test('equipe, integrações (Meta, Google, WhatsApp), domínios, auditoria e IA: só Dono e Administrador', () => {
-  const keys = (Object.keys(PERMISSIONS) as PermissionKey[]).filter((key) => /^(USERS_|INTEGRATIONS_|DOMAINS_|AUDIT_|FLIP_AI_MANAGE)/.test(key));
-  assert.ok(keys.length >= 15);
-  for (const key of keys) assert.deepEqual(ROLES.filter((role) => can(role, key)), ['owner', 'admin'], key);
+test('technical modules only work with a verified developer role', () => {
+  const keys = (Object.keys(PERMISSIONS) as PermissionKey[]).filter((key) => /^(INTEGRATIONS_|DOMAINS_|FLIP_AI_MANAGE)/.test(key));
+  assert.ok(keys.length >= 8);
+  for (const key of keys) {
+    assert.deepEqual(ROLES.filter(role => can(role, key)), [], key);
+    assert.equal(can('developer', key), true, key);
+  }
+});
+test('owners and admins retain commercial user and audit permissions', () => {
+  const keys = (Object.keys(PERMISSIONS) as PermissionKey[]).filter(key => /^(USERS_|AUDIT_)/.test(key));
+  for (const key of keys) assert.deepEqual(ROLES.filter(role => can(role, key)), ['owner', 'admin'], key);
 });
 
 test('Atendente só vê e mexe nos leads dele', () => {
