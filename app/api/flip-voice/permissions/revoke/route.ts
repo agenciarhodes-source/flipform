@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { readFlipAiBody } from '@/lib/flip-ai/http';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
-const request=z.object({leadId:z.string().uuid()}).strict();
+const request=z.object({leadId:z.guid()}).strict();
 
 /** Owner/admin can immediately revoke every existing consent for a specific lead. */
 export const POST = withAuth(async(req:NextRequest,session)=>{
