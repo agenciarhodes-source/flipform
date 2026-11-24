@@ -17,7 +17,7 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Informe a senha'),
   // The tenant is an untrusted hint; the backend revalidates the user,
   // password, membership, tenant status, and active AllowedUser.
-  tenantId: z.string().uuid().optional(),
+  tenantId: z.string().guid().optional(),
 });
 
 export const fieldTypeEnum = z.enum([
