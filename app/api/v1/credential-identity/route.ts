@@ -19,6 +19,7 @@ export async function GET(req: Request): Promise<Response> {
     authorizationHeader: req.headers.get('authorization'),
     scope,
     operation: 'GET /api/v1/credential-identity',
+    requireExclusiveScope: true,
   }, repository);
   if (!authorized.ok) return apiV1Error(authorized.code, authorized.status);
   return Response.json(identityResponse(authorized.tenantId, authorized.integrationId, authorized.scope), {
