@@ -2630,6 +2630,11 @@ model FlipVoiceLine {
   status                String   @default("disabled")
   inboundEnabled        Boolean  @default(false) @map("inbound_enabled")
   outboundEnabled       Boolean  @default(false) @map("outbound_enabled")
+  // WhatsApp Business Calling is provisioned separately; default disabled.
+  whatsappInboundEnabled Boolean @default(false) @map("whatsapp_inbound_enabled")
+  whatsappOutboundEnabled Boolean @default(false) @map("whatsapp_outbound_enabled")
+  whatsappSenderSid     String? @map("whatsapp_sender_sid")
+  whatsappRoutingMode   String @default("none") @map("whatsapp_routing_mode")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -2657,6 +2662,12 @@ model FlipVoiceContactPermission {
   expiresAt       DateTime? @map("expires_at")
   revokedAt       DateTime? @map("revoked_at")
   status          String    @default("pending")
+  // Separate proof granted by Twilio/Meta, never inferred from PSTN opt-in.
+  providerPermissionSource String? @map("provider_permission_source")
+  providerPermissionRef String? @map("provider_permission_ref")
+  providerPermissionConfirmedAt DateTime? @map("provider_permission_confirmed_at")
+  outboundCallWindowStart DateTime? @map("outbound_call_window_start")
+  outboundCallsInWindow Int @default(0) @map("outbound_calls_in_window")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
