@@ -91,7 +91,11 @@ async function readCookieToken(): Promise<string | undefined> {
 export async function getSession(): Promise<SessionPayload | null> {
   const token = await readCookieToken();
   if (!token) return null;
-  return verifyToken(token);
+  const raw = verifyToken(token);
+  // Server-rendered pages still using getSession must never trust a stale
+  // privileged developer claim: revalidate revocation and MFA against DB.
+  if (raw?.role === 'developer') return verifiedSession(raw);
+  return raw;
 }
 
 export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
