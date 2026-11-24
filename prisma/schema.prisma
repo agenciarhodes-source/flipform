@@ -2273,6 +2273,22 @@ model WhatsAppNumberAccess {
   @@map("whatsapp_number_access")
 }
 
+/// The customer's CPF of a lead, encrypted (AES-256-GCM) and apart from the lead row, so lists,
+/// exports and the lead APIs never carry it. cpf_hash is a keyed fingerprint to find a lead by CPF.
+model LeadPersonalDocument {
+  leadId       String   @id @map("lead_id")
+  tenantId     String   @map("tenant_id")
+  cpfEncrypted String   @map("cpf_encrypted")
+  cpfHash      String   @map("cpf_hash")
+  /// document | chat | team
+  source       String
+  updatedBy    String?  @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, cpfHash])
+  @@map("lead_personal_documents")
+}
 
 /// PR01: disabled by default. Generic per-tenant integration, never provider-specific.
 model ApiIntegration {
