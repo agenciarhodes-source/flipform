@@ -112,7 +112,15 @@ export async function startFlipVoiceOutbound(
     where: { tenantId, leadId: lead.id, channel: 'pstn', status: 'verified', revokedAt: null },
     orderBy: { verifiedAt: 'desc' },
   });
-  if (!permission || !validRecipientPermission(permission,tenantId,lead.id,now)) refuse('VOICE_CONTACT_OPT_IN_REQUIRED');
+  const latestOptOut = await prisma.flipVoiceContactPermission.findFirst({
+    where: { tenantId, leadId: lead.id, channel: 'pstn', revokedAt: { not: null } },
+    orderBy: { revokedAt: 'desc' },
+  });
+  if (!permission || !validRecipientPermission(permission,tenantId,lead.id,now) ||
+    (latestOptOut?.revokedAt && permission.verifiedAt &&
+      latestOptOut.revokedAt.getTime() >= permission.verifiedAt.getTime())) {
+    refuse('VOICE_CONTACT_OPT_IN_REQUIRED');
+  }
   const voiceConsentId = await validateVoiceOwner(prisma, { tenantId, profileId: line.profileId, now });
   const budgetRemaining = budget.limitMicros - budget.reservedMicros - budget.spentMicros;
   const decision = evaluateVoiceCallGate({
@@ -147,6 +155,12 @@ export async function startFlipVoiceOutbound(
     if (!latestLine || !freshLead || normalizeBrazilianDialNumber(freshLead.phone) !== number) refuse('VOICE_CONTACT_CHANGED');
     validatePstnLine(latestLine,tenantId,'outbound');
     if (!latestPermission || !validRecipientPermission(latestPermission,tenantId,lead.id,new Date())) refuse('VOICE_OPT_IN_REVOKED');
+    const revoked = await db.flipVoiceContactPermission.findFirst({
+      where: { tenantId, leadId:lead.id, channel:'pstn', revokedAt:{not:null} },
+      orderBy: { revokedAt:'desc' },
+    });
+    if (revoked?.revokedAt && latestPermission.verifiedAt &&
+        revoked.revokedAt.getTime() >= latestPermission.verifiedAt.getTime()) refuse('VOICE_OPT_IN_REVOKED');
     const freshVoiceConsent = await validateVoiceOwner(db,{tenantId,profileId:line.profileId,now:new Date()});
     if (freshVoiceConsent !== voiceConsentId) refuse('VOICE_CONSENT_CHANGED');
     await reserveBudget(db,{tenantId,periodStart:utcMonthStart(now),micros,monthlyCeiling:latestSettings.monthlyLimitMicros});
