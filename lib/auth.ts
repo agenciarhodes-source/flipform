@@ -121,7 +121,8 @@ export async function getVerifiedSessionFromRequest(req: NextRequest): Promise<S
 }
 
 export async function getVerifiedSession(): Promise<SessionPayload | null> {
-  return verifiedSession(await getSession());
+  const token = await readCookieToken();
+  return verifiedSession(token ? verifyToken(token) : null);
 }
 
 const SESSION_ENDED = { error: "Sua sessão terminou. Entre novamente.", code: "session_revoked" };
@@ -165,7 +166,10 @@ export function withAuth<T = any>(
     }
     const session = await getVerifiedSessionFromRequest(req);
     if (!session) return NextResponse.json(SESSION_ENDED, { status: 401 });
-    if (!developerApiAllowed(req.nextUrl.pathname, session.role)) {
+    // Meta's platform-managed OAuth callback is a separately checked Super Admin flow.
+    const platformMetaCallback = session.globalRole === 'platform_admin'
+      && req.nextUrl.pathname === '/api/integrations/meta/callback';
+    if (!developerApiAllowed(req.nextUrl.pathname, session.role) && !platformMetaCallback) {
       return NextResponse.json({ error: 'Configuração exclusiva do Desenvolvedor.' }, { status: 403 });
     }
     // Tenant gating (apenas se a sessão tem tenantId). Super Admin nunca é bloqueado.
