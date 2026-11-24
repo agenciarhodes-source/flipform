@@ -18,24 +18,23 @@ const disabled=()=>process.env.FLIP_VOICE_WHATSAPP_ENABLED!=='true'||
   process.env.FLIP_VOICE_WHATSAPP_OUTBOUND_ENABLED!=='true'||
   process.env.FLIP_VOICE_WHATSAPP_PROVIDER_VERIFIED!=='true';
 const sid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const error=(code:string):never=>{throw new FlipVoiceCoreError(code);};
 const rejected='<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="busy"/></Response>';
 
 export async function requestFlipVoiceWhatsAppCall(
   session:SessionPayload,
   input:{leadId:string;lineId:string;idempotencyKey:string},
 ):Promise<{id:string;status:string;reused:boolean}> {
-  if(!session.tenantId||!['owner','admin'].includes(session.role))error('WA_CALL_FORBIDDEN');
-  if(disabled())error('WA_CALL_GLOBALLY_DISABLED');
-  if(!sid.test(input.leadId)||!sid.test(input.lineId)||!sid.test(input.idempotencyKey))error('WA_CALL_ID_INVALID');
+  if(!session.tenantId||!['owner','admin'].includes(session.role))throw new FlipVoiceCoreError('WA_CALL_FORBIDDEN');
+  if(disabled())throw new FlipVoiceCoreError('WA_CALL_GLOBALLY_DISABLED');
+  if(!sid.test(input.leadId)||!sid.test(input.lineId)||!sid.test(input.idempotencyKey))throw new FlipVoiceCoreError('WA_CALL_ID_INVALID');
   const pepper=process.env.FLIP_VOICE_CONTACT_PEPPER||'';
   const accountSid=process.env.TWILIO_ACCOUNT_SID||'';
   const authToken=process.env.TWILIO_AUTH_TOKEN||'';
   const voiceUrl=process.env.FLIP_VOICE_WHATSAPP_OUTBOUND_TWIML_URL||'';
   const statusUrl=process.env.FLIP_VOICE_WHATSAPP_STATUS_URL||'';
-  if(pepper.length<32||authToken.length<16||!accountSid)error('WA_CALL_PROVIDER_NOT_READY');
+  if(pepper.length<32||authToken.length<16||!accountSid)throw new FlipVoiceCoreError('WA_CALL_PROVIDER_NOT_READY');
   const now=new Date();
-  if(!allowedBrazilBusinessHours(now))error('WA_CALL_OUTSIDE_HOURS');
+  if(!allowedBrazilBusinessHours(now))throw new FlipVoiceCoreError('WA_CALL_OUTSIDE_HOURS');
   const tenantId=session.tenantId;
   const [line,settings,lead,budget]=await Promise.all([
     prisma.flipVoiceLine.findFirst({where:{tenantId,id:input.lineId}}),
@@ -43,11 +42,11 @@ export async function requestFlipVoiceWhatsAppCall(
     prisma.lead.findFirst({where:{tenantId,id:input.leadId},select:{id:true,phone:true,tenantId:true}}),
     prisma.flipVoiceBudget.findUnique({where:{tenantId_periodStart:{tenantId,periodStart:utcMonthStart(now)}}}),
   ]);
-  if(!line||!settings?.enabled||!settings.outboundEnabled||!lead||!budget)error('WA_CALL_NOT_CONFIGURED');
+  if(!line||!settings?.enabled||!settings.outboundEnabled||!lead||!budget)throw new FlipVoiceCoreError('WA_CALL_NOT_CONFIGURED');
   validateWhatsAppChannel(line,tenantId,'outbound');
-  if(settings.maxCallSeconds<30||settings.maxCallSeconds>180)error('WA_CALL_DURATION_INVALID');
+  if(settings.maxCallSeconds<30||settings.maxCallSeconds>180)throw new FlipVoiceCoreError('WA_CALL_DURATION_INVALID');
   const amount=estimateWhatsAppCallReservationMicros(settings.maxCallSeconds);
-  if(settings.perCallLimitMicros<amount||settings.monthlyLimitMicros<amount)error('WA_CALL_BUDGET_DISABLED');
+  if(settings.perCallLimitMicros<amount||settings.monthlyLimitMicros<amount)throw new FlipVoiceCoreError('WA_CALL_BUDGET_DISABLED');
   const recipient=normalizeBrazilianDialNumber(lead.phone);
   const numberHash=hashCallIdentity(tenantId+':'+recipient,pepper);
   const permissions=await prisma.flipVoiceContactPermission.findMany({
@@ -57,7 +56,7 @@ export async function requestFlipVoiceWhatsAppCall(
   const consent=permissions.find(x=>isWhatsAppCallPermitted(x,tenantId,lead.id,recipient,pepper,now));
   const newerRevocation=permissions.some(x=>x.revokedAt&&(!consent?.verifiedAt||x.revokedAt.getTime()>=consent.verifiedAt.getTime()));
   if(!consent||newerRevocation||!whatsappCallQuotaAllows(consent.outboundCallsInWindow,consent.outboundCallWindowStart,now)){
-    error('WA_CALL_PERMISSION_NOT_VERIFIED');
+    throw new FlipVoiceCoreError('WA_CALL_PERMISSION_NOT_VERIFIED');
   }
   const consentId=await validateVoiceOwner(prisma,{tenantId,profileId:line.profileId,now});
   const requestKeyHash=hashCallIdentity(tenantId+':wa-out:'+input.idempotencyKey,pepper);
@@ -73,7 +72,7 @@ export async function requestFlipVoiceWhatsAppCall(
       WHERE "id"=${consent.id} AND "tenant_id"=${tenantId}
       FOR UPDATE
     `);
-    if(locks.length!==1)error('WA_CALL_PERMISSION_CHANGED');
+    if(locks.length!==1)throw new FlipVoiceCoreError('WA_CALL_PERMISSION_CHANGED');
     const [freshLine,freshSettings,freshConsent,freshLead]=await Promise.all([
       db.flipVoiceLine.findFirst({where:{id:line.id,tenantId}}),
       db.flipVoiceSettings.findUnique({where:{tenantId}}),
@@ -82,19 +81,19 @@ export async function requestFlipVoiceWhatsAppCall(
     ]);
     if(!freshLine||!freshSettings?.enabled||!freshSettings.outboundEnabled||
        freshSettings.perCallLimitMicros<amount||freshSettings.monthlyLimitMicros<amount||
-       !freshConsent||!freshLead||normalizeBrazilianDialNumber(freshLead.phone)!==recipient)error('WA_CALL_STATE_CHANGED');
+       !freshConsent||!freshLead||normalizeBrazilianDialNumber(freshLead.phone)!==recipient)throw new FlipVoiceCoreError('WA_CALL_STATE_CHANGED');
     validateWhatsAppChannel(freshLine,tenantId,'outbound');
     const current=new Date();
     if(!isWhatsAppCallPermitted(freshConsent,tenantId,lead.id,recipient,pepper,current)||
-       !whatsappCallQuotaAllows(freshConsent.outboundCallsInWindow,freshConsent.outboundCallWindowStart,current))error('WA_CALL_PERMISSION_EXPIRED');
+       !whatsappCallQuotaAllows(freshConsent.outboundCallsInWindow,freshConsent.outboundCallWindowStart,current))throw new FlipVoiceCoreError('WA_CALL_PERMISSION_EXPIRED');
     const latestRevoked=await db.flipVoiceContactPermission.findFirst({
       where:{tenantId,leadId:lead.id,channel:'whatsapp',revokedAt:{not:null}},
       orderBy:{revokedAt:'desc'},
     });
     if(latestRevoked?.revokedAt&&freshConsent.verifiedAt&&
-       latestRevoked.revokedAt.getTime()>=freshConsent.verifiedAt.getTime())error('WA_CALL_RECIPIENT_OPTOUT');
+       latestRevoked.revokedAt.getTime()>=freshConsent.verifiedAt.getTime())throw new FlipVoiceCoreError('WA_CALL_RECIPIENT_OPTOUT');
     const currentOwnerConsent=await validateVoiceOwner(db,{tenantId,profileId:line.profileId,now:current});
-    if(currentOwnerConsent!==consentId)error('WA_CALL_VOICE_REVOKED');
+    if(currentOwnerConsent!==consentId)throw new FlipVoiceCoreError('WA_CALL_VOICE_REVOKED');
     await reserveBudget(db,{tenantId,periodStart:utcMonthStart(current),micros:amount,
       monthlyCeiling:freshSettings.monthlyLimitMicros});
     const elapsed=freshConsent.outboundCallWindowStart
