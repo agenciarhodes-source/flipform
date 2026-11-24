@@ -1,78 +1,67 @@
-# Flip Voice — Plano de implantação FV00–FV08 (23/11/2026)
+# Flip Voice — implantação em somente 3 PRs
 
-**Situação:** proposta de engenharia, primeira contribuição em Draft, SEM ativação de serviço. **Repositório:** `agenciarhodes-source/flipform`. **Produto:** Flip Voice dentro do FlipForm (não um novo aplicativo).
+**Referência:** 24/11/2026. **Repositório:** agenciarhodes-source/flipform.  
+**Política:** sem merge automático, sem alterar produção, sem discagem ou ativação de API. A antiga lista FV00–FV08 foi consolidada em somente três PRs; nenhum requisito foi descartado.
 
-## 0. Reaproveitar o que já existe
-- `lib/flip-ai/elevenlabs-speech.ts`: TTS da ElevenLabs com saída Ogg/Opus/MP3.
-- `lib/whatsapp-ai/voice.ts`, `lib/whatsapp-ai/voice-rules.ts` e `components/whatsapp-ai/voice-manager.tsx`: configuração por tenant e respostas em áudio (não chamada ao vivo).
-- `lib/flip-ai/text-model-catalog.ts` / `openai-pricing.ts`: modelo `gpt-6-luna` já cadastrado e tabela US$0,10/M entrada e US$0,50/M saída.
-- `components/lead-call-dialog.tsx` e `lib/leads/call-rules.ts`: anotação de chamadas humanas no CRM (não discador VoIP).
-- API v1 recente integrada à main no commit `a577ea9`, com `FLIPFORM_API_V1_ENABLED` inicialmente desativado. **Não alterar esse gate nem reabrir a homologação concluída.**
-- Quatro workflows legados de reparo que estiverem desativados devem permanecer inalterados; não executá-los como requisito do Flip Voice.
+## Infraestrutura já existente (reaproveitar)
+- ElevenLabs texto-para-áudio: `lib/flip-ai/elevenlabs-speech.ts`.
+- Áudio WhatsApp e regras: `lib/whatsapp-ai/voice.ts`, `lib/whatsapp-ai/voice-rules.ts`; configurações e testes existentes.
+- GPT-6 Luna: `lib/flip-ai/text-model-catalog.ts` com US$0,10/1M tokens entrada e US$0,50/1M saída.
+- LeadCall atual registra chamadas humanas. **Não** é discador VoIP.
+- API v1 na `main` com ativação OFF; não reabrir PR00/PR01 nem alterar quatro workflows de reparação.
 
-## 1. Arquitetura
-```text
-Contato / CRM (tenant autenticado)
- -> Política de chamada + consentimento + orçamento + reserva atômica
- -> Serviço Flip Voice (orquestração, eventos e ferramentas mínimas)
- -> ElevenAgents (STT/turn-taking/TTS, voz autorizada)
- -> LLM de texto OpenAI gpt-6-luna por chave própria, via integração Custom LLM
- -> Twilio Voice (PSTN) OU WhatsApp Business Calling (SIP/WebRTC, com permissão)
- -> Webhooks assinados -> registro da sessão e resumo autorizados no CRM
+## PR #636 — Core, GPT-6 Luna e voz clonada (em desenvolvimento, Draft)
+Entrega:
+1. Persistência aditiva com tabelas `flip_voice_*`: configurações OFF, perfis, prova de consentimento hash, orçamento, sessões, eventos. Relações compostas por `tenant_id` evitam vozes/consentimentos/chamadas cruzados.
+2. Política *fail-closed* para autorização de chamadas, bloqueio, opt-in, permissão específica WhatsApp, orçamento e idempotência requerida. **A reserva financeira atômica no banco fica no PR de telefonia**; a política pura sozinha não despacha chamada.
+3. Núcleo de agente ElevenAgents, `llm=gpt-6-luna`, `reasoning_effort=none`, português, voz ElevenLabs validada, first-message identificando IA, duração curta e nenhuma ferramenta ativa.
+4. Adaptador de provisionamento **apenas de agente de teste**. Inexistem rotas públicas ou gatilhos que executem criação de agente, chamadas, migração ou faturamento. Só código confiável poderia invocar provisionamento com sinalizador explícito.
+5. Testes unitários e estáticos: tenant cruzado, consentimento expirado/revogado, voz inválida, habilitação OFF, custo Luna, schema aditivo, agente sem ferramentas.
+6. Homologação do build/tipos/Prisma e simulação sem segredos; teste de voz real com pessoa autorizada depende de chave ElevenLabs e consentimento posterior.
+
+**Estado atual:** implementação parcial em Draft, sem demonstração real de conversa por voz e sem DB migration executada. Critério de conclusão do PR: CI verde, migração avaliada sem aplicar em produção, configuração validada com payload de teste e nenhuma exposição pública.
+
+## PR 2 — Telefonia real + CRM + console (futuro)
+Entrega combinada dos antigos FV04, FV05 e FV07:
+- Motor de sessão, webhook assinado, *tool calls* com autorização por operação e tenant; impedir prompt injection em respostas e dados do CRM.
+- Reservas financeiras transacionais/idempotentes, medição, estorno em caso de falha, cotas duráveis e circuit breakers.
+- Twilio entrada e saída, horário permitido, consentimento documentado, DNC, interrupção de fala e handoff humano.
+- UI e APIs para configurar vozes/números, discagem manual autorizada, atendimentos, transcrição autorizada, resumo, consumo.
+- Testes E2E reais só em staging com equipe, sem ativar todos os clientes nem permitir campanha de chamadas em massa.
+
+## PR 3 — WhatsApp Business Calling + finalização (futuro)
+Entrega combinada dos antigos FV06 e FV08:
+- Integração Meta/BSP/SIP/WebRTC WhatsApp Business Calling.
+- Entrada e saída com permissão de chamada verificada por contato, sem ponte PSTN proibida.
+- Histórico unificado por tenant, custeio de WhatsApp separado de telefonia, fallback de serviço.
+- Testes carga, isolamento, consentimentos, segurança, transcrições, auditoria, rollback e piloto gradativo por tenant.
+
+## Contratos e restrições
+- `FLIP_VOICE_*_ENABLED` OFF por padrão. Não permitir ligações ou gravação com um build que só contém o Core.
+- Chave de ElevenLabs e OpenAI somente no servidor ou cofre do provedor; nunca enviar valor em logs/PR.
+- Qualquer voz clonada requer autorização verificável do titular, escopo específico e possibilidade de revogação.
+- A IA deve se apresentar como IA, não como pessoa real, e nunca tomar decisões jurídicas definitivas ou prometer resultados.
+- Controle por tenant com FK composta + RBAC + consulta filtrada + testes A/B; FK por si só não substitui autorização.
+- PR2 aplica reserva de orçamento **atômica** na transação da sessão, ao contrário de validação só em memória.
+- Não incorporar mudanças da estrutura de dados de PR00/PR01 sem avaliação. Não mudar Ads, Pixel, estágios dos leads, cron de manutenção ou secrets.
+- Somente habilitar produção após aprovação, testes reais e escolha/contratação explícita dos provedores.
+
+## Estimativa de custos (100 chamadas atendidas × 3 minutos, câmbio R$ 5,94/USD)
+- GPT-6 Luna, assumindo 5.000 tokens de entrada + 1.000 saída/chamada: US$ 0,001/chamada, US$ 0,10 total.
+- ElevenAgents Creator: US$22 + excedente de 25 min a US$0,08/min = US$24,00.
+- Twilio celular Brasil: 300 min × US$0,0663/min = US$19,89, mais número US$4,25 = US$24,14.
+- Soma indicativa **US$48,24 (~R$286,55)**/mês, sem impostos, testes, outros serviços, múltiplos números e Meta/WhatsApp. Valor ilustrativo, não preço contratado.
+
+## Testes sugeridos após código no branch
+```bash
+npx tsx --test tests/flip-voice-policy.test.ts tests/flip-voice-agent-core.test.ts tests/flip-voice-elevenlabs-agent.test.ts
+python -m pytest tests/test_flip_voice_schema_static.py
+npm run prisma:validate
+npm run typecheck
 ```
 
-**Conexão do Luna:** ElevenAgents permite LLM externo por API compatível com Chat Completions ou Responses. `gpt-6-luna` não processa áudio nativamente: ElevenAgents fornece entrada de fala e saída de voz. Para Chat Completions com tool calling, usar `reasoning_effort: none`, conforme documentação oficial; validar streaming, ferramentas e latência com chamadas simuladas. Não prometer a mesma voz clonada no WhatsApp por TTS e na conversa antes de um ensaio real.
-
-**Runtime:** não rotear fluxo contínuo PCM pelo request/response de uma Vercel Function. Usar transporte de mídia do provedor, webhooks pequenos, autenticação do tenant no serviço interno e fluxo de agentes em tempo real. O WhatsApp não permite ligar via PSTN a partir de chamada WhatsApp. O provedor de números e o contrato de chamadas devem ser validados para o Brasil.
-
-## 2. PRs completos e dependências
-
-| PR lógico | Entrega | Critério de aceite | Depende de |
-| --- | --- | --- | --- |
-| **FV00** | Plano, contratos tipados, flags OFF, gate puro e testes | Nenhuma ligação habilitada; CI de código e testes | main |
-| **FV01** | Schema/migration para `VoiceProfile`, `VoiceConsent`, `VoiceCallSession`, `VoiceCallEvent`, `VoiceBudget`; RBAC e políticas tenant | Isolamento entre A/B, migração reversível testada e nenhuma leitura cruzada | FV00 |
-| **FV02** | Cadastro de voz, verificação/consentimento do titular, seleção de `voiceId`, revogação e teste de áudio | Não grava sem permissão; não mistura vozes entre empresas | FV01 |
-| **FV03** | Adaptador LLM da Flip AI para ElevenAgents com GPT-6 Luna; ferramentas read-only e escalonamento | Latência e respostas aprovadas; sem inferência jurídica inventada; orçamento de tokens | FV01 |
-| **FV04** | Serviço de sessão em tempo real, webhooks assinados, deduplicação, timeout, interrupções e handoff | Replay/webhook forjado não gera sessão; falhas encerram sem cobranças repetidas | FV02, FV03 |
-| **FV05** | Twilio PSTN inbound/outbound, dialer autorizado, retorno, identificação de não atendimento | Outbound somente opt-in e iniciativa permitida; chamada de teste controlada no staging | FV04 |
-| **FV06** | WhatsApp Business Calling inbound/outbound, permissão específica da Meta, SIP/WebRTC | Permissões verificadas por chamada, sem ponte PSTN e sem chamar contatos não autorizados | FV04 |
-| **FV07** | UI Flip Voice (configurações, números, voz, custos, histórico, acesso humano, resumo) | Botões OFF por padrão e RBAC; acessibilidade; relatório por tenant | FV05, FV06 |
-| **FV08** | E2E/segurança, carga, auditoria LGPD, rollback e liberação gradual por tenant | CI completo verde, evidência de staging, custos observados, aprovação de piloto; release separado | FV07 |
-
-**Não abrir 9 PRs vazios.** Cada PR deve conter implementação e testes reais, ser pequeno o suficiente para revisão e permanecer Draft até seus gates. Sem merge, deploy produtivo ou compra automática.
-
-## 3. Proteções obrigatórias
-1. Flags globais, por tenant, outbound e gravação com default **false**.
-2. Só aceitar tenant do contexto autenticado; callbacks assinados e associados à sessão/tenant no banco.
-3. Outbound exige contato com consentimento rastreável, não estar em lista de bloqueio, horário permitido, autorização específica da chamada WhatsApp quando aplicável e teto financeiro.
-4. Solicitação de humano encerra automação ou encaminha com segurança; não manter conversa fingindo ser funcionário real.
-5. Consentimento e licença explícita para voz clonada, retenção mínima, revogação e exclusão orientada pela política aprovada.
-6. Sem envio automático de chamadas para leads existentes, automação de funil, campanhas/Ads/Pixel ou alteração de workflow de reparo.
-7. Segredos no servidor/cofre, nunca expostos em logs, browser, texto de PR ou payloads históricos.
-8. Idempotência forte com reserva de custo e chave única transacional; `evaluateVoiceCallGate` sozinho NÃO assegura concorrência, cotas ou entrega única.
-9. Para escritório jurídico: transparência de IA, revisão/escalonamento humano para orientação jurídica, sem promessas de resultado.
-10. Chamadas reais apenas depois de checkout financeiro/operacional e aprovação formal por tenant e canal.
-
-## 4. Custos de referência (não são orçamento contratado)
-
-**OpenAI `gpt-6-luna`:** US$ 0,10 / 1M tokens de entrada; US$ 0,50 / 1M de saída. Exemplo **por ligação de 3 minutos**, assumindo 5.000 tokens de entrada e 1.000 de saída ao longo dos turnos: (5000×0,10 + 1000×0,50)/1M = **US$ 0,001** em LLM. Esse número não inclui o áudio. Se a integração encaminhar todo o histórico várias vezes, o consumo real poderá ser maior.
-
-**ElevenAgents:** Creator US$22/mês com 275 min incluídos; excedente US$0,08/min, LLM à parte. **Twilio Brasil celular outbound:** US$0,0663/min e número local US$4,25/mês (conforme disponibilidade). Para **100 chamadas atendidas de 3 min**, simulação:
-- ElevenAgents = US$22 + 25×US$0,08 = **US$24,00**.
-- Telefonia celular = 300×US$0,0663 + US$4,25 = **US$24,14**.
-- GPT-6 Luna texto = 100×US$0,001 = **US$0,10**.
-- **Total indicativo: US$48,24 ≈ R$286,55** usando câmbio ilustrativo R$5,94. Não inclui tributos, custos de número adicionais, eventual mídia/roteamento, chamadas não completadas, gravação, provedor WhatsApp, callbacks, excedente de concorrência ou retrabalho.
-
-Para chamadas WhatsApp, **não** aplicar a tarifa PSTN; cotar tarifas Meta/BSP e confirmar requisitos antes de comprar. Custo principal é minutos de voz e telecom; Luna é parcela pequena.
-
-## 5. Fontes de arquitetura e tarifa (rever antes de contratar)
-- https://developers.openai.com/api/docs/models/gpt-6-luna
-- https://developers.openai.com/api/docs/guides/deployment-checklist
+## Fontes
 - https://elevenlabs.io/docs/eleven-agents/customization/llm/custom-llm
-- https://elevenlabs.io/pricing/agents
-- https://elevenlabs.io/docs/eleven-agents/phone-numbers/twilio-integration/native-integration/
+- https://elevenlabs.io/docs/api-reference/agents/create
+- https://developers.openai.com/api/docs/models/gpt-6-luna
 - https://www.twilio.com/en-us/voice/pricing/br
-- https://www.twilio.com/docs/voice/whatsapp-business-calling
-
-## 6. Status desta primeira entrega
-FV00 é apenas especificação + política pura + testes unitários. **Não instalado em produção, não apto a discagem, sem credenciais ou contrato com provedores.** Avançar em FV01 depois de CI; proteger os demais PRs por testes reais.
