@@ -27,7 +27,7 @@ export async function requireFlipAiAccess(
     role = group ? mapBusinessGroupRoleToTenantRole(group.role) : null;
   }
   // Role developer is derived by verifiedSession, not by the commercial TenantUser role.
-  if (session.role === 'developer') role = 'developer';
+  if (session.role === 'developer' && membership?.status === 'active') role = 'developer';
   const planAccess = Boolean(tenant && canAccessFlipAi({
     role,
     tenantStatus: tenant.status,
