@@ -34,7 +34,7 @@ export function canServeFlipAiPilot(input: Pick<FlipAiBillingInput, 'tenantStatu
 }
 
 export function canAccessFlipAi(input: FlipAiBillingInput & { role: string | null }): boolean {
-  return ['owner', 'admin'].includes(input.role || '') && canServeFlipAiPublic(input);
+  return input.role === 'developer' && canServeFlipAiPublic(input);
 }
 export const agentDraftSchema = z.object({
   name: z.string().trim().min(2).max(80),
