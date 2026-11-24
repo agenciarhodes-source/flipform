@@ -60,6 +60,7 @@ export async function registerElevenTwilioInbound(input: {
   agentId: string;
   fromNumber: string;
   toNumber: string;
+  direction?: 'inbound' | 'outbound';
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   checkCredentials(input.apiKey);
@@ -73,7 +74,7 @@ export async function registerElevenTwilioInbound(input: {
       agent_id: input.agentId,
       from_number: input.fromNumber,
       to_number: input.toNumber,
-      direction: 'inbound',
+      direction: input.direction ?? 'inbound',
     }),
     cache: 'no-store',
     signal: AbortSignal.timeout(12_000),
