@@ -75,7 +75,8 @@ def historical_pr01_candidate(current_schema: str) -> str:
             raise ValueError(f"Missing model for developer inverse: {model}")
         body = match.group(2)
         for field in fields:
-            exact = rf"(?m)^\s+{re.escape(field)}\s*\n"
+            field_pattern = re.escape(field).replace(r"\ ", r"\s+")
+            exact = rf"(?m)^\s+{field_pattern}\s*\n"
             if len(re.findall(exact, body)) != 1:
                 raise ValueError(f"Missing/duplicate developer inverse: {model}.{field}")
             body = re.sub(exact, "", body, count=1)
