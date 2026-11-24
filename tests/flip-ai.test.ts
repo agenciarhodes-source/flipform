@@ -218,19 +218,21 @@ test('credit wallet migration is additive and the ledger implementation is tenan
   assert.match(source, /FLIP_AI_CREDIT_BALANCE_INSUFFICIENT/);
   assert.doesNotMatch(source, /apiKey|accessToken|creditCard|cvv/i);
 });
-test('fresh membership overrides JWT role', async () => {
+test('only a verified developer session configures Flip AI, regardless of commercial membership', async () => {
   let membership = { role: 'viewer', status: 'active' };
   const db = { tenantUser: { findUnique: async () => membership }, tenant: { findUnique: async () => ({ status: 'active', plan }) },
     subscription: { findFirst: async () => null } } as unknown as FlipAiDb;
-  const session = { userId: 'u', tenantId: 't', role: 'owner', globalRole: 'platform_admin' } as SessionPayload;
+  const session = { userId: 'u', tenantId: 't', role: 'owner', globalRole: null } as SessionPayload;
   await assert.rejects(requireFlipAiAccess(db, session), (e: unknown) => e instanceof FlipAiError && e.status === 403);
   membership = { role: 'admin', status: 'active' };
-  assert.deepEqual(await requireFlipAiAccess(db, session), { tenantId: 't', userId: 'u', accessMode: 'plan' });
+  await assert.rejects(requireFlipAiAccess(db, session), (e: unknown) => e instanceof FlipAiError && e.status === 403);
+  const verifiedDeveloper = { ...session, role: 'developer' } as SessionPayload;
+  assert.deepEqual(await requireFlipAiAccess(db, verifiedDeveloper), { tenantId: 't', userId: 'u', accessMode: 'plan' });
 });
 
 test('explicit pilot tenant can access without activating Premium globally', async () => {
   const tenantId = 'a166c90d-c862-4e04-9e8b-ad1c43ac6390';
-  const session = { tenantId, userId: 'u', role: 'owner' } as SessionPayload;
+  const session = { tenantId, userId: 'u', role: 'developer' } as SessionPayload;
   let membership = { role: 'owner', status: 'active' };
   const db = {
     tenantUser: { findUnique: async () => membership },
@@ -243,7 +245,7 @@ test('explicit pilot tenant can access without activating Premium globally', asy
     tenantId, userId: 'u', accessMode: 'pilot',
   });
   membership = { role: 'manager', status: 'active' };
-  await assert.rejects(requireFlipAiAccess(db, session, { pilotTenantIds: tenantId }),
+  await assert.rejects(requireFlipAiAccess(db, { ...session, role: 'owner' }, { pilotTenantIds: tenantId }),
     (error: unknown) => error instanceof FlipAiError && error.status === 403);
 });
 
