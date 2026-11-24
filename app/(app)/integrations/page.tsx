@@ -18,7 +18,7 @@ export default async function IntegrationsPage() {
   if (!session) redirect('/login');
   if (!can(session.role, 'INTEGRATIONS_VIEW')) redirect('/dashboard');
   // Plano Inbox: only the WhatsApp numbers and their message templates.
-  if (session.globalRole !== 'platform_admin' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
+  if (session.globalRole !== 'platform_admin' && session.role !== 'developer' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
     return <div className="p-6 space-y-6 max-w-7xl">
       <div>
         <h1 className="text-3xl font-bold">Integrações</h1>
