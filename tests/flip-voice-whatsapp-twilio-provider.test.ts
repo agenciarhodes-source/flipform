@@ -5,7 +5,7 @@ import { createTwilioWhatsAppCall, requestTwilioWhatsAppCallPermission } from '.
 const defaults={
   accountSid:'AC'+'a'.repeat(32),authToken:'x'.repeat(24),
   senderE164:'+558655551111',recipientE164:'+5586999990000',
-  voiceWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/outbound-twiml',
+  voiceWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/outbound-twiml?ticket='+('a'.repeat(32)),
   statusWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/status',
 };
 test('official Twilio WhatsApp outbound endpoint uses dedicated addresses and trusted URL',async()=>{
@@ -31,6 +31,9 @@ test('provider refuses unapproved callback URLs and invalid sender before networ
  const transport=(async()=>{calls++;throw Error('unwanted network');}) as typeof fetch;
  for(const patch of [
   {senderE164:'+15551234567'},
+  {voiceWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/outbound-twiml'},
+  {voiceWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/outbound-twiml?ticket=short'},
+  {voiceWebhookUrl:'https://api.example.com/api/flip-voice/whatsapp/outbound-twiml?ticket='+('a'.repeat(32))+'&extra=1'},
   {voiceWebhookUrl:'http://api.example.com/api/flip-voice/whatsapp/outbound-twiml'},
   {statusWebhookUrl:'https://evil.example.com/pstn'},
   {accountSid:'invalid'},
