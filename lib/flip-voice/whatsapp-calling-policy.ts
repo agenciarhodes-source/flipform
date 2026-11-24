@@ -89,6 +89,20 @@ export function whatsappCallQuotaAllows(
   return elapsed>=24*3600_000 || count < WHATSAPP_CALLING_DEFAULTS.maxCallsPer24Hours;
 }
 
+/** Requests are limited by Meta independently of outgoing call limits.
+ * Includes unresolved/failed sends: never retry automatically after uncertainty.
+ */
+export function whatsappPermissionRequestQuotaAllows(attempts:Date[],now:Date):boolean {
+  if(!(now instanceof Date)||!Number.isFinite(now.getTime())||
+     !Array.isArray(attempts))return false;
+  const seen=attempts.map(x=>x instanceof Date?x.getTime():Number.NaN);
+  if(seen.some(x=>!Number.isFinite(x)||x>now.getTime()))return false;
+  const pastWeek=seen.filter(x=>x>=now.getTime()-7*86400_000);
+  const pastDay=pastWeek.filter(x=>x>=now.getTime()-86400_000);
+  return pastDay.length < WHATSAPP_CALLING_DEFAULTS.maxPermissionRequests24Hours &&
+    pastWeek.length < WHATSAPP_CALLING_DEFAULTS.maxPermissionRequests7Days;
+}
+
 /** Extra conservative budget hold; invoices must be reconciled with Twilio/Meta. */
 export function estimateWhatsAppCallReservationMicros(seconds:number):bigint {
   if(!Number.isSafeInteger(seconds)||seconds<30||seconds>WHATSAPP_CALLING_DEFAULTS.maxSeconds) {
