@@ -15,6 +15,14 @@ export async function createUrgentTeamTask(input: {
   description: string;
   dueInMinutes: number;
 }) {
+  // AI/automation tasks cannot attach a lead from another tenant.
+  if (input.leadId) {
+    const ownLead = await prisma.lead.findFirst({
+      where: { id: input.leadId, tenantId: input.tenantId },
+      select: { id: true },
+    });
+    if (!ownLead) return 0;
+  }
   const members = await prisma.tenantUser.findMany({
     where: { tenantId: input.tenantId },
     select: { userId: true, role: true, status: true },

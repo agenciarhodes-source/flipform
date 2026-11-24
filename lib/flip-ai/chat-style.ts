@@ -42,9 +42,12 @@ export function cleanChatStyle(text: string) {
  */
 export function splitIntoBubbles(text: string, max = 300) {
   const clean = text.trim();
-  if (clean.length <= max) return [clean];
+  // Respect intentional paragraph breaks even for two short WhatsApp bubbles.
+  // Never split a short greeting or a reply without a complete paragraph boundary.
+  if (clean.length <= 160) return [clean];
   const parts = clean.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
   if (parts.length < 2) return [clean];
+  if (clean.length <= max && parts.some((part) => part.length > 220)) return [clean];
   let best = 1;
   let bestGap = Infinity;
   for (let cut = 1; cut < parts.length; cut += 1) {

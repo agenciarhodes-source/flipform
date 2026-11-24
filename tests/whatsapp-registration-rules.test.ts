@@ -38,14 +38,22 @@ test('o nome do cadastro é confirmado uma vez, na primeira resposta', () => {
     registrationNameState({ registeredName: 'LUIZA BEATRIZ', preferredName: null, aiRepliesSoFar: 0 }),
     { knownName: null, nameToConfirm: 'Luiza' },
   );
-  // Sem resposta, a conversa segue com o nome do cadastro, sem perguntar de novo.
+  // Sem aceite expresso, o nome do cadastro não pode virar nome confirmado.
   assert.deepEqual(
     registrationNameState({ registeredName: 'LUIZA BEATRIZ', preferredName: null, aiRepliesSoFar: 2 }),
-    { knownName: 'Luiza', nameToConfirm: 'Luiza' },
+    { knownName: null, nameToConfirm: 'Luiza' },
   );
   // O nome que a pessoa disse vale mais que o do cadastro.
   assert.equal(
     registrationNameState({ registeredName: 'LUIZA BEATRIZ', preferredName: 'Bia', aiRepliesSoFar: 2 }).knownName,
     'Bia',
   );
+});
+
+test('cadastro não aceita respostas curtas ou expressão regional como nome', () => {
+  for (const name of ['yes', 'S-I', 'C', 'lá ele', 'Sim', 'Loja', 'Mãe']) {
+    assert.equal(registrationFirstName(name), null, name);
+    const state = registrationNameState({ registeredName: 'Bruna Costa', preferredName: name, aiRepliesSoFar: 3 });
+    assert.equal(state.knownName, null, name);
+  }
 });

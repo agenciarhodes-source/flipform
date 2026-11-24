@@ -25,7 +25,7 @@ def test_received_messages_record_their_number():
 def test_sends_use_the_conversation_number():
     source = read("lib/meta/whatsapp-outbound.ts")
     assert "await resolveConnectedWhatsAppConnection(tenantId, conversationId)" in source
-    assert source.count("await numberForSend(tenantId, input.conversationId.trim())") == 3
+    assert source.count("await numberForSend(tenantId, input.conversationId.trim())") == 4
     assert "where: { tenantId, status: 'connected' },\n      orderBy" not in source
 
 

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "observed_at_date": "2026-11-23",
+  "purpose": "PR629 historical schema time-travel feasibility, not a completed PITR restore",
+  "project_id": "holy-fog-36254823",
+  "project_name": "flipform-staging-isolated",
+  "recovery_history_window_seconds": 86400,
+  "isolated_non_default_root_branch": "br-rapid-cherry-bcizfy2x",
+  "database_name": "flipform_staging",
+  "original_schema_at_early_timestamp": {
+    "point": "2026-11-23T01:50:00Z",
+    "historical_schema_diff_vs_current_bytes": 232785,
+    "added_tables_in_diff": 102,
+    "added_enums_in_diff": 10,
+    "view_verified": true
+  },
+  "post_schema_timestamp": {
+    "point": "2026-11-23T02:06:00Z",
+    "historical_schema_diff_vs_current_bytes": 0,
+    "view_verified": true
+  },
+  "latest_schema_public_tables": 102,
+  "history_schema_query": "PASS_HISTORICAL_SCHEMA_DIFF",
+  "native_timestamp_pitr_restore_executed": false,
+  "point_in_time_restore_data_integrity_verified": false,
+  "numeric_rpo_measured": false,
+  "numeric_rto_measured": false,
+  "target_branch_replaced": false,
+  "default_branch_touched": false,
+  "production_project_touched": false,
+  "isolated_root_creation_attempted": true,
+  "isolated_root_creation_result": "BLOCKED_LIMIT",
+  "isolated_root_creation_failure": "HTTP 422: root branches limit exceeded",
+  "count_root_branches_at_observation": 5,
+  "root_branch_names_at_observation": [
+    "pr629-snapshot-restore-readonly-20261122",
+    "pr629-api102-synthetic-proof-20261122",
+    "pr629-api102-snapshot-restore-proof-20261122",
+    "staging",
+    "pr00-a2b-snapshot-restore-20261117"
+  ],
+  "snapshot_restore_current_schema_verified_separately": true,
+  "customer_data_accessed": false,
+  "delete_branch_executed": false,
+  "release_gate": "NO_GO",
+  "owner_operational_acceptance_recorded": true,
+  "next_action": "After explicit authorization to free a retired, safely identified isolated root branch or increase project quota, run true point-in-time restore on non-default disposable root, validate data and schema, quantify RPO/RTO and app reconnection.",
+  "note": "A historical-schema comparison is not instant restore, backup restore or full data recovery. No runtime/production availability claim."
+}

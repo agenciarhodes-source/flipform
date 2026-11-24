@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withAuth } from '@/lib/auth';
-import { can, canEditTask, canDeleteTask, canCompleteTask } from '@/lib/rbac-server';
+import { can, canEditTask, canDeleteTask, canCompleteTask, canAccessLeadTasks } from '@/lib/rbac-server';
 import { logAudit } from '@/lib/audit';
 import { taskUpdateSchema } from '@/lib/schemas-tasks';
 
@@ -12,10 +12,11 @@ export const PUT = withAuth(async (req, session, ctx: { params: { id: string; ta
   }
 
   const task = await prisma.task.findFirst({
-    where: { id: ctx.params.taskId, tenantId: session.tenantId, leadId: ctx.params.id },
-    include: { lead: { select: { id: true, assignedTo: true, name: true } } },
+    where: { id: ctx.params.taskId, tenantId: session.tenantId, leadId: ctx.params.id, lead: { tenantId: session.tenantId } },
+    include: { lead: { select: { id: true, tenantId: true, assignedTo: true, name: true } } },
   });
   if (!task) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 });
+  if (!canAccessLeadTasks(session, task.lead)) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 });
   if (task.lead?.id !== ctx.params.id) {
     return NextResponse.json({ error: 'Tarefa não pertence a este lead' }, { status: 400 });
   }
@@ -124,10 +125,11 @@ export const DELETE = withAuth(async (_req, session, ctx: { params: { id: string
   }
 
   const task = await prisma.task.findFirst({
-    where: { id: ctx.params.taskId, tenantId: session.tenantId, leadId: ctx.params.id },
-    include: { lead: { select: { id: true, assignedTo: true } } },
+    where: { id: ctx.params.taskId, tenantId: session.tenantId, leadId: ctx.params.id, lead: { tenantId: session.tenantId } },
+    include: { lead: { select: { id: true, tenantId: true, assignedTo: true } } },
   });
   if (!task) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 });
+  if (!canAccessLeadTasks(session, task.lead)) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 });
 
   const scope = {
     task: { assignedTo: task.assignedTo, createdBy: task.createdBy },

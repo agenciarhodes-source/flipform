@@ -14,7 +14,7 @@ def test_marker_is_taken_out_before_sending_and_task_created_after():
     assert reply.index("extractTeamTask(parsed.reply)") < reply.index("toWhatsAppText(parsed.reply)")
     assert reply.index("const sent = voiceSent || await enqueueAndDispatchWhatsAppTextMessage({") < reply.index("createWhatsAppTeamTask({")
     assert "TEAM_TASK_INSTRUCTION," in reply
-    assert "responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE" in reply
+    assert "responda como a empresa que vamos cuidar disso (veja VOZ DA EMPRESA), continue o atendimento e crie a TAREFA PARA A EQUIPE" in reply
     assert "TEAM_VOICE_RULE," in reply
 
 

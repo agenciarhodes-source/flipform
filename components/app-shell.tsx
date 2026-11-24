@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   LayoutDashboard,
+  LifeBuoy,
   KanbanSquare,
   Users,
   FileText,
@@ -64,6 +65,8 @@ const NAV: NavItem[] = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/customers", label: "Clientes", icon: Users, permission: "LEADS_VIEW" },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
+  { href: "/suporte-atendimento", label: "Suporte", icon: LifeBuoy, permission: "INBOX_VIEW" },
+  { href: "/settings/suporte-atendimento", label: "Configurar Suporte", icon: LifeBuoy, permission: "SETTINGS_VIEW", show: (role) => role === "owner" },
   { href: "/direct", label: "Direct", icon: Instagram, permission: "INBOX_VIEW" },
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },
@@ -108,11 +111,11 @@ const NAV: NavItem[] = [
 /** The side menu in sections, so related pages stay together. Items not listed stay at the top. */
 const NAV_SECTIONS: Array<{ title: string; hrefs: string[] }> = [
   { title: "Vendas", hrefs: ["/kanban", "/leads", "/customers", "/pipelines", "/sales-rotation"] },
-  { title: "Atendimento", hrefs: ["/inbox", "/direct", "/automations"] },
+  { title: "Atendimento", hrefs: ["/inbox", "/direct", "/suporte-atendimento", "/automations"] },
   { title: "Inteligência artificial", hrefs: ["/flip-ai", "/whatsapp-ai", "/instagram-ai"] },
   { title: "Captação", hrefs: ["/forms", "/domains"] },
   { title: "Análise", hrefs: ["/reports"] },
-  { title: "Administração", hrefs: ["/integrations", "/users", "/billing", "/settings"] },
+  { title: "Administração", hrefs: ["/integrations", "/users", "/billing", "/settings", "/settings/suporte-atendimento"] },
 ];
 
 function navSections<T extends { href: string }>(items: T[]) {
@@ -150,6 +153,7 @@ export function AppShell({
   hasCurrentTenantMembership = true,
   isBusinessGroupAnchor = false,
   inboxOnly = false,
+  supportKnowledgeEnabled = false,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
@@ -159,6 +163,8 @@ export function AppShell({
   isBusinessGroupAnchor?: boolean;
   /** Plano Inbox: the menu shows only the attendance screens. */
   inboxOnly?: boolean;
+  /** Consulta do Suporte somente para Atendentes com associação ativa ao tenant. */
+  supportKnowledgeEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -188,6 +194,7 @@ export function AppShell({
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
+      && (item.href !== "/suporte-atendimento" || supportKnowledgeEnabled)
       && !(item.href === "/team" && !hasCurrentTenantMembership)
       && (!inboxOnly || inGroupView || isBusinessGroupAnchor || inboxPlanMenu.has(item.href)),
   );

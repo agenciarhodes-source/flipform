@@ -1,3 +1,4 @@
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 import { logAudit } from '@/lib/audit';
 import { renderEmailTemplate } from './render';
 import type { SendTransactionalEmailInput, SendTransactionalEmailResult } from './types';
@@ -23,6 +24,7 @@ function getReplyTo() {
 }
 
 async function sendWithResend(input: { to: string; subject: string; html: string; text: string }) {
+  assertPr629NoExternalEgress('resend-email');
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error('Missing RESEND_API_KEY');
 
@@ -49,6 +51,7 @@ async function sendWithResend(input: { to: string; subject: string; html: string
 }
 
 async function sendWithSmtp(input: { to: string; subject: string; html: string; text: string }) {
+  assertPr629NoExternalEgress('smtp-email');
   let nodemailer: any;
   try {
     nodemailer = await import('nodemailer');

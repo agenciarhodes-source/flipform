@@ -1,4 +1,5 @@
 import 'server-only';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 import crypto from 'crypto';
 
 export const META_GRAPH_API_VERSION = 'v26.0';
@@ -159,6 +160,7 @@ export function parseMetaCapiSuccess(data: unknown): MetaCapiSendResult {
 }
 
 export async function sendMetaCapiEvent(payload: MetaCapiPayload): Promise<MetaCapiSendResult> {
+  assertPr629NoExternalEgress('meta-capi');
   const body = {
     data: [
       {

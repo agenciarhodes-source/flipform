@@ -12,7 +12,7 @@ export function isInboxOnlyPlan(slug: string | null | undefined) {
 }
 
 /** Screens of the Plano Inbox. "/account" is the person's own profile and password. */
-export const INBOX_PLAN_PAGES = ['/inbox', '/integrations', '/users', '/billing', '/account'] as const;
+export const INBOX_PLAN_PAGES = ['/inbox', '/integrations', '/users', '/billing', '/account', '/suporte-atendimento', '/settings/suporte-atendimento'] as const;
 
 /** Where a company on the Plano Inbox lands (instead of the dashboard). */
 export const INBOX_PLAN_HOME = '/inbox';

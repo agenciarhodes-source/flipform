@@ -8,7 +8,9 @@ test('style rule: no confirming the obvious, no repeating, no machine marks', ()
     assert.ok(CHAT_STYLE_RULE.includes(phrase), phrase);
   }
   assert.match(CHAT_STYLE_RULE, /ponto e vírgula, travessão/);
-  assert.match(TEAM_VOICE_RULE, /no máximo uma vez a cada várias mensagens/);
+  assert.match(TEAM_VOICE_RULE, /no máximo\s+uma vez a cada várias mensagens/);
+  assert.match(TEAM_VOICE_RULE, /primeira pessoa do plural/);
+  assert.match(TEAM_VOICE_RULE, /"nosso time vai"/);
   assert.match(TEAM_VOICE_RULE, /PROIBIDO dizer "vou encaminhar"/);
 });
 
@@ -30,4 +32,11 @@ test('a long reply becomes two messages at a blank line; short ones stay whole',
   const second = 'b'.repeat(200);
   assert.deepEqual(splitIntoBubbles(`${first}\n\n${second}`), [first, second]);
   assert.deepEqual(splitIntoBubbles('c'.repeat(400)), ['c'.repeat(400)]);
+});
+
+test('intentional two shorter paragraphs become two bubbles without bloating text', () => {
+  const first = 'O próximo passo é reunir os documentos que faltam para analisar o caso com mais cuidado. Agora podemos seguir.';
+  const second = 'Pode mandar a carteira de trabalho quando conseguir. Depois vamos conferir se está tudo legível e completo.';
+  assert.deepEqual(splitIntoBubbles(`${first}\n\n${second}`), [first.trim(), second.trim()]);
+  assert.deepEqual(splitIntoBubbles('Tudo certo.\n\nPode enviar depois.'), ['Tudo certo.\n\nPode enviar depois.']);
 });

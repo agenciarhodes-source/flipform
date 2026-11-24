@@ -42,6 +42,8 @@ export default function TenantDetailPage() {
   const [savingPlan, setSavingPlan] = useState(false);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   const [savingUserRole, setSavingUserRole] = useState<string | null>(null);
+  const [enablingOwnerLogin, setEnablingOwnerLogin] = useState<string | null>(null);
+  const [reconciledLoginIds, setReconciledLoginIds] = useState<string[]>([]);
   const [wallet, setWallet] = useState<any>(null);
   const [loadingWallet, setLoadingWallet] = useState(true);
   const [usage, setUsage] = useState<any>(null);
@@ -343,6 +345,32 @@ export default function TenantDetailPage() {
     }
   };
 
+  const enableExistingOwnerLogin = async (tenantUser: any) => {
+    const reason = window.prompt(
+      'Confirme a identidade do proprietário antes de liberar o login desta empresa. Descreva como confirmou (mínimo 10 caracteres):',
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 10) {
+      toast.error('Descreva a verificação da identidade com pelo menos 10 caracteres.');
+      return;
+    }
+    setEnablingOwnerLogin(tenantUser.id);
+    try {
+      const response = await fetch(`/api/admin/tenants/${id}/users/${tenantUser.id}/enable-login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Não foi possível liberar o login.');
+      setReconciledLoginIds(current => [...current, tenantUser.id]);
+      toast.success('Acesso de login regularizado. A senha e os outros vínculos foram preservados.');
+    } catch (error: any) {
+      toast.error(error.message || 'Não foi possível regularizar o login.');
+    } finally {
+      setEnablingOwnerLogin(null);
+    }
+  };
+
   // Forgotten password: the Super Admin types a new one after confirming the identity.
   const [passwordUser, setPasswordUser] = useState<any>(null);
 
@@ -472,6 +500,12 @@ Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-m
                       <td className="py-2 px-4 text-right space-x-2 whitespace-nowrap">
                         {tu.user.mfaEnabledAt ? (
                           <Button size="sm" variant="ghost" onClick={() => resetUserMfa(tu)}>Desligar 2 etapas</Button>
+                        ) : null}
+                        {tu.role === 'owner' && tu.status === 'active' && !reconciledLoginIds.includes(tu.id) ? (
+                          <Button size="sm" variant="outline" disabled={enablingOwnerLogin === tu.id}
+                            onClick={() => void enableExistingOwnerLogin(tu)}>
+                            {enablingOwnerLogin === tu.id ? 'Regularizando...' : 'Regularizar login'}
+                          </Button>
                         ) : null}
                         <Button size="sm" variant="ghost" onClick={() => setPasswordUser(tu)}>Redefinir senha</Button>
                         <Button

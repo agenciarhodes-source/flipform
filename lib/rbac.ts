@@ -162,6 +162,22 @@ export function getLeadScopeForRole(session: { role: string; userId: string }): 
   return session.role === 'agent' ? { assignedTo: session.userId } : {};
 }
 
+/** T2: lead-specific tasks follow the attendant's own-lead access policy. */
+export function canAccessLeadTasks(
+  session: { role: string; userId: string; tenantId: string },
+  lead: { assignedTo: string | null; tenantId: string } | null,
+): boolean {
+  return lead !== null && lead.tenantId === session.tenantId
+    && (session.role !== 'agent' || lead.assignedTo === session.userId);
+}
+
+/** Agent task statistics count own-tenant, own-lead tasks or personal tasks without a lead. */
+export function getTaskScopeForRole(session: { role: string; userId: string; tenantId: string }) {
+  return session.role === 'agent'
+    ? { OR: [{ lead: { tenantId: session.tenantId, assignedTo: session.userId } }, { leadId: null, assignedTo: session.userId }] }
+    : {};
+}
+
 export function canEditLead(role: string, lead: { assignedTo: string | null }, userId: string): boolean {
   if (can(role, 'LEADS_EDIT_ALL')) return true;
   if (can(role, 'LEADS_EDIT_OWN') && lead.assignedTo === userId) return true;

@@ -43,6 +43,8 @@ import { conversationDocumentContext, documentNote, readWhatsAppDocument } from 
 import { extractTeamTask, TEAM_TASK_INSTRUCTION } from './team-task-rules';
 import { TEAM_VOICE_RULE } from '@/lib/flip-ai/team-voice';
 import { createWhatsAppTeamTask } from './team-task';
+import { customerAsksVideoCall, extractVideoCall, VIDEO_CALL_INSTRUCTION } from './video-call-rules';
+import { handOffForVideoCall } from './video-call';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
@@ -53,7 +55,7 @@ import { sendWhatsAppVoiceReply, whatsappVoiceSettings } from './voice';
 import { shouldSendVoice } from './voice-rules';
 import { setLeadCpf } from '@/lib/leads/cpf';
 import { findCpfInText } from '@/lib/leads/cpf-rules';
-import { decideWhatsAppAiAnswer, isTestPhoneNumber, nameFromReply, plausibleName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
+import { decideWhatsAppAiAnswer, explicitNameFromMessage, isTestPhoneNumber, nameFromReply, shouldClarifyName, toWhatsAppText, withWhatsAppSourceLinks, WHATSAPP_AI_QUIET_SECONDS, WHATSAPP_AI_TIMEZONE } from './eligibility';
 
 type ExecuteTurn = Extract<PreparedPublicChatTurn, { mode: 'execute' }>;
 export type WhatsAppAiOutcome = { replied: boolean; reason: string };
@@ -140,6 +142,8 @@ function whatsappInstructions(input: {
   profileName: string | null;
   /** The AI already asked how to call the person and got no name back. */
   nameAsked?: boolean;
+  /** Last reply rejected a proposed name or was an ambiguous regional expression. */
+  nameClarificationNeeded?: boolean;
   /** analyst = triage then the team; closer = up to the close. */
   role?: AttendantRole;
   /** The person came from a company form: said on the first reply. */
@@ -160,15 +164,18 @@ function whatsappInstructions(input: {
       ? `Esta é a sua primeira resposta nesta conversa: apresente-se apenas como ${input.introduction}, sem dizer nome próprio.`
       : 'Não se apresente de novo.',
     'Nunca diga que é uma pessoa. Se o cliente perguntar se está falando com uma pessoa ou um robô, diga com naturalidade que é uma assistente automática.',
-    'Se o cliente pedir para falar com alguém, responda que o nosso time vai cuidar disso, continue o atendimento e crie a TAREFA PARA A EQUIPE.',
+    'Se o cliente pedir para falar com alguém, responda como a empresa que vamos cuidar disso (veja VOZ DA EMPRESA), continue o atendimento e crie a TAREFA PARA A EQUIPE.',
     TEAM_VOICE_RULE,
     TEAM_TASK_INSTRUCTION,
+    VIDEO_CALL_INSTRUCTION,
     'NÃO SE REPITA: antes de responder, leia as suas últimas mensagens. Não repita frases, pedidos ou explicações que você já deu.'
       + ' Se o cliente só agradeceu, confirmou ("certo", "ok, obrigada") ou disse que vai mandar depois, responda curto (uma frase),'
       + ' sem repetir o pedido, e respeite o prazo que ele deu (por exemplo: "Combinado! Fico no aguardo.").',
     input.knownName
       ? `NOME: o cliente prefere ser chamado de "${input.knownName}". Quando usar o nome, use esse, e NÃO pergunte o nome de novo.`
-      : input.nameAsked
+      : input.nameClarificationNeeded
+        ? 'NOME: a pessoa não confirmou o nome sugerido. Pergunte uma única vez "Como posso te chamar?" e não assuma nenhum nome. Depois disso, mesmo sem resposta clara, continue sem usar nome e sem repetir a pergunta.'
+        : input.nameAsked
         ? 'NOME: você já perguntou como a pessoa prefere ser chamada e ela ainda não disse. Não pergunte de novo e não use nenhum nome até ela dizer.'
         // Global: "Posso te chamar de X?" only when X is clearly a first name; profile names such as
         // "Rf", "Mãe" or "Loja Bela" get "Como posso te chamar?" (lib/whatsapp-ai/name-clarity.ts).
@@ -187,7 +194,7 @@ function whatsappInstructions(input: {
       'A EQUIPE JÁ ATENDEU ESTE CLIENTE: as mensagens marcadas com [Equipe] foram escritas por uma pessoa da empresa, não'
         + ' por você. Continue exatamente de onde a equipe parou e siga o que ela combinou (documentos pedidos, próximos'
         + ' passos, caminho encontrado). Não refaça a triagem, não repita perguntas que a equipe já fez e nunca contradiga a'
-        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que o nosso time vai avaliar, sem decidir'
+        + ' equipe. Se a resposta do cliente trouxer uma dúvida sobre o caso, diga que vamos avaliar com cuidado e retornar por aqui, sem decidir'
         + ' sozinho.',
     ] : []),
     // Global for every company on WhatsApp; what is specific to a business is in its Master Markdown.
@@ -554,6 +561,7 @@ export async function replyToWhatsAppConversation(input: {
           : nameConfirmed ? whatsappContactName(conversation.lead?.name) : nameInAnswer,
         profileName,
         nameAsked: askedForName(recentOutbound.map((message) => message.text)),
+        nameClarificationNeeded: shouldClarifyName(recentOutbound[0]?.text, turnText),
         role: runtime.attendantRole,
         registrationNote: registration?.fromForm && recentOutbound.length === 0
           ? registrationNote({ companyName: conversation.tenant.name, registeredAt: registration.createdAt, now })
@@ -564,6 +572,14 @@ export async function replyToWhatsAppConversation(input: {
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
         : context.messages,
     };
+
+    // The customer asked for a video call: a person of the team calls. The AI says nothing, only
+    // creates the urgent task for the lead's attendant and leaves the conversation to her.
+    if (customerAsksVideoCall(turnText)) {
+      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id, agentId: runtime.id });
+      await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_VIDEO_CALL_HANDOFF' }, 'response');
+      return { replied: false, reason: 'video_call_handoff' };
+    }
 
     const raw = await executeFlipAiConversationResponse({
       tenantId: input.tenantId,
@@ -577,6 +593,12 @@ export async function replyToWhatsAppConversation(input: {
     // A task for the team never reaches the customer: it is taken out of the reply here.
     const teamTask = extractTeamTask(parsed.reply);
     parsed.reply = teamTask.reply;
+    // The customer accepted the video call: same as asking for it, nothing is sent.
+    if (extractVideoCall(parsed.reply).requested) {
+      await handOffForVideoCall({ tenantId: input.tenantId, conversationId: conversation.id, agentId: runtime.id });
+      await failPublicChatTurn(turn, { kind: 'definitive', code: 'WHATSAPP_AI_VIDEO_CALL_HANDOFF' }, 'response');
+      return { replied: false, reason: 'video_call_handoff' };
+    }
     const closingSend = extractSendDocuments(parsed.reply);
     parsed.reply = closingSend.reply;
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
@@ -660,7 +682,7 @@ export async function replyToWhatsAppConversation(input: {
       runtime,
       classification: parsed.qualification?.classification,
       // The model may read "Simmm" as a name: only something that can be a name is kept.
-      preferredName: alignNameSpelling(plausibleName(parsed.identity?.name) || nameInAnswer, knownNames),
+      preferredName: alignNameSpelling(nameInAnswer || explicitNameFromMessage(turnText), knownNames),
       whatsappBusinessAccountId: connection.wabaId,
       qualification: parsed.qualification,
       model: raw.model,

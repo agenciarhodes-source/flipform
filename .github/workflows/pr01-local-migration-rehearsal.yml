@@ -1,0 +1,146 @@
+name: PR01 - Local migration rehearsal (DISPOSABLE ONLY)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/pr01-local-migration-rehearsal.yml'
+      - 'scripts/pr01_local_migration_rehearsal.py'
+      - 'scripts/pr01_cascade_risk_review.py'
+      - 'scripts/pr01_retention_release_gate.py'
+      - 'scripts/pr01_staging_no_go_gate.py'
+      - 'tests/test_pr01_staging_no_go_gate.py'
+      - 'docs/security/pr01-staging-release-gates-DRAFT.json'
+      - 'vercel.json'
+      - 'tests/test_pr01_phase9_retention_gate.py'
+      - 'docs/security/pr01-phase9-retention-decision-matrix.json'
+      - 'scripts/pr01_offline_sql_diff_audit.py'
+      - 'scripts/pr00_a2c2_audit_sql.py'
+      - 'prisma/schema.prisma'
+
+permissions:
+  contents: read
+
+jobs:
+  local-pr01-migration:
+    name: PR01 disposable Postgres apply / rollback rehearsal (NO Neon)
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/pr01-global-api-foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      PR01_LOCAL_REHEARSAL: 'true'
+      PR01_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pr01_rehearsal?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/pr01_rehearsal?schema=public
+      PGPASSWORD: postgres
+    steps:
+      - name: Checkout exact PR commit and baseline without persisted credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Refuse unsafe database or environment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CI" = "true"
+          test "$PR01_LOCAL_REHEARSAL" = "true"
+          test "$DATABASE_URL" = 'postgresql://postgres:postgres@127.0.0.1:5432/pr01_rehearsal?schema=public'
+          test "$DIRECT_URL" = "$DATABASE_URL"
+          test ! -e .env
+          test ! -e .env.local
+          test ! -e .env.production
+          git cat-file -e "${PR01_BASE_SHA}^{commit}"
+          mkdir -p pr01-migration-rehearsal
+          git show "${PR01_BASE_SHA}:prisma/schema.prisma" > pr01-migration-rehearsal/baseline.prisma
+          python3 -c "import os,sys;sys.path.insert(0,'scripts');from pr01_local_migration_rehearsal import guard;guard(os.environ);print('Local-only CI guard passed')"
+          node -e "const p=require('./package.json'); if(p.dependencies.prisma!=='5.22.0'||p.dependencies['@prisma/client']!=='5.22.0')process.exit(1)"
+
+      - name: Setup Node and pinned CLI
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies without running SQL
+        run: npm ci
+
+      - name: Generate baseline and additive scripts from Prisma files only
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx prisma validate --schema prisma/schema.prisma
+          ./node_modules/.bin/prisma migrate diff \
+            --from-empty \
+            --to-schema-datamodel pr01-migration-rehearsal/baseline.prisma \
+            --script --output pr01-migration-rehearsal/baseline.sql
+          ./node_modules/.bin/prisma migrate diff \
+            --from-schema-datamodel pr01-migration-rehearsal/baseline.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --script --output pr01-migration-rehearsal/additive.sql
+          python3 scripts/pr01_offline_sql_diff_audit.py \
+            --baseline pr01-migration-rehearsal/baseline.prisma \
+            --candidate prisma/schema.prisma \
+            --sql pr01-migration-rehearsal/additive.sql \
+            --report pr01-migration-rehearsal/allowlist-report.json
+          python3 scripts/pr01_cascade_risk_review.py \
+            --sql pr01-migration-rehearsal/additive.sql \
+            --report pr01-migration-rehearsal/cascade-risk-report.json
+
+          # A successful check explicitly verifies NO-GO for real migrations.
+          # Approval cannot be self-granted by changing a JSON status.
+          python3 -m unittest discover -s tests -p 'test_pr01_phase9_retention_gate.py' -v
+          python3 scripts/pr01_retention_release_gate.py \
+            --policy docs/security/pr01-phase9-retention-decision-matrix.json \
+            --fk-report pr01-migration-rehearsal/cascade-risk-report.json \
+            --report pr01-migration-rehearsal/phase9-retention-release-hold.json
+
+      # This is an offline NO-GO proof, not a claim of staging readiness.
+      - name: PR01 staging release NO-GO preflight (offline only)
+        run: |
+          python3 -m unittest discover -s tests -p 'test_pr01_staging_no_go_gate.py' -v
+          python3 scripts/pr01_staging_no_go_gate.py \
+            --manifest docs/security/pr01-staging-release-gates-DRAFT.json \
+            --vercel vercel.json \
+            --retention docs/security/pr01-phase9-retention-decision-matrix.json \
+            --report pr01-migration-rehearsal/staging-no-go-report.json
+
+      - name: Start runner-only PostgreSQL with pgvector
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo systemctl start postgresql.service
+          PG_MAJOR="$(pg_lsclusters -h | awk 'NR==1 {print $1}')"
+          sudo apt-get update -y
+          sudo apt-get install -y "postgresql-${PG_MAJOR}-pgvector"
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER USER postgres PASSWORD 'postgres'"
+          sudo -u postgres createdb pr01_rehearsal
+          pg_isready -h 127.0.0.1 -p 5432
+          psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5432 -U postgres \
+            -d pr01_rehearsal -c 'CREATE EXTENSION IF NOT EXISTS vector'
+
+      - name: Apply additive SQL, verify baseline survivor, rehearse local-only empty rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/pr01_local_migration_rehearsal.py \
+            --baseline-schema pr01-migration-rehearsal/baseline.prisma \
+            --candidate-schema prisma/schema.prisma \
+            --baseline-sql pr01-migration-rehearsal/baseline.sql \
+            --delta-sql pr01-migration-rehearsal/additive.sql \
+            --report pr01-migration-rehearsal/disposable-rollback-report.json
+          sha256sum pr01-migration-rehearsal/additive.sql > pr01-migration-rehearsal/additive.sha256
+          git rev-parse HEAD > pr01-migration-rehearsal/head-commit.txt
+          printf '%s\n' "$PR01_BASE_SHA" > pr01-migration-rehearsal/base-commit.txt
+
+      - name: Upload evidence for manual review, never a production migration artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: pr01-disposable-migration-rehearsal-evidence
+          path: pr01-migration-rehearsal/
+          if-no-files-found: warn
+          retention-days: 14

@@ -4,6 +4,8 @@ import { can } from '@/lib/rbac';
 import { tenantHasMessagingPlan } from '@/lib/billing/plan-access';
 import { MessagingPlanNotice } from '@/components/billing/messaging-plan-notice';
 import { InboxClient } from '../inbox/inbox-client';
+import { canReadTenantSupportKnowledge } from '@/lib/suporte-atendimento/access';
+import { isTenantSupportActive } from '@/lib/suporte-atendimento/tenant-knowledge';
 
 /** Direct: the Instagram conversations, apart from the WhatsApp ones in the Inbox. */
 export default async function DirectPage() {
@@ -14,6 +16,7 @@ export default async function DirectPage() {
 
   return (
     <InboxClient
+      supportKnowledgeEnabled={canReadTenantSupportKnowledge(session) && await isTenantSupportActive(session.tenantId)}
       channel="instagram"
       canManage={can(session.role, 'INBOX_MANAGE')}
       canAssign={['owner', 'admin', 'manager'].includes(session.role)}

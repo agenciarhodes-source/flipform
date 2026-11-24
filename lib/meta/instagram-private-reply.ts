@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { can } from '@/lib/rbac';
 import { INSTAGRAM_GRAPH_VERSION } from '@/lib/meta/instagram';
 import { getInstagramSendConnection } from '@/lib/meta/instagram-send-credentials';
+import { assertPr629NoExternalEgress } from '@/lib/qa/pr629-external-egress';
 
 const PRIVATE_REPLY_PROVIDER = 'instagram_private_reply';
 const COMMENT_PROVIDER = 'instagram_comment';
@@ -407,6 +408,8 @@ async function sendPrivateReplyToMeta(input: {
   text: string;
   accessToken: string;
 }): Promise<ProviderSendResult> {
+  // QA preview: deny real Instagram private replies before any network activity.
+  assertPr629NoExternalEgress('instagram-private-reply');
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
   try {

@@ -1,0 +1,157 @@
+name: API v1 - Homologation hold (offline only)
+
+on:
+  pull_request:
+    branches:
+      - feature/pr02-forms-catalog-read
+    paths:
+      - '.github/workflows/api-v1-homologation-preflight.yml'
+      - 'scripts/api_v1_homologation_preflight.py'
+      - 'tests/test_api_v1_homologation_preflight.py'
+      - 'docs/security/api-v1-homologation-evidence-20261121.json'
+      - 'docs/security/api-v1-homologation-runbook-20261121.md'
+      - 'docs/security/api-v1-retention-decision-workbook-20261122.json'
+      - 'docs/security/api-v1-retention-approval-guide-20261122.md'
+      - 'docs/security/api-v1-retention-owner-review-20261123.md'
+      - 'docs/security/api-v1-retention-candidate-periods-20261123.json'
+      - 'docs/security/api-v1-retention-candidate-periods-20261123.md'
+      - 'docs/security/api-v1-retention-clock-feasibility-20261123.json'
+      - 'docs/security/api-v1-retention-clock-feasibility-20261123.md'
+      - 'scripts/pr629_retention_clock_gate.py'
+      - 'tests/test_pr629_retention_clock_gate.py'
+      - 'docs/security/api-v1-operational-owner-acceptance-20261123.json'
+      - 'docs/security/api-v1-operational-owner-acceptance-20261123.md'
+      - 'scripts/pr629_operational_acceptance_gate.py'
+      - 'tests/test_pr629_operational_acceptance_gate.py'
+      - 'docs/security/api-v1-pitr-timeline-readonly-20261123.json'
+      - 'scripts/pr629_pitr_timeline_gate.py'
+      - 'tests/test_pr629_pitr_timeline_gate.py'
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/20261123170000_api_v1_lifecycle_clocks/migration.sql'
+      - 'lib/api-v1/lifecycle-clocks.ts'
+      - 'lib/api-v1/integration-management.ts'
+      - 'lib/api-v1/prisma-credential-repository.ts'
+      - 'lib/api-v1/policy.ts'
+      - 'tests/pr629-pilot-allowlist.test.ts'
+      - 'lib/api-v1/diagnostic-delivery-state.ts'
+      - 'docs/security/api-v1-lifecycle-clock-implementation-20261123.md'
+      - 'tests/pr629-lifecycle-clocks.test.ts'
+      - 'docs/security/api-v1-pitr-egress-review-20261122.md'
+      - 'scripts/api_v1_egress_static_guard.py'
+      - 'tests/test_api_v1_egress_static_guard.py'
+      - 'lib/qa/pr629-external-egress.ts'
+      - 'lib/qa/pr629-db-target-attestation.ts'
+      - 'app/api/pr629-qa/db-target/route.ts'
+      - 'tests/pr629-db-target-attestation.test.ts'
+      - 'tests/test_pr629_db_target_attestation_static.py'
+      - 'docs/security/pr629-db-target-attestation-runbook-20261123.md'
+      - 'lib/tracking/meta-capi.ts'
+      - 'lib/tracking/google-data-manager.ts'
+      - 'lib/meta/instagram-outbound.ts'
+      - 'lib/meta/whatsapp-outbound.ts'
+      - 'lib/stripe/client.ts'
+      - 'lib/email/send.ts'
+      - 'tests/test_pr629_external_egress_guard.py'
+      - 'tests/test_pr629_extra_preview_transports_guard.py'
+      - 'docs/security/pr629-preview-egress-coverage-20261123.md'
+      - 'lib/meta/instagram-private-reply.ts'
+      - 'lib/meta/whatsapp-templates.ts'
+      - 'lib/meta/whatsapp-media.ts'
+      - 'lib/meta/whatsapp-typing.ts'
+      - 'tests/pr629-external-egress-runtime.test.ts'
+      - 'vercel.json'
+
+permissions:
+  contents: read
+
+jobs:
+  safeguard:
+    name: Preflight NO-GO - does not deploy or connect to Neon
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'security/api-v1-homologation-20261121'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Checkout without write credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Check offline gate and negative tests
+        run: |
+          python3 -m unittest discover -s tests -p test_api_v1_homologation_preflight.py -v
+          python3 scripts/api_v1_homologation_preflight.py --report "$RUNNER_TEMP/api-v1-homologation-preflight.json"
+          python3 -m unittest discover -s tests -p test_api_v1_egress_static_guard.py -v
+          python3 scripts/api_v1_egress_static_guard.py
+          python3 -m unittest discover -s tests -p test_pr629_external_egress_guard.py -v
+          python3 -m unittest discover -s tests -p test_pr629_extra_preview_transports_guard.py -v
+          python3 -m unittest discover -s tests -p test_pr629_retention_clock_gate.py -v
+          python3 scripts/pr629_retention_clock_gate.py
+          python3 -m unittest discover -s tests -p test_pr629_operational_acceptance_gate.py -v
+          python3 scripts/pr629_operational_acceptance_gate.py
+          python3 -m unittest discover -s tests -p test_pr629_pitr_timeline_gate.py -v
+          python3 -m unittest discover -s tests -p test_pr629_db_target_attestation_static.py -v
+          python3 scripts/pr629_pitr_timeline_gate.py
+      - name: Upload non-sensitive hold evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: api-v1-homologation-no-go-preflight
+          path: ${{ runner.temp }}/api-v1-homologation-preflight.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  stack-validate:
+    name: Typecheck and scoped API v1 regression tests
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'security/api-v1-homologation-20261121'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      JWT_SECRET_CURRENT: pr629-ci-disposable-only
+      EMAIL_PROVIDER: none
+      FLIPFORM_API_V1_ENABLED: 'false'
+      PR629_BLOCK_EXTERNAL_EGRESS: 'false'
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/pr629_disposable?schema=public
+    steps:
+      - name: Checkout without write credentials
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies and generate Prisma client offline
+        run: npm ci
+      - name: Typecheck final stacked API code
+        run: npm run typecheck
+      - name: Test preview-only outbound transport brake without network access
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-external-egress-runtime.test.ts
+      - name: Test dormant QA database target guard with synthetic URLs
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-db-target-attestation.test.ts
+      - name: Test per-tenant pilot allowlist fail closed
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-pilot-allowlist.test.ts
+      - name: Test lifecycle clock transitions offline
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/pr629-lifecycle-clocks.test.ts
+      - name: Test M2M policies, read-only scopes and existing provider transports
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: |
+          npx tsx --test \
+            tests/pr01-api-foundation.test.ts \
+            tests/pr02-pipelines-read.test.ts \
+            tests/pr02-forms-catalog.test.ts \
+            tests/pr02-form-fields-read.test.ts \
+            tests/pr02-pipeline-metrics.test.ts \
+            tests/pr02-leads-metadata.test.ts \
+            tests/pr02-lead-detail.test.ts \
+            tests/google-data-manager.test.ts \
+            tests/tracking.test.ts
