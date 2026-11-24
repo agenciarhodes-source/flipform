@@ -18,6 +18,7 @@ export async function readFlipVoiceAgentDraft(input: {
   profileId: string;
   businessDisplayName: string;
   businessInstructions: string;
+  openAiSecretId?: string; // trusted ElevenLabs secret reference, never bearer token
   now?: Date;
 }): Promise<VoiceAgentDraft> {
   const tenantId = input.authenticatedTenantId.trim();
@@ -40,7 +41,7 @@ export async function readFlipVoiceAgentDraft(input: {
     const approved: ApprovedVoice = {
       tenantId: profile.tenantId,
       profileId: profile.id,
-      provider: profile.provider === 'elevenlabs' ? 'elevenlabs' : (profile.provider as 'elevenlabs'),
+      provider: profile.provider,
       providerVoiceId: profile.providerVoiceId,
       profileStatus: profile.status,
       consentStatus: consent.status,
@@ -58,6 +59,7 @@ export async function readFlipVoiceAgentDraft(input: {
         businessDisplayName: input.businessDisplayName,
         businessInstructions: input.businessInstructions,
         testOnly: true,
+        openAiSecretId: input.openAiSecretId,
         now,
       });
     } catch (error) {
