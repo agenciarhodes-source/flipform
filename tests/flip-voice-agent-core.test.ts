@@ -65,3 +65,23 @@ test('agent blueprint rejects production use, giant instructions, invalid durati
   assert.throws(() => buildFlipVoiceAgentDraft({...baseline, maxCallSeconds:3600, now}));
   assert.throws(() => buildFlipVoiceAgentDraft({...baseline, tenantId:'tenant-B', now}));
 });
+
+test('using our own GPT-6 Luna account requires a secret reference, never a key', () => {
+  const secretId='elevenSecretForOpenAi123';
+  const cfg=buildFlipVoiceAgentDraft({
+    tenantId:'tenant-A',voice:approved(),businessDisplayName:'Empresa Piloto',
+    businessInstructions:'Informações da empresa',testOnly:true,now,openAiSecretId:secretId,
+  });
+  const prompt=cfg.conversation_config.agent.prompt;
+  assert.equal(prompt.llm,'custom-llm');
+  assert.equal(prompt.custom_llm?.url,'https://api.openai.com/v1/chat/completions');
+  assert.equal(prompt.custom_llm?.model_id,'gpt-6-luna');
+  assert.equal(prompt.custom_llm?.api_key.secret_id,secretId);
+  assert.equal(cfg.platform_settings.auth.enable_auth,true);
+  assert.equal(cfg.platform_settings.call_limits.daily_limit,5);
+  assert.deepEqual(prompt.tools,[]);
+  assert.throws(()=>buildFlipVoiceAgentDraft({
+    tenantId:'tenant-A',voice:approved(),businessDisplayName:'Empresa Piloto',
+    businessInstructions:'',testOnly:true,now,openAiSecretId:'sk-proj-unsafe key with spaces',
+  }));
+});
