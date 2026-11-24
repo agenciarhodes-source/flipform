@@ -107,3 +107,18 @@ export function validTwilioSignature(url: string, parameters: Record<string,stri
   const a=Buffer.from(expected,'utf8'), b=Buffer.from(header,'utf8');
   return a.length === b.length && timingSafeEqual(a,b);
 }
+
+/** Provisional spend, not the provider invoice. Requires independent reconciliation. */
+export function estimatedTerminalSpendMicros(
+  terminalStatus:'completed'|'busy'|'no-answer'|'failed'|'canceled',
+  durationSeconds:number|null,
+  reservedMicros:bigint,
+):bigint|null {
+  if(reservedMicros<0n)return null;
+  if(terminalStatus!=='completed')return 0n;
+  if(durationSeconds===null||!Number.isInteger(durationSeconds)||
+     durationSeconds<0||durationSeconds>3600)return null;
+  const estimate=BigInt(Math.ceil(Math.max(1,durationSeconds)/60)) *
+    FLIP_VOICE_PSTN_GATE.estimatedCombinedUsdMicrosPerMinute;
+  return estimate <= reservedMicros ? estimate : null;
+}
