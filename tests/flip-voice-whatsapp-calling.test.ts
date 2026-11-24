@@ -17,6 +17,7 @@ const permission=():ProviderWhatsAppPermission=>({
   channel:'whatsapp',evidenceSha256:'a'.repeat(64),
   providerPermissionSource:'twilio_signed_webhook',
   providerPermissionRef:'SM'+'a'.repeat(32),
+  providerPermissionRequestSid:'SM'+'b'.repeat(32),
   providerPermissionConfirmedAt:new Date('2026-11-23T12:00:00.000Z'),
   verifiedAt:new Date('2026-11-23T12:00:00.000Z'),
   expiresAt:new Date('2026-11-30T12:00:00.000Z'),
@@ -50,7 +51,7 @@ test('WhatsApp sender validation is tenant-bound and independently enabled',()=>
 
 test('permission requires exact tenant, number and signed provider origin',()=>{
  assert.equal(isWhatsAppCallPermitted(permission(),'tenant-a','lead-a',number,pepper,now),true);
- for(const change of [{channel:'pstn'},{status:'pending'},{providerPermissionSource:null},
+ for(const change of [{channel:'pstn'},{status:'pending'},{providerPermissionSource:null},{providerPermissionRequestSid:null},
   {providerPermissionRef:null},{phoneHash:'b'.repeat(64)},
   {expiresAt:new Date('2026-11-23')},{revokedAt:now},
   {providerPermissionConfirmedAt:new Date('2026-11-01')},
