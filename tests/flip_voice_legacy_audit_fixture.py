@@ -18,6 +18,8 @@ VOICE_MODELS = {
     "FlipVoiceBudget": "flip_voice_budgets",
     "FlipVoiceCall": "flip_voice_calls",
     "FlipVoiceEvent": "flip_voice_events",
+    "FlipVoiceLine": "flip_voice_lines",
+    "FlipVoiceContactPermission": "flip_voice_contact_permissions",
 }
 TENANT_INVERSE = {
     "flipVoiceSettings FlipVoiceSettings?",
@@ -26,15 +28,19 @@ TENANT_INVERSE = {
     "flipVoiceBudgets FlipVoiceBudget[]",
     "flipVoiceCalls FlipVoiceCall[]",
     "flipVoiceEvents FlipVoiceEvent[]",
+    "flipVoiceLines FlipVoiceLine[]",
+    "flipVoiceContactPermissions FlipVoiceContactPermission[]",
 }
 AGENT_INVERSE = {"flipVoiceProfiles FlipVoiceProfile[]"}
+PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
+CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
 
 def historical_pr01_candidate(current_schema: str) -> str:
     """Return only the approved historical 102-model candidate for PR01 tests."""
     model_names = re.findall(r"(?m)^model\s+(\w+)\s*\{", current_schema)
-    if len(model_names) != 108 or len(set(model_names)) != 108:
-        raise ValueError("Expected 108 explicit models (102 PR01 + six Flip Voice)")
+    if len(model_names) != 110 or len(set(model_names)) != 110:
+        raise ValueError("Expected 110 explicit models (102 PR01 + eight Flip Voice)")
     projected = current_schema
     for model, table in VOICE_MODELS.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"

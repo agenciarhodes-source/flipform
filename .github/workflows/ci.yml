@@ -91,7 +91,7 @@ jobs:
 
       # Flip Voice PR 1/3: no network, no API keys, no DB reads or outbound calls.
       - name: Flip Voice core tests (offline)
-        run: npx tsx --test tests/flip-voice-policy.test.ts tests/flip-voice-agent-core.test.ts tests/flip-voice-elevenlabs-agent.test.ts tests/flip-ai-external-fk-trigger-allowlist.test.ts
+        run: npx tsx --test tests/flip-voice-policy.test.ts tests/flip-voice-agent-core.test.ts tests/flip-voice-elevenlabs-agent.test.ts tests/flip-ai-external-fk-trigger-allowlist.test.ts tests/flip-voice-telephony-core.test.ts tests/flip-voice-telephony-provider.test.ts
 
       - name: Prisma generate
         run: npx prisma generate

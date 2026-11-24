@@ -160,6 +160,8 @@ model Tenant {
   flipVoiceBudgets FlipVoiceBudget[]
   flipVoiceCalls FlipVoiceCall[]
   flipVoiceEvents FlipVoiceEvent[]
+  flipVoiceLines FlipVoiceLine[]
+  flipVoiceContactPermissions FlipVoiceContactPermission[]
 
   // PR01 additive API foundation. No production schema change is authorized here.
   apiV1Integrations ApiIntegration[]
@@ -2517,6 +2519,7 @@ model FlipVoiceProfile {
   agent       FlipAiAgent? @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
   consents    FlipVoiceConsent[]
   calls       FlipVoiceCall[]
+  lines       FlipVoiceLine[]
 
   @@unique([tenantId, id])
   @@index([tenantId, agentId])
@@ -2568,6 +2571,9 @@ model FlipVoiceCall {
   tenantId          String   @map("tenant_id")
   profileId         String   @map("profile_id")
   consentId         String   @map("consent_id")
+  lineId            String?  @map("line_id")
+  leadId            String?  @map("lead_id")
+  contactPermissionId String? @map("contact_permission_id")
   channel           String
   direction         String
   status            String   @default("held")
@@ -2584,6 +2590,8 @@ model FlipVoiceCall {
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   profile           FlipVoiceProfile @relation(fields: [tenantId, profileId], references: [tenantId, id], onDelete: Restrict)
   consent           FlipVoiceConsent @relation(fields: [tenantId, profileId, consentId], references: [tenantId, profileId, id], onDelete: Restrict)
+  line              FlipVoiceLine? @relation(fields: [tenantId, lineId], references: [tenantId, id], onDelete: Restrict)
+  contactPermission FlipVoiceContactPermission? @relation(fields: [tenantId, contactPermissionId], references: [tenantId, id], onDelete: Restrict)
   events            FlipVoiceEvent[]
 
   @@unique([tenantId, id])
@@ -2607,4 +2615,54 @@ model FlipVoiceEvent {
   @@unique([tenantId, callId, eventHash])
   @@index([tenantId, eventType, receivedAt])
   @@map("flip_voice_events")
+}
+
+
+/// PR2: a number and ElevenLabs agent belong to one tenant and one approved voice.
+/// Linking an imported number is a separate, explicitly authorized administrative action.
+model FlipVoiceLine {
+  id                    String   @id @default(uuid())
+  tenantId              String   @map("tenant_id")
+  profileId             String   @map("profile_id")
+  phoneE164             String   @map("phone_e164")
+  providerPhoneNumberId String   @unique @map("provider_phone_number_id")
+  providerAgentId       String   @map("provider_agent_id")
+  status                String   @default("disabled")
+  inboundEnabled        Boolean  @default(false) @map("inbound_enabled")
+  outboundEnabled       Boolean  @default(false) @map("outbound_enabled")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  profile               FlipVoiceProfile @relation(fields: [tenantId, profileId], references: [tenantId, id], onDelete: Restrict)
+  calls                 FlipVoiceCall[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, phoneE164])
+  @@index([tenantId, status])
+  @@map("flip_voice_lines")
+}
+
+/// A recipient's explicit, revocable permission for human/AI-initiated calls.
+/// This is DISTINCT from the voice owner's cloning consent.
+model FlipVoiceContactPermission {
+  id              String    @id @default(uuid())
+  tenantId        String    @map("tenant_id")
+  leadId          String    @map("lead_id")
+  phoneHash       String    @map("phone_hash")
+  channel         String    @default("pstn")
+  purpose         String    @default("requested_follow_up")
+  evidenceSha256  String    @map("evidence_sha256")
+  verifiedAt      DateTime? @map("verified_at")
+  expiresAt       DateTime? @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  calls           FlipVoiceCall[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, leadId, channel, status])
+  @@map("flip_voice_contact_permissions")
 }
