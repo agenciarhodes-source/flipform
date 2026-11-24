@@ -138,7 +138,7 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       assert.equal(await issueApiV1Key(
         developerA, { ...options, integrationId: integrationB.id }, db,
       ), null, 'owner A cannot issue into integration B');
-      const issued = await issueApiV1Key(ownerA, options, db);
+      const issued = await issueApiV1Key(developerA, options, db);
       assert.ok(issued && issued.bearerToken.startsWith('ffv1.'));
       const issuedRow = await db.apiCredential.findUnique({ where: { id: issued.credentialId } });
       assert.ok(issuedRow);
