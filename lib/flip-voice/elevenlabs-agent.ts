@@ -19,9 +19,16 @@ export async function provisionElevenTestAgent(input: {
   fetchImpl?: typeof fetch;
 }): Promise<TestAgentProvisionResult> {
   if (!input.provisioningEnabled) throw new FlipVoiceCoreError('PROVISIONING_DISABLED');
+  const prompt = input.draft.conversation_config.agent.prompt;
+  const usesApprovedLuna =
+    (prompt.llm === 'gpt-6-luna' && prompt.custom_llm === undefined) ||
+    (prompt.llm === 'custom-llm' &&
+      prompt.custom_llm?.url === 'https://api.openai.com/v1/chat/completions' &&
+      prompt.custom_llm?.model_id === 'gpt-6-luna' &&
+      prompt.custom_llm?.api_type === 'chat_completions' &&
+      /^[a-zA-Z0-9_-]{8,100}$/.test(prompt.custom_llm.api_key.secret_id));
   if (!input.draft.name.startsWith('Flip Voice TEST - ') ||
-      input.draft.conversation_config.agent.prompt.tools.length !== 0 ||
-      input.draft.conversation_config.agent.prompt.llm !== 'gpt-6-luna') {
+      prompt.tools.length !== 0 || prompt.reasoning_effort !== 'none' || !usesApprovedLuna) {
     throw new FlipVoiceCoreError('UNSAFE_AGENT_CONFIG');
   }
   if (!input.providerApiKey.trim()) throw new FlipVoiceCoreError('PROVIDER_KEY_MISSING');
