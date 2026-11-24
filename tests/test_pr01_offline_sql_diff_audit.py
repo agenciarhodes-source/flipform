@@ -6,9 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pr01_offline_sql_diff_audit import audit, check_schema_delta, check_sql
+from tests.flip_voice_legacy_audit_fixture import historical_pr01_candidate
 from pr00_a2c2_audit_sql import PR01_ADDITIVE_MODELS
 
-CANDIDATE = (ROOT / "prisma/schema.prisma").read_text(encoding="utf-8")
+CANDIDATE = historical_pr01_candidate((ROOT / "prisma/schema.prisma").read_text(encoding="utf-8"))
 
 def synthetic_baseline():
     pattern = r"(?ms)^model\s+(?:" + "|".join(PR01_ADDITIVE_MODELS) + r")\s*\{.*?^\}\n?"
