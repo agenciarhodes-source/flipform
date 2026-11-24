@@ -27,14 +27,14 @@ test('Brazilian dial normalization never sends arbitrary raw input',()=>{
 
 test('recipient consent is separate from voice consent and revocable',()=>{
  const now = new Date('2026-11-24T14:00:00Z');
- const p={tenantId:'A',leadId:'lead1',channel:'pstn',purpose:'requested_follow_up',evidenceSha256:'a'.repeat(64),status:'verified',verifiedAt:new Date('2026-11-20'),expiresAt:new Date('2026-12-20'),revokedAt:null};
- assert.equal(validRecipientPermission(p,'A','lead1',now),true);
+ const p={tenantId:'A',leadId:'lead1',channel:'pstn',purpose:'requested_follow_up',evidenceSha256:'a'.repeat(64),phoneHash:'b'.repeat(64),status:'verified',verifiedAt:new Date('2026-11-20'),expiresAt:new Date('2026-12-20'),revokedAt:null};
+ assert.equal(validRecipientPermission(p,'A','lead1','b'.repeat(64),now),true);
  for(const changed of [
   {...p,tenantId:'B'}, {...p,leadId:'lead2'}, {...p,status:'pending'},
   {...p,revokedAt:now}, {...p,expiresAt:new Date('2026-11-01')},
-  {...p,evidenceSha256:'bogus'}, {...p,verifiedAt:new Date('2026-12-01')},
+  {...p,evidenceSha256:'bogus'}, {...p,phoneHash:'c'.repeat(64)}, {...p,verifiedAt:new Date('2026-12-01')},
   {...p,channel:'whatsapp'}, {...p,purpose:'marketing_prospecting'}
- ]) assert.equal(validRecipientPermission(changed,'A','lead1',now),false);
+ ]) assert.equal(validRecipientPermission(changed,'A','lead1','b'.repeat(64),now),false);
 });
 
 test('business-hour and budget guards are conservative',()=>{
