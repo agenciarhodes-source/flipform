@@ -80,3 +80,6 @@ A versão original dependia do `CallSid` já persistido e podia rejeitar chamada
 - Transferência humano via `register-call` ElevenLabs: **não suportada nativamente**. Deve permanecer indisponível até mecanismo VoIP/SIP implementado e testado.
 - Aviso: o backend de permissões Twilio usa webhook de mensagem próprio do sender; **não sobrescrever o WhatsApp Meta existente no FlipForm** sem desenho de roteamento e aprovação do operador.
 - Todo o serviço é fail-closed e sem migração de produção; requer staging com sender Twilio WhatsApp Calling ativado, voz consentida, testes e aprovação.
+
+## Retomada dos checks — 24/11/2026
+O GitHub Actions voltou a executar normalmente para `main` e outras branches. A branch do PR #646 foi criada quando o Actions não estava disparando workflows; o commit desta revisão deve acionar uma nova execução de CI, Security e Playwright no GitHub. **Não presumir sucesso antes de os checks serem concluídos no SHA da branch.** Até lá, manter o PR em Draft, migração e chamadas desativadas, e proibir merge para produção.
