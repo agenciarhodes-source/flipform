@@ -24,6 +24,7 @@ CREATE TABLE "flip_voice_contact_permissions" (
   "id" TEXT NOT NULL,
   "tenant_id" TEXT NOT NULL,
   "lead_id" TEXT NOT NULL,
+  "phone_hash" TEXT NOT NULL,
   "channel" TEXT NOT NULL DEFAULT 'pstn',
   "purpose" TEXT NOT NULL DEFAULT 'requested_follow_up',
   "evidence_sha256" TEXT NOT NULL,
