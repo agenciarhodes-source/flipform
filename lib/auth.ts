@@ -9,6 +9,7 @@ import {
   type JwtSessionPayload,
 } from "./jwt";
 import { evaluateBillingAccess } from "./billing-access";
+import { developerApiAllowed } from './developer-access/route-policy';
 
 const COOKIE_NAME = "flipform_token";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -160,6 +161,9 @@ export function withAuth<T = any>(
     }
     const session = await getVerifiedSessionFromRequest(req);
     if (!session) return NextResponse.json(SESSION_ENDED, { status: 401 });
+    if (!developerApiAllowed(req.nextUrl.pathname, session.role)) {
+      return NextResponse.json({ error: 'Configuração exclusiva do Desenvolvedor.' }, { status: 403 });
+    }
     // Tenant gating (apenas se a sessão tem tenantId). Super Admin nunca é bloqueado.
     if (session.tenantId && session.globalRole !== "platform_admin") {
       const tenant = await prisma.tenant.findUnique({
