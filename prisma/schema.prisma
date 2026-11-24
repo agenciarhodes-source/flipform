@@ -2650,6 +2650,6 @@ model UniversalConnectionAudit {
   createdAt    DateTime @default(now()) @map("created_at")
   connection UniversalConnection @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict)
 
-  @@index([tenantId, connectionId, createdAt])
+  @@index([tenantId, connectionId, createdAt], map: "uc_audits_tenant_conn_created_idx")
   @@map("universal_connection_audits")
 }

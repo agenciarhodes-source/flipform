@@ -29,7 +29,7 @@ CREATE TABLE "universal_connection_audits" (
 );
 CREATE UNIQUE INDEX "universal_connections_tenant_id_id_key" ON "universal_connections"("tenant_id", "id");
 CREATE INDEX "universal_connections_tenant_id_provider_id_idx" ON "universal_connections"("tenant_id", "provider_id");
-CREATE INDEX "universal_connection_audits_tenant_id_connection_id_created_at_idx" ON "universal_connection_audits"("tenant_id", "connection_id", "created_at");
+CREATE INDEX "uc_audits_tenant_conn_created_idx" ON "universal_connection_audits"("tenant_id", "connection_id", "created_at");
 ALTER TABLE "universal_connections" ADD CONSTRAINT "universal_connections_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "universal_connection_credentials" ADD CONSTRAINT "universal_connection_credentials_tenant_id_connection_id_fkey" FOREIGN KEY ("tenant_id", "connection_id") REFERENCES "universal_connections"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "universal_connection_audits" ADD CONSTRAINT "universal_connection_audits_tenant_id_connection_id_fkey" FOREIGN KEY ("tenant_id", "connection_id") REFERENCES "universal_connections"("tenant_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
