@@ -10,6 +10,10 @@ def test_login_choice_after_password_and_before_session():
     assert "parsed.data.tenantId" in login
     assert "tenantSelectionRequired: true" in login
 
+def test_mfa_cancel_returns_to_credential_form_in_multi_company_login():
+    page = (ROOT / "app/login/page.tsx").read_text()
+    assert "setMfaToken(null); setPassword(''); setTenantChoices([]); setSelectedTenantId('');" in page
+
 def test_owner_access_reconciliation_rejects_revoked_and_requires_admin_and_audit():
     route = (ROOT / "app/api/admin/tenants/[id]/users/[tenantUserId]/enable-login/route.ts").read_text()
     assert "withPlatformAdmin" in route
