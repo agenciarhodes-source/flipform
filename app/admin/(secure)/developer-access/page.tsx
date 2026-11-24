@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 type Tenant = { id: string; name: string; slug: string };
-type Account = { id: string; name: string; email: string };
+type Account = { id: string; name: string; email: string; mfaEnabledAt: string | null };
 type Grant = { id: string; tenantId: string; userId: string; revokedAt: string | null };
 type Snapshot = { tenants: Tenant[]; users: Account[]; grants: Grant[] };
 
@@ -35,7 +35,7 @@ export default function DeveloperAccessAdminPage() {
       const response = await result.json();
       if (!result.ok) throw new Error(response.error || 'Operação não autorizada.');
       await refresh();
-      setMessage(method === 'POST' ? 'Acesso concedido. O usuário deve fazer novo login com MFA.' : 'Acesso revogado. Sessões encerradas.');
+      setMessage(method === 'POST' ? 'Vínculo cadastrado. O usuário deverá ativar MFA e entrar novamente antes de obter permissões técnicas.' : 'Acesso revogado. Sessões encerradas.');
     } catch (e) { setMessage(e instanceof Error ? e.message : 'Erro ao atualizar.'); }
     finally { setLoading(false); }
   }
@@ -44,17 +44,17 @@ export default function DeveloperAccessAdminPage() {
     <div>
       <h1 className="text-2xl font-bold">Acesso de Desenvolvedor</h1>
       <p className="text-sm text-muted-foreground mt-1">
-        Concessões por empresa. Somente usuários já cadastrados e com autenticação de dois fatores ativa.
+        Concessões por empresa. Somente usuários já cadastrados. A concessão não habilita privilégios técnicos até a ativação e confirmação do MFA.
         Nunca solicite a senha do cliente.
       </p>
     </div>
     {message && <p role="status" className="rounded border p-3 text-sm">{message}</p>}
     <section className="rounded border p-5 space-y-4">
       <h2 className="font-semibold">Conceder acesso técnico</h2>
-      <label className="block text-sm">Conta autenticada com MFA
+      <label className="block text-sm">Conta que receberá acesso técnico
         <select className="mt-1 block w-full rounded border p-2" value={userId} onChange={e => setUserId(e.target.value)}>
           <option value="">Selecione a conta</option>
-          {data?.users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email}</option>)}
+          {data?.users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email} {u.mfaEnabledAt ? '· MFA ativo' : '· MFA pendente'}</option>)}
         </select>
       </label>
       <label className="block text-sm">Empresa autorizada
