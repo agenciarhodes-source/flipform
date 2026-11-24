@@ -7,8 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from pr00_a2c2_audit_sql import audit_sql, split_statements
+from tests.flip_voice_legacy_audit_fixture import historical_pr01_candidate
 
-SCHEMA = (ROOT / "prisma/schema.prisma").read_text(encoding="utf-8")
+SCHEMA = historical_pr01_candidate((ROOT / "prisma/schema.prisma").read_text(encoding="utf-8"))
 
 TEST_SQL = """
 -- CreateEnum

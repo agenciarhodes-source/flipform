@@ -2,6 +2,7 @@ import 'server-only';
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { isApprovedFlipVoiceReferenceTrigger } from './external-fk-trigger-allowlist';
 import {
   canonicalizeFlipAiDefaultDefinition,
   canonicalizeFlipAiCheckDefinition,
@@ -511,6 +512,9 @@ export async function inspectFlipAiSchema(): Promise<FlipAiSchemaReadiness> {
   const unexpectedTriggers = triggers
     .filter((trigger) => {
       if (!requiredTableNames.has(trigger.triggerTableName)) return false;
+      // Parent-side PostgreSQL FK triggers from the new Flip Voice model are
+      // legitimate, but any unmatched/new/disabled trigger still fails closed.
+      if (isApprovedFlipVoiceReferenceTrigger(trigger)) return false;
       const constraintKey = trigger.constraintTableName && trigger.constraintName
         ? `${trigger.constraintTableName}.${trigger.constraintName}`
         : null;
