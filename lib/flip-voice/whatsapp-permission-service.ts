@@ -49,7 +49,7 @@ export async function initiateWhatsAppCallPermissionRequest(
   const now=new Date();
   const held=await prisma.$transaction(async db=>{
     // Prevent parallel manual requests bypassing the Meta 1/day and 2/week limits.
-    await db.$executeRaw(Prisma.sql`
+    await db.$queryRaw(Prisma.sql`
       SELECT pg_advisory_xact_lock(hashtext(${tenantId}),hashtext(${lead.id}))
     `);
     const earlier=await db.flipVoiceContactPermission.findFirst({
@@ -77,6 +77,12 @@ export async function initiateWhatsAppCallPermissionRequest(
     });
     if(attempts.length>=WHATSAPP_CALLING_DEFAULTS.maxPermissionRequests7Days||
        attempts.some(x=>x.createdAt.getTime()>=lastDay.getTime()))deny('WA_PERMISSION_RATE_LIMIT');
+    // Supersede older unresolved requests without recording a customer opt-out.
+    await db.flipVoiceContactPermission.updateMany({
+      where:{tenantId,leadId:lead.id,channel:'whatsapp',phoneHash,
+        status:'pending',expiresAt:{gt:now}},
+      data:{expiresAt:now},
+    });
     const record=await db.flipVoiceContactPermission.create({
       data:{
         tenantId,leadId:lead.id,channel:'whatsapp',
