@@ -84,3 +84,26 @@ export const DELETE = withPlatformAdmin(async (req, session) => {
     action: 'developer.revoked', metadata: { targetUserId: userId } });
   return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
 });
+
+/** Safe account/tenant catalog for the platform administrator's access screen. */
+export const GET = withPlatformAdmin(async (_req, session) => {
+  if (!hasRecentMfa(session))
+    return NextResponse.json({ error: 'Confirme o MFA novamente para administrar concessões.' }, { status: 403 });
+  const [tenants, users, grants] = await Promise.all([
+    prisma.tenant.findMany({
+      where: { status: { in: ['active', 'trial'] } },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' }, take: 200,
+    }),
+    prisma.user.findMany({
+      where: { mfaEnabledAt: { not: null }, NOT: { globalRole: 'platform_admin' } },
+      select: { id: true, email: true, name: true },
+      orderBy: { email: 'asc' }, take: 200,
+    }),
+    prisma.developerTenantGrant.findMany({
+      select: { id: true, tenantId: true, userId: true, createdAt: true, revokedAt: true },
+      orderBy: { createdAt: 'desc' }, take: 300,
+    }),
+  ]);
+  return NextResponse.json({ tenants, users, grants }, { headers: { 'Cache-Control': 'private, no-store' } });
+});
