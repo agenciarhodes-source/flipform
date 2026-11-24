@@ -55,7 +55,7 @@ export default async function AppGroupLayout({
   }
 
   // Plano Inbox: only the attendance screens; any other screen opens the Inbox.
-  const inboxOnly = isInboxOnlyPlan(tenant?.plan?.slug) && session.globalRole !== "platform_admin";
+  const inboxOnly = isInboxOnlyPlan(tenant?.plan?.slug) && session.globalRole !== "platform_admin" && session.role !== 'developer';
   if (inboxOnly && pathname && !inboxPlanAllowsPath(pathname)) {
     redirect(INBOX_PLAN_HOME);
   }

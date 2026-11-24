@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { reviewPendingConversations, supervisionView } from '@/lib/whatsapp-ai/reviews';
 import { SupervisionBoard } from '@/components/whatsapp-ai/supervision-board';
@@ -11,7 +11,7 @@ export const maxDuration = 60;
 
 /** Supervision of the AI on WhatsApp: opening the page reviews up to 10 conversations that stopped. */
 export default async function SupervisionPage() {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');
   const { reviewed } = await reviewPendingConversations(session.tenantId).catch(() => ({ reviewed: 0 }));

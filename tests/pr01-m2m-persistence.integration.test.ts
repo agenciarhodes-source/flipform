@@ -30,6 +30,7 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
     let tenantA = '';
     let tenantB = '';
     let actorId = '';
+    let issuerId = '';
     let planId = '';
     let ownsPlan = false;
     try {
@@ -53,6 +54,11 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
         passwordHash: 'synthetic-not-a-password',
       } });
       actorId = actor.id;
+      const issuer = await db.user.create({ data: {
+        name: 'Synthetic Platform Approver', email: 'pr01-issuer-' + suffix + '@example.invalid',
+        passwordHash: 'synthetic-not-a-password', globalRole: 'platform_admin',
+      } });
+      issuerId = issuer.id;
       await db.tenantUser.create({ data: {
         userId: actorId, tenantId: tenantA, role: 'owner', status: 'active',
       } });
@@ -85,6 +91,15 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       assert.equal((await repo.findCredential(credential.id))?.tenantId, tenantA);
       assert.equal(apiV1Entitled(tenantA, await repo.findTenantEntitlement(tenantA)), true);
       assert.equal(apiV1Entitled(tenantB, await repo.findTenantEntitlement(tenantB)), false);
+      // A tenant owner alone is forbidden to manage keys: only a per-tenant
+      // technical grant plus active MFA unlocks the developer credential gate.
+      assert.equal(await mayManageApiV1Credentials({ userId: actorId, tenantId: tenantA }, tenantA, db), false);
+      await db.developerTenantGrant.create({ data: {
+        tenantId: tenantA, userId: actorId, grantedById: issuerId,
+      } });
+      assert.equal(await mayManageApiV1Credentials({ userId: actorId, tenantId: tenantA }, tenantA, db), false,
+        'grant without MFA stays inert');
+      await db.user.update({ where: { id: actorId }, data: { mfaEnabledAt: new Date() } });
       assert.equal(await mayManageApiV1Credentials({ userId: actorId, tenantId: tenantA }, tenantA, db), true);
       assert.equal(await mayManageApiV1Credentials({ userId: actorId, tenantId: tenantB }, tenantB, db), false);
       assert.equal(await mayManageApiV1Credentials({ userId: actorId, tenantId: tenantA }, tenantB, db), false);
@@ -108,9 +123,9 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       } });
       assert.equal(apiV1Entitled(tenantB, await repo.findTenantEntitlement(tenantB)), false);
 
-      // Phase 3: the server-only lifecycle requires an actual active owner,
+      // Phase 3: the server-only lifecycle requires an explicitly granted developer,
       // an eligible tenant, same-tenant integration and a future expiration.
-      const ownerA = { userId: actorId, tenantId: tenantA };
+      const developerA = { userId: actorId, tenantId: tenantA };
       const options = {
         integrationId: integrationA.id,
         expiresAt: new Date('2030-05-01T00:00:00Z'),
@@ -121,9 +136,9 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
         { ...options, integrationId: integrationB.id }, db,
       ), null, 'viewer in tenant B cannot issue');
       assert.equal(await issueApiV1Key(
-        ownerA, { ...options, integrationId: integrationB.id }, db,
+        developerA, { ...options, integrationId: integrationB.id }, db,
       ), null, 'owner A cannot issue into integration B');
-      const issued = await issueApiV1Key(ownerA, options, db);
+      const issued = await issueApiV1Key(developerA, options, db);
       assert.ok(issued && issued.bearerToken.startsWith('ffv1.'));
       const issuedRow = await db.apiCredential.findUnique({ where: { id: issued.credentialId } });
       assert.ok(issuedRow);
@@ -135,7 +150,7 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
       } }), 1);
 
       const rotated = await rotateApiV1Key(
-        ownerA, issued.credentialId,
+        developerA, issued.credentialId,
         { integrationId: integrationA.id, expiresAt: new Date('2031-01-01T00:00:00Z') }, db,
       );
       assert.ok(rotated && rotated.credentialId !== issued.credentialId);
@@ -143,11 +158,11 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
         where: { id: issued.credentialId },
       }))?.revokedAt instanceof Date, true);
       assert.equal(await rotateApiV1Key(
-        ownerA, issued.credentialId,
+        developerA, issued.credentialId,
         { integrationId: integrationA.id, expiresAt: new Date('2031-01-01T00:00:00Z') }, db,
       ), null, 'a revoked key cannot rotate twice');
-      assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integrationA.id, db), true);
-      assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integrationA.id, db), false);
+      assert.equal(await revokeApiV1Key(developerA, rotated.credentialId, integrationA.id, db), true);
+      assert.equal(await revokeApiV1Key(developerA, rotated.credentialId, integrationA.id, db), false);
       assert.equal(await db.apiCredentialAudit.count({
         where: { tenantId: tenantA, actorUserId: actorId },
       }), 4);
@@ -202,8 +217,10 @@ test('PR01 tenant-scoped credential FK, grants, expiry, roles and fail-closed qu
         await db.apiIntegration.deleteMany({ where: { tenantId: { in: ids } } });
         await db.tenantEntitlementGrant.deleteMany({ where: { tenantId: { in: ids } } });
         await db.subscription.deleteMany({ where: { tenantId: { in: ids } } });
+        await db.developerTenantGrant.deleteMany({ where: { tenantId: { in: ids } } });
         await db.tenantUser.deleteMany({ where: { tenantId: { in: ids } } });
         if (actorId) await db.user.delete({ where: { id: actorId } });
+        if (issuerId) await db.user.delete({ where: { id: issuerId } });
         await db.tenant.deleteMany({ where: { id: { in: ids } } });
       }
       if (ownsPlan && planId) await db.plan.delete({ where: { id: planId } });

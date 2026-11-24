@@ -9,6 +9,7 @@ import {
   type JwtSessionPayload,
 } from "./jwt";
 import { evaluateBillingAccess } from "./billing-access";
+import { developerApiAllowed } from './developer-access/route-policy';
 
 const COOKIE_NAME = "flipform_token";
 const MAX_AGE = 60 * 60 * 24 * 7; // 7 days
@@ -90,7 +91,11 @@ async function readCookieToken(): Promise<string | undefined> {
 export async function getSession(): Promise<SessionPayload | null> {
   const token = await readCookieToken();
   if (!token) return null;
-  return verifyToken(token);
+  const raw = verifyToken(token);
+  // Server-rendered pages still using getSession must never trust a stale
+  // privileged developer claim: revalidate revocation and MFA against DB.
+  if (raw?.role === 'developer') return verifiedSession(raw);
+  return raw;
 }
 
 export function getSessionFromRequest(req: NextRequest): SessionPayload | null {
@@ -116,7 +121,8 @@ export async function getVerifiedSessionFromRequest(req: NextRequest): Promise<S
 }
 
 export async function getVerifiedSession(): Promise<SessionPayload | null> {
-  return verifiedSession(await getSession());
+  const token = await readCookieToken();
+  return verifiedSession(token ? verifyToken(token) : null);
 }
 
 const SESSION_ENDED = { error: "Sua sessão terminou. Entre novamente.", code: "session_revoked" };
@@ -160,6 +166,12 @@ export function withAuth<T = any>(
     }
     const session = await getVerifiedSessionFromRequest(req);
     if (!session) return NextResponse.json(SESSION_ENDED, { status: 401 });
+    // Meta's platform-managed OAuth callback is a separately checked Super Admin flow.
+    const platformMetaCallback = session.globalRole === 'platform_admin'
+      && req.nextUrl.pathname === '/api/integrations/meta/callback';
+    if (!developerApiAllowed(req.nextUrl.pathname, session.role) && !platformMetaCallback) {
+      return NextResponse.json({ error: 'Configuração exclusiva do Desenvolvedor.' }, { status: 403 });
+    }
     // Tenant gating (apenas se a sessão tem tenantId). Super Admin nunca é bloqueado.
     if (session.tenantId && session.globalRole !== "platform_admin") {
       const tenant = await prisma.tenant.findUnique({

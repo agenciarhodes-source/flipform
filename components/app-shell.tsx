@@ -66,7 +66,7 @@ const NAV: NavItem[] = [
   { href: "/customers", label: "Clientes", icon: Users, permission: "LEADS_VIEW" },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "INBOX_VIEW" },
   { href: "/suporte-atendimento", label: "Suporte", icon: LifeBuoy, permission: "INBOX_VIEW" },
-  { href: "/settings/suporte-atendimento", label: "Configurar Suporte", icon: LifeBuoy, permission: "SETTINGS_VIEW", show: (role) => role === "owner" },
+  { href: "/settings/suporte-atendimento", label: "Configurar Suporte", icon: LifeBuoy, permission: "SETTINGS_VIEW", show: (role) => role === "developer" },
   { href: "/direct", label: "Direct", icon: Instagram, permission: "INBOX_VIEW" },
   { href: "/automations", label: "Automações", icon: Zap, permission: "INTEGRATIONS_VIEW" },
   { href: "/flip-ai", label: "Flip AI", icon: Bot, permission: "FLIP_AI_MANAGE" },

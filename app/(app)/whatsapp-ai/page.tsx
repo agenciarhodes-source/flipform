@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { MessageCircle } from 'lucide-react';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { getWhatsAppAiWorkspace } from '@/lib/whatsapp-ai/settings';
@@ -22,7 +22,7 @@ import { checklistItemsToText, type ChecklistItem } from '@/lib/whatsapp-ai/docu
 export const dynamic = 'force-dynamic';
 
 export default async function WhatsAppAiPage() {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');
   try {

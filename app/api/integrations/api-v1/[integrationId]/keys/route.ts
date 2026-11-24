@@ -12,7 +12,7 @@ const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 export const GET = withAuth(async (_req, session, ctx: { params: { integrationId: string } }) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   if (!validApiV1Uuid(ctx.params.integrationId)) return adminV1Error(400);
   const keys = await listApiV1Keys(actor, ctx.params.integrationId);
   if (!keys) return adminV1Error(404);
@@ -22,7 +22,7 @@ export const GET = withAuth(async (_req, session, ctx: { params: { integrationId
 export const POST = withAuth(async (req, session, ctx: { params: { integrationId: string } }) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const integrationId = ctx.params.integrationId;
   if (!validApiV1Uuid(integrationId)) return adminV1Error(400);
   const body = await readApiV1Json(req);

@@ -54,6 +54,7 @@ export default async function AdminLayout({
             label="Billing & Planos"
           />
           <AdminLink href="/admin/access" icon={Users} label="Acessos" />
+          <AdminLink href="/admin/developer-access" icon={Shield} label="Acesso Desenvolvedor" />
           <AdminLink href="/admin/openai" icon={BrainCircuit} label="OpenAI" />
           <AdminLink href="/admin/treasury" icon={Landmark} label="Tesouraria IA" />
           <AdminLink href="/admin/integrations" icon={Plug} label="Integrações" />

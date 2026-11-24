@@ -51,3 +51,20 @@ test('Vercel config cannot declare platform crons and disables deploys for the a
   assert.equal(config.git.deploymentEnabled['audit/pr00-a2s-isolation'], false);
   assert.equal(Object.hasOwn(config, 'crons'), false);
 });
+
+test('expensive checks run only after review-ready, on pushes to main, or by explicit dispatch', () => {
+  for (const workflowName of ['ci.yml', 'playwright.yml']) {
+    const workflow = readFileSync(new URL('../.github/workflows/' + workflowName, import.meta.url), 'utf8');
+    assert.match(workflow, /types:\s*\[opened, synchronize, reopened, ready_for_review\]/);
+    assert.match(workflow, /if:\s*github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.draft/);
+    assert.match(workflow, /workflow_dispatch:/);
+  }
+  const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  assert.match(ci, /push:\s*\n\s*branches:\s*\[main\]/);
+  assert.match(ci, /Developer MFA and tenant-grant authorization tests/);
+  assert.match(ci, /Typecheck/);
+  assert.match(ci, /Build/);
+  const e2e = readFileSync(new URL('../.github/workflows/playwright.yml', import.meta.url), 'utf8');
+  assert.match(e2e, /cancel-in-progress: true/);
+  assert.match(e2e, /Run Playwright onboarding tests/);
+});
