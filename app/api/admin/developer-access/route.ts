@@ -39,7 +39,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
       tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } }),
     ]);
     if (!tenant || ['suspended', 'blocked', 'canceled', 'inactive'].includes(tenant.status)) return { status: 404 };
-    if (!user || user.globalRole === 'platform_admin' || !user.mfaEnabledAt) return { status: 409 };
+    if (!user || user.globalRole === 'platform_admin') return { status: 409 };
     const existing = await tx.developerTenantGrant.findUnique({ where: { tenantId_userId: { tenantId, userId } } });
     if (existing && !existing.revokedAt) return { status: 409 };
     await tx.tenantUser.upsert({
@@ -60,7 +60,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
     await tx.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
     return { status: 201, id: grant.id };
   });
-  if (result.status !== 201) return NextResponse.json({ error: 'Empresa ou usuário não elegível, MFA ausente ou acesso já concedido.' }, { status: result.status });
+  if (result.status !== 201) return NextResponse.json({ error: 'Empresa ou usuário não elegível ou acesso já concedido.' }, { status: result.status });
   await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'developer_grant', entityId: result.id!,
     action: 'developer.granted', metadata: { targetUserId: userId } });
   return NextResponse.json({ ok: true, grantId: result.id }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
@@ -96,8 +96,8 @@ export const GET = withPlatformAdmin(async (_req, session) => {
       orderBy: { name: 'asc' }, take: 200,
     }),
     prisma.user.findMany({
-      where: { mfaEnabledAt: { not: null }, NOT: { globalRole: 'platform_admin' } },
-      select: { id: true, email: true, name: true },
+      where: { NOT: { globalRole: 'platform_admin' } },
+      select: { id: true, email: true, name: true, mfaEnabledAt: true },
       orderBy: { email: 'asc' }, take: 200,
     }),
     prisma.developerTenantGrant.findMany({
