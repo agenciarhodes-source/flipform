@@ -98,7 +98,7 @@ export default function LoginPage() {
           <h2 className="font-heading text-2xl font-bold mb-2">{mfaToken ? 'Verificação em duas etapas' : tenantChoices.length ? 'Escolha sua empresa' : 'Entrar'}</h2>
           {!mfaToken && <p className="text-muted-foreground text-sm mb-6">{tenantChoices.length ? 'Você tem acesso a mais de uma empresa. Escolha qual deseja acessar.' : 'Acesse sua conta para gerenciar seus leads.'}</p>}
           {mfaToken ? (
-            <MfaLoginStep mfaToken={mfaToken} onSuccess={goIn} onCancel={() => { setMfaToken(null); setPassword(''); }} />
+            <MfaLoginStep mfaToken={mfaToken} onSuccess={goIn} onCancel={() => { setMfaToken(null); setPassword(''); setTenantChoices([]); setSelectedTenantId(''); }} />
           ) : (
           <form onSubmit={onSubmit} className="space-y-4">
             {tenantChoices.length ? (
