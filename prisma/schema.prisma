@@ -99,6 +99,7 @@ model Tenant {
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
 
+  developerGrants       DeveloperTenantGrant[]
   tenantUsers           TenantUser[]
   forms                 Form[]
   pipelines             Pipeline[]
@@ -222,6 +223,8 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  developerGrants     DeveloperTenantGrant[] @relation("DeveloperGrantUser")
+  developerGrantsIssued DeveloperTenantGrant[] @relation("DeveloperGrantIssuer")
   tenantUsers         TenantUser[]
   assignedLeads       Lead[]                @relation("AssignedLeads")
   stageChanges        LeadStageHistory[]    @relation("StageChanger")
@@ -243,6 +246,30 @@ model User {
   flipAiTopUpOrdersCreated FlipAiTopUpOrder[] @relation("FlipAiTopUpOrderCreator")
 
   @@map("users")
+}
+
+
+/**
+ * Tenant-specific technical entitlement, independent of business-group roles
+ * and the global platform_admin role. Not enabled until the privileged grant
+ * issuance and MFA/session enforcement flows are implemented.
+ */
+model DeveloperTenantGrant {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  userId      String    @map("user_id")
+  grantedById String    @map("granted_by_id")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User   @relation("DeveloperGrantUser", fields: [userId], references: [id], onDelete: Restrict)
+  grantedBy   User   @relation("DeveloperGrantIssuer", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId, revokedAt])
+  @@map("developer_tenant_grants")
 }
 
 model TenantUser {
