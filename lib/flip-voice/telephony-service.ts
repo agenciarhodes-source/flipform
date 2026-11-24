@@ -10,6 +10,7 @@ import {
   estimatedTerminalSpendMicros,
 } from './telephony-core';
 import { startElevenTwilioOutbound } from './telephony-provider';
+import { whatsappEstimatedTerminalSpend } from './whatsapp-billing';
 
 type DbTx = Prisma.TransactionClient;
 const isGlobalEnabled = () => process.env.FLIP_VOICE_PSTN_ENABLED === 'true';
@@ -31,7 +32,7 @@ function currentSettingsOrFail(
   if (cost <= 0n || settings.perCallLimitMicros < cost || settings.monthlyLimitMicros < cost) refuse('VOICE_BUDGET_NOT_CONFIGURED');
 }
 
-async function validateVoiceOwner(db: DbTx | typeof prisma, input: {
+export async function validateVoiceOwner(db: DbTx | typeof prisma, input: {
   tenantId: string; profileId: string; now: Date;
 }): Promise<string> {
   const profile = await db.flipVoiceProfile.findFirst({
@@ -58,7 +59,7 @@ async function validateVoiceOwner(db: DbTx | typeof prisma, input: {
 }
 
 /** Reserve budget atomically; absence of an explicit budget row means ZERO authorization. */
-async function reserveBudget(db: DbTx, input: {
+export async function reserveBudget(db: DbTx, input: {
   tenantId: string; periodStart: Date; micros: bigint; monthlyCeiling: bigint;
 }) {
   const rows = await db.$queryRaw<{ tenant_id: string }[]>(Prisma.sql`
@@ -279,13 +280,14 @@ export async function settleFlipVoiceTwilioCall(input:{
   callSid: string;
   status: 'completed'|'busy'|'no-answer'|'failed'|'canceled';
   durationSeconds: number | null;
+  channel?: 'pstn' | 'whatsapp';
 }):Promise<'settled'|'already_settled'|'needs_review'>{
   if(!/^CA[a-f0-9]{32}$/i.test(input.callSid))return 'needs_review';
   if(input.status==='completed' &&
      (!Number.isInteger(input.durationSeconds) || input.durationSeconds===null ||
       input.durationSeconds < 0 || input.durationSeconds > 3600)) return 'needs_review';
   const candidates=await prisma.flipVoiceCall.findMany({
-    where:{providerCallId:input.callSid,channel:'pstn'},take:2,
+    where:{providerCallId:input.callSid,channel:input.channel ?? 'pstn'},take:2,
     select:{id:true,tenantId:true},
   });
   if(candidates.length!==1)return 'needs_review';
@@ -304,7 +306,9 @@ export async function settleFlipVoiceTwilioCall(input:{
       if(!call)refuse('VOICE_CALL_NOT_FOUND');
       if(finalStatuses.has(call.status))return 'already_settled' as const;
       if(!['initiated','delivery_unknown','dispatching'].includes(call.status))return 'needs_review' as const;
-      const billedEstimate=estimatedTerminalSpendMicros(input.status,input.durationSeconds,call.reservedUsdMicros);
+      const billedEstimate = (input.channel === 'whatsapp')
+        ? whatsappEstimatedTerminalSpend(input.status,input.durationSeconds,call.reservedUsdMicros)
+        : estimatedTerminalSpendMicros(input.status,input.durationSeconds,call.reservedUsdMicros);
       if(billedEstimate===null)return 'needs_review' as const;
       const periodStart=utcMonthStart(call.createdAt);
       const updated=await db.$executeRaw(Prisma.sql`
@@ -318,7 +322,7 @@ export async function settleFlipVoiceTwilioCall(input:{
       if(updated!==1)refuse('VOICE_BUDGET_RECONCILIATION_REQUIRED');
       await db.flipVoiceEvent.create({data:{
         tenantId,callId:id,eventHash:hashCallIdentity(input.callSid+':'+input.status,secret()),
-        eventType:'twilio_'+input.status,
+        eventType:'twilio_'+(input.channel ?? 'pstn')+'_'+input.status,
       }});
       await db.flipVoiceCall.update({where:{id},data:{
         status:input.status==='completed'?'completed_estimated':'not_connected',
