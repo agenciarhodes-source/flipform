@@ -2584,6 +2584,7 @@ model FlipVoiceCall {
   providerCallId    String?  @map("provider_call_id")
   // Hash of one-time Twilio outbound callback ticket; never store plaintext.
   outboundWebhookTicketHash String? @unique @map("outbound_webhook_ticket_hash")
+  outboundTwiMLClaimedAt DateTime? @map("outbound_twiml_claimed_at")
   startedAt         DateTime? @map("started_at")
   endedAt           DateTime? @map("ended_at")
   createdAt         DateTime @default(now()) @map("created_at")
