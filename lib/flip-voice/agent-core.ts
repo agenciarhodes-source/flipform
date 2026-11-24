@@ -81,10 +81,16 @@ export type VoiceAgentDraft = {
       first_message: string;
       prompt: {
         prompt: string;
-        llm: 'gpt-6-luna';
+        llm: 'gpt-6-luna' | 'custom-llm';
         reasoning_effort: 'none';
         max_tokens: number;
         tools: [];
+        custom_llm?: {
+          url: 'https://api.openai.com/v1/chat/completions';
+          model_id: 'gpt-6-luna';
+          api_type: 'chat_completions';
+          api_key: { secret_id: string };
+        };
       };
     };
     tts: { voice_id: string; model_id: 'eleven_v4_turbo' };
@@ -99,6 +105,8 @@ export function buildFlipVoiceAgentDraft(input: {
   businessDisplayName: string;
   businessInstructions: string;
   testOnly: true;
+  // ElevenLabs secret reference ONLY; NEVER pass the OpenAI bearer secret.
+  openAiSecretId?: string;
   maxCallSeconds?: number;
   now?: Date;
 }): VoiceAgentDraft {
@@ -107,6 +115,9 @@ export function buildFlipVoiceAgentDraft(input: {
   const name = input.businessDisplayName.trim().slice(0, 60);
   if (name.length < 2) throw new FlipVoiceCoreError('BUSINESS_NAME_INVALID');
   if (input.businessInstructions.length > 4000) throw new FlipVoiceCoreError('INSTRUCTIONS_TOO_LONG');
+  if (input.openAiSecretId !== undefined && !/^[a-zA-Z0-9_-]{8,100}$/.test(input.openAiSecretId)) {
+    throw new FlipVoiceCoreError('OPENAI_SECRET_REFERENCE_INVALID');
+  }
   const duration = input.maxCallSeconds ?? FLIP_VOICE_DEFAULTS.maxCallSeconds;
   if (!Number.isInteger(duration) || duration < 30 || duration > 300) {
     throw new FlipVoiceCoreError('CALL_DURATION_INVALID');
@@ -125,10 +136,16 @@ export function buildFlipVoiceAgentDraft(input: {
         first_message: 'Olá! Você ligou para ' + name + '. Sou uma assistente virtual de inteligência artificial. Como posso ajudar?',
         prompt: {
           prompt,
-          llm: 'gpt-6-luna',
+          llm: input.openAiSecretId ? 'custom-llm' : 'gpt-6-luna',
           reasoning_effort: 'none',
           max_tokens: 220,
           tools: [],
+          ...(input.openAiSecretId ? { custom_llm: {
+            url: 'https://api.openai.com/v1/chat/completions' as const,
+            model_id: 'gpt-6-luna' as const,
+            api_type: 'chat_completions' as const,
+            api_key: { secret_id: input.openAiSecretId },
+          }} : {}),
         },
       },
       tts: { voice_id: input.voice.providerVoiceId, model_id: 'eleven_v4_turbo' },
