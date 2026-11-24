@@ -47,17 +47,28 @@ export async function POST(req:NextRequest) {
     if(channels.length!==1||!channels[0].whatsappSenderSid)return response(204);
     const tenantId=channels[0].tenantId;
     const phoneHash=hashCallIdentity(tenantId+':'+event.sender,pepper);
-    const pending=await prisma.flipVoiceContactPermission.findMany({
-      where:{tenantId,channel:'whatsapp',phoneHash,status:'pending',revokedAt:null},
-      select:{id:true,leadId:true},take:2,
-    });
-    if(pending.length!==1)return response(204);
     const now=new Date();
+    const pending=await prisma.flipVoiceContactPermission.findMany({
+      where:{
+        tenantId,channel:'whatsapp',phoneHash,status:'pending',revokedAt:null,
+        providerPermissionRequestSid:{not:null},
+        expiresAt:{gt:now},
+        createdAt:{gte:new Date(now.getTime()-7*86400_000)},
+      },
+      select:{id:true,leadId:true,providerPermissionRequestSid:true},
+      orderBy:{createdAt:'desc'},take:2,
+    });
+    if(pending.length!==1||!/^SM[a-f0-9]{32}$/i.test(pending[0].providerPermissionRequestSid||''))return response(204);
+    // Reject an unprompted button reply if no active, sent request exists.
     // Seven-day cap even for provider marked "permanent" permission.
     const expiresAt=new Date(now.getTime()+7*86400_000);
     const eventProof=hashCallIdentity(tenantId+':whatsapp-permission:'+event.eventSid,pepper);
     const result=await prisma.flipVoiceContactPermission.updateMany({
-      where:{tenantId,id:pending[0].id,status:'pending',revokedAt:null,phoneHash},
+      where:{
+        tenantId,id:pending[0].id,status:'pending',revokedAt:null,phoneHash,
+        providerPermissionRequestSid:pending[0].providerPermissionRequestSid,
+        expiresAt:{gt:now},
+      },
       data:event.decision==='accepted'
         ? {status:'verified',verifiedAt:now,expiresAt,
            providerPermissionSource:'twilio_signed_webhook',
