@@ -63,7 +63,7 @@ export function verifyApiV1Secret(secret: Buffer, hashHex: string): boolean {
 }
 
 export async function authorizeApiV1Request(
-  args: { authorizationHeader: string | null; scope: ApiV1Scope; operation: string; now?: Date },
+  args: { authorizationHeader: string | null; scope: ApiV1Scope; operation: string; now?: Date; requireExclusiveScope?: boolean },
   repository: ApiV1CredentialRepository | null,
 ): Promise<ApiV1Authorization> {
   if (!repository) return UNAVAILABLE; // No backing store configured.
@@ -83,7 +83,8 @@ export async function authorizeApiV1Request(
       return DENIED;
     }
     if (!credential.scopes.every((scope) => SCOPE_SET.has(scope))
-      || !credential.scopes.includes(args.scope)) {
+      || !credential.scopes.includes(args.scope)
+      || (args.requireExclusiveScope === true && (credential.scopes.length !== 1 || credential.scopes[0] !== args.scope))) {
       return { ok: false, status: 403, code: 'permission_denied' };
     }
     const entitlement = await repository.findTenantEntitlement(credential.tenantId);

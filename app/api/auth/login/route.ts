@@ -7,8 +7,8 @@ import { loginSchema } from '@/lib/schemas';
 import { logAudit } from '@/lib/audit';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from '@/lib/business-groups';
+import { decideLoginTenant } from '@/lib/auth/tenant-login-selection';
 
-const BLOCKED = new Set(['suspended', 'blocked', 'canceled', 'inactive']);
 
 function logLogin(event: string, metadata: Record<string, unknown>) {
   console.info('[auth/login][POST]', { event, ...metadata });
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Sem empresa associada ou conta inativa' }, { status: 403 });
     }
 
-    type MembershipRow = { tenantId: string; role: string; tenant: { slug: string; status: unknown }; [key: string]: unknown };
+    type MembershipRow = { tenantId: string; role: string; tenant: { name: string; slug: string; status: string }; [key: string]: unknown };
     type AllowedRow = { tenantId: string; id: string; [key: string]: unknown };
     const typedMemberships = memberships as MembershipRow[];
 
@@ -130,10 +130,15 @@ export async function POST(req: Request) {
     });
 
     const allowedByTenant = new Map<string, AllowedRow>((allowedUsers as AllowedRow[]).map((allowed) => [allowed.tenantId, allowed]));
-    const selectedMembership = typedMemberships.find((membership) => {
-      const allowed = allowedByTenant.get(membership.tenantId);
-      return allowed && !BLOCKED.has(String(membership.tenant.status));
-    });
+    const decision = decideLoginTenant(typedMemberships, new Set(allowedByTenant.keys()), parsed.data.tenantId);
+    // Never create a session or MFA challenge until the tenant is explicitly chosen.
+    // Only return options after the user's password is proven valid.
+    if (decision.kind === 'choose') {
+      logLogin('tenant_selection_required', { ip, userId: user.id, eligibleTenants: decision.choices.length });
+      return NextResponse.json({ ok: true, tenantSelectionRequired: true, tenants: decision.choices },
+        { headers: { 'Cache-Control': 'no-store' } });
+    }
+    const selectedMembership = decision.kind === 'ready' ? decision.membership : null;
 
     if (!selectedMembership) {
       logLogin('forbidden_no_active_allowed_tenant', {

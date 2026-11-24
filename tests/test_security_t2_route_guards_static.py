@@ -75,6 +75,8 @@ GUARDED = {
     "v1/status/route.ts": "apiV1Enabled(process.env)",
     # M2M route: bearer identity, tenant entitlement and distributed quota on every GET.
     "v1/capabilities/route.ts": "authorizeApiV1Request({",
+    # Scoped read-key introspection: same M2M entitlement and quota guard.
+    "v1/credential-identity/route.ts": "authorizeApiV1Request({",
     # PR02: independently authenticated M2M bearer, tenant entitlement and quota.
     "v1/pipelines/route.ts": "authorizeApiV1Request({",
     # PR02 aggregate metrics: separate M2M scope and tenant-bound quota on every GET.
