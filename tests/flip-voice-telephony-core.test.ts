@@ -48,7 +48,7 @@ test('business-hour and budget guards are conservative',()=>{
 
 test('Twilio signature requires HTTPS, exact parameters and constant-time comparison',()=>{
  const url='https://example.com/api/flip-voice/twilio/inbound';
- const params={To:'+5511987654321',From:'+5586999990000',CallSid:'CA123'};
+ const params: Record<string,string>={To:'+5511987654321',From:'+5586999990000',CallSid:'CA123'};
  const key='test-token-with-more-than-16-characters';
  const payload=url+Object.keys(params).sort().map(k=>k+params[k]).join('');
  const sig=createHmac('sha1',key).update(payload).digest('base64');
