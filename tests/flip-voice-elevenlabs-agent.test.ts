@@ -46,7 +46,7 @@ test('does not leak an API key in provider errors or readiness', async () => {
     provisionElevenTestAgent({draft,providerApiKey:'private-dont-print',provisioningEnabled:true,fetchImpl:transport}),
     (e: unknown)=>e instanceof Error && e.message==='ELEVEN_AGENT_CREATE_FAILED_401',
   );
-  const state=flipVoiceProvisioningReadiness({ELEVENLABS_API_KEY:'secret',FLIP_VOICE_AGENT_PROVISIONING_ENABLED:'false'} as NodeJS.ProcessEnv);
+  const state=flipVoiceProvisioningReadiness({NODE_ENV:'test',ELEVENLABS_API_KEY:'secret',FLIP_VOICE_AGENT_PROVISIONING_ENABLED:'false'} as NodeJS.ProcessEnv);
   assert.equal(state.hasElevenLabsKey,true);
   assert.equal(state.agentProvisioningEnabled,false);
   assert.equal(JSON.stringify(state).includes('secret'),false);
