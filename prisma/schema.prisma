@@ -249,11 +249,8 @@ model User {
 }
 
 
-/**
- * Tenant-specific technical entitlement, independent of business-group roles
- * and the global platform_admin role. Not enabled until the privileged grant
- * issuance and MFA/session enforcement flows are implemented.
- */
+/// Tenant-scoped developer entitlement; separate from platform_admin.
+/// Requires explicit grant, verified MFA and an active tenant.
 model DeveloperTenantGrant {
   id          String    @id @default(uuid())
   tenantId    String    @map("tenant_id")
