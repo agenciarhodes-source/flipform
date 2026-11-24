@@ -16,6 +16,12 @@ export async function POST(req:NextRequest){
  if(endpoint.protocol!=='https:'||endpoint.search||endpoint.hash||
     endpoint.pathname!==req.nextUrl.pathname||
     !url.endsWith('/api/flip-voice/whatsapp/outbound-twiml')||token.length<16)return reply();
+ const tickets=req.nextUrl.searchParams.getAll('ticket');
+ if(tickets.length!==1||req.nextUrl.searchParams.size!==1||
+    !/^[A-Za-z0-9_-]{32,64}$/.test(tickets[0]))return reply();
+ // Twilio signs the *complete* URL, including the opaque query ticket.
+ endpoint.searchParams.set('ticket',tickets[0]);
+ const signedUrl=endpoint.toString();
  if(!req.headers.get('content-type')?.toLowerCase().startsWith('application/x-www-form-urlencoded')||
     Number(req.headers.get('content-length')||0)>4096)return reply();
  const body=await req.text();if(body.length>4096)return reply();
@@ -24,13 +30,13 @@ export async function POST(req:NextRequest){
    if(Object.hasOwn(fields,k)||!/^[A-Za-z][A-Za-z0-9_]{0,60}$/.test(k))return reply();
    fields[k]=v;
  }
- if(!validTwilioSignature(url,fields,token,req.headers.get('x-twilio-signature')||'')||
+ if(!validTwilioSignature(signedUrl,fields,token,req.headers.get('x-twilio-signature')||'')||
     !validateWhatsAppTwilioAccount(fields,process.env.TWILIO_ACCOUNT_SID||''))return reply();
  try{
    const sender=normalizeWhatsAppAddress(fields.From||'');
    const recipient=normalizeWhatsAppAddress(fields.To||'');
    return reply(await loadWhatsAppOutboundTwiML({
-     providerCallSid:fields.CallSid||'',sender,recipient,
+     providerCallSid:fields.CallSid||'',sender,recipient,ticket:tickets[0],
    }));
  }catch{return reply();}
 }
