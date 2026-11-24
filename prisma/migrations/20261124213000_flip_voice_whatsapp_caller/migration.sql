@@ -29,6 +29,7 @@ CREATE INDEX "flip_voice_contact_permissions_tenant_id_channel_phone_hash_idx"
 
 -- Fail-closed callback correlation for Twilio outbound: ticket HMAC is unique, never plaintext.
 ALTER TABLE "flip_voice_calls"
-  ADD COLUMN "outbound_webhook_ticket_hash" TEXT;
+  ADD COLUMN "outbound_webhook_ticket_hash" TEXT,
+  ADD COLUMN "outbound_twiml_claimed_at" TIMESTAMP(3);
 CREATE UNIQUE INDEX "flip_voice_calls_outbound_webhook_ticket_hash_key"
   ON "flip_voice_calls"("outbound_webhook_ticket_hash");
