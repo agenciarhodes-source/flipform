@@ -258,3 +258,60 @@ export async function registerFlipVoiceInbound(input: {
     }
   }catch{return unavailable;}
 }
+
+/** Verified Twilio terminal event. Actual provider invoices must still be reconciled. */
+export async function settleFlipVoiceTwilioCall(input:{
+  callSid: string;
+  status: 'completed'|'busy'|'no-answer'|'failed'|'canceled';
+  durationSeconds: number | null;
+}):Promise<'settled'|'already_settled'|'needs_review'>{
+  if(!/^CA[a-f0-9]{32}$/i.test(input.callSid))return 'needs_review';
+  if(input.status==='completed' &&
+     (!Number.isInteger(input.durationSeconds) || input.durationSeconds===null ||
+      input.durationSeconds < 0 || input.durationSeconds > 3600)) return 'needs_review';
+  const candidates=await prisma.flipVoiceCall.findMany({
+    where:{providerCallId:input.callSid,channel:'pstn'},take:2,
+    select:{id:true,tenantId:true},
+  });
+  if(candidates.length!==1)return 'needs_review';
+  const {id,tenantId}=candidates[0];
+  const finalStatuses=new Set(['completed_estimated','not_connected']);
+  try{
+    return await prisma.$transaction(async db=>{
+      // Serialization on this call row prevents double budget settlement by parallel callbacks.
+      const locks=await db.$queryRaw<{id:string}[]>(Prisma.sql`
+        SELECT "id" FROM "flip_voice_calls"
+        WHERE "id"=${id} AND "tenant_id"=${tenantId}
+        FOR UPDATE
+      `);
+      if(locks.length!==1)refuse('VOICE_CALL_NOT_FOUND');
+      const call=await db.flipVoiceCall.findFirst({where:{id,tenantId}});
+      if(!call)refuse('VOICE_CALL_NOT_FOUND');
+      if(finalStatuses.has(call.status))return 'already_settled' as const;
+      if(!['initiated','delivery_unknown','dispatching'].includes(call.status))return 'needs_review' as const;
+      const billedEstimate = input.status==='completed'
+        ? BigInt(Math.ceil(Math.max(1,input.durationSeconds||0)/60)) * 200_000n
+        : 0n;
+      if(billedEstimate > call.reservedUsdMicros)return 'needs_review' as const;
+      const periodStart=utcMonthStart(call.createdAt);
+      const updated=await db.$executeRaw(Prisma.sql`
+        UPDATE "flip_voice_budgets"
+        SET "reserved_micros"="reserved_micros"-${call.reservedUsdMicros},
+            "spent_micros"="spent_micros"+${billedEstimate},
+            "updated_at"=CURRENT_TIMESTAMP
+        WHERE "tenant_id"=${tenantId} AND "period_start"=${periodStart}
+          AND "reserved_micros">=${call.reservedUsdMicros}
+      `);
+      if(updated!==1)refuse('VOICE_BUDGET_RECONCILIATION_REQUIRED');
+      await db.flipVoiceEvent.create({data:{
+        tenantId,callId:id,eventHash:hashCallIdentity(input.callSid+':'+input.status,secret()),
+        eventType:'twilio_'+input.status,
+      }});
+      await db.flipVoiceCall.update({where:{id},data:{
+        status:input.status==='completed'?'completed_estimated':'not_connected',
+        billedUsdMicros:billedEstimate,endedAt:new Date(),
+      }});
+      return 'settled' as const;
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:12_000});
+  }catch{return 'needs_review';}
+}
