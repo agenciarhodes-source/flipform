@@ -17,7 +17,8 @@ import { formatDate, formatDateTime } from '@/lib/utils';
 import { can, canManageRole, ROLE_DESCRIPTIONS_PT_BR, ROLE_LABELS_PT_BR, ROLE_SHORT_DESCRIPTIONS_PT_BR, type RoleName } from '@/lib/rbac';
 import type { SessionPayload } from '@/lib/auth';
 
-type Role = RoleName;
+// Developer grants are issued by platform administration, never by a tenant owner.
+type Role = Exclude<RoleName, 'developer'>;
 
 const ROLE_META: Record<Role, { label: string; color: string; icon: any; desc: string }> = {
   owner: { label: ROLE_LABELS_PT_BR.owner, color: 'bg-purple-100 text-purple-700 border-purple-200', icon: ShieldCheck, desc: ROLE_DESCRIPTIONS_PT_BR.owner },
