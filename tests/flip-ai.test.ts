@@ -101,11 +101,11 @@ import {
 } from '../lib/flip-ai/schema-contract';
 
 const plan = { slug: 'premium', isActive: true };
-const allowed = { role: 'owner', tenantStatus: 'active', plan };
-test('only Premium/Premium Pro owners and admins qualify', () => {
+const allowed = { role: 'developer', tenantStatus: 'active', plan };
+test('only MFA-verified developer role (enforced upstream) configures Flip AI', () => {
   assert.equal(canAccessFlipAi(allowed), true);
-  assert.equal(canAccessFlipAi({ ...allowed, role: 'admin', plan: { ...plan, slug: 'premium-pro' } }), true);
-  for (const role of ['manager', 'agent', 'viewer', 'platform_admin', null]) assert.equal(canAccessFlipAi({ ...allowed, role }), false);
+  assert.equal(canAccessFlipAi({ ...allowed, role: 'developer', plan: { ...plan, slug: 'premium-pro' } }), true);
+  for (const role of ['owner', 'admin', 'manager', 'agent', 'viewer', 'platform_admin', null]) assert.equal(canAccessFlipAi({ ...allowed, role }), false);
   for (const slug of ['free', 'starter', 'pro', 'growth', 'business', 'Premium', null]) assert.equal(canAccessFlipAi({ ...allowed, plan: { ...plan, slug } }), false);
   assert.equal(canAccessFlipAi({ ...allowed, plan: null }), false);
   assert.equal(canAccessFlipAi({ ...allowed, plan: { ...plan, isActive: false } }), false);
