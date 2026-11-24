@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { readFlipAiBody } from '@/lib/flip-ai/http';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
 const request=z.object({leadId:z.string().uuid()}).strict();
@@ -14,7 +15,7 @@ export const POST = withAuth(async(req:NextRequest,session)=>{
   if(!req.headers.get('content-type')?.startsWith('application/json')||
      Number(req.headers.get('content-length')||0)>1024)return NextResponse.json({code:'INVALID_BODY'},{status:400,headers});
   let body:unknown;
-  try{body=await req.json();}catch{return NextResponse.json({code:'INVALID_BODY'},{status:400,headers});}
+  try{body=await readFlipAiBody(req,1024);}catch{return NextResponse.json({code:'INVALID_BODY'},{status:400,headers});}
   const parsed=request.safeParse(body);
   if(!parsed.success)return NextResponse.json({code:'INVALID_REQUEST'},{status:400,headers});
   try{
