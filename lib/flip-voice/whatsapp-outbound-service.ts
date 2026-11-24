@@ -221,8 +221,8 @@ export async function loadWhatsAppOutboundTwiML(input:{
       fromNumber:input.sender,toNumber:input.recipient,
       direction:'outbound',
     });
-    if(!/<Connect\\b[\\s\\S]*?<Stream\\b/i.test(twiml)||
-       /<Dial\\b|<Number\\b|<Sip\\b|<Redirect\\b/i.test(twiml))return rejected;
+    if(!/<Connect\b[\s\S]*?<Stream\b/i.test(twiml)||
+       /<Dial\b|<Number\b|<Sip\b|<Redirect\b/i.test(twiml))return rejected;
     return twiml;
   }catch{return rejected;}
 }
