@@ -39,7 +39,7 @@ export function withPermission<T = any>(
       }
     }
     // Plano Inbox: the modules outside the attendance answer as not part of the plan.
-    if (inboxPlanBlocksPermission(permission) && session.globalRole !== 'platform_admin' && session.tenantId
+    if (inboxPlanBlocksPermission(permission) && session.globalRole !== 'platform_admin' && session.role !== 'developer' && session.tenantId
       && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
       return NextResponse.json({ error: INBOX_PLAN_BLOCKED_MESSAGE, code: 'INBOX_PLAN_MODULE' }, { status: 403 });
     }
