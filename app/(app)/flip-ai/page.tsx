@@ -2,15 +2,17 @@ import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
 import { Bot } from 'lucide-react';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
+import { can } from '@/lib/rbac';
 import { getAgentDraftWorkspace } from '@/lib/flip-ai/agents';
 import { FlipAiError } from '@/lib/flip-ai/access';
 import { AgentDraftManager } from '@/components/flip-ai/agent-draft-manager';
 export const dynamic = 'force-dynamic';
 
 export default async function FlipAiPage() {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
+  if (!can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');
   try {
     return <AgentDraftManager initialWorkspace={await getAgentDraftWorkspace(session)} />;
   } catch (error) {
