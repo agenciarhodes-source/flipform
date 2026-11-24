@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const GET = withAuth(async (_req, session) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const integrations = await listApiV1Integrations(actor);
   if (!integrations) return adminV1Error(503);
   return adminV1Response({ integrations });
@@ -19,7 +19,7 @@ export const GET = withAuth(async (_req, session) => {
 export const POST = withAuth(async (req, session) => {
   if (!apiV1Enabled(process.env)) return adminV1Error(404);
   const actor = { userId: session.userId, tenantId: session.tenantId };
-  if (!await verifyApiV1Owner(actor)) return adminV1Error(403);
+  if (!await verifyApiV1Owner(actor, session.role)) return adminV1Error(403);
   const body = await readApiV1Json(req);
   if (!body || Object.keys(body).length !== 1
     || typeof body.displayName !== 'string'
