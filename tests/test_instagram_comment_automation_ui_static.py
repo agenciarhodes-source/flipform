@@ -11,7 +11,7 @@ def test_automations_page_is_tenant_session_and_rbac_scoped_with_instagram_parke
     page = read('app/(app)/automations/page.tsx')
     workspace = read('app/(app)/automations/automation-workspace-client.tsx')
 
-    assert 'getSession()' in page
+    assert 'getVerifiedSession()' in page
     assert "can(session.role, 'INTEGRATIONS_VIEW')" in page
     assert "can(session.role, 'INTEGRATIONS_EDIT')" in page
     assert 'AutomationWorkspaceClient' in page
