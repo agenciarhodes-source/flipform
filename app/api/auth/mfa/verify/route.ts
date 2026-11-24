@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Código inválido. Confira o aplicativo e tente de novo.' }, { status: 401 });
   }
 
-  await setSessionCookie(challenge.session);
+  await setSessionCookie({ ...challenge.session, mfaVerifiedAt: Math.floor(Date.now() / 1000) });
   if (challenge.session.tenantId) {
     await prisma.tenant.update({ where: { id: challenge.session.tenantId }, data: { lastLoginAt: new Date() } }).catch(() => undefined);
   }
