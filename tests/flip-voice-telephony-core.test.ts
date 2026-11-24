@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import {
   normalizeBrazilianDialNumber, validE164, validatePstnLine, validRecipientPermission,
   allowedBrazilBusinessHours, estimateCallReserveMicros, utcMonthStart,
-  hashCallIdentity, validTwilioSignature,
+  hashCallIdentity, validTwilioSignature, estimatedTerminalSpendMicros,
 } from '../lib/flip-voice/telephony-core';
 
 const line={tenantId:'tenant-A',status:'ready',inboundEnabled:true,outboundEnabled:true,providerAgentId:'agent_1234567890123',providerPhoneNumberId:'phnum_1234567890123',phoneE164:'+5511987654321'};
@@ -58,4 +58,13 @@ test('Twilio signature requires HTTPS, exact parameters and constant-time compar
  assert.equal(validTwilioSignature(url,params,key,'anything'),false);
  assert.match(hashCallIdentity('lead-1','x'.repeat(32)),/^[a-f0-9]{64}$/);
  assert.throws(()=>hashCallIdentity('lead-1','weak'));
+});
+
+test('terminal settlement caps estimated cost at previously reserved budget',()=>{
+ assert.equal(estimatedTerminalSpendMicros('completed',120,600_000n),400_000n);
+ assert.equal(estimatedTerminalSpendMicros('completed',0,600_000n),200_000n);
+ assert.equal(estimatedTerminalSpendMicros('busy',null,600_000n),0n);
+ assert.equal(estimatedTerminalSpendMicros('completed',200,600_000n),null);
+ assert.equal(estimatedTerminalSpendMicros('completed',null,600_000n),null);
+ assert.equal(estimatedTerminalSpendMicros('completed',10,-1n),null);
 });
