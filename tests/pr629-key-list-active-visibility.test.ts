@@ -7,7 +7,7 @@ const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const INTEGRATION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ACTIVE = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
-test('owner can always see and revoke an older active key after 30 newer rotations', async () => {
+test('authorized developer can always see an older active key after 30 newer rotations', async () => {
   const previous = process.env.FLIPFORM_API_V1_ENABLED;
   process.env.FLIPFORM_API_V1_ENABLED = 'true'; // synthetic local CI only, never Vercel
   try {
@@ -22,7 +22,9 @@ test('owner can always see and revoke an older active key after 30 newer rotatio
     }));
     const calls: Array<{ where: Record<string, unknown>; take: number }> = [];
     const db = {
-      tenantUser: { findUnique: async () => ({ role: 'owner', status: 'active' }) },
+      tenantUser: { findUnique: async () => ({ role: 'viewer', status: 'active' }) },
+      developerTenantGrant: { findUnique: async () => ({ revokedAt: null }) },
+      user: { findUnique: async () => ({ mfaEnabledAt: new Date('2026-01-01T00:00:00Z') }) },
       tenant: { findUnique: async () => ({
         id: TENANT, status: 'active',
         subscriptions: [{ status: 'active', provider: 'direct', plan: { slug: 'premium-pro', isActive: true } }],
@@ -35,7 +37,7 @@ test('owner can always see and revoke an older active key after 30 newer rotatio
       } },
     } as unknown as PrismaClient;
 
-    const keys = await listApiV1Keys({ userId: 'owner-qa', tenantId: TENANT }, INTEGRATION, db);
+    const keys = await listApiV1Keys({ userId: 'developer-qa', tenantId: TENANT }, INTEGRATION, db);
     assert.ok(keys);
     assert.equal(keys.length, 31);
     assert.equal(keys[0]?.id, ACTIVE, 'older active key stays available for revocation');
