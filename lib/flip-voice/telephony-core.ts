@@ -12,7 +12,12 @@ export const FLIP_VOICE_PSTN_GATE = Object.freeze({
 });
 
 export function normalizeBrazilianDialNumber(value: string | null | undefined): string {
-  const digits = brazilianDigits(value);
+  const raw=(value||'').trim();
+  // A foreign explicit +country code must never be reinterpreted as a Brazilian local number.
+  if(raw.startsWith('+') && !raw.replace(/\D/g,'').startsWith('55')) {
+    throw new FlipVoiceCoreError('PHONE_NOT_DIALABLE');
+  }
+  const digits = brazilianDigits(raw);
   if (!digits) throw new FlipVoiceCoreError('PHONE_NOT_DIALABLE');
   return '+' + digits;
 }
