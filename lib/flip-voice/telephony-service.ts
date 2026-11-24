@@ -181,3 +181,80 @@ export async function startFlipVoiceOutbound(
     return {callId:hold.id,status:'delivery_unknown',reused:false};
   }
 }
+
+/**
+ * Creates a budgeted inbound session only for one explicitly enabled line.
+ * Called exclusively by the Twilio signature-verified webhook route.
+ * Imported phone numbers need a Twilio webhook pointed at this route; the
+ * ElevenLabs native number auto-routing must NOT bypass this gate.
+ */
+export async function registerFlipVoiceInbound(input: {
+  calledNumber: string;
+  callerNumber: string;
+  callSid: string;
+}): Promise<{ accepted: boolean; twiml: string; callId?: string }> {
+  const unavailable = {accepted:false,twiml:'<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="busy"/></Response>'};
+  if (!isGlobalEnabled() || !/^CA[a-f0-9]{32}$/i.test(input.callSid)
+    || !input.calledNumber.startsWith('+') || !input.callerNumber.startsWith('+')) return unavailable;
+  const apiKey=process.env.ELEVENLABS_API_KEY || '';
+  if (apiKey.length < 16 || secret().length < 32) return unavailable;
+  const lines = await prisma.flipVoiceLine.findMany({
+    where: { phoneE164: input.calledNumber, status:'ready', inboundEnabled:true },
+    take:2,
+  });
+  if (lines.length !== 1) return unavailable; // Never guess tenant on ambiguous E164.
+  const line=lines[0],tenantId=line.tenantId, now=new Date();
+  try {
+    validatePstnLine(line,tenantId,'inbound');
+    const settings=await prisma.flipVoiceSettings.findUnique({where:{tenantId}});
+    const reserve=estimateCallReserveMicros(settings?.maxCallSeconds || 180);
+    if (!settings?.enabled || settings.monthlyLimitMicros < reserve
+      || settings.perCallLimitMicros < reserve) return unavailable;
+    const consentId=await validateVoiceOwner(prisma,{tenantId,profileId:line.profileId,now});
+    const requestKeyHash=hashCallIdentity(tenantId+':inbound:'+input.callSid,secret());
+    const contactHash=hashCallIdentity(tenantId+':'+input.callerNumber,secret());
+    const hold=await prisma.$transaction(async db=>{
+      const previous=await db.flipVoiceCall.findFirst({
+        where:{tenantId,channel:'pstn',direction:'inbound',requestKeyHash},
+        select:{id:true,status:true},
+      });
+      if(previous)return {...previous,reused:true};
+      const freshLine=await db.flipVoiceLine.findFirst({where:{id:line.id,tenantId}});
+      const freshSettings=await db.flipVoiceSettings.findUnique({where:{tenantId}});
+      if(!freshLine || !freshSettings?.enabled || freshSettings.perCallLimitMicros<reserve)refuse('VOICE_INBOUND_DISABLED');
+      validatePstnLine(freshLine,tenantId,'inbound');
+      await validateVoiceOwner(db,{tenantId,profileId:line.profileId,now:new Date()});
+      await reserveBudget(db,{tenantId,periodStart:utcMonthStart(now),micros:reserve,monthlyCeiling:freshSettings.monthlyLimitMicros});
+      const created=await db.flipVoiceCall.create({data:{
+        tenantId,profileId:line.profileId,consentId,lineId:line.id,
+        channel:'pstn',direction:'inbound',status:'held',
+        requestKeyHash,contactHash,providerCallId:input.callSid,
+        reservedUsdMicros:reserve,billedUsdMicros:0n,
+      },select:{id:true,status:true}});
+      return {...created,reused:false};
+    },{isolationLevel:Prisma.TransactionIsolationLevel.Serializable,timeout:15_000});
+    if(hold.reused)return unavailable; // Never register the same provider call twice.
+    const advanced=await prisma.flipVoiceCall.updateMany({
+      where:{tenantId,id:hold.id,status:'held'},data:{status:'dispatching'},
+    });
+    if(advanced.count!==1)return unavailable;
+    try{
+      const { registerElevenTwilioInbound }=await import('./telephony-provider');
+      const twiml=await registerElevenTwilioInbound({
+        apiKey,agentId:line.providerAgentId,
+        fromNumber:input.callerNumber,toNumber:input.calledNumber,
+      });
+      await prisma.flipVoiceCall.updateMany({
+        where:{tenantId,id:hold.id,status:'dispatching'},
+        data:{status:'initiated',startedAt:new Date()},
+      });
+      return {accepted:true,twiml,callId:hold.id};
+    }catch{
+      await prisma.flipVoiceCall.updateMany({
+        where:{tenantId,id:hold.id,status:'dispatching'},
+        data:{status:'delivery_unknown'},
+      }).catch(()=>undefined);
+      return unavailable;
+    }
+  }catch{return unavailable;}
+}
