@@ -1,4 +1,5 @@
 import 'server-only';
+import { randomBytes } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { SessionPayload } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -49,6 +50,10 @@ export async function requestFlipVoiceWhatsAppCall(
   if(settings.perCallLimitMicros<amount||settings.monthlyLimitMicros<amount)throw new FlipVoiceCoreError('WA_CALL_BUDGET_DISABLED');
   const recipient=normalizeBrazilianDialNumber(lead.phone);
   const numberHash=hashCallIdentity(tenantId+':'+recipient,pepper);
+  // Prepared BEFORE Twilio is called so the Voice webhook can identify the held
+  // session even when Twilio requests TwiML before returning its CallSid.
+  const webhookTicket=randomBytes(24).toString('base64url');
+  const outboundWebhookTicketHash=hashCallIdentity(tenantId+':wa-ticket:'+webhookTicket,pepper);
   const permissions=await prisma.flipVoiceContactPermission.findMany({
     where:{tenantId,leadId:lead.id,channel:'whatsapp'},
     orderBy:{createdAt:'desc'},take:30,
@@ -107,7 +112,7 @@ export async function requestFlipVoiceWhatsAppCall(
       tenantId,profileId:line.profileId,consentId,lineId:line.id,
       leadId:lead.id,contactPermissionId:freshConsent.id,
       channel:'whatsapp',direction:'outbound',status:'held',
-      contactHash:numberHash,requestKeyHash,
+      contactHash:numberHash,requestKeyHash,outboundWebhookTicketHash,
       reservedUsdMicros:amount,billedUsdMicros:0n,
     },select:{id:true,status:true}});
     return {id:row.id,status:row.status,reused:false};
@@ -119,18 +124,23 @@ export async function requestFlipVoiceWhatsAppCall(
   });
   if(started.count!==1)return {id:held.id,status:'held_for_review',reused:false};
   try {
+    const url=new URL(voiceUrl);
+    if(url.search||url.hash)throw new FlipVoiceCoreError('WA_CALLBACK_URL_INVALID');
+    url.searchParams.set('ticket',webhookTicket);
     const created=await createTwilioWhatsAppCall({
       accountSid,authToken,senderE164:line.phoneE164,recipientE164:recipient,
-      voiceWebhookUrl:voiceUrl,statusWebhookUrl:statusUrl,
+      voiceWebhookUrl:url.toString(),statusWebhookUrl:statusUrl,
     });
+    // The signed webhook might already have claimed the CallSid. Do not
+    // overwrite it, reset the state or create a second call.
     await prisma.flipVoiceCall.updateMany({
-      where:{id:held.id,tenantId,status:'dispatching'},
+      where:{id:held.id,tenantId,status:'dispatching',providerCallId:null},
       data:{status:'initiated',providerCallId:created.callSid,startedAt:new Date()},
     });
     return {id:held.id,status:'initiated',reused:false};
   }catch{
     await prisma.flipVoiceCall.updateMany({
-      where:{id:held.id,tenantId,status:'dispatching'},
+      where:{id:held.id,tenantId,status:'dispatching',providerCallId:null},
       data:{status:'delivery_unknown'},
     }).catch(()=>undefined);
     return {id:held.id,status:'delivery_unknown',reused:false};
