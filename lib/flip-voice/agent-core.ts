@@ -12,7 +12,7 @@ export type VoiceScope = 'tts' | 'voice_calls';
 export type ApprovedVoice = {
   tenantId: string;
   profileId: string;
-  provider: 'elevenlabs';
+  provider: string;
   providerVoiceId: string;
   profileStatus: string;
   consentStatus: string;
@@ -75,6 +75,11 @@ export const FLIP_VOICE_SYSTEM_GUARDRAILS = [
 
 export type VoiceAgentDraft = {
   name: string;
+  platform_settings: {
+    auth: { enable_auth: true };
+    call_limits: { agent_concurrency_limit: 1; daily_limit: 5 };
+    trust_context: 'low';
+  };
   conversation_config: {
     agent: {
       language: 'pt';
@@ -130,6 +135,11 @@ export function buildFlipVoiceAgentDraft(input: {
   ].join('\n\n');
   return {
     name: ('Flip Voice TEST - ' + name).slice(0, 78),
+    platform_settings: {
+      auth: { enable_auth: true },
+      call_limits: { agent_concurrency_limit: 1, daily_limit: 5 },
+      trust_context: 'low',
+    },
     conversation_config: {
       agent: {
         language: 'pt',
