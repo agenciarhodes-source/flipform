@@ -48,10 +48,10 @@ FLIP_VOICE_CONTACT_PEPPER=(servidor/cofre)
 6. O Twilio Voice/TwiML + `register-call` ElevenLabs em WhatsApp exige **validação real de compatibilidade** com o sender e aplicativo TwiML; a rota requer `FLIP_VOICE_WHATSAPP_PROVIDER_VERIFIED=true` após aprovação.
 
 ## Pendências que NÃO podem ser ocultadas por CI verde
-- [ ] Integração de **envio de pedido de permissão** com limite persistente de frequência e estado pendente; o adaptador existe, ainda não tem API autenticada/orquestrador. Sem isso, não é possível criar novos consentimentos verificáveis pelo fluxo de ponta a ponta.
+- [x] Em código: **solicitação de permissão** pela API autenticada `/api/flip-voice/whatsapp/permission-request`, limitada a 1 tentativa/24h e 2/7 dias, com prova da mensagem Twilio enviada, callback assinado e vínculo com tenant e número. **Não homologado com sender real** e ainda exige integração segura com o webhook atual de mensagens.
 - [x] Núcleo de **originação WhatsApp outbound** com reserva + quota atômica + status + TwiML e endpoint autenticado. **Apenas em código; não homologado**, depende de sender ativo e teste de compatibilidade Twilio/ElevenLabs.
 - [ ] Configuração assistida de sender Twilio/WhatsApp e permissões sem SQL manual em produção, protegida por perfil desenvolvedor.
-- [ ] Transferência real para agente humano via SIP/VoIP e teste de retomada no CRM.
+- [ ] **Transferência humana não disponível neste modo:** a documentação ElevenLabs diz que `register-call` NÃO possui transferência nativa. Somente habilitar handoff após projetar, implementar e homologar mecanismo próprio VoIP/SIP, sem ponte PSTN.
 - [ ] Histórico e painel operacional unificados, controles de custo com conciliação dos valores reais do fornecedor.
 - [ ] Fluxo autorizado de ferramentas CRM (consulta e ações) protegido por RBAC/tenant, sem confiar no prompt.
 - [ ] Testar migração em banco descartável, concorrência, limitação de chamadas e restauração; sem tocar Neon produção.
@@ -67,4 +67,16 @@ FLIP_VOICE_CONTACT_PEPPER=(servidor/cofre)
 - https://www.twilio.com/en-us/blog/developers/tutorials/integrations/ai-agent-to-human-agent-elevenlabs-call-handoffs-twilio
 
 ## Importante: possível corrida na originação
-Na chamada iniciada pela API Twilio, o provedor pode solicitar o TwiML antes de o `CallSid` ter sido persistido na sessão. O webhook só aceita `CallSid` associado ao tenant e a uma chamada autorizada; nesse caso, uma tentativa prematura será rejeitada. É obrigatório reproduzir esta condição em testes E2E e escolher mecanismo transacional de correlação/compensação antes do piloto; **não ativar outbound em produção enquanto isso não estiver resolvido**.
+A versão original dependia do `CallSid` já persistido e podia rejeitar chamadas por uma corrida. A nova implementação grava uma credencial temporária **hash HMAC** por chamada ANTES de solicitar a origem à Twilio, inclui somente a versão opaca no URL de voz assinado pela Twilio e reivindica a execução uma única vez no banco. **O mecanismo ainda precisa ser comprovado em teste E2E com Twilio real**, incluindo retomadas e falhas de rede. Não habilitar saída até esse aceite.
+
+## Segunda tentativa — PR #646 (substitui #644 fechado)
+- Nova branch baseada no código não integrado do #644; sem reabertura ou merge do PR cancelado.
+- `provider_permission_request_sid` rastreia o pedido real de autorização enviado pela Twilio; resposta `ACCEPTED` sem pedido pendente, recente, não expirado e com SID válido não libera ligação.
+- Pedidos supersedidos expiram em vez de revogar o consentimento do destinatário; pedidos incertos contam para o limite e não são reenviados automaticamente.
+- `outbound_webhook_ticket_hash` armazena um HMAC único e `outbound_twiml_claimed_at` impede registros repetidos, com callback assinado sobre URL que inclui `ticket`.
+- `register-call` recebe `direction=outbound` em ligações iniciadas pelo FlipForm, sem alterar o comportamento PSTN `inbound`.
+- Tests offline acrescentados para cotas, permission request SID, ticket obrigatório na URL, migração e direção do fluxo.
+- GitHub Actions executava falhas de inicialização **sem steps** em branches distintas, mesmo quando o build da Vercel compilava. **Não interpretar ausência de check como sucesso**. Investigar conta/runner/faturamento GitHub Actions antes do aceite.
+- Transferência humano via `register-call` ElevenLabs: **não suportada nativamente**. Deve permanecer indisponível até mecanismo VoIP/SIP implementado e testado.
+- Aviso: o backend de permissões Twilio usa webhook de mensagem próprio do sender; **não sobrescrever o WhatsApp Meta existente no FlipForm** sem desenho de roteamento e aprovação do operador.
+- Todo o serviço é fail-closed e sem migração de produção; requer staging com sender Twilio WhatsApp Calling ativado, voz consentida, testes e aprovação.
