@@ -47,6 +47,7 @@ export type ProviderWhatsAppPermission = {
   tenantId: string; leadId: string; phoneHash: string; channel: string;
   evidenceSha256: string; providerPermissionSource: string | null;
   providerPermissionRef: string | null;
+  providerPermissionRequestSid: string | null;
   providerPermissionConfirmedAt: Date | null;
   verifiedAt: Date | null; expiresAt: Date | null; revokedAt: Date | null; status: string;
   outboundCallWindowStart: Date | null;
@@ -65,7 +66,9 @@ export function isWhatsAppCallPermitted(
      permission.channel!=='whatsapp'||permission.phoneHash!==expected ||
      permission.status!=='verified'||permission.revokedAt!==null||
      permission.providerPermissionSource!=='twilio_signed_webhook'||
-     !permission.providerPermissionRef?.trim()||!/^[a-f0-9]{64}$/i.test(permission.evidenceSha256)||
+     !permission.providerPermissionRef?.trim()||
+     !/^SM[a-f0-9]{32}$/i.test(permission.providerPermissionRequestSid||'')||
+     !/^[a-f0-9]{64}$/i.test(permission.evidenceSha256)||
      !permission.verifiedAt||permission.verifiedAt.getTime()>now.getTime()||
      !Number.isFinite(age)||age>now.getTime()||
      now.getTime()-age>WHATSAPP_CALLING_DEFAULTS.maxPermissionDays*86400_000||
