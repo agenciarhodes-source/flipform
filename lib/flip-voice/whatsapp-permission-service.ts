@@ -4,7 +4,7 @@ import type { SessionPayload } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { FlipVoiceCoreError } from './agent-core';
 import { allowedBrazilBusinessHours, hashCallIdentity, normalizeBrazilianDialNumber } from './telephony-core';
-import { validateWhatsAppChannel, WHATSAPP_CALLING_DEFAULTS } from './whatsapp-calling-policy';
+import { validateWhatsAppChannel, whatsappPermissionRequestQuotaAllows } from './whatsapp-calling-policy';
 import { requestTwilioWhatsAppCallPermission } from './whatsapp-twilio-provider';
 
 const guid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,14 +69,13 @@ export async function initiateWhatsAppCallPermissionRequest(
     });
     if(revoked)deny('WA_PERMISSION_PREVIOUSLY_REVOKED');
     const lastWeek=new Date(now.getTime()-7*86400_000);
-    const lastDay=new Date(now.getTime()-86400_000);
     const attempts=await db.flipVoiceContactPermission.findMany({
       where:{tenantId,leadId:lead.id,channel:'whatsapp',phoneHash,
         createdAt:{gte:lastWeek}},
       select:{createdAt:true},
     });
-    if(attempts.length>=WHATSAPP_CALLING_DEFAULTS.maxPermissionRequests7Days||
-       attempts.some(x=>x.createdAt.getTime()>=lastDay.getTime()))deny('WA_PERMISSION_RATE_LIMIT');
+    if(!whatsappPermissionRequestQuotaAllows(attempts.map(x=>x.createdAt),now))
+      deny('WA_PERMISSION_RATE_LIMIT');
     // Supersede older unresolved requests without recording a customer opt-out.
     await db.flipVoiceContactPermission.updateMany({
       where:{tenantId,leadId:lead.id,channel:'whatsapp',phoneHash,
