@@ -153,6 +153,14 @@ model Tenant {
   leadStageSuggestions LeadStageSuggestion[]
   documentChecklists   DocumentChecklist[]
 
+  // Flip Voice: all references are tenant-scoped, disabled until an approved release.
+  flipVoiceSettings FlipVoiceSettings?
+  flipVoiceProfiles FlipVoiceProfile[]
+  flipVoiceConsents FlipVoiceConsent[]
+  flipVoiceBudgets FlipVoiceBudget[]
+  flipVoiceCalls FlipVoiceCall[]
+  flipVoiceEvents FlipVoiceEvent[]
+
   // PR01 additive API foundation. No production schema change is authorized here.
   apiV1Integrations ApiIntegration[]
   apiV1EntitlementGrants TenantEntitlementGrant[]
@@ -1182,6 +1190,7 @@ model FlipAiAgent {
   qualifications FlipAiQualification[]
   externalSources FlipAiExternalSource[]
   externalSearchCaches FlipAiExternalSearchCache[]
+  flipVoiceProfiles FlipVoiceProfile[]
   @@unique([tenantId, id])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, rotationId])
@@ -2471,4 +2480,131 @@ model ApiV1DeliveryAttempt {
   @@unique([tenantId, integrationId, outboxEventId, attemptNo])
   @@index([tenantId, result, createdAt])
   @@map("api_v1_delivery_attempts")
+}
+
+
+/// FV01 (Flip Voice Core): all features off by default. These settings are not an
+/// authorization source without the server-side global feature gate and RBAC.
+model FlipVoiceSettings {
+  tenantId            String   @id @map("tenant_id")
+  enabled             Boolean  @default(false)
+  outboundEnabled     Boolean  @default(false) @map("outbound_enabled")
+  recordingEnabled    Boolean  @default(false) @map("recording_enabled")
+  monthlyLimitMicros  BigInt   @default(0) @map("monthly_limit_micros")
+  perCallLimitMicros  BigInt   @default(0) @map("per_call_limit_micros")
+  maxCallSeconds      Int      @default(180) @map("max_call_seconds")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("flip_voice_settings")
+}
+
+/// One voice per authorized person; NEVER keep a raw cloned sample or provider API key.
+model FlipVoiceProfile {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  agentId     String?  @map("agent_id")
+  label       String
+  provider    String   @default("elevenlabs")
+  providerVoiceId String @map("provider_voice_id")
+  status      String   @default("pending")
+  createdBy   String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  agent       FlipAiAgent? @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
+  consents    FlipVoiceConsent[]
+  calls       FlipVoiceCall[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, agentId])
+  @@index([tenantId, status])
+  @@map("flip_voice_profiles")
+}
+
+/// Consent evidence is represented by its digest, not by ID documents/audio.
+model FlipVoiceConsent {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  profileId      String   @map("profile_id")
+  evidenceSha256 String   @map("evidence_sha256")
+  scopes         String[] @default([])
+  status         String   @default("pending")
+  verifiedAt     DateTime? @map("verified_at")
+  expiresAt      DateTime? @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  authorizedBy   String?  @map("authorized_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  profile        FlipVoiceProfile @relation(fields: [tenantId, profileId], references: [tenantId, id], onDelete: Restrict)
+  calls          FlipVoiceCall[]
+
+  @@unique([tenantId, profileId, id])
+  @@index([tenantId, profileId, status])
+  @@map("flip_voice_consents")
+}
+
+/// Atomic balances must be reserved in PostgreSQL transactions; no in-memory counters.
+model FlipVoiceBudget {
+  tenantId       String   @map("tenant_id")
+  periodStart    DateTime @map("period_start")
+  limitMicros    BigInt   @default(0) @map("limit_micros")
+  reservedMicros BigInt   @default(0) @map("reserved_micros")
+  spentMicros    BigInt   @default(0) @map("spent_micros")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@id([tenantId, periodStart])
+  @@map("flip_voice_budgets")
+}
+
+/// A held call has NOT been dialled. Idempotency digest is scoped to the tenant.
+model FlipVoiceCall {
+  id                String   @id @default(uuid())
+  tenantId          String   @map("tenant_id")
+  profileId         String   @map("profile_id")
+  consentId         String   @map("consent_id")
+  channel           String
+  direction         String
+  status            String   @default("held")
+  contactHash       String?  @map("contact_hash")
+  requestKeyHash    String   @map("request_key_hash")
+  reservedUsdMicros BigInt   @default(0) @map("reserved_usd_micros")
+  billedUsdMicros   BigInt   @default(0) @map("billed_usd_micros")
+  providerCallId    String?  @map("provider_call_id")
+  startedAt         DateTime? @map("started_at")
+  endedAt           DateTime? @map("ended_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  profile           FlipVoiceProfile @relation(fields: [tenantId, profileId], references: [tenantId, id], onDelete: Restrict)
+  consent           FlipVoiceConsent @relation(fields: [tenantId, profileId, consentId], references: [tenantId, profileId, id], onDelete: Restrict)
+  events            FlipVoiceEvent[]
+
+  @@unique([tenantId, id])
+  @@unique([tenantId, channel, direction, requestKeyHash])
+  @@index([tenantId, status, createdAt])
+  @@map("flip_voice_calls")
+}
+
+/// Provider callbacks must be signed and claimed exactly once before writing events.
+model FlipVoiceEvent {
+  id              String   @id @default(uuid())
+  tenantId        String   @map("tenant_id")
+  callId          String   @map("call_id")
+  eventHash       String   @map("event_hash")
+  eventType       String   @map("event_type")
+  receivedAt      DateTime @default(now()) @map("received_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  call            FlipVoiceCall @relation(fields: [tenantId, callId], references: [tenantId, id], onDelete: Restrict)
+
+  @@unique([tenantId, callId, eventHash])
+  @@index([tenantId, eventType, receivedAt])
+  @@map("flip_voice_events")
 }
