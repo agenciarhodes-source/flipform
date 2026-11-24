@@ -44,6 +44,7 @@ export function validatePstnLine(line: {
 export function validRecipientPermission(permission: {
   tenantId: string;
   leadId: string;
+  phoneHash: string;
   channel: string;
   purpose: string;
   evidenceSha256: string;
@@ -51,8 +52,9 @@ export function validRecipientPermission(permission: {
   verifiedAt: Date | null;
   revokedAt: Date | null;
   expiresAt: Date | null;
-}, tenantId: string, leadId: string, now: Date): boolean {
+}, tenantId: string, leadId: string, expectedPhoneHash: string, now: Date): boolean {
   return permission.tenantId === tenantId && permission.leadId === leadId
+    && /^[a-f0-9]{64}$/i.test(expectedPhoneHash) && permission.phoneHash === expectedPhoneHash
     && permission.channel === 'pstn'
     && permission.purpose === 'requested_follow_up'
     && permission.status === 'verified'
