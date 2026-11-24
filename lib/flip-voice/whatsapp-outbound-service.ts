@@ -147,40 +147,82 @@ export async function requestFlipVoiceWhatsAppCall(
   }
 }
 
-/** Request TwiML for an already authorized WhatsApp outbound call ONLY. */
+/** Claim a pre-authorized outbound call before Twilio has to know its CallSid. */
 export async function loadWhatsAppOutboundTwiML(input:{
-  providerCallSid:string;sender:string;recipient:string;
+  providerCallSid:string;sender:string;recipient:string;ticket:string;
 }):Promise<string>{
-  if(disabled()||!/^CA[a-f0-9]{32}$/i.test(input.providerCallSid))return rejected;
+  if(disabled()||!/^CA[a-f0-9]{32}$/i.test(input.providerCallSid)||
+     !/^[A-Za-z0-9_-]{32,64}$/.test(input.ticket))return rejected;
   const pepper=process.env.FLIP_VOICE_CONTACT_PEPPER||'';
   const elevenKey=process.env.ELEVENLABS_API_KEY||'';
   if(pepper.length<32||elevenKey.length<16)return rejected;
-  const matches=await prisma.flipVoiceCall.findMany({
-    where:{providerCallId:input.providerCallSid,channel:'whatsapp',direction:'outbound'},
-    select:{id:true,tenantId:true,profileId:true,lineId:true,
-      consentId:true,status:true,contactHash:true},take:2,
+
+  // Derive the tenant from the unique sender, never from a user query param.
+  const senderLines=await prisma.flipVoiceLine.findMany({
+    where:{phoneE164:input.sender,whatsappRoutingMode:'twilio_voice',
+      whatsappOutboundEnabled:true,status:'ready'},
+    take:2,
   });
-  if(matches.length!==1)return rejected;
-  const call=matches[0],tenantId=call.tenantId;
-  if(!call.lineId||!call.contactHash||
-      call.contactHash!==hashCallIdentity(tenantId+':'+input.recipient,pepper)||
-      !['initiated','delivery_unknown'].includes(call.status))return rejected;
-  const [line,settings]=await Promise.all([
-    prisma.flipVoiceLine.findFirst({where:{tenantId,id:call.lineId}}),
-    prisma.flipVoiceSettings.findUnique({where:{tenantId}}),
-  ]);
-  if(!line||!settings?.enabled)return rejected;
+  if(senderLines.length!==1)return rejected;
+  const line=senderLines[0],tenantId=line.tenantId;
+  const ticketHash=hashCallIdentity(tenantId+':wa-ticket:'+input.ticket,pepper);
+  const calls=await prisma.flipVoiceCall.findMany({
+    where:{tenantId,outboundWebhookTicketHash:ticketHash,
+      channel:'whatsapp',direction:'outbound'},
+    select:{
+      id:true,tenantId:true,profileId:true,lineId:true,leadId:true,
+      contactPermissionId:true,consentId:true,status:true,contactHash:true,
+      providerCallId:true,outboundTwiMLClaimedAt:true,
+    },
+    take:2,
+  });
+  if(calls.length!==1)return rejected;
+  const call=calls[0];
+  if(call.lineId!==line.id||!call.leadId||!call.contactPermissionId||
+     !call.contactHash||call.outboundTwiMLClaimedAt!==null||
+     !['initiated','dispatching'].includes(call.status)||
+     (call.providerCallId!==null&&call.providerCallId!==input.providerCallSid)||
+     call.contactHash!==hashCallIdentity(tenantId+':'+input.recipient,pepper)){
+    return rejected;
+  }
+  const now=new Date();
   try{
+    const [settings,permission,lead,latestRevoked]=await Promise.all([
+      prisma.flipVoiceSettings.findUnique({where:{tenantId}}),
+      prisma.flipVoiceContactPermission.findFirst({where:{id:call.contactPermissionId,tenantId}}),
+      prisma.lead.findFirst({where:{id:call.leadId,tenantId},select:{phone:true}}),
+      prisma.flipVoiceContactPermission.findFirst({
+        where:{tenantId,leadId:call.leadId,channel:'whatsapp',revokedAt:{not:null}},
+        orderBy:{revokedAt:'desc'},
+      }),
+    ]);
+    if(!settings?.enabled||!settings.outboundEnabled||!permission||!lead||
+       normalizeBrazilianDialNumber(lead.phone)!==input.recipient||
+       !isWhatsAppCallPermitted(permission,tenantId,call.leadId,input.recipient,pepper,now)||
+       (latestRevoked?.revokedAt&&permission.verifiedAt&&
+         latestRevoked.revokedAt.getTime()>=permission.verifiedAt.getTime())){
+      return rejected;
+    }
     validateWhatsAppChannel(line,tenantId,'outbound');
-    if(line.phoneE164!==input.sender)return rejected;
-    const currentConsentId=await validateVoiceOwner(prisma,{tenantId,profileId:call.profileId,now:new Date()});
-    if(currentConsentId!==call.consentId)return rejected;
+    const voiceConsent=await validateVoiceOwner(prisma,{tenantId,profileId:call.profileId,now});
+    if(voiceConsent!==call.consentId)return rejected;
+
+    // A unique, atomic claim blocks duplicate/forged TwiML requests. Correlation
+    // is based on the ticket committed BEFORE creating the remote Twilio call.
+    const claim=await prisma.flipVoiceCall.updateMany({
+      where:{id:call.id,tenantId,outboundWebhookTicketHash:ticketHash,
+        outboundTwiMLClaimedAt:null,status:{in:['dispatching','initiated']},
+        OR:[{providerCallId:null},{providerCallId:input.providerCallSid}]},
+      data:{providerCallId:input.providerCallSid,outboundTwiMLClaimedAt:now},
+    });
+    if(claim.count!==1)return rejected;
     const twiml=await registerElevenTwilioInbound({
       apiKey:elevenKey,agentId:line.providerAgentId,
       fromNumber:input.sender,toNumber:input.recipient,
+      direction:'outbound',
     });
-    if(!/<Connect\b[\s\S]*?<Stream\b/i.test(twiml)||
-       /<Dial\b|<Number\b|<Sip\b|<Redirect\b/i.test(twiml))return rejected;
+    if(!/<Connect\\b[\\s\\S]*?<Stream\\b/i.test(twiml)||
+       /<Dial\\b|<Number\\b|<Sip\\b|<Redirect\\b/i.test(twiml))return rejected;
     return twiml;
   }catch{return rejected;}
 }
