@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { withAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { startFlipVoiceOutbound } from '@/lib/flip-voice/telephony-service';
+import { readFlipAiBody } from '@/lib/flip-ai/http';
 import { FlipVoiceCoreError } from '@/lib/flip-voice/agent-core';
 
 export const dynamic = 'force-dynamic';
@@ -32,7 +33,7 @@ export const POST = withAuth(async (req: NextRequest, session) => {
     return NextResponse.json({code:'INVALID_BODY'},{status:400,headers});
   }
   let body: unknown;
-  try { body=await req.json(); }
+  try { body=await readFlipAiBody(req,2048); }
   catch { return NextResponse.json({code:'INVALID_JSON'},{status:400,headers}); }
   const parsed=requestSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({code:'INVALID_REQUEST'},{status:400,headers});
