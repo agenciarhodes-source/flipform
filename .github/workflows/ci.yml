@@ -69,6 +69,10 @@ jobs:
       - name: Multi-company login choice tests (offline)
         run: npx tsx --test tests/tenant-login-selection.test.ts
 
+      # Read-key introspection: bounded scopes, never client-provided tenants.
+      - name: API v1 read-key identity parser tests (offline)
+        run: npx tsx --test tests/api-v1-credential-identity.test.ts
+
       # PR01 Phase 1: pure M2M policies/credential verification, NO database connections.
       - name: PR01 API v1 security foundation tests (offline)
         run: npx tsx --test tests/pr01-api-foundation.test.ts
