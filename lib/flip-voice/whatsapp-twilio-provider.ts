@@ -7,11 +7,15 @@ const CONTENT=/^HX[a-f0-9]{32}$/i;
 function validateTwilioCredentials(sid:string,token:string):void{
   if(!SID.test(sid)||token.trim().length<16)throw new FlipVoiceCoreError('WA_TWILIO_CREDENTIALS_MISSING');
 }
-function trustedWebhook(url:string,path:string):void{
+function trustedWebhook(url:string,path:string,requiresTicket=false):void{
   let target:URL;
   try{target=new URL(url);}catch{throw new FlipVoiceCoreError('WA_WEBHOOK_URL_INVALID');}
-  if(target.protocol!=='https:'||target.username||target.password||target.search||target.hash||
-     target.hostname==='localhost'||target.pathname!==path){
+  const ticket=target.searchParams.getAll('ticket');
+  const searchValid=requiresTicket
+    ? ticket.length===1 && target.searchParams.size===1 && /^[A-Za-z0-9_-]{32,64}$/.test(ticket[0])
+    : target.search.length===0;
+  if(target.protocol!=='https:'||target.username||target.password||target.hash||
+     target.hostname==='localhost'||target.pathname!==path||!searchValid){
     throw new FlipVoiceCoreError('WA_WEBHOOK_URL_INVALID');
   }
 }
@@ -26,7 +30,7 @@ export async function createTwilioWhatsAppCall(input:{
 }):Promise<{callSid:string}>{
   validateTwilioCredentials(input.accountSid,input.authToken);
   verifyNumber(input.senderE164);verifyNumber(input.recipientE164);
-  trustedWebhook(input.voiceWebhookUrl,'/api/flip-voice/whatsapp/outbound-twiml');
+  trustedWebhook(input.voiceWebhookUrl,'/api/flip-voice/whatsapp/outbound-twiml',true);
   trustedWebhook(input.statusWebhookUrl,'/api/flip-voice/whatsapp/status');
   const payload=new URLSearchParams({
     From:'whatsapp:'+input.senderE164,
