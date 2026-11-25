@@ -26,7 +26,7 @@ async function preflight(req: NextRequest, session: { userId: string; mfaVerifie
   return limit.allowed ? null : rateLimitResponse(limit);
 }
 
-/** Grant existing users only; NEVER reset or request a client's password. */
+/** Grant registered technical accounts, including grandfathered grant holders; never use client passwords. */
 export const POST = withPlatformAdmin(async (req, session) => {
   const denied = await preflight(req, session);
   if (denied) return denied;
@@ -40,7 +40,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
       tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } }),
     ]);
     if (!tenant || ['suspended', 'blocked', 'canceled', 'inactive'].includes(tenant.status)) return { status: 404 };
-    if (!user || user.globalRole === 'platform_admin') return { status: 409 };
+    if (!user || (user.globalRole !== 'developer_account' && !await tx.developerTenantGrant.count({ where: { userId } }))) return { status: 409 };
     const existing = await tx.developerTenantGrant.findUnique({ where: { tenantId_userId: { tenantId, userId } } });
     if (existing && !existing.revokedAt) return { status: 409 };
     // A technical grant must never reinstate a previously disabled company account.
@@ -126,9 +126,9 @@ export const GET = withPlatformAdmin(async (_req, session) => {
       orderBy: { name: 'asc' }, take: 200,
     }),
     prisma.user.findMany({
-      // Nullable globalRole: SQL NOT (global_role = ...) excludes NULL rows.
-      // Include ordinary accounts explicitly while excluding platform admins.
-      where: { OR: [{ globalRole: null }, { globalRole: { not: 'platform_admin' } }] },
+      // Show only registered technical accounts, plus legacy accounts that already
+      // received a developer grant before technical account registration existed.
+      where: { OR: [{ globalRole: 'developer_account' }, { developerGrants: { some: {} } }] },
       select: { id: true, email: true, name: true, mfaEnabledAt: true },
       orderBy: { email: 'asc' }, take: 200,
     }),
