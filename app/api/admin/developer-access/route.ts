@@ -122,7 +122,9 @@ export const GET = withPlatformAdmin(async (_req, session) => {
       orderBy: { name: 'asc' }, take: 200,
     }),
     prisma.user.findMany({
-      where: { NOT: { globalRole: 'platform_admin' } },
+      // Nullable globalRole: SQL NOT (global_role = ...) excludes NULL rows.
+      // Include ordinary accounts explicitly while excluding platform admins.
+      where: { OR: [{ globalRole: null }, { globalRole: { not: 'platform_admin' } }] },
       select: { id: true, email: true, name: true, mfaEnabledAt: true },
       orderBy: { email: 'asc' }, take: 200,
     }),
