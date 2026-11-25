@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withPlatformAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { mayProvisionDeveloperMembership } from '@/lib/developer-access/security-rules';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
@@ -52,8 +53,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
       where: { tenantId_email: { tenantId, email: user.email } },
       select: { active: true, status: true },
     });
-    if (existingMembership && existingMembership.status !== 'active') return { status: 409 };
-    if (existingAllowlist && (!existingAllowlist.active || existingAllowlist.status !== 'active')) return { status: 409 };
+    if (!mayProvisionDeveloperMembership({ existingMembership, existingAllowlist })) return { status: 409 };
     if (!existingMembership) {
       await tx.tenantUser.create({ data: { tenantId, userId, role: 'viewer', status: 'active' } });
     }
