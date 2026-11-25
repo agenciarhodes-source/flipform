@@ -77,5 +77,5 @@ export function apiV1Entitled(tenantId: string, e: ApiV1Entitlement | null): boo
 
 /** API key management has its own conservative role policy; not INTEGRATIONS_MANAGE. */
 export function canManageApiV1Keys(role: string, actorTenantId: string, targetTenantId: string): boolean {
-  return Boolean(actorTenantId) && actorTenantId === targetTenantId && role === 'owner';
+  return Boolean(actorTenantId) && actorTenantId === targetTenantId && role === 'developer';
 }

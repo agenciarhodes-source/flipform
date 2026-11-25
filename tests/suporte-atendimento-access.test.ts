@@ -4,15 +4,16 @@ import { canReadTenantSupportKnowledge, canManageTenantSupportKnowledge, canUseT
 import { DEFAULT_SUPPORT_ACTIVATION, parseTenantSupportActivation } from '../lib/suporte-atendimento/support-switch-rules';
 import { inboxPlanAllowsPath } from '../lib/billing/inbox-plan-rules';
 
-test('Proprietário configura o Suporte sem flag de ambiente', () => {
-  assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'owner' }), true);
+test('Somente desenvolvedor configura Suporte', () => {
+  assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'owner' }), false);
+  assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'developer' }), true);
   assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'owner' }), false);
 });
 test('Atendente consulta o próprio manual e não altera configuração', () => {
   assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), true);
   assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role: 'agent' }), false);
 });
-for (const role of ['admin', 'manager', 'viewer', 'developer', 'platform_admin']) {
+for (const role of ['admin', 'manager', 'viewer', 'platform_admin']) {
   test('papel ' + role + ' não gerencia nem consulta sem delegação específica', () => {
     assert.equal(canReadTenantSupportKnowledge({ tenantId: 'tenant-a', role }), false);
     assert.equal(canManageTenantSupportKnowledge({ tenantId: 'tenant-a', role }), false);

@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
@@ -14,11 +14,11 @@ import { tenantPlanSlug } from '@/lib/session-access';
 import { isInboxOnlyPlan } from '@/lib/billing/inbox-plan-rules';
 
 export default async function IntegrationsPage() {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!can(session.role, 'INTEGRATIONS_VIEW')) redirect('/dashboard');
   // Plano Inbox: only the WhatsApp numbers and their message templates.
-  if (session.globalRole !== 'platform_admin' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
+  if (session.globalRole !== 'platform_admin' && session.role !== 'developer' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
     return <div className="p-6 space-y-6 max-w-7xl">
       <div>
         <h1 className="text-3xl font-bold">Integrações</h1>
@@ -36,7 +36,7 @@ export default async function IntegrationsPage() {
   return <>
     <ClientConnectionOnboarding />
     <IntegrationsClient />
-    {session.role === 'owner' && apiV1Enabled(process.env) && <ApiV1Card />}
+    {session.role === 'developer' && apiV1Enabled(process.env) && <ApiV1Card />}
     <div id="google-funnel" className="scroll-mt-24">
       <GoogleFunnelCard />
     </div>

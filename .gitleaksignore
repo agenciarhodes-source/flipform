@@ -13,3 +13,7 @@
 # PR01 staging NO-GO gate: verified static Prisma TABLE NAMES only, no credential.
 # Exact SARIF fingerprint from commit 3c757322; scanner remains active for all others.
 3c75732281b0406b538048e1eee22cceab80c1cd:scripts/pr01_staging_no_go_gate.py:generic-api-key:32
+
+# PR2: verified synthetic unit-test key only, identified in Gitleaks SARIF run 45478029219.
+# New commits construct test keys dynamically; this suppresses ONLY the historic finding.
+c067cfa79161c4c885f9155a28f3c5970c697247:tests/flip-voice-telephony-provider.test.ts:generic-api-key:5

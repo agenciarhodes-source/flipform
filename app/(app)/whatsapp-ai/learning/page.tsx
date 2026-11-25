@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { listLearning } from '@/lib/flip/learning';
 import { LearningBoard } from '@/components/whatsapp-ai/learning-board';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 /** The company's learnings from its own attendance, to approve for every attendant of the company. */
 export default async function LearningPage() {
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');
   const view = await listLearning(session.tenantId);

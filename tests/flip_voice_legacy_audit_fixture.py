@@ -18,6 +18,8 @@ VOICE_MODELS = {
     "FlipVoiceBudget": "flip_voice_budgets",
     "FlipVoiceCall": "flip_voice_calls",
     "FlipVoiceEvent": "flip_voice_events",
+    "FlipVoiceLine": "flip_voice_lines",
+    "FlipVoiceContactPermission": "flip_voice_contact_permissions",
 }
 TENANT_INVERSE = {
     "flipVoiceSettings FlipVoiceSettings?",
@@ -26,15 +28,27 @@ TENANT_INVERSE = {
     "flipVoiceBudgets FlipVoiceBudget[]",
     "flipVoiceCalls FlipVoiceCall[]",
     "flipVoiceEvents FlipVoiceEvent[]",
+    "flipVoiceLines FlipVoiceLine[]",
+    "flipVoiceContactPermissions FlipVoiceContactPermission[]",
 }
 AGENT_INVERSE = {"flipVoiceProfiles FlipVoiceProfile[]"}
+DEVELOPER_MODELS = {"DeveloperTenantGrant": "developer_tenant_grants"}
+DEVELOPER_INVERSE = {
+    "Tenant": {"developerGrants DeveloperTenantGrant[]"},
+    "User": {
+        'developerGrants DeveloperTenantGrant[] @relation("DeveloperGrantUser")',
+        'developerGrantsIssued DeveloperTenantGrant[] @relation("DeveloperGrantIssuer")',
+    },
+}
+PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
+CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
 
 def historical_pr01_candidate(current_schema: str) -> str:
     """Return only the approved historical 102-model candidate for PR01 tests."""
     model_names = re.findall(r"(?m)^model\s+(\w+)\s*\{", current_schema)
-    if len(model_names) != 108 or len(set(model_names)) != 108:
-        raise ValueError("Expected 108 explicit models (102 PR01 + six Flip Voice)")
+    if len(model_names) != 111 or len(set(model_names)) != 111:
+        raise ValueError("Expected 111 explicit models (102 PR01 + eight Flip Voice + developer grant)")
     projected = current_schema
     for model, table in VOICE_MODELS.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
@@ -44,6 +58,29 @@ def historical_pr01_candidate(current_schema: str) -> str:
         projected, count = re.subn(pattern, "", projected, count=1)
         if count != 1:
             raise ValueError(f"Could not isolate exactly one {model}")
+
+    # New developer grant is independently reviewed with its own additive migration.
+    for model, table in DEVELOPER_MODELS.items():
+        pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
+        match = re.search(pattern, projected)
+        if not match or match.group(1).count(f'@@map("{table}")') != 1:
+            raise ValueError(f"Missing or unapproved developer model mapping: {model}")
+        projected, count = re.subn(pattern, "", projected, count=1)
+        if count != 1:
+            raise ValueError(f"Could not isolate exactly one {model}")
+    for model, fields in DEVELOPER_INVERSE.items():
+        pattern = rf"(?ms)(^model\s+{model}\s*\{{)(.*?)(^\}})"
+        match = re.search(pattern, projected)
+        if not match:
+            raise ValueError(f"Missing model for developer inverse: {model}")
+        body = match.group(2)
+        for field in fields:
+            field_pattern = re.escape(field).replace(r"\ ", r"\s+")
+            exact = rf"(?m)^\s+{field_pattern}\s*\n"
+            if len(re.findall(exact, body)) != 1:
+                raise ValueError(f"Missing/duplicate developer inverse: {model}.{field}")
+            body = re.sub(exact, "", body, count=1)
+        projected = projected[:match.start(2)] + body + projected[match.end(2):]
 
     # These fields create no columns: only the relations referencing the six
     # new models may be stripped from a historical 102-model test fixture.

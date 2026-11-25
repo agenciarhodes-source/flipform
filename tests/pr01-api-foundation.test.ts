@@ -63,11 +63,11 @@ test('only approved scopes exist; API credential management does not inherit man
   assert.equal(isApiV1Scope('integrations.read'), true);
   assert.equal(isApiV1Scope('pipeline.write'), false); // PR02, not PR01
   assert.equal(isApiV1Scope('*'), false);
-  assert.equal(canManageApiV1Keys('owner', TENANT_A, TENANT_A), true);
-  for (const role of ['admin', 'manager', 'agent', 'viewer', 'platform_admin']) {
+  assert.equal(canManageApiV1Keys('developer', TENANT_A, TENANT_A), true);
+  for (const role of ['owner', 'admin', 'manager', 'agent', 'viewer', 'platform_admin']) {
     assert.equal(canManageApiV1Keys(role, TENANT_A, TENANT_A), false, role);
   }
-  assert.equal(canManageApiV1Keys('owner', TENANT_A, TENANT_B), false);
+  assert.equal(canManageApiV1Keys('developer', TENANT_A, TENANT_B), false);
 });
 
 test('entitlement requires same tenant, enabled feature, usable subscription and active plan', () => {

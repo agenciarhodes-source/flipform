@@ -32,7 +32,7 @@ test('PR01 same-origin management guard is deny-by-default', () => {
   assert.equal(isApiV1SameOriginMutation(new Request(url, { method: 'POST' })), false);
 });
 
-test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, rotate, revoke, isolate',
+test('PR01 complete developer-M2M circuit: create disabled, activate, issue, read, rotate, revoke, isolate',
   { skip: process.env.CI !== 'true' },
   async () => {
     assertDisposableOnly();
@@ -42,6 +42,7 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
     const suffix = randomUUID().replace(/-/g, '').slice(0, 12);
     const tenants: string[] = [];
     let actorId = '';
+    let issuerId = '';
     let ownPlanId = '';
     try {
       let plan = await db.plan.findUnique({ where: { slug: 'premium' } });
@@ -61,6 +62,11 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
         passwordHash: 'CI synthetic value only',
       } });
       actorId = actor.id;
+      const issuer = await db.user.create({ data: {
+        name: 'Synthetic platform approver', email: 'closure-issuer-' + suffix + '@example.invalid',
+        passwordHash: 'CI synthetic value only', globalRole: 'platform_admin',
+      } });
+      issuerId = issuer.id;
       await db.tenantUser.createMany({ data: [
         { userId: actorId, tenantId: a.id, role: 'owner', status: 'active' },
         { userId: actorId, tenantId: b.id, role: 'viewer', status: 'active' },
@@ -68,27 +74,35 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
       await db.subscription.create({ data: {
         tenantId: a.id, planId: plan.id, status: 'active', provider: 'synthetic-pr01-closure',
       } });
-      const ownerA = { userId: actorId, tenantId: a.id };
+      const developerA = { userId: actorId, tenantId: a.id };
       const viewerB = { userId: actorId, tenantId: b.id };
-      assert.equal(await mayManageApiV1Credentials(ownerA, a.id, db), true);
+      assert.equal(await mayManageApiV1Credentials(developerA, a.id, db), false,
+        'owner alone must not have API configuration rights');
+      await db.developerTenantGrant.create({ data: {
+        tenantId: a.id, userId: actorId, grantedById: issuerId,
+      } });
+      assert.equal(await mayManageApiV1Credentials(developerA, a.id, db), false,
+        'MFA must be enabled before using a technical grant');
+      await db.user.update({ where: { id: actorId }, data: { mfaEnabledAt: new Date() } });
+      assert.equal(await mayManageApiV1Credentials(developerA, a.id, db), true);
       assert.equal(await mayManageApiV1Credentials(viewerB, b.id, db), false);
 
-      const integration = await createApiV1Integration(ownerA, 'Synthetic Finance Connector', db);
+      const integration = await createApiV1Integration(developerA, 'Synthetic Finance Connector', db);
       assert.ok(integration);
       assert.equal(integration.status, 'disabled');
-      assert.equal((await listApiV1Integrations(ownerA, db))?.length, 1);
+      assert.equal((await listApiV1Integrations(developerA, db))?.length, 1);
       assert.equal(await listApiV1Integrations(viewerB, db), null);
       assert.equal(await setApiV1IntegrationState(viewerB, integration.id, 'active', db), null);
-      assert.equal(await setApiV1IntegrationState(ownerA, integration.id, 'active', db) !== null, true);
-      assert.equal(await belowApiV1KeyLimit(ownerA, integration.id, db), true);
+      assert.equal(await setApiV1IntegrationState(developerA, integration.id, 'active', db) !== null, true);
+      assert.equal(await belowApiV1KeyLimit(developerA, integration.id, db), true);
 
-      const issued = await issueApiV1Key(ownerA, {
+      const issued = await issueApiV1Key(developerA, {
         integrationId: integration.id, scopes: ['integrations.read'],
         expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       }, db);
       assert.ok(issued);
       assert.equal(issued.bearerToken.startsWith('ffv1.'), true);
-      const metadata = await listApiV1Keys(ownerA, integration.id, db);
+      const metadata = await listApiV1Keys(developerA, integration.id, db);
       assert.equal(metadata?.length, 1);
       assert.equal(JSON.stringify(metadata).includes(issued.bearerToken), false);
       assert.equal(JSON.stringify(metadata).includes('secretHashHex'), false);
@@ -142,25 +156,25 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
       assert.ok(await db.tenant.findUnique({ where: { id: protectedTenant.id } }));
       assert.ok(await db.apiIntegration.findUnique({ where: { id: protectedIntegration.id } }));
 
-      const rotated = await rotateApiV1Key(ownerA, issued.credentialId, {
+      const rotated = await rotateApiV1Key(developerA, issued.credentialId, {
         integrationId: integration.id, expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       }, db);
       assert.ok(rotated);
       assert.equal((await call(issued.bearerToken)).status, 401);
       assert.equal((await call(rotated.bearerToken)).status, 200);
-      assert.equal(await revokeApiV1Key(ownerA, rotated.credentialId, integration.id, db), true);
+      assert.equal(await revokeApiV1Key(developerA, rotated.credentialId, integration.id, db), true);
       assert.equal((await call(rotated.bearerToken)).status, 401);
 
       // The five-active-key limit must also hold under simultaneous requests.
       // Two old keys above were revoked, so four fresh sequential keys leave one slot.
       for (let i = 0; i < 4; i++) {
-        const next = await issueApiV1Key(ownerA, {
+        const next = await issueApiV1Key(developerA, {
           integrationId: integration.id, scopes: ['integrations.read'],
           expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
         }, db);
         assert.ok(next);
       }
-      const competingKeys = await Promise.all(Array.from({ length: 3 }, () => issueApiV1Key(ownerA, {
+      const competingKeys = await Promise.all(Array.from({ length: 3 }, () => issueApiV1Key(developerA, {
         integrationId: integration.id, scopes: ['integrations.read'],
         expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       }, db)));
@@ -173,28 +187,28 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
       const other = await db.apiIntegration.create({ data: {
         tenantId: b.id, displayName: 'Synthetic B integration', status: 'active',
       } });
-      assert.equal(await setApiV1IntegrationState(ownerA, other.id, 'disabled', db), null);
-      assert.equal(await listApiV1Keys(ownerA, other.id, db), null);
-      assert.equal(await issueApiV1Key(ownerA, {
+      assert.equal(await setApiV1IntegrationState(developerA, other.id, 'disabled', db), null);
+      assert.equal(await listApiV1Keys(developerA, other.id, db), null);
+      assert.equal(await issueApiV1Key(developerA, {
         integrationId: other.id, scopes: ['integrations.read'],
         expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       }, db), null);
-      const disabled = await setApiV1IntegrationState(ownerA, integration.id, 'disabled', db);
+      const disabled = await setApiV1IntegrationState(developerA, integration.id, 'disabled', db);
       assert.equal(disabled?.status, 'disabled');
 
       // A tenant cap needs the same protection; only one of three races may
       // occupy the fourth slot after two additional sequential integrations.
       for (let i = 0; i < 2; i++) {
-        assert.ok(await createApiV1Integration(ownerA, `Supplementary ${i}`, db));
+        assert.ok(await createApiV1Integration(developerA, `Supplementary ${i}`, db));
       }
       const competingIntegrations = await Promise.all(Array.from({ length: 3 }, (_, i) =>
-        createApiV1Integration(ownerA, `Concurrent ${i}`, db)));
+        createApiV1Integration(developerA, `Concurrent ${i}`, db)));
       assert.equal(competingIntegrations.filter(Boolean).length, 1);
-      assert.equal((await listApiV1Integrations(ownerA, db))?.length, 4);
+      assert.equal((await listApiV1Integrations(developerA, db))?.length, 4);
 
       process.env.FLIPFORM_API_V1_ENABLED = 'false';
       assert.equal((await call(rotated.bearerToken)).status, 404);
-      assert.equal(await createApiV1Integration(ownerA, 'Must fail', db), null);
+      assert.equal(await createApiV1Integration(developerA, 'Must fail', db), null);
     } finally {
       if (tenants.length) {
         const where = { tenantId: { in: tenants } };
@@ -204,10 +218,12 @@ test('PR01 complete owner-M2M circuit: create disabled, activate, issue, read, r
         await db.apiIntegration.deleteMany({ where });
         await db.auditLog.deleteMany({ where });
         await db.subscription.deleteMany({ where });
+        await db.developerTenantGrant.deleteMany({ where });
         await db.tenantUser.deleteMany({ where });
         await db.tenant.deleteMany({ where: { id: { in: tenants } } });
       }
       if (actorId) await db.user.delete({ where: { id: actorId } });
+      if (issuerId) await db.user.delete({ where: { id: issuerId } });
       if (ownPlanId) await db.plan.delete({ where: { id: ownPlanId } });
       if (oldFlag === undefined) delete process.env.FLIPFORM_API_V1_ENABLED;
       else process.env.FLIPFORM_API_V1_ENABLED = oldFlag;

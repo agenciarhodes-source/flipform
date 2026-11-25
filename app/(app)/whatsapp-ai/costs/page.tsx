@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { redirect } from 'next/navigation';
-import { getSession } from '@/lib/auth';
+import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { operationCosts } from '@/lib/costs/operation-costs';
 import { usd, WHATSAPP_PRICES_SNAPSHOT } from '@/lib/costs/pricing';
@@ -24,7 +24,7 @@ function monthOptions(count = 12) {
 /** How much the operation costs: AI and WhatsApp, per month, per result and per day. */
 export default async function CostsPage(props: { searchParams: Promise<{ month?: string }> }) {
   const searchParams = await props.searchParams;
-  const session = await getSession();
+  const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!session.tenantId || !can(session.role, 'FLIP_AI_MANAGE')) redirect('/dashboard');
   const months = monthOptions();

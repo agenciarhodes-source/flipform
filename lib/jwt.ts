@@ -10,6 +10,8 @@ export interface JwtSessionPayload {
   globalRole?: string | null;
   /** Session version of the user when the token was issued (security protocol S2). */
   sv?: number;
+  /** Proof that the second factor was verified for this session, in epoch seconds. */
+  mfaVerifiedAt?: number;
 }
 
 const JWT_SECRET_CURRENT = process.env.JWT_SECRET_CURRENT || process.env.JWT_SECRET;

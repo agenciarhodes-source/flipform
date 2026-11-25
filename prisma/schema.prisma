@@ -99,6 +99,7 @@ model Tenant {
   createdAt     DateTime     @default(now()) @map("created_at")
   updatedAt     DateTime     @updatedAt @map("updated_at")
 
+  developerGrants       DeveloperTenantGrant[]
   tenantUsers           TenantUser[]
   forms                 Form[]
   pipelines             Pipeline[]
@@ -160,6 +161,8 @@ model Tenant {
   flipVoiceBudgets FlipVoiceBudget[]
   flipVoiceCalls FlipVoiceCall[]
   flipVoiceEvents FlipVoiceEvent[]
+  flipVoiceLines FlipVoiceLine[]
+  flipVoiceContactPermissions FlipVoiceContactPermission[]
 
   // PR01 additive API foundation. No production schema change is authorized here.
   apiV1Integrations ApiIntegration[]
@@ -221,6 +224,8 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
+  developerGrants     DeveloperTenantGrant[] @relation("DeveloperGrantUser")
+  developerGrantsIssued DeveloperTenantGrant[] @relation("DeveloperGrantIssuer")
   tenantUsers         TenantUser[]
   assignedLeads       Lead[]                @relation("AssignedLeads")
   stageChanges        LeadStageHistory[]    @relation("StageChanger")
@@ -242,6 +247,27 @@ model User {
   flipAiTopUpOrdersCreated FlipAiTopUpOrder[] @relation("FlipAiTopUpOrderCreator")
 
   @@map("users")
+}
+
+
+/// Tenant-scoped developer entitlement; separate from platform_admin.
+/// Requires explicit grant, verified MFA and an active tenant.
+model DeveloperTenantGrant {
+  id          String    @id @default(uuid())
+  tenantId    String    @map("tenant_id")
+  userId      String    @map("user_id")
+  grantedById String    @map("granted_by_id")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user        User   @relation("DeveloperGrantUser", fields: [userId], references: [id], onDelete: Restrict)
+  grantedBy   User   @relation("DeveloperGrantIssuer", fields: [grantedById], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, userId])
+  @@index([userId, revokedAt])
+  @@map("developer_tenant_grants")
 }
 
 model TenantUser {
@@ -2518,6 +2544,7 @@ model FlipVoiceProfile {
   agent       FlipAiAgent? @relation(fields: [tenantId, agentId], references: [tenantId, id], onDelete: Restrict)
   consents    FlipVoiceConsent[]
   calls       FlipVoiceCall[]
+  lines       FlipVoiceLine[]
 
   @@unique([tenantId, id])
   @@index([tenantId, agentId])
@@ -2569,6 +2596,9 @@ model FlipVoiceCall {
   tenantId          String   @map("tenant_id")
   profileId         String   @map("profile_id")
   consentId         String   @map("consent_id")
+  lineId            String?  @map("line_id")
+  leadId            String?  @map("lead_id")
+  contactPermissionId String? @map("contact_permission_id")
   channel           String
   direction         String
   status            String   @default("held")
@@ -2577,6 +2607,9 @@ model FlipVoiceCall {
   reservedUsdMicros BigInt   @default(0) @map("reserved_usd_micros")
   billedUsdMicros   BigInt   @default(0) @map("billed_usd_micros")
   providerCallId    String?  @map("provider_call_id")
+  // Hash of one-time Twilio outbound callback ticket; never store plaintext.
+  outboundWebhookTicketHash String? @unique @map("outbound_webhook_ticket_hash")
+  outboundTwiMLClaimedAt DateTime? @map("outbound_twiml_claimed_at")
   startedAt         DateTime? @map("started_at")
   endedAt           DateTime? @map("ended_at")
   createdAt         DateTime @default(now()) @map("created_at")
@@ -2585,6 +2618,8 @@ model FlipVoiceCall {
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   profile           FlipVoiceProfile @relation(fields: [tenantId, profileId], references: [tenantId, id], onDelete: Restrict)
   consent           FlipVoiceConsent @relation(fields: [tenantId, profileId, consentId], references: [tenantId, profileId, id], onDelete: Restrict)
+  line              FlipVoiceLine? @relation(fields: [tenantId, lineId], references: [tenantId, id], onDelete: Restrict)
+  contactPermission FlipVoiceContactPermission? @relation(fields: [tenantId, contactPermissionId], references: [tenantId, id], onDelete: Restrict)
   events            FlipVoiceEvent[]
 
   @@unique([tenantId, id])
