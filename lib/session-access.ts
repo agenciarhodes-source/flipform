@@ -47,7 +47,9 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
   { ok: true; session: SessionPayload } | { ok: false; reason: string }
 > {
   const key = `${session.userId}|${session.tenantId || '-'}|${session.sv ?? 0}`;
-  let decision = fresh(accessCache, key);
+  // Technical sessions recheck the current user/session version on every request.
+  const technicalSession = needsFreshTechnicalSession(session);
+  let decision = technicalSession ? null : fresh(accessCache, key);
   if (!decision) {
     const [user, membership] = await Promise.all([
       prisma.user.findUnique({ where: { id: session.userId }, select: { sessionVersion: true, globalRole: true } }),
@@ -126,7 +128,7 @@ export async function tenantAccessAllowed(session: SessionPayload) {
   if (session.globalRole === 'platform_admin' || !session.tenantId) {
     return { allow: true, status: null, reason: 'super_admin' };
   }
-  const cached = fresh(tenantCache, session.tenantId);
+  const cached = session.role === 'developer' ? null : fresh(tenantCache, session.tenantId);
   if (cached) return cached;
   const [tenant, subscription] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { status: true } }),
