@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withPlatformAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { mayProvisionDeveloperMembership, shouldDeactivateDeveloperCreatedAllowlist } from '@/lib/developer-access/security-rules';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
@@ -42,16 +43,26 @@ export const POST = withPlatformAdmin(async (req, session) => {
     if (!user || user.globalRole === 'platform_admin') return { status: 409 };
     const existing = await tx.developerTenantGrant.findUnique({ where: { tenantId_userId: { tenantId, userId } } });
     if (existing && !existing.revokedAt) return { status: 409 };
-    await tx.tenantUser.upsert({
+    // A technical grant must never reinstate a previously disabled company account.
+    // Provision only genuinely missing records, preserving any existing company role.
+    const existingMembership = await tx.tenantUser.findUnique({
       where: { tenantId_userId: { tenantId, userId } },
-      create: { tenantId, userId, role: 'viewer', status: 'active' },
-      update: { status: 'active' },
+      select: { status: true, role: true },
     });
-    await tx.allowedUser.upsert({
+    const existingAllowlist = await tx.allowedUser.findUnique({
       where: { tenantId_email: { tenantId, email: user.email } },
-      create: { tenantId, email: user.email, role: 'viewer', status: 'active', active: true, source: 'developer_grant', invitedBy: session.userId },
-      update: { active: true, status: 'active' },
+      select: { active: true, status: true },
     });
+    if (!mayProvisionDeveloperMembership({ existingMembership, existingAllowlist })) return { status: 409 };
+    if (!existingMembership) {
+      await tx.tenantUser.create({ data: { tenantId, userId, role: 'viewer', status: 'active' } });
+    }
+    if (!existingAllowlist) {
+      await tx.allowedUser.create({ data: {
+        tenantId, email: user.email, role: existingMembership?.role ?? 'viewer',
+        status: 'active', active: true, source: 'developer_grant', invitedBy: session.userId,
+      } });
+    }
     const grant = await tx.developerTenantGrant.upsert({
       where: { tenantId_userId: { tenantId, userId } },
       create: { tenantId, userId, grantedById: session.userId },
@@ -60,7 +71,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
     await tx.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
     return { status: 201, id: grant.id };
   });
-  if (result.status !== 201) return NextResponse.json({ error: 'Empresa ou usuário não elegível ou acesso já concedido.' }, { status: result.status });
+  if (result.status !== 201) return NextResponse.json({ error: 'Empresa ou usuário não elegível, vínculo empresarial desativado ou acesso já concedido.' }, { status: result.status });
   await logPlatformAudit({ tenantId, userId: session.userId, entityType: 'developer_grant', entityId: result.id!,
     action: 'developer.granted', metadata: { targetUserId: userId } });
   return NextResponse.json({ ok: true, grantId: result.id }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
@@ -76,6 +87,21 @@ export const DELETE = withPlatformAdmin(async (req, session) => {
     const current = await tx.developerTenantGrant.findUnique({ where: { tenantId_userId: { tenantId, userId } } });
     if (!current || current.revokedAt) return null;
     await tx.developerTenantGrant.update({ where: { id: current.id }, data: { revokedAt: new Date() } });
+    // Never leave login access behind when it was provisioned solely by this
+    // developer grant. Existing customer-issued allowlist entries remain intact.
+    const account = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (account?.email) {
+      const allowlist = await tx.allowedUser.findUnique({
+        where: { tenantId_email: { tenantId, email: account.email } },
+        select: { source: true },
+      });
+      if (shouldDeactivateDeveloperCreatedAllowlist(allowlist?.source)) {
+        await tx.allowedUser.update({
+          where: { tenantId_email: { tenantId, email: account.email } },
+          data: { active: false, status: 'inactive' },
+        });
+      }
+    }
     await tx.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
     return current.id;
   });
