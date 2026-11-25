@@ -74,7 +74,7 @@ jobs:
 
       # Developer access: fail closed for technical modules across companies.
       - name: Developer MFA and tenant-grant authorization tests (offline)
-        run: npx tsx --test tests/developer-access-policy.test.ts tests/developer-route-policy.test.ts
+        run: npx tsx --test tests/developer-access-policy.test.ts tests/developer-route-policy.test.ts tests/developer-security-hardening.test.ts
 
       # Read-key introspection: bounded scopes, never client-provided tenants.
       - name: API v1 read-key identity parser tests (offline)
