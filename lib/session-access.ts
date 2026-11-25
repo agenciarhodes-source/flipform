@@ -70,12 +70,13 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
       groupRole,
       tokenRole: session.role,
     });
-    remember(accessCache, key, decision);
+    if (!technicalSession) remember(accessCache, key, decision);
   }
   if (!decision.ok) return { ok: false, reason: decision.reason };
   // Critical entitlement is never taken from JWT or the 30-second access cache.
   // A grant is scoped to exactly one tenant and is rechecked on every verified request.
-  let role = decision.role;
+  // A developer role in a cookie, including a stale or forged claim, is never a grant.
+  let role = decision.role === 'developer' ? 'viewer' : decision.role;
   if (session.tenantId && Number.isSafeInteger(session.mfaVerifiedAt)
     && (session.mfaVerifiedAt ?? 0) > 0
     && Date.now() / 1000 - (session.mfaVerifiedAt ?? 0) < 7 * 24 * 60 * 60
