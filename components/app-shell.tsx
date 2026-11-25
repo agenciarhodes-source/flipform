@@ -59,6 +59,7 @@ type NavItem = {
 };
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/account/security", label: "Segurança da conta", icon: Settings },
   { href: "/flip", label: "Flip", icon: Sparkles, permission: "LEADS_VIEW" },
   { href: "/team", label: "Visão da equipe", icon: Network, permission: "DASHBOARD_VIEW", show: (role) => ['owner', 'admin', 'manager'].includes(role) },
   { href: "/kanban", label: "Kanban", icon: KanbanSquare },
@@ -390,6 +391,8 @@ export function AppShell({
                   <DropdownMenuItem asChild><Link href="/group"><Building2 className="w-4 h-4 mr-2" />Visão do grupo</Link></DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild><Link href="/account/security"><Settings className="w-4 h-4 mr-2" />Segurança da conta</Link></DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onLogout} className="text-destructive">
                 <LogOut className="w-4 h-4 mr-2" /> Sair
