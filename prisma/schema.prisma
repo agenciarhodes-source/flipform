@@ -168,6 +168,7 @@ model Tenant {
   apiV1Integrations ApiIntegration[]
   apiV1EntitlementGrants TenantEntitlementGrant[]
   apiV1CredentialAudits ApiCredentialAudit[]
+  universalConnections UniversalConnection[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -2705,4 +2706,48 @@ model FlipVoiceContactPermission {
   @@unique([tenantId, id])
   @@index([tenantId, leadId, channel, status])
   @@map("flip_voice_contact_permissions")
+}
+
+/// Universal Connect PR-A. Separate from outbound API v1. No enabled connections by default.
+model UniversalConnection {
+  id           String    @id @default(uuid())
+  tenantId     String    @map("tenant_id")
+  providerId   String    @map("provider_id")
+  authMethod   String    @map("auth_method")
+  enabled      Boolean   @default(false)
+  revokedAt    DateTime? @map("revoked_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  credential   UniversalConnectionCredential?
+  audits       UniversalConnectionAudit[]
+
+  @@unique([tenantId, id])
+  @@index([tenantId, providerId])
+  @@map("universal_connections")
+}
+
+model UniversalConnectionCredential {
+  tenantId     String @map("tenant_id")
+  connectionId String @map("connection_id")
+  keyId        String @map("key_id")
+  ciphertext   String
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  connection UniversalConnection @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@id([tenantId, connectionId])
+  @@map("universal_connection_credentials")
+}
+
+model UniversalConnectionAudit {
+  id           String @id @default(uuid())
+  tenantId     String @map("tenant_id")
+  connectionId String @map("connection_id")
+  actorUserId  String @map("actor_user_id")
+  action       String
+  createdAt    DateTime @default(now()) @map("created_at")
+  connection UniversalConnection @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict)
+
+  @@index([tenantId, connectionId, createdAt], map: "uc_audits_tenant_conn_created_idx")
+  @@map("universal_connection_audits")
 }

@@ -100,6 +100,11 @@ jobs:
       - name: Flip Voice core tests (offline)
         run: npx tsx --test tests/flip-voice-policy.test.ts tests/flip-voice-agent-core.test.ts tests/flip-voice-elevenlabs-agent.test.ts tests/flip-ai-external-fk-trigger-allowlist.test.ts tests/flip-voice-telephony-core.test.ts tests/flip-voice-telephony-provider.test.ts tests/flip-voice-whatsapp-calling.test.ts tests/flip-voice-whatsapp-twilio-provider.test.ts
 
+      - name: Universal Connect contract and vault tests (offline)
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npx tsx --test tests/universal-connectors-contracts.test.ts tests/universal-connectors-vault.test.ts
+
       - name: Prisma generate
         run: npx prisma generate
 
@@ -212,6 +217,14 @@ jobs:
 
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
+
+      - name: Universal Connect tenant isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/universal-connectors-registry.integration.test.ts
 
       # PR01 Phase 2: synthetic-only isolation on the runner's disposable PostgreSQL.
       # Never use Neon, Vercel, or external integrations in this suite.
