@@ -16,7 +16,6 @@ export default function DeveloperAccessAdminPage() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newTenantId, setNewTenantId] = useState('');
   const [catalogError, setCatalogError] = useState('');
   const securityLink = 'https://app.flipform.com.br/account/security';
   const selectedAccount = data?.users.find(u => u.id === userId);
@@ -41,14 +40,14 @@ export default function DeveloperAccessAdminPage() {
 
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newName.trim() || !newEmail.trim() || newPassword.length < 12 || !newTenantId) return;
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 12) return;
     setLoading(true);
     setMessage('');
     try {
       const response = await fetch('/api/admin/developer-accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, email: newEmail, password: newPassword, tenantId: newTenantId }),
+        body: JSON.stringify({ name: newName, email: newEmail, password: newPassword }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Não foi possível cadastrar a conta.');
@@ -57,8 +56,7 @@ export default function DeveloperAccessAdminPage() {
       setNewPassword('');
       await refresh();
       setUserId(result.account.id);
-      setTenantId(newTenantId);
-      setMessage('Desenvolvedor criado e vinculado à empresa selecionada. Para vincular outra conta técnica, use “Adicionar Desenvolvedor à empresa”. O novo usuário confirma o MFA no primeiro acesso.');
+      setMessage('Conta de Desenvolvedor criada. Agora, na seção abaixo, escolha uma empresa e autorize este Desenvolvedor. O MFA é configurado uma vez por conta.');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Falha no cadastro.');
     } finally {
@@ -88,7 +86,7 @@ export default function DeveloperAccessAdminPage() {
     <div>
       <h1 className="text-2xl font-bold">Acesso de Desenvolvedor</h1>
       <p className="text-sm text-muted-foreground mt-1">
-        Concessões por empresa. Somente usuários já cadastrados. O Admin autoriza o acesso; a própria conta ativa e confirma MFA antes de obter privilégios técnicos.
+        Crie o perfil técnico uma única vez e escolha as empresas autorizadas. O Desenvolvedor usa o mesmo login e MFA para todas as empresas vinculadas.
         Nunca solicite a senha do cliente.
       </p>
     </div>
@@ -96,8 +94,8 @@ export default function DeveloperAccessAdminPage() {
     {catalogError && <div role="alert" className="rounded border p-4 space-y-2 text-sm"><strong>Empresas e usuários não carregaram.</strong><p>{catalogError}</p><p>Se a autenticação MFA expirou, entre novamente no Super Admin. Depois, atualize esta página.</p><button type="button" onClick={() => refresh().catch(e => setCatalogError(e instanceof Error ? e.message : 'Erro ao atualizar.'))} className="rounded border px-3 py-2">Tentar novamente</button></div>}
     {data?.tenants.length === 0 && <p role="status" className="rounded border p-3 text-sm">Nenhuma empresa ativa disponível. Verifique o cadastro de empresas no Super Admin.</p>}
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Criar Desenvolvedor para uma empresa</h2>
-      <p className="text-sm text-muted-foreground">Escolha a empresa e cadastre a conta que atuará como Desenvolvedor nela. Você pode vincular o mesmo Desenvolvedor a outras empresas depois. O MFA é obrigatório no login técnico.</p>
+      <h2 className="font-semibold">1. Criar conta de Desenvolvedor</h2>
+      <p className="text-sm text-muted-foreground">Cadastre uma única conta técnica com nome, e-mail e senha. Nenhuma empresa é vinculada nesta etapa. Use a segunda seção para escolher quais empresas essa conta pode acessar.</p>
       <form onSubmit={createAccount} className="grid gap-3">
         <label className="text-sm">Nome
           <input required minLength={2} maxLength={120} autoComplete="off" className="mt-1 block w-full rounded border p-2" value={newName} onChange={e => setNewName(e.target.value)} />
@@ -108,21 +106,15 @@ export default function DeveloperAccessAdminPage() {
         <label className="text-sm">Perfil
           <input value="Desenvolvedor" readOnly className="mt-1 block w-full rounded border bg-muted/40 p-2" aria-label="Perfil" />
         </label>
-        <label className="text-sm">Empresa que receberá o Desenvolvedor
-          <select required className="mt-1 block w-full rounded border p-2" value={newTenantId} onChange={e => setNewTenantId(e.target.value)}>
-            <option value="">Selecione a empresa</option>
-            {data?.tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </label>
         <label className="text-sm">Senha inicial (mínimo 12 caracteres)
           <input required type="password" minLength={12} maxLength={128} autoComplete="new-password" className="mt-1 block w-full rounded border p-2" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
         </label>
-        <button type="submit" disabled={loading || !data || !newTenantId || newPassword.length < 12} className="w-fit rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">Criar e autorizar Desenvolvedor</button>
+        <button type="submit" disabled={loading || newPassword.length < 12} className="w-fit rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">Criar conta de Desenvolvedor</button>
       </form>
     </section>
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Adicionar Desenvolvedor à empresa</h2>
-      <p className="text-sm text-muted-foreground">Escolha a empresa e depois a conta do Desenvolvedor que terá permissão nela. A autenticação MFA é feita uma única vez por conta.</p>
+      <h2 className="font-semibold">2. Autorizar Desenvolvedor em uma empresa</h2>
+      <p className="text-sm text-muted-foreground">Selecione a empresa e uma conta técnica já cadastrada. Repita para outras empresas, sem criar outro e-mail ou senha. No login, o Desenvolvedor escolhe uma empresa autorizada.</p>
       <label className="block text-sm">Empresa
         <select className="mt-1 block w-full rounded border p-2" value={tenantId} onChange={e => setTenantId(e.target.value)}>
           <option value="">Selecione a empresa</option>
@@ -131,7 +123,7 @@ export default function DeveloperAccessAdminPage() {
       </label>
       <label className="block text-sm">Desenvolvedor a autorizar
         <select className="mt-1 block w-full rounded border p-2" value={userId} onChange={e => setUserId(e.target.value)}>
-          <option value="">Selecione o desenvolvedor</option>
+          <option value="">Selecione a conta técnica</option>
           {data?.users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email} {u.mfaEnabledAt ? '· MFA ativo' : '· MFA pendente'}</option>)}
         </select>
       </label>
