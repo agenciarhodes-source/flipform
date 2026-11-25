@@ -18,3 +18,8 @@ export function mayUseDeveloperGrant(input: {
   return input.hasGrant && !input.revoked && input.mfaVerified && input.mfaEnabled
     && input.membershipActive && input.allowlistActive;
 }
+
+/** Revoke only the login authorization introduced by a technical grant. */
+export function shouldDeactivateDeveloperCreatedAllowlist(source: string | null | undefined): boolean {
+  return source === 'developer_grant';
+}
