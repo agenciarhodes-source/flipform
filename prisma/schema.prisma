@@ -2751,3 +2751,17 @@ model UniversalConnectionAudit {
   @@index([tenantId, connectionId, createdAt], map: "uc_audits_tenant_conn_created_idx")
   @@map("universal_connection_audits")
 }
+
+/// Encrypted CPF and keyed lookup fingerprint, separate from the lead.
+model LeadPersonalDocument {
+  leadId String @id @map("lead_id")
+  tenantId String @map("tenant_id")
+  cpfEncrypted String @map("cpf_encrypted")
+  cpfHash String @map("cpf_hash")
+  source String
+  updatedBy String? @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([tenantId, cpfHash])
+  @@map("lead_personal_documents")
+}

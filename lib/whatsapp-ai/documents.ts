@@ -9,6 +9,10 @@ import { sniffAttachmentMimeType } from '@/lib/flip-ai/chat-attachment';
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 import { checklistStatus, documentSummary, type ChecklistItem, type DocumentStatus } from './document-rules';
 
+import { tenantHasFeature } from '@/lib/billing/tenant-features';
+import { setLeadCpf } from '@/lib/leads/cpf';
+import { redactCpfText } from '@/lib/leads/cpf-rules';
+
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
 const READER_FORMAT: OpenAiJsonSchemaFormat = {
@@ -116,6 +120,7 @@ export async function readWhatsAppDocument(input: {
 
   const chosen = await prisma.conversationDocumentCase.findUnique({ where: { conversationId: input.conversationId }, select: { checklistId: true } }).catch(() => null);
   const lists = chosen ? checklists.filter((list) => list.id === chosen.checklistId) : checklists;
+  const cpfEnabled = await tenantHasFeature(input.tenantId, 'lead_cpf');
   const instructions = [
     'Você confere documentos enviados por clientes de uma empresa. Identifique qual documento das listas abaixo é o arquivo.',
     'Listas (id da lista · chave do item · nome · regra):',
@@ -124,15 +129,15 @@ export async function readWhatsAppDocument(input: {
     'Responda checklistId e itemKey exatamente como na lista, ou null se o arquivo não for nenhum deles.',
     'detectedType: o que o documento é, em poucas palavras. legible: se dá para ler os dados com clareza.',
     'problem: null se estiver tudo certo; senão, em uma frase, o problema (ilegível, cortado, vencido, fora da regra).',
-    'Não transcreva dados pessoais do documento na resposta.',
+    ...(cpfEnabled ? ['holderCpf: leia somente o CPF do titular de RG, CNH, cartão CPF ou CTPS digital, se legível; nunca de terceiro, mãe, cônjuge ou testemunha. Caso contrário null. Fora o holderCpf, não transcreva dados pessoais.'] : ['Não transcreva dados pessoais do documento na resposta.']),
   ].join('\n');
 
   const model = (await getActiveFlipAiTextModel()).model;
-  let answer: { checklistId: string | null; itemKey: string | null; detectedType: string; legible: boolean; problem: string | null } | null = null;
+  let answer: { checklistId: string | null; itemKey: string | null; detectedType: string; legible: boolean; problem: string | null; holderCpf?: string | null } | null = null;
   let usage: { model: string; inputTokens: number; outputTokens: number; responseId: string } | null = null;
   try {
     const result = await streamOpenAiText({ instructions, messages: [{ role: 'user', content: parts }] }, () => undefined, {
-      model, textFormat: READER_FORMAT, timeoutMs: 30_000, maxOutputTokens: 300, safetyIdentifier: input.conversationId,
+      model, textFormat: cpfEnabled ? { ...READER_FORMAT, schema: { ...READER_FORMAT.schema, required: ['checklistId', 'itemKey', 'detectedType', 'legible', 'problem', 'holderCpf'], properties: { checklistId: { type: ['string', 'null'] }, itemKey: { type: ['string', 'null'] }, detectedType: { type: 'string' }, legible: { type: 'boolean' }, problem: { type: ['string', 'null'] }, holderCpf: { type: ['string', 'null'] } } } } : READER_FORMAT, timeoutMs: 30_000, maxOutputTokens: 300, safetyIdentifier: input.conversationId,
     });
     usage = result;
     answer = JSON.parse(result.text);
@@ -148,6 +153,9 @@ export async function readWhatsAppDocument(input: {
       : !item ? 'unrecognized'
         : answer.problem ? 'problem' : 'received';
   const conversation = await prisma.conversation.findFirst({ where: { id: input.conversationId, tenantId: input.tenantId }, select: { leadId: true } });
+  if (cpfEnabled && conversation?.leadId && answer?.legible && answer.holderCpf) {
+    await setLeadCpf({ tenantId: input.tenantId, leadId: conversation.leadId, cpf: answer.holderCpf, source: 'document', onlyIfEmpty: true }).catch(() => undefined);
+  }
   const saved = await prisma.leadDocument.create({
     data: {
       tenantId: input.tenantId,
@@ -156,9 +164,9 @@ export async function readWhatsAppDocument(input: {
       messageId: input.message.id,
       checklistId: list?.id || null,
       itemKey: item?.key || null,
-      detectedType: answer?.detectedType?.slice(0, 120) || null,
+      detectedType: (cpfEnabled && answer?.detectedType ? redactCpfText(answer.detectedType).slice(0, 120) : answer?.detectedType?.slice(0, 120)) || null,
       status,
-      note: answer?.problem?.slice(0, 300) || null,
+      note: (cpfEnabled && answer?.problem ? redactCpfText(answer.problem).slice(0, 300) : answer?.problem?.slice(0, 300)) || null,
     },
   }).catch(() => null);
   // The first recognized document decides the case of the conversation.

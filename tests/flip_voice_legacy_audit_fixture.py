@@ -40,6 +40,9 @@ DEVELOPER_INVERSE = {
         'developerGrantsIssued DeveloperTenantGrant[] @relation("DeveloperGrantIssuer")',
     },
 }
+POST_VOICE_MODELS = {"LeadPersonalDocument": "lead_personal_documents"}
+UNIVERSAL_MODELS = {"UniversalConnection": "universal_connections", "UniversalConnectionCredential": "universal_connection_credentials", "UniversalConnectionAudit": "universal_connection_audits"}
+CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS)
 PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
 CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
@@ -47,9 +50,22 @@ CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermis
 def historical_pr01_candidate(current_schema: str) -> str:
     """Return only the approved historical 102-model candidate for PR01 tests."""
     model_names = re.findall(r"(?m)^model\s+(\w+)\s*\{", current_schema)
-    if len(model_names) != 111 or len(set(model_names)) != 111:
-        raise ValueError("Expected 111 explicit models (102 PR01 + eight Flip Voice + developer grant)")
+    if len(model_names) != CURRENT_MODEL_COUNT or len(set(model_names)) != CURRENT_MODEL_COUNT:
+        raise ValueError(f"Expected {CURRENT_MODEL_COUNT} explicitly approved models")
     projected = current_schema
+    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS}.items():
+        pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
+        match = re.search(pattern, projected)
+        if not match or match.group(1).count(f'@@map("{table}")') != 1:
+            raise ValueError(f"Missing or unapproved later model mapping: {model}")
+        if model in POST_VOICE_MODELS and "@relation" in match.group(1):
+            raise ValueError(f"Unexpected relation: {model}")
+        projected, count = re.subn(pattern, "", projected, count=1)
+        if count != 1:
+            raise ValueError(f"Could not isolate exactly one {model}")
+    projected, count = re.subn(r"(?m)^\s+universalConnections UniversalConnection\[\]\s*\n", "", projected)
+    if count != 1:
+        raise ValueError("Missing or duplicate UniversalConnection inverse")
     for model, table in VOICE_MODELS.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
         match = re.search(pattern, projected)
