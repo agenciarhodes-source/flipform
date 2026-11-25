@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buttonVariants } from '@/components/ui/button';
+import { buttonVariants, Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 type CaseView = {
   name: string;
@@ -9,7 +10,7 @@ type CaseView = {
   others: Array<{ messageId: string; detectedType: string | null; status: string; createdAt: string }>;
 };
 
-type ClosingView = {conversationId:string;sentAt:string;sendComplete:boolean;reviewRequired:boolean;items:Array<{id:string;name:string;status:string;note:string|null;href:string|null}>};
+type ClosingView = {conversationId:string;sentId:string;sentAt:string;sendComplete:boolean;reviewRequired:boolean;complete:boolean;modeApproved:boolean;taskCreated:boolean;items:Array<{id:string;name:string;status:string;note:string|null;href:string|null}>};
 const ICON: Record<string, string> = { received: '✅', unreadable: '⚠️', problem: '⚠️', missing: '⏳', unrecognized: '❔' };
 const LABEL: Record<string, string> = { received: 'Recebido', unreadable: 'Ilegível', problem: 'Com problema', missing: 'Falta', unrecognized: 'Não reconhecido' };
 
@@ -18,15 +19,28 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
   const [cases, setCases] = useState<CaseView[] | null>(null);
   const [closing,setClosing]=useState<ClosingView[]>([]);
   const [cpfRegistered,setCpfRegistered]=useState(false);
+  const [canApprove,setCanApprove]=useState(false);
+  const [refresh,setRefresh]=useState(0);
+  const [busy,setBusy]=useState(false);
+  async function approve(entry:ClosingView,mode:'separate'|'package') {
+    if(!window.confirm('Confirmar este formato de devolução para os modelos enviados? Isso pode gerar uma tarefa para revisão humana.'))return;
+    setBusy(true);
+    try {
+      const res=await fetch('/api/leads/'+encodeURIComponent(leadId)+'/closing-return-mode',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationId:entry.conversationId,sentId:entry.sentId,mode})});
+      const result=await res.json();
+      if(!res.ok)throw Error(result.error||'Não foi possível confirmar.');
+      toast.success('Formato confirmado.');setRefresh(n=>n+1);
+    }catch(error){toast.error(error instanceof Error?error.message:'Não foi possível confirmar.');}finally{setBusy(false);}
+  }
   useEffect(() => {
     let active=true;
-    setCases(null); setClosing([]); setCpfRegistered(false);
+    setCases(null); setClosing([]); setCpfRegistered(false);setCanApprove(false);
     fetch(`/api/leads/${encodeURIComponent(leadId)}/documents`, { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : { cases: [] }))
-      .then((data) => {if(!active)return;setCases(Array.isArray(data.cases)?data.cases:[]);setClosing(Array.isArray(data.closing)?data.closing:[]);setCpfRegistered(data.cpfRegistered===true);})
+      .then((data) => {if(!active)return;setCases(Array.isArray(data.cases)?data.cases:[]);setClosing(Array.isArray(data.closing)?data.closing:[]);setCpfRegistered(data.cpfRegistered===true);setCanApprove(data.canApproveClosingMode===true);})
       .catch(() => {if(active)setCases([]);});
     return ()=>{active=false;};
-  }, [leadId]);
+  }, [leadId,refresh]);
 
   if (cases === null) return <p className="text-sm text-muted-foreground">Carregando documentos...</p>;
   if (!cases.length && !closing.length) {
@@ -38,6 +52,12 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
         <h3 className="font-medium">Contratos assinados</h3>
         <p className="text-xs text-muted-foreground">Conferência preliminar · revisão humana necessária · CPF cadastrado: {cpfRegistered?'sim':'não'}</p>
         {!entry.sendComplete && <p className="text-sm">Envio de modelos não confirmado integralmente.</p>}
+        {entry.taskCreated?<p className="text-sm font-medium">Tarefa de análise criada. Confira eventuais reenvios antes do lançamento.</p>:entry.complete?<p className="text-sm font-medium">Recebimento visual completo. Revisão humana necessária.</p>:<p className="text-sm">{entry.modeApproved?'Aguardando documentos completos.':'Formato de devolução aguardando confirmação do dono.'}</p>}
+        {canApprove&&entry.sendComplete&&!entry.modeApproved&&!entry.taskCreated&&<div className="flex flex-wrap gap-2">
+          {entry.items.length===3&&<Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void approve(entry,'separate')}>Confirmar 3 documentos separados</Button>}
+          {entry.items.length===1&&<Button type="button" size="sm" variant="outline" disabled={busy} onClick={()=>void approve(entry,'package')}>Confirmar modelo único completo</Button>}
+          {entry.items.length!==1&&entry.items.length!==3&&<p className="text-xs">Formato não suportado. Conferência manual necessária.</p>}
+        </div>}
         <ul className="space-y-2 text-sm">{entry.items.map(item=><li key={item.id} className="flex flex-wrap items-center gap-2">
           <span aria-hidden="true">{ICON[item.status]||'⏳'}</span><span className="font-medium">{item.name}</span>
           <span className="text-xs text-muted-foreground">{item.status==='received'?'Recebido — conferência visual':LABEL[item.status]||item.status}{item.note?' · '+item.note:''}</span>

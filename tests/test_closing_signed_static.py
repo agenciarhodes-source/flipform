@@ -25,3 +25,17 @@ def test_signed_review_respects_scope_and_keeps_human_review():
     assert "complete:false as const" in rules and "reviewRequired:true as const" in rules
     assert "signedReview: review?.instruction" in read("lib/closing-documents/send.ts")
     assert "Contratos assinados" in read("components/lead-documents-tab.tsx")
+
+def test_signed_task_is_atomic_and_owner_approval_is_scoped():
+    service=read("lib/closing-documents/signed-task.ts")
+    route=read("app/api/leads/[id]/closing-return-mode/route.ts")
+    assert "FOR UPDATE" in service and "tenant_id = " in service
+    assert "prisma.$transaction" in service and "tx.task.create" in service and "tx.auditLog.create" in service
+    assert "state.taskCreated" in service and "closing_documents.all_signed" in service
+    assert "status.modeApproved" in service and "status.complete" in service
+    assert "urgent:true" in service and "priority:'high'" in service
+    assert "tenantHasFeature(session.tenantId,'closing_signed_check')" in route
+    assert "session.role!=='owner'" in route and "role:'owner',status:'active'" in service
+    assert "state.sent.sentId!==input.sentId" in service
+    assert "ensureSignedClosingTask(" in read("lib/whatsapp-ai/reply.ts")
+    assert "cpf" not in service.lower()
