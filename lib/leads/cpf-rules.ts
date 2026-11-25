@@ -44,3 +44,13 @@ export function findCpfInText(text: string | null | undefined): string | null {
 export function redactCpfText(text: string): string {
   return text.replace(/(?<!\d)(?:\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11})(?!\d)/g, value => isValidCpf(value) ? '[CPF ocultado]' : value);
 }
+
+// Redact CPF strings in JSON-shaped AI decisions, including memory and qualification.
+export function redactCpfPayload<T>(value: T): T {
+  if (typeof value === 'string') return redactCpfText(value) as T;
+  if (Array.isArray(value)) return value.map(item => redactCpfPayload(item)) as T;
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, redactCpfPayload(item)])) as T;
+  }
+  return value;
+}

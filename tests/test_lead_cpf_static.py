@@ -25,3 +25,13 @@ def test_cpf_does_not_leak_into_lead_model():
     assert "cpf" not in lead.lower()
     assert "lead_personal_documents" in schema
 
+
+def test_cpf_homologation_and_ai_redaction_are_wired():
+    ci = read(".github/workflows/ci.yml")
+    reply = read("lib/whatsapp-ai/reply.ts")
+    assert "tests/lead-cpf.integration.test.ts" in ci
+    assert "Lead CPF tenant isolation and atomic writes (disposable PostgreSQL)" in ci
+    assert "cpfEnabled ? redactCpfPayload(decision)" in reply
+    assert "cpfEnabled ? redactCpfText(styledReply)" in reply
+    assert "cpfEnabled ? redactCpfText(teamTask.task)" in reply
+    assert "cpfEnabled ? redactCpfText(transcript)" in reply

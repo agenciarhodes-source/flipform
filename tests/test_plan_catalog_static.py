@@ -27,7 +27,9 @@ def test_repair_script_only_creates_missing_plans_from_the_catalog():
 
 def test_inbox_plan_hides_and_blocks_the_other_modules():
     layout = (ROOT / "app/(app)/layout.tsx").read_text(encoding="utf-8")
-    assert "if (inboxOnly && pathname && !inboxPlanAllowsPath(pathname)) {" in layout
+    assert 'const isPersonalSecurityRoute = pathname === "/account/security";' in layout
+    assert "if (inboxOnly && pathname && !isPersonalSecurityRoute && !inboxPlanAllowsPath(pathname)) {" in layout
+    assert "redirect(INBOX_PLAN_HOME);" in layout
     rbac = (ROOT / "lib/rbac-server.ts").read_text(encoding="utf-8")
     assert "isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))" in rbac
     shell = (ROOT / "components/app-shell.tsx").read_text(encoding="utf-8")

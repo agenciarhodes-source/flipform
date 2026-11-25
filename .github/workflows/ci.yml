@@ -218,6 +218,14 @@ jobs:
       - name: Prepare ephemeral database schema
         run: npx prisma db push --skip-generate
 
+      - name: Lead CPF tenant isolation and atomic writes (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/lead-cpf.integration.test.ts
+
       - name: Universal Connect tenant isolation (disposable PostgreSQL)
         env:
           CI: "true"
