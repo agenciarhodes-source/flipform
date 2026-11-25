@@ -9,10 +9,12 @@ connections, or change existing client data.
   for signed technical sessions, including recently MFA-verified sessions.
 - An untrusted/stale `developer` role is downgraded until an active grant,
   enabled MFA, active direct company membership and active allowlist are
-  independently verified.
+  independently verified using current database state.
 - `app/api/admin/developer-access/route.ts` never reactivates an existing
   disabled `TenantUser` or `AllowedUser` when issuing a technical grant.
-  Existing company roles are not overwritten.
+  Existing company roles are not overwritten. Revocation disables only a
+  temporary allowlist introduced by developer provisioning; pre-existing
+  customer-issued allowlist entries are preserved.
 - Existing technical entrypoints built on `withAuth` / `withPermission`
   still enforce role and tenant checks. The Meta platform callback preserves
   its separately protected administrative authorization.
@@ -33,3 +35,9 @@ connections, or change existing client data.
 7. Run no production SQL, migrations or access provisioning without approval.
 
 No automatic merge or production deployment approval is implied by CI success.
+
+## CI note
+
+PR is review-ready for one controlled validation run; review the latest
+commit and rerun neither expensive workflow automatically. Green checks are
+required before merge. No merging or production updates in this review.
