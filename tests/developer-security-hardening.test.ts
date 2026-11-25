@@ -2,6 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
   needsFreshTechnicalSession, mayProvisionDeveloperMembership, mayUseDeveloperGrant,
+  shouldDeactivateDeveloperCreatedAllowlist,
 } from '../lib/developer-access/security-rules';
 
 test('every technical session bypasses the 30-second access decision cache', () => {
@@ -29,5 +30,12 @@ test('technical capability is denied when any tenant or authentication condition
   assert.equal(mayUseDeveloperGrant(valid), true);
   for (const key of Object.keys(valid) as Array<keyof typeof valid>) {
     assert.equal(mayUseDeveloperGrant({ ...valid, [key]: !valid[key] }), false, key);
+  }
+});
+
+test('revocation removes only temporary technical-login allowlist, not pre-existing client memberships', () => {
+  assert.equal(shouldDeactivateDeveloperCreatedAllowlist('developer_grant'), true);
+  for (const source of ['manual', 'invite', 'business_group', '', null, undefined]) {
+    assert.equal(shouldDeactivateDeveloperCreatedAllowlist(source), false);
   }
 });
