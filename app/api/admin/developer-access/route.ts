@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withPlatformAdmin } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { mayProvisionDeveloperMembership } from '@/lib/developer-access/security-rules';
+import { mayProvisionDeveloperMembership, shouldDeactivateDeveloperCreatedAllowlist } from '@/lib/developer-access/security-rules';
 import { logPlatformAudit } from '@/lib/platform-audit';
 import { getClientIp, rateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
@@ -87,6 +87,21 @@ export const DELETE = withPlatformAdmin(async (req, session) => {
     const current = await tx.developerTenantGrant.findUnique({ where: { tenantId_userId: { tenantId, userId } } });
     if (!current || current.revokedAt) return null;
     await tx.developerTenantGrant.update({ where: { id: current.id }, data: { revokedAt: new Date() } });
+    // Never leave login access behind when it was provisioned solely by this
+    // developer grant. Existing customer-issued allowlist entries remain intact.
+    const account = await tx.user.findUnique({ where: { id: userId }, select: { email: true } });
+    if (account?.email) {
+      const allowlist = await tx.allowedUser.findUnique({
+        where: { tenantId_email: { tenantId, email: account.email } },
+        select: { source: true },
+      });
+      if (shouldDeactivateDeveloperCreatedAllowlist(allowlist?.source)) {
+        await tx.allowedUser.update({
+          where: { tenantId_email: { tenantId, email: account.email } },
+          data: { active: false, status: 'inactive' },
+        });
+      }
+    }
     await tx.user.update({ where: { id: userId }, data: { sessionVersion: { increment: 1 } } });
     return current.id;
   });
