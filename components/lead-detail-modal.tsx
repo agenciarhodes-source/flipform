@@ -25,6 +25,7 @@ import { TasksTab } from '@/components/tasks-tab';
 import { CityCombobox } from '@/components/city-combobox';
 import { getBrazilStates, normalizeBrazilCity, normalizeBrazilState, formatLeadLocation } from '@/lib/brazil-locations';
 import { dateLikeToDateOnly, formatDateOnlyBR, todayDateOnly } from '@/lib/date-only';
+import { LeadCpfField } from '@/components/lead-cpf-field';
 import { summarizeFlipAiQualificationScore } from '@/lib/flip-ai/qualification-score';
 
 interface Stage { id: string; name: string; color: string; }
@@ -456,6 +457,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               </section>
             )}
 
+            <LeadCpfField leadId={leadId} />
             <section className="space-y-3 rounded-xl border bg-white p-4">
               <h3 className="font-heading text-sm font-semibold">Localização</h3>
               <div className="grid grid-cols-2 gap-3">

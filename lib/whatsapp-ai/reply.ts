@@ -1,3 +1,6 @@
+import { tenantHasFeature } from '@/lib/billing/tenant-features';
+import { setLeadCpf } from '@/lib/leads/cpf';
+import { findCpfInText, redactCpfText } from '@/lib/leads/cpf-rules';
 import 'server-only';
 
 import { createHash, randomUUID } from 'crypto';
@@ -353,8 +356,13 @@ export async function replyToWhatsAppConversation(input: {
   let receivedFiles = false;
   // Names the company already has (WhatsApp profile, registration): a voice note never misspells them.
   const knownNames = knownFirstNames([conversation.externalContactIdentity.displayName, conversation.lead?.name]);
+  const cpfEnabled = await tenantHasFeature(input.tenantId, 'lead_cpf');
   for (const message of pending) {
-    if (message.text?.trim()) parts.push(message.text.trim());
+    if (cpfEnabled && conversation.leadId) {
+      const cpf = findCpfInText(message.text);
+      if (cpf) await setLeadCpf({ tenantId: input.tenantId, leadId: conversation.leadId, cpf, source: 'chat', onlyIfEmpty: true }).catch(() => undefined);
+    }
+    if (message.text?.trim()) parts.push(cpfEnabled ? redactCpfText(message.text.trim()) : message.text.trim());
     if (message.type === 'audio') {
       const heard = await transcribeWhatsAppVoiceNote({
         tenantId: input.tenantId,
@@ -394,6 +402,7 @@ export async function replyToWhatsAppConversation(input: {
       extraUserNotes.push(UNSUPPORTED_NOTE);
     }
   }
+  if (cpfEnabled) extraUserNotes.push('[Nota interna: nunca repita o CPF do cliente nem o inclua em resumos ou tarefas.]');
   if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));
   // The last document arrived and the company sends contracts by ZapSign: the link follows the reply.
   const contractDue = receivedFiles

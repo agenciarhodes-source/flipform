@@ -27,3 +27,9 @@ def test_documents_reach_the_ai_the_lead_card_and_the_stages():
     assert "<LeadDocumentsTab leadId={leadId} />" in read("components/lead-detail-modal.tsx")
     assert "withPermission('FLIP_AI_MANAGE'" in read("app/api/whatsapp-ai/document-checklists/route.ts")
     assert "tests/whatsapp-ai-document-rules.test.ts" in read(".github/workflows/ci.yml")
+
+
+def test_cpf_reader_is_feature_gated():
+    documents = read("lib/whatsapp-ai/documents.ts")
+    assert "cpfEnabled ? " in documents and "holderCpf" in documents
+    assert "nunca de terceiro" in documents and "onlyIfEmpty: true" in documents

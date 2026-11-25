@@ -1,3 +1,4 @@
+import { leadIdsByCpf } from '@/lib/leads/cpf';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPermission } from '@/lib/rbac-server';
@@ -74,6 +75,8 @@ export const GET = withPermission('LEADS_VIEW', async (req, session) => {
       { email: { contains: search, mode: 'insensitive' } },
       { phone: { contains: search } },
     ];
+    const cpfMatches = await leadIdsByCpf(session.tenantId, search);
+    if (cpfMatches.length) where.OR.push({ id: { in: cpfMatches } });
   }
   if (basis === 'open') {
     delete where.enteredAt;
