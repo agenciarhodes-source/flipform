@@ -38,3 +38,16 @@ test('reader requires signatures, fields, pages and legibility; no free-form not
   assert.equal(pages.status,'problem');
   assert.ok(!pages.note?.includes('texto privado'));
 });
+
+import { parseClosingManifest, preliminaryClosingStatus, signedReviewInstruction } from '../lib/closing-documents/signed-review-rules';
+test('preliminary review never declares completion without approved return format',()=>{
+  assert.equal(parseClosingManifest({files:['Procuração'],sent:1}),null);
+  assert.equal(parseClosingManifest({confirmedTemplates:[templates[0],templates[0]],situation:'adult',sendComplete:true}),null);
+  const manifest=parseClosingManifest({confirmedTemplates:templates,situation:'adult',sendComplete:true});
+  assert.ok(manifest);
+  const result=preliminaryClosingStatus(manifest,[row('a'),row('b'),row('c')]);
+  assert.equal(result.complete,false);
+  assert.equal(result.reviewRequired,true);
+  assert.equal(result.items.length,3);
+  assert.match(signedReviewInstruction(manifest,[row('a')]),/Não crie tarefa automática/);
+});

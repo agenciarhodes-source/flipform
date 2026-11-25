@@ -2,6 +2,7 @@ import 'server-only';
 
 import { prisma } from '@/lib/prisma';
 import { tenantHasFeature } from '@/lib/billing/tenant-features';
+import { signedClosingReview } from './signed-review';
 import { moveLeadToStage } from '@/lib/leads/move-stage';
 import { enqueueAndDispatchWhatsAppDocumentMessage, enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { closingDocuments, readClosingTemplate } from './store';
@@ -37,10 +38,11 @@ export async function closingDocumentsContext(tenantId: string, conversationId: 
   const templates = templatesForCase(settings.templates, await caseOf(tenantId, conversationId));
   if (!templates.length) return null;
   const sentAt = await lastSent(tenantId, conversationId);
+  const review = await signedClosingReview(tenantId,conversationId).catch(()=>null);
   return {
     templates,
     stageId: settings.stageId,
-    instruction: closingInstruction({ sendWhen: settings.sendWhen, fileNames: templates.map((template) => template.name), sentAt }),
+    instruction: closingInstruction({ sendWhen: settings.sendWhen, fileNames: templates.map((template) => template.name), sentAt, signedReview: review?.instruction }),
     sentAt,
   };
 }

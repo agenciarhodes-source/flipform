@@ -11,5 +11,5 @@ export const GET = withPermission('LEADS_VIEW', async (_req: NextRequest, sessio
     select: { id: true },
   });
   if (!lead) return NextResponse.json({ cases: [] });
-  return NextResponse.json(await leadDocumentsView(session.tenantId, lead.id));
+  return NextResponse.json(await leadDocumentsView(session.tenantId, lead.id), { headers: { 'Cache-Control': 'private, no-store' } });
 });
