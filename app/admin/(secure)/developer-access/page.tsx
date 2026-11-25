@@ -16,6 +16,7 @@ export default function DeveloperAccessAdminPage() {
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newTenantId, setNewTenantId] = useState('');
   const securityLink = 'https://app.flipform.com.br/account/security';
   const selectedAccount = data?.users.find(u => u.id === userId);
 
@@ -38,14 +39,14 @@ export default function DeveloperAccessAdminPage() {
 
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!newName.trim() || !newEmail.trim() || newPassword.length < 12) return;
+    if (!newName.trim() || !newEmail.trim() || newPassword.length < 12 || !newTenantId) return;
     setLoading(true);
     setMessage('');
     try {
       const response = await fetch('/api/admin/developer-accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, email: newEmail, password: newPassword }),
+        body: JSON.stringify({ name: newName, email: newEmail, password: newPassword, tenantId: newTenantId }),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || 'Não foi possível cadastrar a conta.');
@@ -54,7 +55,8 @@ export default function DeveloperAccessAdminPage() {
       setNewPassword('');
       await refresh();
       setUserId(result.account.id);
-      setMessage('Conta técnica criada. Agora escolha a empresa e conceda acesso. A conta deverá ativar MFA antes de receber permissões técnicas.');
+      setTenantId(newTenantId);
+      setMessage('Desenvolvedor cadastrado e autorizado para a empresa selecionada. Para outras empresas, use “Adicionar empresa” abaixo. O novo usuário confirma o MFA no primeiro acesso.');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Falha no cadastro.');
     } finally {
@@ -90,8 +92,8 @@ export default function DeveloperAccessAdminPage() {
     </div>
     {message && <p role="status" className="rounded border p-3 text-sm">{message}</p>}
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Cadastrar conta técnica</h2>
-      <p className="text-sm text-muted-foreground">Uma conta separada do Super Admin. O cadastro não concede acesso a empresas; autorize cada empresa na etapa seguinte. Compartilhe a senha inicial por canal seguro e oriente a pessoa a trocá-la.</p>
+      <h2 className="font-semibold">Criar Desenvolvedor</h2>
+      <p className="text-sm text-muted-foreground">Crie o acesso uma única vez e selecione a primeira empresa. Depois, adicione quantas empresas forem necessárias. A conta é separada do Super Admin e exige MFA para usar as permissões técnicas.</p>
       <form onSubmit={createAccount} className="grid gap-3">
         <label className="text-sm">Nome
           <input required minLength={2} maxLength={120} autoComplete="off" className="mt-1 block w-full rounded border p-2" value={newName} onChange={e => setNewName(e.target.value)} />
@@ -99,15 +101,24 @@ export default function DeveloperAccessAdminPage() {
         <label className="text-sm">E-mail
           <input required type="email" maxLength={254} autoComplete="off" className="mt-1 block w-full rounded border p-2" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
         </label>
+        <label className="text-sm">Perfil
+          <input value="Desenvolvedor" readOnly className="mt-1 block w-full rounded border bg-muted/40 p-2" aria-label="Perfil" />
+        </label>
+        <label className="text-sm">Primeira empresa autorizada
+          <select required className="mt-1 block w-full rounded border p-2" value={newTenantId} onChange={e => setNewTenantId(e.target.value)}>
+            <option value="">Selecione a empresa</option>
+            {data?.tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
         <label className="text-sm">Senha inicial (mínimo 12 caracteres)
           <input required type="password" minLength={12} maxLength={128} autoComplete="new-password" className="mt-1 block w-full rounded border p-2" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
         </label>
-        <button type="submit" disabled={loading || newPassword.length < 12} className="w-fit rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">Criar conta técnica</button>
+        <button type="submit" disabled={loading || !data || !newTenantId || newPassword.length < 12} className="w-fit rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">Criar e autorizar Desenvolvedor</button>
       </form>
     </section>
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Autorizar Desenvolvedor</h2>
-      <p className="text-sm text-muted-foreground">Selecione a conta e a empresa. O sistema exige MFA para liberar o acesso técnico; você acompanha essa pendência aqui no Admin.</p>
+      <h2 className="font-semibold">Adicionar empresa a um Desenvolvedor</h2>
+      <p className="text-sm text-muted-foreground">Selecione a conta já cadastrada e outra empresa para autorizar. O MFA é configurado uma vez por conta, não por empresa.</p>
       <label className="block text-sm">Conta que receberá acesso técnico
         <select className="mt-1 block w-full rounded border p-2" value={userId} onChange={e => setUserId(e.target.value)}>
           <option value="">Selecione a conta</option>
@@ -122,7 +133,7 @@ export default function DeveloperAccessAdminPage() {
         </select>
       </label>
       <button type="button" disabled={loading || !data || !tenantId || !userId} onClick={() => change('POST', userId, tenantId)} className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">
-        Conceder acesso
+        Adicionar empresa
       </button>
       <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
         <h3 className="font-medium text-sm">Ativação de segurança da conta técnica</h3>
