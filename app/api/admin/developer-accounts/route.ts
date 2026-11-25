@@ -11,6 +11,7 @@ const input = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
   password: z.string().min(12).max(128),
+  tenantId: z.string().uuid(),
 }).strict();
 
 export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
@@ -32,19 +33,45 @@ export const POST = withPlatformAdmin(async (req: NextRequest, session) => {
   if (!parsed.success) {
     return NextResponse.json({ error: 'Informe nome, e-mail válido e senha inicial com no mínimo 12 caracteres.' }, { status: 400 });
   }
-  const { name, email, password } = parsed.data;
+  const { name, email, password, tenantId } = parsed.data;
   const passwordHash = await hashPassword(password);
   try {
-    const account = await prisma.user.create({
-      data: { name, email, passwordHash, globalRole: null },
-      select: { id: true, name: true, email: true },
+    // Create the account and authorize the selected company atomically.
+    // A newly-created account cannot be left with an unintended partial grant.
+    const account = await prisma.$transaction(async tx => {
+      const tenant = await tx.tenant.findUnique({
+        where: { id: tenantId }, select: { id: true, status: true },
+      });
+      if (!tenant || !['active', 'trial'].includes(tenant.status)) {
+        throw new Error('TENANT_NOT_ELIGIBLE');
+      }
+      const user = await tx.user.create({
+        data: { name, email, passwordHash, globalRole: null },
+        select: { id: true, name: true, email: true },
+      });
+      await tx.tenantUser.create({
+        data: { userId: user.id, tenantId, role: 'viewer', status: 'active' },
+      });
+      await tx.allowedUser.create({
+        data: {
+          tenantId, email, role: 'viewer', status: 'active', active: true,
+          source: 'developer_grant', invitedBy: session.userId,
+        },
+      });
+      await tx.developerTenantGrant.create({
+        data: { tenantId, userId: user.id, grantedById: session.userId },
+      });
+      return user;
     });
     await logPlatformAudit({
-      tenantId: null, userId: session.userId, entityType: 'user', entityId: account.id,
-      action: 'developer.account_created', metadata: { targetUserId: account.id },
+      tenantId, userId: session.userId, entityType: 'user', entityId: account.id,
+      action: 'developer.account_created', metadata: { targetUserId: account.id, tenantId },
     });
     return NextResponse.json({ account }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'TENANT_NOT_ELIGIBLE') {
+      return NextResponse.json({ error: 'Empresa não disponível para receber o Desenvolvedor.' }, { status: 409 });
+    }
     if (typeof error === 'object' && error && 'code' in error && error.code === 'P2002') {
       return NextResponse.json({ error: 'Já existe uma conta com este e-mail. Selecione-a na lista.' }, { status: 409 });
     }
