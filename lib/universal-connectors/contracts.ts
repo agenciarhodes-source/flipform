@@ -8,7 +8,7 @@ export const CONNECTOR_CAPABILITIES = [
 export type ConnectorCapability = (typeof CONNECTOR_CAPABILITIES)[number];
 
 export const CONNECTOR_AUTH_METHODS = [
-  'oauth2', 'api_key', 'signed_webhook',
+  'oauth2', 'api_key', 'bearer_token', 'signed_webhook',
 ] as const;
 export type ConnectorAuthMethod = (typeof CONNECTOR_AUTH_METHODS)[number];
 

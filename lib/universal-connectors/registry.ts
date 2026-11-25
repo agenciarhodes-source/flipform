@@ -62,3 +62,24 @@ export async function revokeConnection(actor: UniversalActor, connectionId: stri
     await tx.universalConnectionAudit.create({ data: { tenantId: actor.tenantId, connectionId, actorUserId: actor.userId, action: 'revoked.local' } });
   }, serializable);
 }
+
+/** Atomic registration of an explicitly tested sandbox credential. The caller must
+ * have probed the exact supplied secret using the fixed sandbox adapter first.
+ * Still disabled for synchronization; no external writes or activation. */
+export async function registerSandboxCredential(actor: UniversalActor, secret: string, db: PrismaClient = prisma) {
+  const { ASAAS_SANDBOX } = await import('./catalog');
+  const { sandboxAvailable, validCredential } = await import('./sandbox-policy');
+  if (!sandboxAvailable(actor.tenantId) || !validCredential(secret)) throw new Error('Sandbox unavailable');
+  return db.$transaction(async tx => {
+    await assertOwner(tx, actor);
+    const count = await tx.universalConnection.count({ where: { tenantId: actor.tenantId, providerId: ASAAS_SANDBOX.providerId, revokedAt: null } });
+    if (count >= 3) throw new Error('Sandbox connection limit');
+    const row = await tx.universalConnection.create({ data: {
+      tenantId: actor.tenantId, providerId: ASAAS_SANDBOX.providerId, authMethod: 'api_key', enabled: false,
+    }, select: safeSelect });
+    const envelope = sealCredential(secret, { tenantId: actor.tenantId, connectionId: row.id, providerId: row.providerId }, currentVaultKey());
+    await tx.universalConnectionCredential.create({ data: { tenantId: actor.tenantId, connectionId: row.id, ...envelope } });
+    await tx.universalConnectionAudit.create({ data: { tenantId: actor.tenantId, connectionId: row.id, actorUserId: actor.userId, action: 'sandbox.registered' } });
+    return row;
+  }, serializable);
+}
