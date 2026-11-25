@@ -44,14 +44,14 @@ export function templatesForCase<T extends { checklistIds: string[] }>(templates
 }
 
 /** What the AI reads: when to send, who signs, and whether they already went. */
-export function closingInstruction(input: { sendWhen: string; fileNames: string[]; sentAt: Date | null }) {
+export function closingInstruction(input: { sendWhen: string; fileNames: string[]; sentAt: Date | null; signedReview?: string }) {
   return [
     `DOCUMENTOS PARA FINALIZAR O ATENDIMENTO (${input.fileNames.join(', ')}): o cliente preenche e assina estes documentos.`,
     `QUANDO ENVIAR (regra da empresa): ${input.sendWhen.trim()}`,
     input.sentAt
       ? `Eles JÁ FORAM ENVIADOS nesta conversa (${input.sentAt.toISOString().slice(0, 10)}). Não mande de novo, a não ser que o`
         + ' cliente peça ou diga que perdeu. Quando o cliente mandar de volta os documentos preenchidos e assinados (fotos ou PDF),'
-        + ' agradeça e crie [TAREFA_EQUIPE: Conferir os documentos assinados que o cliente enviou].'
+        + (input.signedReview ? ' agradeça e siga somente o estado de conferência abaixo.' : ' agradeça e crie [TAREFA_EQUIPE: Conferir os documentos assinados que o cliente enviou].')
       : 'Ainda NÃO foram enviados.',
     'Para enviar, escreva no FIM da resposta, numa linha separada: [ENVIAR_DOCUMENTOS: adulto], [ENVIAR_DOCUMENTOS: menor] ou'
       + ' [ENVIAR_DOCUMENTOS: rogo]. O cliente não vê essa linha; o sistema manda os arquivos logo depois da sua mensagem, com a'
@@ -62,6 +62,7 @@ export function closingInstruction(input: { sendWhen: string; fileNames: string[
       + ' rogo, com 2 testemunhas e a digital do cliente. Se o cliente tem 60 anos ou mais e você não sabe se ele assina, pergunte'
       + ' com delicadeza antes ("Você consegue assinar o seu nome, ou prefere que outra pessoa assine por você?"). Se o cliente'
       + ' falar em curador, curatela ou interdição, NÃO envie: crie [TAREFA_EQUIPE: Cliente com curatela: analisar quem assina].',
+    ...(input.signedReview ? [input.signedReview] : []),
   ].join('\n');
 }
 

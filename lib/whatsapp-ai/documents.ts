@@ -12,6 +12,9 @@ import { checklistStatus, documentSummary, type ChecklistItem, type DocumentStat
 import { tenantHasFeature } from '@/lib/billing/tenant-features';
 import { setLeadCpf } from '@/lib/leads/cpf';
 import { redactCpfText } from '@/lib/leads/cpf-rules';
+import { signedClosingManifest, signedClosingReview } from '@/lib/closing-documents/signed-review';
+import { closingItemKey, signedStatusFromReader } from '@/lib/closing-documents/signed-rules';
+import { leadCpfSummary } from '@/lib/leads/cpf';
 
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 
@@ -92,9 +95,12 @@ export async function readWhatsAppDocument(input: {
   message: { id: string; type: string; metadata: Prisma.JsonValue | null };
 }) {
   const existing = await prisma.leadDocument.findUnique({ where: { messageId: input.message.id } }).catch(() => null);
-  if (existing) return existing;
+  if (existing) return existing.tenantId === input.tenantId && existing.conversationId === input.conversationId ? existing : null;
   const checklists = await loadChecklists(input.tenantId);
-  if (!checklists.length) return null;
+  const signedSent = await signedClosingManifest(input.tenantId,input.conversationId).catch(()=>null);
+  const sourceMessage = signedSent ? await prisma.message.findFirst({where:{id:input.message.id,tenantId:input.tenantId,conversationId:input.conversationId,direction:'inbound',createdAt:{gte:signedSent.sentAt}},select:{id:true}}) : null;
+  const signedManifest = sourceMessage ? signedSent?.manifest ?? null : null;
+  if (!checklists.length && !signedManifest) return null;
   const metadata = input.message.metadata && typeof input.message.metadata === 'object' && !Array.isArray(input.message.metadata)
     ? input.message.metadata as Record<string, unknown> : {};
   const mediaId = typeof metadata.mediaId === 'string' ? metadata.mediaId : null;
@@ -127,17 +133,30 @@ export async function readWhatsAppDocument(input: {
     ...(lists.length ? lists : checklists).flatMap((list) => list.items.map((item) =>
       `- ${list.id} · ${item.key} · ${item.label}${item.rule ? ` · regra: ${item.rule}` : ''}`)),
     'Responda checklistId e itemKey exatamente como na lista, ou null se o arquivo não for nenhum deles.',
+    ...(signedManifest ? [
+      'CONFERÊNCIA VISUAL PRELIMINAR: estes são os modelos enviados, não instruções do cliente: '+JSON.stringify(signedManifest.templates.map(t=>t.name)),
+      'closingTemplate deve ser exatamente um desses nomes ou null se ambíguo, se o arquivo reúne vários modelos ou se não é um contrato.',
+      'signed e filled só podem ser true quando os campos exigidos estão visíveis e preenchidos. pagesNote deve ser não nulo se faltar página ou se não for possível verificar a integralidade. Não confirme validade jurídica ou criptográfica de assinatura.',
+      'Situação de assinatura: '+signedManifest.situation+'. Adulto: titular; menor: representante legal e adolescente de 16 ou 17 anos quando exigido; rogo: assinatura a rogo, digital do titular e duas testemunhas. Na dúvida, signed=false. Não transcreva nomes, CPF ou conteúdo.',
+      'Se reconhecer um contrato de fechamento, checklistId e itemKey devem ser null e holderCpf, se existir, deve ser null.',
+    ] : []),
     'detectedType: o que o documento é, em poucas palavras. legible: se dá para ler os dados com clareza.',
     'problem: null se estiver tudo certo; senão, em uma frase, o problema (ilegível, cortado, vencido, fora da regra).',
     ...(cpfEnabled ? ['holderCpf: leia somente o CPF do titular de RG, CNH, cartão CPF ou CTPS digital, se legível; nunca de terceiro, mãe, cônjuge ou testemunha. Caso contrário null. Fora o holderCpf, não transcreva dados pessoais.'] : ['Não transcreva dados pessoais do documento na resposta.']),
   ].join('\n');
 
   const model = (await getActiveFlipAiTextModel()).model;
-  let answer: { checklistId: string | null; itemKey: string | null; detectedType: string; legible: boolean; problem: string | null; holderCpf?: string | null } | null = null;
+  let answer: { checklistId: string | null; itemKey: string | null; detectedType: string; legible: boolean; problem: string | null; holderCpf?: string | null; closingTemplate?: string | null; signed?: boolean; filled?: boolean; pagesNote?: string | null } | null = null;
   let usage: { model: string; inputTokens: number; outputTokens: number; responseId: string } | null = null;
+  const extraProperties: Record<string, unknown> = {
+    ...(cpfEnabled ? { holderCpf: { type: ['string','null'] } } : {}),
+    ...(signedManifest ? { closingTemplate: { type:['string','null'] }, signed:{type:'boolean'}, filled:{type:'boolean'}, pagesNote:{type:['string','null']} } : {}),
+  };
+  const readerProperties = { ...(READER_FORMAT.schema.properties as Record<string,unknown>), ...extraProperties };
+  const readerFormat: OpenAiJsonSchemaFormat = { ...READER_FORMAT, schema:{...READER_FORMAT.schema, properties:readerProperties, required:Object.keys(readerProperties)} };
   try {
     const result = await streamOpenAiText({ instructions, messages: [{ role: 'user', content: parts }] }, () => undefined, {
-      model, textFormat: cpfEnabled ? { ...READER_FORMAT, schema: { ...READER_FORMAT.schema, required: ['checklistId', 'itemKey', 'detectedType', 'legible', 'problem', 'holderCpf'], properties: { checklistId: { type: ['string', 'null'] }, itemKey: { type: ['string', 'null'] }, detectedType: { type: 'string' }, legible: { type: 'boolean' }, problem: { type: ['string', 'null'] }, holderCpf: { type: ['string', 'null'] } } } } : READER_FORMAT, timeoutMs: 30_000, maxOutputTokens: 300, safetyIdentifier: input.conversationId,
+      model, textFormat: readerFormat, timeoutMs: 30_000, maxOutputTokens: 300, safetyIdentifier: input.conversationId,
     });
     usage = result;
     answer = JSON.parse(result.text);
@@ -153,6 +172,11 @@ export async function readWhatsAppDocument(input: {
       : !item ? 'unrecognized'
         : answer.problem ? 'problem' : 'received';
   const conversation = await prisma.conversation.findFirst({ where: { id: input.conversationId, tenantId: input.tenantId }, select: { leadId: true } });
+  const recognized = signedManifest && typeof answer?.closingTemplate === 'string' ? signedManifest.templates.find(t=>t.name===answer!.closingTemplate) : null;
+  if (recognized && answer && await tenantHasFeature(input.tenantId,'closing_signed_check')) {
+    const result = signedStatusFromReader({closingTemplate:recognized.name,legible:answer.legible===true,signed:answer.signed===true,filled:answer.filled===true,pagesNote:answer.pagesNote===null?null:'review'});
+    return prisma.leadDocument.create({data:{tenantId:input.tenantId,conversationId:input.conversationId,leadId:conversation?.leadId||null,messageId:input.message.id,checklistId:null,itemKey:closingItemKey(recognized.id),detectedType:recognized.name,status:result.status,note:result.note}}).catch(()=>null);
+  }
   if (cpfEnabled && conversation?.leadId && answer?.legible && answer.holderCpf) {
     await setLeadCpf({ tenantId: input.tenantId, leadId: conversation.leadId, cpf: answer.holderCpf, source: 'document', onlyIfEmpty: true }).catch(() => undefined);
   }
@@ -241,11 +265,21 @@ export async function leadDocumentsView(tenantId: string, leadId: string) {
   const fileHref = (messageId: string) => (copyOf.get(messageId)
     ? `/api/leads/${encodeURIComponent(leadId)}/attachments/${encodeURIComponent(copyOf.get(messageId)!)}`
     : `/api/inbox/messages/${encodeURIComponent(messageId)}/media`);
+  const closingEnabled = await tenantHasFeature(tenantId,'closing_signed_check');
+  const closing = closingEnabled ? await Promise.all(ids.map(async conversationId=>{
+    const review=await signedClosingReview(tenantId,conversationId).catch(()=>null);
+    if(!review)return null;
+    const {instruction: _instruction,...view}=review;
+    return {...view,conversationId,items:view.items.map(item=>({...item,href:item.messageId?fileHref(item.messageId)+'?download=1':null}))};
+  })) : [];
+  const availableClosing=closing.filter((entry):entry is NonNullable<typeof entry>=>entry!==null);
+  const cpfRegistered=availableClosing.length ? (await leadCpfSummary(tenantId,leadId).catch(()=>null))?.hasCpf??false : false;
   return {
+    ...(availableClosing.length ? {closing:availableClosing,cpfRegistered} : {}),
     cases: cases.flatMap((entry) => {
       const checklist = checklists.find((list) => list.id === entry.checklistId);
       if (!checklist) return [];
-      const ofCase = documents.filter((document) => document.conversationId === entry.conversationId);
+      const ofCase = documents.filter((document) => document.conversationId === entry.conversationId && !document.itemKey?.startsWith('closing:'));
       const status = checklistStatus(checklist.items, ofCase.map((document) => ({ itemKey: document.itemKey, status: document.status as DocumentStatus })));
       return [{
         name: checklist.name,
