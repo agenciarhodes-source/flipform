@@ -51,6 +51,7 @@ import { handOffForVideoCall } from './video-call';
 import { contractReadiness, sendContractIfReady } from '@/lib/contracts/zapsign';
 import { CONTRACT_COMING_NOTE } from '@/lib/contracts/zapsign-rules';
 import { closingDocumentsContext, sendClosingDocuments } from '@/lib/closing-documents/send';
+import { ensureSignedClosingTask } from '@/lib/closing-documents/signed-task';
 import { extractSendDocuments } from '@/lib/closing-documents/send-rules';
 import { prefersAudioReplies } from '@/lib/flip-ai/audio-reply';
 import { CHAT_STYLE_RULE, cleanChatStyle, replyLengthRule, splitIntoBubbles } from '@/lib/flip-ai/chat-style';
@@ -405,6 +406,8 @@ export async function replyToWhatsAppConversation(input: {
   }
   if (cpfEnabled) extraUserNotes.push('[Nota interna: nunca repita o CPF do cliente nem o inclua em resumos ou tarefas.]');
   if (receivedFiles) extraUserNotes.push(receivedFilesNote(runtime.attendantRole));
+  // Retry on subsequent turns as well; task creation and audit are atomic and permanent.
+  await ensureSignedClosingTask({tenantId:input.tenantId,conversationId:conversation.id}).catch(()=>undefined);
   // The last document arrived and the company sends contracts by ZapSign: the link follows the reply.
   const contractDue = receivedFiles
     ? await contractReadiness(input.tenantId, conversation.id).catch(() => null)

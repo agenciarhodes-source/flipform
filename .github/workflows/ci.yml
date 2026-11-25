@@ -226,6 +226,14 @@ jobs:
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/lead-cpf.integration.test.ts
 
+      - name: Signed closing task once-only and tenant isolation (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci
+          npx tsx --test tests/closing-signed-task.integration.test.ts
+
       - name: Universal Connect tenant isolation (disposable PostgreSQL)
         env:
           CI: "true"

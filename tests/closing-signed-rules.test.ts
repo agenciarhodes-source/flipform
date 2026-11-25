@@ -51,3 +51,22 @@ test('preliminary review never declares completion without approved return forma
   assert.equal(result.items.length,3);
   assert.match(signedReviewInstruction(manifest,[row('a')]),/Não crie tarefa automática/);
 });
+
+import { approvedReturnMode, approvedClosingStatus, pickClosingAssignee, approvedSignedInstruction } from '../lib/closing-documents/signed-review-rules';
+test('approval is tied to current send and cannot implicitly complete a package',()=>{
+  const manifest=parseClosingManifest({confirmedTemplates:templates,situation:'adult',sendComplete:true})!;
+  const docs=[row('a'),row('b'),row('c')];
+  assert.equal(approvedReturnMode({sentId:'old',mode:'separate'},'new'),null);
+  assert.equal(approvedClosingStatus(manifest,docs,null).complete,false);
+  assert.equal(approvedClosingStatus(manifest,docs,'package').complete,false);
+  assert.equal(approvedClosingStatus(manifest,docs,'separate').complete,true);
+  assert.equal(approvedClosingStatus(manifest,[...docs,row('c','problem',2)],'separate').complete,false);
+  assert.match(approvedSignedInstruction(manifest,docs,'separate'),/revisão humana obrigatória/i);
+});
+test('one active responsible person or deterministic manager/owner fallback',()=>{
+  const members=[{userId:'a',role:'agent',status:'inactive'},{userId:'b',role:'agent',status:'active'},{userId:'m2',role:'manager',status:'active'},{userId:'m1',role:'manager',status:'active'},{userId:'o',role:'owner',status:'active'}];
+  assert.equal(pickClosingAssignee({leadAssignee:'a',conversationAssignee:'b',members}),'b');
+  assert.equal(pickClosingAssignee({leadAssignee:'b',conversationAssignee:'o',members}),'b');
+  assert.equal(pickClosingAssignee({leadAssignee:null,conversationAssignee:null,members}),'m1');
+  assert.equal(pickClosingAssignee({leadAssignee:'foreign',conversationAssignee:null,members:[]}),null);
+});
