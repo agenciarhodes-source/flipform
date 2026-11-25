@@ -35,7 +35,15 @@ def test_technical_modules_remain_developer_only():
         assert f"{permission}: ['developer']" in rbac
     assert "role === 'developer'" in source("lib/developer-access/route-policy.ts")
 
-def test_developer_can_delete_leads_and_plan_entitlements_remain():
-    assert "(role === 'owner' || role === 'developer')" in source("lib/rbac.ts")
+def test_lead_deletion_matches_existing_owner_only_api():
+    rbac = source("lib/rbac.ts")
+    helper = rbac.split("export function canDeleteLead(role: string): boolean", 1)[1].split("}", 1)[0]
+    assert "return role === 'owner' && can(role, 'LEADS_DELETE');" in helper
+    route = source("app/api/leads/[id]/route.ts")
+    delete = route.split("export const DELETE", 1)[1]
+    assert "session.role !== 'owner' || !canDeleteLead(session.role)" in delete
+    assert "canDelete: canDeleteLead(session.role)" in route
+
+def test_developer_plan_entitlements_remain():
     assert "session.role !== 'developer'" not in source("app/(app)/layout.tsx")
     assert "session.role !== 'developer'" not in source("lib/rbac-server.ts")
