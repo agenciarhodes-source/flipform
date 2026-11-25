@@ -136,7 +136,26 @@ export async function POST(req: Request) {
     });
 
     const allowedByTenant = new Map<string, AllowedRow>((allowedUsers as AllowedRow[]).map((allowed) => [allowed.tenantId, allowed]));
-    const decision = decideLoginTenant(typedMemberships, new Set(allowedByTenant.keys()), parsed.data.tenantId);
+    // Dedicated developer identities may select only tenant-scoped, active grants.
+    // They always choose the target company before the MFA challenge, even with one grant.
+    const authorizedTenantIds = new Set(allowedByTenant.keys());
+    if (user.globalRole === 'developer_account') {
+      const grants = await prisma.developerTenantGrant.findMany({
+        where: { userId: user.id, revokedAt: null },
+        select: { tenantId: true },
+      });
+      const scoped = new Set(grants.map(grant => grant.tenantId));
+      for (const tenantId of authorizedTenantIds) {
+        if (!scoped.has(tenantId)) authorizedTenantIds.delete(tenantId);
+      }
+    }
+    const decision = decideLoginTenant(typedMemberships, authorizedTenantIds, parsed.data.tenantId);
+    if (user.globalRole === 'developer_account' && !parsed.data.tenantId && decision.kind === 'ready') {
+      return NextResponse.json({
+        ok: true, tenantSelectionRequired: true,
+        tenants: [{ id: decision.membership.tenantId, name: decision.membership.tenant.name, slug: decision.membership.tenant.slug }],
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     // Never create a session or MFA challenge until the tenant is explicitly chosen.
     // Only return options after the user's password is proven valid.
     if (decision.kind === 'choose') {
