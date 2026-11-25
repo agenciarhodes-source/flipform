@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { UniversalSandboxCard } from './universal-sandbox-card';
+import { sandboxAvailable } from '@/lib/universal-connectors/sandbox-policy';
 import { getVerifiedSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
@@ -36,6 +38,7 @@ export default async function IntegrationsPage() {
   return <>
     <ClientConnectionOnboarding />
     <IntegrationsClient />
+    {session.role === 'developer' && sandboxAvailable(session.tenantId) && <UniversalSandboxCard />}
     {session.role === 'developer' && apiV1Enabled(process.env) && <ApiV1Card />}
     <div id="google-funnel" className="scroll-mt-24">
       <GoogleFunnelCard />
