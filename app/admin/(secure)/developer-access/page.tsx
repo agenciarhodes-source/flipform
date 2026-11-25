@@ -135,7 +135,7 @@ export default function DeveloperAccessAdminPage() {
         <h3 className="font-medium text-sm">Ativação de segurança da conta técnica</h3>
         <p className="text-sm text-muted-foreground">O Super Admin autoriza o acesso aqui, mas não ativa ou confirma o autenticador em nome de outra pessoa. Compartilhe o endereço abaixo com o responsável pela conta. Após a ativação, ele deverá sair e entrar novamente, validando o código MFA.</p>
         <div className="flex flex-wrap items-center gap-3">
-          <a href="/account/security" target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-2">Abrir segurança da minha conta</a>
+          <a href="/account/security" target="_blank" rel="noopener noreferrer" className="rounded border px-3 py-2 text-sm font-medium hover:bg-muted">Abrir segurança da minha conta</a>
           <button type="button" onClick={copyMfaLink} className="rounded border px-3 py-2 text-sm">Copiar link de ativação do MFA</button>
         </div>
       </div>

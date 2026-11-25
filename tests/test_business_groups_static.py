@@ -100,7 +100,9 @@ def test_app_shell_and_layout_hide_group_hub_and_keep_group_route_recoverable():
     assert 'prisma.tenantUser.findFirst' in layout
     assert 'currentTenantIsGroupTenant' in layout
     assert 'const isBusinessGroupAnchor = hasBusinessGroupAccess && !currentTenantIsGroupTenant' in layout
-    assert 'if (isBusinessGroupAnchor && !isGroupRoute)' in layout
+    assert 'const isPersonalSecurityRoute = pathname === "/account/security";' in layout
+    assert 'if (isBusinessGroupAnchor && !isGroupRoute && !isPersonalSecurityRoute)' in layout
+    assert 'redirect("/group");' in layout
     assert 'isBusinessGroupAnchor={isBusinessGroupAnchor}' in layout
     assert '!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute' in layout
 

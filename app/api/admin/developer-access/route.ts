@@ -36,7 +36,7 @@ export const POST = withPlatformAdmin(async (req, session) => {
   if (session.userId === userId) return NextResponse.json({ error: 'Use uma conta técnica separada da administração global.' }, { status: 409 });
   const result = await prisma.$transaction(async tx => {
     const [user, tenant] = await Promise.all([
-      tx.user.findUnique({ where: { id: userId }, select: { id: true, email: true, mfaEnabledAt: true, globalRole: true } }),
+      tx.user.findUnique({ where: { id: userId }, select: { id: true, email: true, globalRole: true } }),
       tx.tenant.findUnique({ where: { id: tenantId }, select: { id: true, status: true } }),
     ]);
     if (!tenant || ['suspended', 'blocked', 'canceled', 'inactive'].includes(tenant.status)) return { status: 404 };

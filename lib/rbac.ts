@@ -196,11 +196,11 @@ export function canMoveLead(role: string, lead: { assignedTo: string | null }, u
 }
 
 /**
- * Lead deletion is reserved for the company owner and scoped, MFA-verified developer.
+ * Lead deletion is reserved for the company owner, matching the server DELETE guard.
  * Admins, managers, agents and viewers must never delete CRM leads.
  */
 export function canDeleteLead(role: string): boolean {
-  return (role === 'owner' || role === 'developer') && can(role, 'LEADS_DELETE');
+  return role === 'owner' && can(role, 'LEADS_DELETE');
 }
 
 export function assertPermission(session: { role?: string | null } | null | undefined, permission: PermissionKey): void {
