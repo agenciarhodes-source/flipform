@@ -113,8 +113,12 @@ export const DELETE = withPlatformAdmin(async (req, session) => {
 
 /** Safe account/tenant catalog for the platform administrator's access screen. */
 export const GET = withPlatformAdmin(async (_req, session) => {
-  if (!hasRecentMfa(session))
-    return NextResponse.json({ error: 'Confirme o MFA novamente para administrar concessões.' }, { status: 403 });
+  // A verified MFA session may read company/account options for up to 7 days.
+  // Grant creation and revocation still require MFA confirmed in the past 15 minutes.
+  const now = Math.floor(Date.now() / 1000);
+  const verifiedAt = session.mfaVerifiedAt;
+  if (!verifiedAt || !Number.isSafeInteger(verifiedAt) || verifiedAt > now + 60 || now - verifiedAt > 7 * 24 * 60 * 60)
+    return NextResponse.json({ error: 'Entre novamente e confirme o MFA para visualizar as empresas.' }, { status: 403 });
   const [tenants, users, grants] = await Promise.all([
     prisma.tenant.findMany({
       where: { status: { in: ['active', 'trial'] } },

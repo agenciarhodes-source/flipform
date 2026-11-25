@@ -17,6 +17,7 @@ export default function DeveloperAccessAdminPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newTenantId, setNewTenantId] = useState('');
+  const [catalogError, setCatalogError] = useState('');
   const securityLink = 'https://app.flipform.com.br/account/security';
   const selectedAccount = data?.users.find(u => u.id === userId);
 
@@ -31,11 +32,12 @@ export default function DeveloperAccessAdminPage() {
 
   const refresh = useCallback(async () => {
     const response = await fetch('/api/admin/developer-access', { cache: 'no-store' });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Acesso negado.');
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Falha ao carregar empresas e contas.');
+    setCatalogError('');
     setData(result);
   }, []);
-  useEffect(() => { refresh().catch(e => setMessage(e.message)); }, [refresh]);
+  useEffect(() => { refresh().catch(e => { setData(null); setCatalogError(e instanceof Error ? e.message : 'Falha ao carregar empresas.'); }); }, [refresh]);
 
   async function createAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -56,7 +58,7 @@ export default function DeveloperAccessAdminPage() {
       await refresh();
       setUserId(result.account.id);
       setTenantId(newTenantId);
-      setMessage('Desenvolvedor cadastrado e autorizado para a empresa selecionada. Para outras empresas, use “Adicionar empresa” abaixo. O novo usuário confirma o MFA no primeiro acesso.');
+      setMessage('Desenvolvedor criado e vinculado à empresa selecionada. Para vincular outra conta técnica, use “Adicionar Desenvolvedor à empresa”. O novo usuário confirma o MFA no primeiro acesso.');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Falha no cadastro.');
     } finally {
@@ -91,9 +93,11 @@ export default function DeveloperAccessAdminPage() {
       </p>
     </div>
     {message && <p role="status" className="rounded border p-3 text-sm">{message}</p>}
+    {catalogError && <div role="alert" className="rounded border p-4 space-y-2 text-sm"><strong>Empresas e usuários não carregaram.</strong><p>{catalogError}</p><p>Se a autenticação MFA expirou, entre novamente no Super Admin. Depois, atualize esta página.</p><button type="button" onClick={() => refresh().catch(e => setCatalogError(e instanceof Error ? e.message : 'Erro ao atualizar.'))} className="rounded border px-3 py-2">Tentar novamente</button></div>}
+    {data?.tenants.length === 0 && <p role="status" className="rounded border p-3 text-sm">Nenhuma empresa ativa disponível. Verifique o cadastro de empresas no Super Admin.</p>}
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Criar Desenvolvedor</h2>
-      <p className="text-sm text-muted-foreground">Crie o acesso uma única vez e selecione a primeira empresa. Depois, adicione quantas empresas forem necessárias. A conta é separada do Super Admin e exige MFA para usar as permissões técnicas.</p>
+      <h2 className="font-semibold">Criar Desenvolvedor para uma empresa</h2>
+      <p className="text-sm text-muted-foreground">Escolha a empresa e cadastre a conta que atuará como Desenvolvedor nela. Você pode vincular o mesmo Desenvolvedor a outras empresas depois. O MFA é obrigatório no login técnico.</p>
       <form onSubmit={createAccount} className="grid gap-3">
         <label className="text-sm">Nome
           <input required minLength={2} maxLength={120} autoComplete="off" className="mt-1 block w-full rounded border p-2" value={newName} onChange={e => setNewName(e.target.value)} />
@@ -104,7 +108,7 @@ export default function DeveloperAccessAdminPage() {
         <label className="text-sm">Perfil
           <input value="Desenvolvedor" readOnly className="mt-1 block w-full rounded border bg-muted/40 p-2" aria-label="Perfil" />
         </label>
-        <label className="text-sm">Primeira empresa autorizada
+        <label className="text-sm">Empresa que receberá o Desenvolvedor
           <select required className="mt-1 block w-full rounded border p-2" value={newTenantId} onChange={e => setNewTenantId(e.target.value)}>
             <option value="">Selecione a empresa</option>
             {data?.tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -117,23 +121,23 @@ export default function DeveloperAccessAdminPage() {
       </form>
     </section>
     <section className="rounded border p-5 space-y-4">
-      <h2 className="font-semibold">Adicionar empresa a um Desenvolvedor</h2>
-      <p className="text-sm text-muted-foreground">Selecione a conta já cadastrada e outra empresa para autorizar. O MFA é configurado uma vez por conta, não por empresa.</p>
-      <label className="block text-sm">Conta que receberá acesso técnico
-        <select className="mt-1 block w-full rounded border p-2" value={userId} onChange={e => setUserId(e.target.value)}>
-          <option value="">Selecione a conta</option>
-          {data?.users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email} {u.mfaEnabledAt ? '· MFA ativo' : '· MFA pendente'}</option>)}
-        </select>
-      </label>
-      {selectedAccount && <div className="rounded border p-3 text-sm" role="status">Segurança da conta selecionada: <strong>{selectedAccount.mfaEnabledAt ? 'MFA ativado' : 'MFA pendente'}</strong>. {selectedAccount.mfaEnabledAt ? 'O usuário deve entrar novamente e confirmar o MFA para usar a concessão.' : 'Após conceder o acesso, a própria conta deverá ativar o MFA no primeiro acesso.'}</div>}
-      <label className="block text-sm">Empresa autorizada
+      <h2 className="font-semibold">Adicionar Desenvolvedor à empresa</h2>
+      <p className="text-sm text-muted-foreground">Escolha a empresa e depois a conta do Desenvolvedor que terá permissão nela. A autenticação MFA é feita uma única vez por conta.</p>
+      <label className="block text-sm">Empresa
         <select className="mt-1 block w-full rounded border p-2" value={tenantId} onChange={e => setTenantId(e.target.value)}>
           <option value="">Selecione a empresa</option>
           {data?.tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>)}
         </select>
       </label>
+      <label className="block text-sm">Desenvolvedor a autorizar
+        <select className="mt-1 block w-full rounded border p-2" value={userId} onChange={e => setUserId(e.target.value)}>
+          <option value="">Selecione o desenvolvedor</option>
+          {data?.users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.email} {u.mfaEnabledAt ? '· MFA ativo' : '· MFA pendente'}</option>)}
+        </select>
+      </label>
+      {selectedAccount && <div className="rounded border p-3 text-sm" role="status">Segurança da conta: <strong>{selectedAccount.mfaEnabledAt ? 'MFA ativado' : 'MFA pendente'}</strong>. {selectedAccount.mfaEnabledAt ? 'O usuário deve entrar novamente e confirmar o MFA.' : 'O usuário deverá ativar o MFA após receber a autorização.'}</div>}
       <button type="button" disabled={loading || !data || !tenantId || !userId} onClick={() => change('POST', userId, tenantId)} className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-40">
-        Adicionar empresa
+        Autorizar Desenvolvedor nesta empresa
       </button>
       <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
         <h3 className="font-medium text-sm">Ativação de segurança da conta técnica</h3>
@@ -145,7 +149,7 @@ export default function DeveloperAccessAdminPage() {
       </div>
     </section>
     <section className="rounded border p-5 space-y-3">
-      <h2 className="font-semibold">Concessões existentes</h2>
+      <h2 className="font-semibold">Desenvolvedores autorizados por empresa</h2>
       {!data && <p className="text-sm">Carregando...</p>}
       {data?.grants.length === 0 && <p className="text-sm">Nenhum acesso técnico cadastrado.</p>}
       {data?.grants.map(g => {
