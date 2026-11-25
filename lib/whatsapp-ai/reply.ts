@@ -1,6 +1,6 @@
 import { tenantHasFeature } from '@/lib/billing/tenant-features';
 import { setLeadCpf } from '@/lib/leads/cpf';
-import { findCpfInText, redactCpfText } from '@/lib/leads/cpf-rules';
+import { findCpfInText, redactCpfText, redactCpfPayload } from '@/lib/leads/cpf-rules';
 import 'server-only';
 
 import { createHash, randomUUID } from 'crypto';
@@ -376,8 +376,9 @@ export async function replyToWhatsAppConversation(input: {
       const transcript = heard ? alignTranscriptNames(heard, knownNames) : null;
       if (transcript) {
         inputMode = 'voice';
-        parts.push(transcript);
-        extraUserNotes.push(`[Áudio do cliente, transcrito]: ${transcript}`);
+        const safeTranscript = cpfEnabled ? redactCpfText(transcript) : transcript;
+        parts.push(safeTranscript);
+        extraUserNotes.push(`[Áudio do cliente, transcrito]: ${safeTranscript}`);
       } else {
         extraUserNotes.push('[O cliente enviou um áudio que não pôde ser ouvido. Peça, com gentileza, que escreva a mensagem.]');
       }
@@ -409,7 +410,8 @@ export async function replyToWhatsAppConversation(input: {
     ? await contractReadiness(input.tenantId, conversation.id).catch(() => null)
     : null;
   if (contractDue) extraUserNotes.push(CONTRACT_COMING_NOTE);
-  const turnText = (parts.join('\n') || extraUserNotes.join('\n') || (takeover ? latestInbound.text?.trim() : '') || 'Olá').slice(0, 2_000);
+  const turnTextRaw = (parts.join('\n') || extraUserNotes.join('\n') || (takeover ? latestInbound.text?.trim() : '') || 'Olá');
+  const turnText = (cpfEnabled ? redactCpfText(turnTextRaw) : turnTextRaw).slice(0, 2_000);
   if (takeover) extraUserNotes.push(CLOSER_TAKEOVER_NOTE);
   if (input.trigger === 'handback') {
     extraUserNotes.push('[Nota interna, não mostre ao cliente: a equipe devolveu esta conversa para você. Responda o que o cliente perguntou ou pediu nas últimas mensagens e continue o atendimento de onde parou, sem repetir o que a equipe já disse.]');
@@ -569,7 +571,9 @@ export async function replyToWhatsAppConversation(input: {
           : null,
         teamInvolved,
       })}\n${replyLengthRule({ customerText: turnText, journeyStage: lastJourneyStage })}${documents ? `\n\n${documents.text}` : ''}${closing ? `\n\n${closing.instruction}` : ''}`,
-      messages: extraUserNotes.length
+      messages: cpfEnabled ? redactCpfPayload(extraUserNotes.length
+        ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
+        : context.messages) : extraUserNotes.length
         ? [...context.messages, { role: 'user' as const, content: extraUserNotes.join('\n') }]
         : context.messages,
     };
@@ -590,7 +594,8 @@ export async function replyToWhatsAppConversation(input: {
       textFormat: PUBLIC_CHAT_DECISION_FORMAT,
       timeoutMs: 40_000,
     });
-    const parsed = parsePublicChatDecision(raw.text);
+    const decision = parsePublicChatDecision(raw.text);
+    const parsed = cpfEnabled ? redactCpfPayload(decision) : decision;
     // A task for the team never reaches the customer: it is taken out of the reply here.
     const teamTask = extractTeamTask(parsed.reply);
     parsed.reply = teamTask.reply;
@@ -605,7 +610,8 @@ export async function replyToWhatsAppConversation(input: {
     parsed.qualification = applyBrainFinalQualification(parsed.qualification, context.brainAssessment);
     parsed.reply = enforceContactMoment(parsed.reply, context.contactMoment);
     // Without the marks of a machine text (dashes, semicolons), whatever the model wrote.
-    const reply = cleanChatStyle(withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources));
+    const styledReply = cleanChatStyle(withWhatsAppSourceLinks(toWhatsAppText(parsed.reply), context.sources));
+    const reply = cpfEnabled ? redactCpfText(styledReply) : styledReply;
     if (!reply) throw new OpenAiResponseError('definitive', 'WHATSAPP_AI_EMPTY_REPLY');
 
     // A person may have answered while the AI was thinking: then the AI stays quiet. Compared by the
@@ -697,7 +703,7 @@ export async function replyToWhatsAppConversation(input: {
       mode: settings.stageMode,
     }).catch((error) => console.error('WhatsApp AI stage suggestion failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     if (teamTask.task) {
-      await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: teamTask.task, urgent: teamTask.urgent })
+      await createWhatsAppTeamTask({ tenantId: input.tenantId, conversationId: conversation.id, what: cpfEnabled ? redactCpfText(teamTask.task) : teamTask.task, urgent: teamTask.urgent })
         .catch((error) => console.error('WhatsApp AI team task failed', { errorType: error instanceof Error ? error.name : 'unknown' }));
     }
     if (closing && closingSend.send) {
