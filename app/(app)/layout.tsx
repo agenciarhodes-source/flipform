@@ -19,6 +19,7 @@ export default async function AppGroupLayout({
 
   const pathname = (await headers()).get("x-pathname") || "";
   const isBillingRoute = pathname === "/billing" || pathname.startsWith("/billing/");
+  const isPersonalSecurityRoute = pathname === "/account/security";
   const isGroupRoute = pathname === "/group" || pathname.startsWith("/group/");
 
   const [tenant, groupState, currentTenantMembership] = await Promise.all([
@@ -50,20 +51,20 @@ export default async function AppGroupLayout({
 
   // O tenant técnico serve apenas como âncora de autenticação. Usuários de grupo
   // não devem operar nele nem enxergá-lo como uma unidade de negócio.
-  if (isBusinessGroupAnchor && !isGroupRoute) {
+  if (isBusinessGroupAnchor && !isGroupRoute && !isPersonalSecurityRoute) {
     redirect("/group");
   }
 
   // Plano Inbox: only the attendance screens; any other screen opens the Inbox.
   const inboxOnly = isInboxOnlyPlan(tenant?.plan?.slug) && session.globalRole !== "platform_admin" && session.role !== 'developer';
-  if (inboxOnly && pathname && !inboxPlanAllowsPath(pathname)) {
+  if (inboxOnly && pathname && !isPersonalSecurityRoute && !inboxPlanAllowsPath(pathname)) {
     redirect(INBOX_PLAN_HOME);
   }
 
   const billingAccess = await requireBillingAccess(session);
   // A visão do grupo precisa continuar acessível mesmo se a unidade atual ficar
   // bloqueada, para permitir que o responsável escolha outra unidade autorizada.
-  if (!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute) {
+  if (!billingAccess.allowAccess && !isBillingRoute && !isGroupRoute && !isPersonalSecurityRoute) {
     redirect("/billing/blocked");
   }
 
