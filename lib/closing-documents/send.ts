@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from '@/lib/prisma';
+import { tenantHasFeature } from '@/lib/billing/tenant-features';
 import { moveLeadToStage } from '@/lib/leads/move-stage';
 import { enqueueAndDispatchWhatsAppDocumentMessage, enqueueAndDispatchWhatsAppTextMessage } from '@/lib/meta/whatsapp-outbound';
 import { closingDocuments, readClosingTemplate } from './store';
@@ -61,6 +62,8 @@ export async function sendClosingDocuments(input: {
   if (!context) return { sent: 0, reason: 'off' as const };
   if (context.sentAt && now.getTime() - context.sentAt.getTime() < CLOSING_RESEND_GAP_MS) return { sent: 0, reason: 'recent' as const };
 
+  const signedCheckEnabled = await tenantHasFeature(input.tenantId, 'closing_signed_check');
+  const confirmedTemplates: Array<{ id: string; name: string }> = [];
   let sent = 0;
   for (const template of context.templates) {
     const file = await readClosingTemplate(input.tenantId, template.id);
@@ -72,7 +75,10 @@ export async function sendClosingDocuments(input: {
       aiSender: { agentId: input.agent.id, agentName: input.agent.name },
       file: { bytes: file.bytes, mimeType: file.mime, fileName: `${file.name}.${file.kind}` },
     }).catch(() => null);
-    if (result && result.status !== 'failed') sent += 1;
+    if (result && result.status !== 'failed') {
+      sent += 1;
+      if (signedCheckEnabled && result.status === 'sent') confirmedTemplates.push({ id: template.id, name: template.name });
+    }
   }
   if (!sent) return { sent: 0, reason: 'failed' as const };
   await enqueueAndDispatchWhatsAppTextMessage({
@@ -86,7 +92,8 @@ export async function sendClosingDocuments(input: {
   await prisma.auditLog.create({
     data: {
       tenantId: input.tenantId, userId: null, entityType: 'conversation', entityId: input.conversationId,
-      action: SENT_ACTION, metadata: { situation: input.situation, files: context.templates.map((template) => template.name), sent },
+      action: SENT_ACTION, metadata: { situation: input.situation, files: context.templates.map((template) => template.name), sent,
+        ...(signedCheckEnabled ? { confirmedTemplates, sendComplete: confirmedTemplates.length === context.templates.length } : {}) },
     },
   }).catch(() => undefined);
   await moveAfterSending({ tenantId: input.tenantId, conversationId: input.conversationId, stageId: context.stageId })
