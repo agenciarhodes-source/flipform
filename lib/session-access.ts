@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { prisma } from './prisma';
+import { needsFreshTechnicalSession, mayUseDeveloperGrant } from './developer-access/security-rules';
 import type { SessionPayload } from './auth';
 import { evaluateBillingAccess } from './billing-access';
 import { getBusinessGroupAccessesForUser, mapBusinessGroupRoleToTenantRole } from './business-groups';
@@ -82,14 +83,27 @@ export async function verifySessionAccess(session: SessionPayload): Promise<
     && Date.now() / 1000 - (session.mfaVerifiedAt ?? 0) < 7 * 24 * 60 * 60
     && (session.mfaVerifiedAt ?? 0) <= Date.now() / 1000 + 60) {
     try {
-      const [grant, userMfa] = await Promise.all([
+      const [grant, account, membership] = await Promise.all([
         prisma.developerTenantGrant.findUnique({
           where: { tenantId_userId: { tenantId: session.tenantId, userId: session.userId } },
           select: { revokedAt: true },
         }),
-        prisma.user.findUnique({ where: { id: session.userId }, select: { mfaEnabledAt: true } }),
+        prisma.user.findUnique({ where: { id: session.userId }, select: { mfaEnabledAt: true, email: true } }),
+        prisma.tenantUser.findUnique({
+          where: { tenantId_userId: { tenantId: session.tenantId, userId: session.userId } },
+          select: { status: true },
+        }),
       ]);
-      if (grant && !grant.revokedAt && userMfa?.mfaEnabledAt) role = 'developer';
+      const allowlist = account?.email ? await prisma.allowedUser.findUnique({
+        where: { tenantId_email: { tenantId: session.tenantId, email: account.email } },
+        select: { active: true, status: true },
+      }) : null;
+      if (mayUseDeveloperGrant({
+        hasGrant: !!grant, revoked: !!grant?.revokedAt, mfaVerified: true,
+        mfaEnabled: !!account?.mfaEnabledAt,
+        membershipActive: membership?.status === 'active',
+        allowlistActive: allowlist?.active === true && allowlist?.status === 'active',
+      })) role = 'developer';
     } catch {
       // Fail closed: no technical entitlement during database errors.
     }
