@@ -32,7 +32,7 @@ export function closingStatus(expected: readonly ExpectedClosing[], received: re
   const items = expected.map(template => {
     const matching = received.filter(row => row.itemKey === closingItemKey(template.id) && Number.isFinite(row.createdAt.getTime()));
     matching.sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime() || a.messageId.localeCompare(b.messageId));
-    const latest = matching[0];
+    const latest: SignedDocument | undefined = matching.length > 0 ? matching[0] : undefined;
     // Equal timestamps are ambiguous; do not pick a positive result over a negative result.
     const ambiguous = latest && matching.some(row=>row.createdAt.getTime()===latest.createdAt.getTime() && row.status!==latest.status);
     return { ...template, status: ambiguous ? 'problem' as const : latest?.status ?? 'missing' as const, note: ambiguous ? 'Conferência manual necessária.' : latest?.note ?? null, messageId: ambiguous ? null : latest?.messageId ?? null };
