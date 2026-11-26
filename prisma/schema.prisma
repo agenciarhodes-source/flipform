@@ -2721,6 +2721,7 @@ model UniversalConnection {
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   credential   UniversalConnectionCredential?
   audits       UniversalConnectionAudit[]
+  syncRuns     UniversalSyncRun[]
 
   @@unique([tenantId, id])
   @@index([tenantId, providerId])
@@ -2764,4 +2765,49 @@ model LeadPersonalDocument {
   updatedAt DateTime @updatedAt @map("updated_at")
   @@index([tenantId, cpfHash])
   @@map("lead_personal_documents")
+}
+
+/// PR-C: synthetic-only persistent queue. No production worker is exposed.
+model UniversalSyncRun {
+  id           String    @id @default(uuid())
+  tenantId     String    @map("tenant_id")
+  connectionId String    @map("connection_id")
+  requestKey   String    @map("request_key")
+  fixtureVersion String  @map("fixture_version")
+  status       String    @default("queued")
+  nextPage     Int       @default(0) @map("next_page")
+  attempts     Int       @default(0)
+  processed    Int       @default(0)
+  errorCode    String?   @map("error_code")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  finishedAt   DateTime? @map("finished_at")
+  connection   UniversalConnection @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict, map: "uc_sync_connection_fk")
+  records      UniversalDataRecord[]
+
+  @@unique([tenantId, connectionId, id], map: "uc_sync_run_scope_key")
+  @@unique([tenantId, connectionId, requestKey], map: "uc_sync_run_request_key")
+  @@index([tenantId, status, createdAt], map: "uc_sync_run_queue_idx")
+  @@map("universal_sync_runs")
+}
+
+/// Typed synthetic financial projection. No raw provider payload, personal data or CRM mutation.
+model UniversalDataRecord {
+  id             String   @id @default(uuid())
+  tenantId       String   @map("tenant_id")
+  connectionId   String   @map("connection_id")
+  runId          String   @map("run_id")
+  providerId     String   @map("provider_id")
+  kind           String
+  sourceId       String   @map("source_id")
+  sourceUpdatedAt DateTime @map("source_updated_at")
+  observedAt     DateTime @default(now()) @map("observed_at")
+  amountMinor    Int      @map("amount_minor")
+  currency       String
+  status         String
+  run            UniversalSyncRun @relation(fields: [tenantId, connectionId, runId], references: [tenantId, connectionId, id], onDelete: Restrict, map: "uc_data_run_fk")
+
+  @@unique([tenantId, connectionId, kind, sourceId], map: "uc_data_source_key")
+  @@index([tenantId, kind, sourceUpdatedAt], map: "uc_data_scope_time_idx")
+  @@map("universal_data_records")
 }

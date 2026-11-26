@@ -42,7 +42,8 @@ DEVELOPER_INVERSE = {
 }
 POST_VOICE_MODELS = {"LeadPersonalDocument": "lead_personal_documents"}
 UNIVERSAL_MODELS = {"UniversalConnection": "universal_connections", "UniversalConnectionCredential": "universal_connection_credentials", "UniversalConnectionAudit": "universal_connection_audits"}
-CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS)
+SYNC_MODELS = {"UniversalSyncRun": "universal_sync_runs", "UniversalDataRecord": "universal_data_records"}
+CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS) + len(SYNC_MODELS)
 PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
 CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
@@ -53,7 +54,25 @@ def historical_pr01_candidate(current_schema: str) -> str:
     if len(model_names) != CURRENT_MODEL_COUNT or len(set(model_names)) != CURRENT_MODEL_COUNT:
         raise ValueError(f"Expected {CURRENT_MODEL_COUNT} explicitly approved models")
     projected = current_schema
-    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS}.items():
+    # Only the explicitly approved PR-C relation chain may be projected out.
+    sync_relations = {
+        "UniversalConnection": {"syncRuns UniversalSyncRun[]"},
+        "UniversalSyncRun": {
+            'connection UniversalConnection @relation(fields: [tenantId, connectionId], references: [tenantId, id], onDelete: Restrict, map: "uc_sync_connection_fk")',
+            "records UniversalDataRecord[]",
+        },
+        "UniversalDataRecord": {
+            'run UniversalSyncRun @relation(fields: [tenantId, connectionId, runId], references: [tenantId, connectionId, id], onDelete: Restrict, map: "uc_data_run_fk")',
+        },
+    }
+    for model, required in sync_relations.items():
+        block = re.search(rf"(?ms)^model\s+{model}\s*\{{(.*?)^\}}", projected)
+        if not block:
+            raise ValueError(f"Missing PR-C model: {model}")
+        lines = [" ".join(line.split()) for line in block.group(1).splitlines()]
+        if any(lines.count(field) != 1 for field in required):
+            raise ValueError(f"Missing or altered PR-C relation: {model}")
+    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS, **SYNC_MODELS}.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
         match = re.search(pattern, projected)
         if not match or match.group(1).count(f'@@map("{table}")') != 1:
