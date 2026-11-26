@@ -5,6 +5,10 @@
     "api/pdf.py": {
       "maxDuration": 120,
       "includeFiles": "pdf_bundle.py"
+    },
+    "api/selftest.py": {
+      "maxDuration": 20,
+      "includeFiles": "pdf_bundle.py"
     }
   }
 }

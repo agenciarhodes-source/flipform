@@ -73,7 +73,7 @@ export async function generateGoJusPdf(input:Identity){
   if(!worker||!storage.ready)throw new GoJusBundleError('unavailable');
   const manifest=await selectManifest(input);
   const signal=AbortSignal.timeout(100_000);
-  const key=`tenants/${input.tenantId}/gojus-temp/${randomUUID()}.pdf`;
+  const key=`flip-pdf-temp/${input.tenantId}/${randomUUID()}.pdf`;
   const files=manifest.ordered.map(a=>({url:signedUrl(storage.config,'GET',a.objectKey),mime:a.mimeType,size:a.sizeBytes}));
   try{
     const response=await fetch(worker.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${worker.token}`},body:JSON.stringify({tenantId:input.tenantId,files,outputUrl:signedUrl(storage.config,'PUT',key)}),cache:'no-store',redirect:'error',signal});
@@ -82,6 +82,14 @@ export async function generateGoJusPdf(input:Identity){
     if(typeof result?.sha256!=='string'||!/^[a-f0-9]{64}$/.test(result.sha256)||!Number.isSafeInteger(result.size)||result.size<=0||result.size>GOJUS_OUTPUT_LIMIT||!Number.isSafeInteger(result.pages)||result.pages<1||result.pages>120)throw new GoJusBundleError('unavailable');
     const head=await fetch(signedUrl(storage.config,'HEAD',key),{method:'HEAD',cache:'no-store',redirect:'error',signal});
     if(!head.ok||head.headers.get('content-type')!=='application/pdf'||Number(head.headers.get('content-length'))!==result.size)throw new GoJusBundleError('unavailable');
+    // Independently verify the bytes actually stored, not merely the worker's report.
+    const stored=await fetch(signedUrl(storage.config,'GET',key),{method:'GET',cache:'no-store',redirect:'error',signal});
+    if(!stored.ok||!stored.body||stored.headers.get('content-type')!=='application/pdf'||Number(stored.headers.get('content-length'))!==result.size)throw new GoJusBundleError('unavailable');
+    const reader=stored.body.getReader();
+    const digest=createHash('sha256');let size=0;let prefix=Buffer.alloc(0);
+    try{while(true){const chunk=await reader.read();if(chunk.done)break;size+=chunk.value.byteLength;if(size>result.size||size>GOJUS_OUTPUT_LIMIT)throw new GoJusBundleError('unavailable');if(prefix.length<5)prefix=Buffer.concat([prefix,Buffer.from(chunk.value.subarray(0,5-prefix.length))]);digest.update(chunk.value);}}
+    finally{await reader.cancel().catch(()=>undefined);}
+    if(size!==result.size||!prefix.equals(Buffer.from('%PDF-'))||digest.digest('hex')!==result.sha256)throw new GoJusBundleError('unavailable');
     const current=await selectManifest(input);
     if(current.fingerprint!==manifest.fingerprint)throw new GoJusBundleError('changed');
     return {url:createAttachmentDownloadUrl(storage.config,{key,downloadName:'documentacao_completa.pdf'}),hash:result.sha256 as string,count:manifest.ordered.length};

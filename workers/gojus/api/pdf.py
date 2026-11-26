@@ -36,11 +36,11 @@ def valid_url(url, tenant, output, env):
         u = urlsplit(url)
         if u.scheme != "https" or u.netloc != account + ".r2.cloudflarestorage.com" or u.fragment:
             return False
-        prefix = "/" + bucket + "/tenants/" + tenant + ("/gojus-temp/" if output else "/whatsapp/")
+        prefix = "/" + bucket + ("/flip-pdf-temp/" + tenant + "/" if output else "/tenants/" + tenant + "/whatsapp/")
         if not u.path.startswith(prefix):
             return False
         suffix = u.path[len(prefix):]
-        if not re.fullmatch(r"[a-f0-9-]{36}\.pdf" if output else r"[-A-Za-z0-9_]{1,100}", suffix):
+        if not re.fullmatch(r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\.pdf" if output else r"[-A-Za-z0-9_]{1,100}", suffix):
             return False
         q = parse_qs(u.query, strict_parsing=True)
         allowed = {"X-Amz-Algorithm", "X-Amz-Credential", "X-Amz-Date", "X-Amz-Expires", "X-Amz-SignedHeaders", "X-Amz-Signature"}
