@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { buttonVariants, Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { GoJusSheetPreview } from './gojus-sheet-preview';
 
 type CaseView = {
   name: string;
@@ -22,6 +23,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
   const [canApprove,setCanApprove]=useState(false);
   const [refresh,setRefresh]=useState(0);
   const [busy,setBusy]=useState(false);
+  const [gojusSheet,setGojusSheet]=useState(false);
   async function approve(entry:ClosingView,mode:'separate'|'package') {
     if(!window.confirm('Confirmar este formato de devolução para os modelos enviados? Isso pode gerar uma tarefa para revisão humana.'))return;
     setBusy(true);
@@ -34,20 +36,21 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
   }
   useEffect(() => {
     let active=true;
-    setCases(null); setClosing([]); setCpfRegistered(false);setCanApprove(false);
+    setCases(null); setClosing([]); setCpfRegistered(false);setCanApprove(false);setGojusSheet(false);
     fetch(`/api/leads/${encodeURIComponent(leadId)}/documents`, { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : { cases: [] }))
-      .then((data) => {if(!active)return;setCases(Array.isArray(data.cases)?data.cases:[]);setClosing(Array.isArray(data.closing)?data.closing:[]);setCpfRegistered(data.cpfRegistered===true);setCanApprove(data.canApproveClosingMode===true);})
+      .then((data) => {if(!active)return;setCases(Array.isArray(data.cases)?data.cases:[]);setClosing(Array.isArray(data.closing)?data.closing:[]);setCpfRegistered(data.cpfRegistered===true);setCanApprove(data.canApproveClosingMode===true);setGojusSheet(data.gojusSheet===true);})
       .catch(() => {if(active)setCases([]);});
     return ()=>{active=false;};
   }, [leadId,refresh]);
 
   if (cases === null) return <p className="text-sm text-muted-foreground">Carregando documentos...</p>;
-  if (!cases.length && !closing.length) {
+  if (!cases.length && !closing.length && !gojusSheet) {
     return <p className="text-sm text-muted-foreground">Nenhum documento conferido pela IA ainda. Os documentos enviados pelo WhatsApp aparecem aqui quando a IA os confere.</p>;
   }
   return (
     <div className="space-y-4">
+      {gojusSheet&&<GoJusSheetPreview key={leadId} leadId={leadId}/>}
       {closing.map(entry=><section key={entry.conversationId} className="rounded-lg border p-3 space-y-2">
         <h3 className="font-medium">Contratos assinados</h3>
         <p className="text-xs text-muted-foreground">Conferência preliminar · revisão humana necessária · CPF cadastrado: {cpfRegistered?'sim':'não'}</p>
