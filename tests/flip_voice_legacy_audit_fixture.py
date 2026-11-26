@@ -44,7 +44,8 @@ POST_VOICE_MODELS = {"LeadPersonalDocument": "lead_personal_documents"}
 UNIVERSAL_MODELS = {"UniversalConnection": "universal_connections", "UniversalConnectionCredential": "universal_connection_credentials", "UniversalConnectionAudit": "universal_connection_audits"}
 SYNC_MODELS = {"UniversalSyncRun": "universal_sync_runs", "UniversalDataRecord": "universal_data_records"}
 ADS_MODELS = {"FlipAdsCampaignDraft": "flip_ads_campaign_drafts", "FlipAdsDraftAudit": "flip_ads_draft_audits"}
-CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS) + len(SYNC_MODELS) + len(ADS_MODELS)
+CATALOG_MODELS = {"PlatformCatalogApp": "platform_catalog_apps", "PlatformCatalogAudit": "platform_catalog_audits"}
+CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS) + len(SYNC_MODELS) + len(ADS_MODELS) + len(CATALOG_MODELS)
 PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
 CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
@@ -91,7 +92,20 @@ def historical_pr01_candidate(current_schema: str) -> str:
         lines = [" ".join(line.split()) for line in block.group(1).splitlines()]
         if any(lines.count(field) != 1 for field in required):
             raise ValueError(f"Missing or altered PR-E relation: {model}")
-    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS, **SYNC_MODELS, **ADS_MODELS}.items():
+    # Global catalog has no relation to a tenant, credential or operational connection.
+    catalog_relations = {
+        "PlatformCatalogApp": "audits PlatformCatalogAudit[]",
+        "PlatformCatalogAudit": 'app PlatformCatalogApp @relation(fields: [appId], references: [id], onDelete: Restrict, map: "pc_audit_app_fk")',
+    }
+    for model, required in catalog_relations.items():
+        block = re.search(rf"(?ms)^model\s+{model}\s*\{{(.*?)^\}}", projected)
+        if not block:
+            raise ValueError(f"Missing global catalog model: {model}")
+        relations = [" ".join(line.split()) for line in block.group(1).splitlines()
+                     if "@relation" in line or "PlatformCatalogAudit[]" in line]
+        if relations != [required]:
+            raise ValueError(f"Unexpected catalog relation: {model}")
+    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS, **SYNC_MODELS, **ADS_MODELS, **CATALOG_MODELS}.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
         match = re.search(pattern, projected)
         if not match or match.group(1).count(f'@@map("{table}")') != 1:

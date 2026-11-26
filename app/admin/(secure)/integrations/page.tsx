@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { Copy, Loader2, RefreshCw, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -102,6 +104,8 @@ export default function AdminIntegrationsPage() {
   }
   return <div className="p-8 space-y-6 max-w-5xl">
     <div><h1 className="font-heading text-2xl font-bold">Integrações da Plataforma</h1><p className="text-sm text-muted-foreground">Configure as integrações universais de Ads e WhatsApp utilizadas pelos clientes do FlipForm.</p></div>
+
+    <Card className="p-5 space-y-3"><h2 className="font-heading text-xl font-semibold">Catálogo global de aplicativos</h2><p className="text-sm text-muted-foreground">Personalize os cartões compartilhados por todas as empresas, sem alterar suas credenciais.</p><Link href="/admin/integrations/catalog" className={buttonVariants({variant:'outline'})}>Gerenciar aplicativos</Link></Card>
 
     {settingsLoading && <Card className="p-6 text-sm"><Loader2 className="inline w-4 h-4 mr-2 animate-spin" />Carregando configuração...</Card>}
 

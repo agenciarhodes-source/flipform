@@ -7,6 +7,7 @@ import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
 import { readCatalogConnectionCounts } from '@/lib/integration-catalog/connection-counts';
+import { readGlobalCatalog } from '@/lib/integration-catalog/store';
 import { ConnectionCatalog } from './connection-catalog';
 import { NativeApiPanel } from './native-api-panel';
 import { getWorkspace360Access } from '@/lib/workspace-360/access';
@@ -22,12 +23,12 @@ export default async function IntegrationsPage() {
   const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!can(session.role, 'INTEGRATIONS_VIEW')) redirect('/dashboard');
-  const status = await readCatalogConnectionCounts();
+  const [status,catalog,planSlug] = await Promise.all([readCatalogConnectionCounts(),readGlobalCatalog(),tenantPlanSlug(session.tenantId)]);
   // Plano Inbox: only WhatsApp numbers and templates.
-  if (session.globalRole !== 'platform_admin' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
+  if (session.globalRole !== 'platform_admin' && isInboxOnlyPlan(planSlug)) {
     return <div className="p-6 space-y-6 max-w-7xl">
       <div><h1 className="text-3xl font-bold">Integrações e API</h1><p className="text-sm text-muted-foreground mt-1">Conecte os números de WhatsApp da empresa e gerencie os modelos de mensagem.</p></div>
-      <ConnectionCatalog universal={false} sandbox={false} api={false} inboxOnly status={{whatsapp:status.whatsapp,instagram:null,meta:null}} />
+      <ConnectionCatalog apps={catalog.apps} catalogAvailable={catalog.available} planSlug={planSlug} universal={false} sandbox={false} api={false} inboxOnly status={{whatsapp:status.whatsapp,instagram:null,meta:null}} />
       <div id="whatsapp-connection" className="scroll-mt-24 space-y-4">
         <WhatsAppEmbeddedSignupCard />
         <WhatsAppNumbersCard />
@@ -41,7 +42,7 @@ export default async function IntegrationsPage() {
     <section className="p-6 max-w-7xl space-y-4">
       <h1 className="text-3xl font-bold">Integrações e API</h1>
       <p className="text-sm text-muted-foreground">Central de aplicativos, conexões e credenciais da empresa. Catálogo visual compartilhado pela plataforma; cada autorização é individual por empresa.</p>
-      <ConnectionCatalog universal={access.universal} sandbox={sandbox} api={access.api} status={status} />
+      <ConnectionCatalog apps={catalog.apps} catalogAvailable={catalog.available} planSlug={planSlug} universal={access.universal} sandbox={sandbox} api={access.api} status={status} />
     </section>
     {access.api && <div className="px-6 max-w-7xl"><NativeApiPanel session={session} /></div>}
     <ClientConnectionOnboarding />
