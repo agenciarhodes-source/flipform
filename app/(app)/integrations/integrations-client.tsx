@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 import { getFinalTrackingLogs } from '@/lib/tracking/logs';
 import { MetaAssetSelector } from './meta-asset-selector';
+import { notifyCatalogConnectionChanged } from './connection-events';
 
 const providers = [
   { value: 'meta', label: 'Meta' },
@@ -113,6 +114,7 @@ export function IntegrationsClient() {
       const response = await fetch('/api/integrations/meta/connection', { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível desconectar a conta Meta.');
+      notifyCatalogConnectionChanged();
       toast.success('Conta Meta desconectada deste tenant.');
       await load();
     } catch (error: any) {

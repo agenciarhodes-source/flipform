@@ -1,3 +1,9 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { WHATSAPP_CONNECTION_CHANGED_EVENT, CATALOG_CONNECTION_CHANGED_EVENT } from './connection-events';
+import { WHATSAPP_NUMBERS_CHANGED } from './whatsapp-numbers-card';
 import { CONNECTION_CATALOG, ICON_TONES } from '@/lib/integration-catalog/catalog';
 import { buttonVariants } from '@/components/ui/button';
 type Props = { universal: boolean; sandbox: boolean; api: boolean; inboxOnly?: boolean;
@@ -6,6 +12,20 @@ function savedStatus(count: number | null) {
   return count === null ? 'Status indisponível' : count === 0 ? 'Nenhum vínculo ativo registrado' : count + ' vínculo(s) ativo(s) registrado(s)';
 }
 export function ConnectionCatalog({ universal, sandbox, api, inboxOnly = false, status }: Props) {
+  const router = useRouter();
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => router.refresh(), 150);
+    };
+    const events = [WHATSAPP_CONNECTION_CHANGED_EVENT, WHATSAPP_NUMBERS_CHANGED, CATALOG_CONNECTION_CHANGED_EVENT];
+    events.forEach(event => window.addEventListener(event, refresh));
+    return () => {
+      clearTimeout(timer);
+      events.forEach(event => window.removeEventListener(event, refresh));
+    };
+  }, [router]);
   const entries = CONNECTION_CATALOG.filter(app => inboxOnly ? app.id === 'whatsapp' : !app.premiumOnly || universal);
   return <section className="space-y-4" aria-label="Catálogo de aplicativos">
     <p className="text-sm text-muted-foreground">Selecione um aplicativo para abrir suas configurações. Vínculos registrados não comprovam disponibilidade atual da API do fornecedor.</p>

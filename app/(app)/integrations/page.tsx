@@ -6,7 +6,7 @@ import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
-import { prisma } from '@/lib/prisma';
+import { readCatalogConnectionCounts } from '@/lib/integration-catalog/connection-counts';
 import { ConnectionCatalog } from './connection-catalog';
 import { NativeApiPanel } from './native-api-panel';
 import { getWorkspace360Access } from '@/lib/workspace-360/access';
@@ -22,13 +22,12 @@ export default async function IntegrationsPage() {
   const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (!can(session.role, 'INTEGRATIONS_VIEW')) redirect('/dashboard');
-  const tenantId = session.tenantId;
-  const whatsapp = await prisma.tenantWhatsAppConnection.count({ where: { tenantId, status: 'connected', revokedAt: null } }).catch(() => null);
+  const status = await readCatalogConnectionCounts();
   // Plano Inbox: only WhatsApp numbers and templates.
   if (session.globalRole !== 'platform_admin' && isInboxOnlyPlan(await tenantPlanSlug(session.tenantId))) {
     return <div className="p-6 space-y-6 max-w-7xl">
       <div><h1 className="text-3xl font-bold">Integrações e API</h1><p className="text-sm text-muted-foreground mt-1">Conecte os números de WhatsApp da empresa e gerencie os modelos de mensagem.</p></div>
-      <ConnectionCatalog universal={false} sandbox={false} api={false} inboxOnly status={{whatsapp,instagram:null,meta:null}} />
+      <ConnectionCatalog universal={false} sandbox={false} api={false} inboxOnly status={{whatsapp:status.whatsapp,instagram:null,meta:null}} />
       <div id="whatsapp-connection" className="scroll-mt-24 space-y-4">
         <WhatsAppEmbeddedSignupCard />
         <WhatsAppNumbersCard />
@@ -38,15 +37,11 @@ export default async function IntegrationsPage() {
   }
   const access = await getWorkspace360Access(session);
   const sandbox = session.role === 'developer' && sandboxAvailable(session.tenantId);
-  const [instagram, meta] = await Promise.all([
-    prisma.tenantInstagramConnection.count({ where: { tenantId, status: 'connected', revokedAt: null } }).catch(() => null),
-    prisma.tenantMetaConnection.count({ where: { tenantId, status: 'authorized', revokedAt: null } }).catch(() => null),
-  ]);
   return <>
     <section className="p-6 max-w-7xl space-y-4">
       <h1 className="text-3xl font-bold">Integrações e API</h1>
       <p className="text-sm text-muted-foreground">Central de aplicativos, conexões e credenciais da empresa. Catálogo visual compartilhado pela plataforma; cada autorização é individual por empresa.</p>
-      <ConnectionCatalog universal={access.universal} sandbox={sandbox} api={access.api} status={{whatsapp,instagram,meta}} />
+      <ConnectionCatalog universal={access.universal} sandbox={sandbox} api={access.api} status={status} />
     </section>
     {access.api && <div className="px-6 max-w-7xl"><NativeApiPanel session={session} /></div>}
     <ClientConnectionOnboarding />

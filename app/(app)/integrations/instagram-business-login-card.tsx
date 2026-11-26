@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { notifyCatalogConnectionChanged } from './connection-events';
 import { ConnectionHealthPanel, type ConnectionHealth } from './connection-health-panel';
 import { instagramConnectStageMessage, isInstagramConnectStage, safeProviderCode } from '@/lib/meta/instagram-connect-stages';
 
@@ -92,6 +93,7 @@ export function InstagramBusinessLoginCard() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error('Não foi possível verificar a conexão do Instagram agora.');
       setHealth(payload.health || null);
+      notifyCatalogConnectionChanged();
       if (payload.health?.state === 'healthy') toast.success('Conexão do Instagram validada com a Meta.');
       else if (payload.health?.state === 'provider_error') toast.error('A Meta não respondeu à verificação. Tente novamente mais tarde.');
       else toast.error('A conexão do Instagram precisa de atenção.');
@@ -109,6 +111,7 @@ export function InstagramBusinessLoginCard() {
     try {
       const response = await fetch('/api/integrations/instagram/connection', { method: 'DELETE' });
       if (!response.ok) throw new Error('Não foi possível desconectar o Instagram agora.');
+      notifyCatalogConnectionChanged();
       toast.success('Instagram desconectado do FlipForm.');
       await loadConnection();
     } catch (error) {
