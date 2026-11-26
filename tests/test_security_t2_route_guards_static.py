@@ -23,6 +23,9 @@ GUARDED = {
     "admin/allowed-users/[id]/route.ts": "await getVerifiedSession()",
     "admin/tenants/courtesy/route.ts": "await getVerifiedSession()",
     "auth/me/route.ts": "await getVerifiedSession()",
+    # Global catalog raster images: verified platform admin OR authorized tenant session.
+    # Dedicated guard permits the Admin preview as well as the tenant catalog.
+    "integrations/catalog/icon/[id]/route.ts": "await getVerifiedSessionFromRequest(req)",
     "auth/logout-all/route.ts": VERIFIED,
     "auth/mfa/route.ts": VERIFIED,
     "auth/mfa/setup/route.ts": VERIFIED,
@@ -169,3 +172,15 @@ def test_cron_routes_check_the_secret_before_working():
             continue
         text = (API / path).read_text(encoding="utf-8")
         assert "if (!isCronRequestAuthorized(req))" in text, path
+
+
+def test_global_catalog_icon_guard_precedes_database_read():
+    source = (API / "integrations/catalog/icon/[id]/route.ts").read_text(encoding="utf-8")
+    assert source.index("await getVerifiedSessionFromRequest(req)") < source.index("if(!session ||") < source.index("await prisma.platformCatalogApp.findUnique")
+    assert "session.globalRole!=='platform_admin'" in source
+    assert "!session.tenantId || !can(session.role,'INTEGRATIONS_VIEW')" in source
+    assert "return new NextResponse(null,{status:403})" in source
+    assert "validateIcon(row.iconPng)" in source
+    assert "checked.iconDigest!==row?.iconDigest" in source
+    assert "'Content-Type':'image/png'" in source and "'X-Content-Type-Options':'nosniff'" in source
+    assert not re.search(r"export (?:async )?function (POST|PUT|PATCH|DELETE)\b|export const (POST|PUT|PATCH|DELETE)\s*=", source)

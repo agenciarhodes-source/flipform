@@ -20,11 +20,11 @@ async function boundedBody(req:NextRequest) {
     try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new CatalogInvalid('JSON inválido.');}
   } finally {reader.releaseLock();}
 }
-export const GET=withPlatformAdmin(async()=>{
+export const GET = withPlatformAdmin(async()=>{
   try {const data=await readCatalogAdmin(); return reply(data,data.available?200:503);}
   catch{return reply({error:'Catálogo global indisponível.'},503);}
 });
-export const PUT=withPlatformAdmin(async(req,session)=>{
+export const PUT = withPlatformAdmin(async(req,session)=>{
   if(req.headers.get('origin')!==req.nextUrl.origin) return reply({error:'Origem inválida.'},403);
   try {
     const parsed=catalogInput.safeParse(await boundedBody(req));

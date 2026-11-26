@@ -13,7 +13,7 @@ def test_global_catalog_additive_and_no_tenant_or_provider_writes():
     assert "tenant.update" not in store and "fetch(" not in store
 def test_admin_and_icon_security():
     route=read("app/api/admin/integrations/catalog/route.ts")
-    assert "GET=withPlatformAdmin" in route and "PUT=withPlatformAdmin" in route
+    assert "GET = withPlatformAdmin" in route and "PUT = withPlatformAdmin" in route
     assert "req.headers.get('origin')!==req.nextUrl.origin" in route and "size>100000" in route
     icon=read("app/api/integrations/catalog/icon/[id]/route.ts")
     assert "getVerifiedSessionFromRequest" in icon and "image/png" in icon and "nosniff" in icon
