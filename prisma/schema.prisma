@@ -2850,3 +2850,35 @@ model FlipAdsDraftAudit {
   @@index([tenantId, draftId, createdAt], map: "fad_audit_scope_idx")
   @@map("flip_ads_draft_audits")
 }
+
+/// Global presentation metadata only, never an authorization or a tenant connection.
+model PlatformCatalogApp {
+  id          String   @id
+  label       String
+  description String
+  category    String
+  sortOrder   Int      @map("sort_order")
+  planSlugs   String[] @map("plan_slugs")
+  iconPng     String?  @map("icon_png")
+  iconDigest  String?  @map("icon_digest")
+  revision    Int      @default(1)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  audits      PlatformCatalogAudit[]
+
+  @@map("platform_catalog_apps")
+}
+
+model PlatformCatalogAudit {
+  id        String   @id @default(uuid())
+  appId     String   @map("app_id")
+  actorId   String   @map("actor_id")
+  revision  Int
+  before    Json?
+  after     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  app       PlatformCatalogApp @relation(fields: [appId], references: [id], onDelete: Restrict, map: "pc_audit_app_fk")
+
+  @@unique([appId, revision], map: "pc_audit_revision_key")
+  @@index([createdAt], map: "pc_audit_time_idx")
+  @@map("platform_catalog_audits")
+}
