@@ -51,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           args=(git --redact --no-banner --config .gitleaks.toml --report-format sarif --report-path gitleaks.sarif)
-          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then
+          if [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ] || [ "$REF" = "refs/heads/feat/flipform-360-pr-n-homologation" ]; then
             echo "Whole history"
           elif [ "$REF" = "refs/heads/main" ]; then
             if git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then args+=(--log-opts="${BEFORE}..${SHA}"); else args+=(--log-opts="-1"); fi
@@ -96,7 +96,11 @@ jobs:
           set -euo pipefail
           rules=(--config p/owasp-top-ten --config p/typescript --config p/react --config p/secrets)
           common=(scan --metrics=off --json --output semgrep.json "${rules[@]}")
-          if [ "$EVENT" = "push" ] && [ "$REF" != "refs/heads/main" ]; then
+          if [ "$REF" = "refs/heads/feat/flipform-360-pr-n-homologation" ]; then
+            # Final candidate: full ERROR scan of accumulated code, not merely the last diff.
+            semgrep "${common[@]}" --severity ERROR --error 2> >(tee semgrep.log >&2)
+            jq -e '(.errors | length) == 0' semgrep.json >/dev/null
+          elif [ "$EVENT" = "push" ] && [ "$REF" != "refs/heads/main" ]; then
             # A branch fails only on new high-severity findings it introduces.
             semgrep "${common[@]}" --severity ERROR --error --baseline-commit "$(git merge-base origin/main HEAD)" 2> >(tee semgrep.log >&2)
           else

@@ -32,6 +32,7 @@ jobs:
       EMAIL_FROM: atendimento@flipform.com.br
       EMAIL_REPLY_TO: atendimento@flipform.com.br
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
 
@@ -65,7 +66,7 @@ jobs:
 
       # Security (protocol S1): known vulnerabilities in production dependencies, reported on every PR.
       - name: Dependency audit (production)
-        continue-on-error: true
+        continue-on-error: ${{ github.head_ref != 'feat/flipform-360-pr-n-homologation' && github.ref_name != 'feat/flipform-360-pr-n-homologation' }}
         run: npm audit --omit=dev --audit-level=high
 
       # Multiple company logins: tenant choice is password-gated and allowlist-bound.
@@ -110,6 +111,17 @@ jobs:
 
       - name: Prisma validate
         run: npx prisma validate
+
+      - name: FlipForm 360 A-M TypeScript offline suites
+        env:
+          NODE_OPTIONS: --conditions=react-server
+        run: npm run test:360:ts
+
+      - name: FlipForm 360 A-M Node offline suites
+        run: npm run test:360:node
+
+      - name: FlipForm 360 test manifest coverage
+        run: node --test tests/flipform-360-homologation.test.mjs
 
       - name: Typecheck
         run: npm run typecheck
@@ -167,6 +179,7 @@ jobs:
       EMAIL_FROM: atendimento@flipform.com.br
       EMAIL_REPLY_TO: atendimento@flipform.com.br
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/flipform_ci?schema=public
       CRON_SECRET: test-placeholder
       INTERNAL_JOB_SECRET: test-placeholder
       SMOKE_BASE_URL: http://localhost:3000
@@ -241,6 +254,27 @@ jobs:
         run: |
           node scripts/assert-ci-local-db.mjs flipform_ci
           npx tsx --test tests/universal-connectors-registry.integration.test.ts
+
+      - name: PR-C sync fixture integration (disposable PostgreSQL)
+        env:
+          CI: "true"
+          NODE_OPTIONS: --conditions=react-server
+          UNIVERSAL_SYNC_FIXTURE_ENABLED: "true"
+        run: |
+          node scripts/assert-ci-local-db.mjs flipform_ci --require-direct
+          npx tsx --test tests/universal-sync-fixture.integration.test.ts | tee "$RUNNER_TEMP/flipform-360-sync.tap"
+          grep -Eq '^# pass [1-9][0-9]*$' "$RUNNER_TEMP/flipform-360-sync.tap"
+          grep -Eq '^# skipped 0$' "$RUNNER_TEMP/flipform-360-sync.tap"
+        shell: bash
+
+      - name: PR-A/C/E additive SQL rehearsal (disposable PostgreSQL)
+        run: |
+          set -euo pipefail
+          node scripts/assert-ci-local-db.mjs flipform_ci --require-direct
+          sudo -u postgres createdb flipform_360_sql
+          export PGPASSWORD=postgres
+          psql_local=(psql -X -h 127.0.0.1 -p 5432 -U postgres -d flipform_360_sql -v ON_ERROR_STOP=1)
+          "${psql_local[@]}" --single-transaction -f tests/sql/flipform-360-predecessor.sql -f prisma/migrations/20261124210000_universal_connect_foundation/migration.sql -f prisma/migrations/20261126001000_universal_sync_fixture/migration.sql -f prisma/migrations/20261126040000_flip_ads_campaign_drafts/migration.sql -f tests/sql/flipform-360-constraints.sql
 
       # PR01 Phase 2: synthetic-only isolation on the runner's disposable PostgreSQL.
       # Never use Neon, Vercel, or external integrations in this suite.

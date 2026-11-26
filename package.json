@@ -39,7 +39,9 @@
     "data:update-brazil-cities": "node scripts/update-brazil-cities.mjs",
     "test:cities": "node --test tests/brazil-cities-catalog.test.mjs",
     "revenue:diagnose": "tsx scripts/diagnose-suspicious-revenue.ts --dry-run",
-    "revenue:repair": "tsx scripts/repair-suspicious-revenue.ts"
+    "revenue:repair": "tsx scripts/repair-suspicious-revenue.ts",
+    "test:360:ts": "tsx --test tests/universal-connectors-sandbox.test.ts tests/universal-sync-fixture-policy.test.ts tests/flip-ads-read.test.ts tests/flip-ads-campaign-planner.test.ts",
+    "test:360:node": "node --test tests/flip-ads-additional-reporting.test.mjs tests/google-organic-reporting.test.mjs tests/enterprise-data.test.mjs tests/flip-intelligence-executive-snapshot.test.mjs tests/flip-intelligence-executive-advice.test.mjs tests/executive-whatsapp.test.mjs tests/executive-proactivity.test.mjs tests/flip-intelligence-commercial-readiness.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -1,0 +1,16 @@
+# PR-N — Final code-level homologation (A–M)
+Base: 84c7afb60dceea3c786fcc6af94b09ca25bfb856 (PR-M #671 merged).
+This is a technical validation candidate, not commercial approval. No deployment/activation/migration authorization, real credentials or external paid APIs. All prior new capability groups remain NO-GO for live use (PR-M inventory).
+## Checks
+- Existing CI (dependency install, security floor, production audit, typecheck, Prisma generate/validate, Python suite, existing regressions, build and Smoke Test).
+- Explicit TypeScript suite: tests/universal-connectors-sandbox.test.ts, tests/universal-sync-fixture-policy.test.ts, tests/flip-ads-read.test.ts, tests/flip-ads-campaign-planner.test.ts.
+- Explicit Node suite: tests/flip-ads-additional-reporting.test.mjs, tests/google-organic-reporting.test.mjs, tests/enterprise-data.test.mjs, tests/flip-intelligence-executive-snapshot.test.mjs, tests/flip-intelligence-executive-advice.test.mjs, tests/executive-whatsapp.test.mjs, tests/executive-proactivity.test.mjs, tests/flip-intelligence-commercial-readiness.test.mjs.
+- PR-A registry integration retained; PR-C fixture integration explicitly enabled only in the local runner with no skips permitted.
+- PR-A/C/E SQL rehearsal: create dedicated disposable localhost database with minimal predecessor tenants contract, apply exact three migration SQL files in a single transaction, verify composite foreign keys, uniqueness, checks, restricted deletion and defaults. This is NOT full historical-schema/production migration or backup/restore proof. Existing local Prisma db push and isolation tests remain unchanged except explicit DIRECT_URL and URL guard hardening.
+- Existing Playwright E2E only onboarding suite (currently sole spec), local database; existing SQL review/rehearsal workflows remain unchanged, may be path-filtered/manual or skipped. Inspect applicable runs and report gaps, never mark skipped as passed.
+- Security on exact PR-N branch: whole git history Gitleaks, full high-severity Semgrep with error handling. Production dependency audit blocking on candidate branch. Existing security schedule/diff behavior retained elsewhere. Full history may expose historical findings; remediation must not erase history or leak secrets. Review reports before merge.
+- Vercel staging check; no production testing. A subsequent merge may trigger existing production deployment; owner must separately assess before merging.
+## Operator acceptance
+PR opened for review (not merge); checks may consume Actions minutes; avoid duplicate reruns. Record exact head SHA, workflow/job conclusions, report findings, skipped/absent steps and unresolved issues. No approval if required checks fail or are absent. No production schema changes, repair workflows, live provider calls, secret changes, automatic merge, or enabling business flags. ZAP separately only on verified safe staging. Complete repository privacy review and approved budget before ongoing work.
+## Remaining
+Real integrations, data ingestion, authenticated user-facing dashboards, AI/model integration, executive WhatsApp/voice/agenda, billing and live end-to-end pilot remain implementation/operational blockers per PR-M. The SQL rehearsal covers actual new DDL against a minimal schema, not full migration chain. No claim of production readiness even with green checks.

@@ -24,6 +24,11 @@ export function assertLocalDatabaseUrl(value, expectedDatabase, key = 'DATABASE_
   if (decodeURIComponent(url.pathname) !== `/${expectedDatabase}`) {
     throw new Error(`${key}: wrong disposable database`);
   }
+  if (url.hash || [...url.searchParams.keys()].some(key => key !== 'schema') ||
+      url.searchParams.getAll('schema').length > 1 ||
+      (url.searchParams.has('schema') && url.searchParams.get('schema') !== 'public')) {
+    throw new Error(`${key}: unexpected disposable database URL parameters`);
+  }
   if (url.username !== 'postgres') {
     throw new Error(`${key}: unexpected disposable database role`);
   }
