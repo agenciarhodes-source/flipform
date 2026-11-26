@@ -32,7 +32,7 @@ export default function AdminOverviewPage() {
             <div className="text-sm text-muted-foreground">MRR estimado</div>
             <div className="font-heading text-3xl font-bold">R$ {Number(data.mrr).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
           </div>
-          <Link href="/admin/billing" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Billing & Planos <ArrowRight className="w-3 h-3" /></Link>
+          <Link href="/admin/billing" className={buttonVariants({ variant: 'outline', size: 'sm' })}>Billing &amp; Planos <ArrowRight className="w-3 h-3" /></Link>
         </div>
       </Card>
       <Card className="p-5">

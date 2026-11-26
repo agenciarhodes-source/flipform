@@ -17,6 +17,10 @@ test('rejects remote URLs, wrong databases, roles and ports', () => {
     'postgresql://admin:redacted@127.0.0.1:5432/flipform_e2e',
     'postgresql://postgres:redacted@127.0.0.1:6432/flipform_e2e',
     'https://localhost/flipform_e2e',
+    local + '&host=remote.example.com',
+    local + '&schema=public',
+    local.replace('schema=public', 'schema=private'),
+    local + '#fragment',
     '',
   ]) {
     assert.throws(() => assertLocalDatabaseUrl(candidate, 'flipform_e2e'));

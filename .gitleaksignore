@@ -17,3 +17,8 @@
 # PR2: verified synthetic unit-test key only, identified in Gitleaks SARIF run 45478029219.
 # New commits construct test keys dynamically; this suppresses ONLY the historic finding.
 c067cfa79161c4c885f9155a28f3c5970c697247:tests/flip-voice-telephony-provider.test.ts:generic-api-key:5
+
+# PR-N: verified public RFC 6238 Appendix B SHA-1 TOTP test vector (Base32).
+# Exact historical finding from SARIF run 45771011991; no real credential.
+# All other findings, commits, files and rules remain subject to the full scan.
+c035dfdae64ffa21ac89ef8cfac5365b5d99f2b5:tests/mfa-totp.test.ts:generic-api-key:20
