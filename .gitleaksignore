@@ -22,3 +22,7 @@ c067cfa79161c4c885f9155a28f3c5970c697247:tests/flip-voice-telephony-provider.tes
 # Exact historical finding from SARIF run 45771011991; no real credential.
 # All other findings, commits, files and rules remain subject to the full scan.
 c035dfdae64ffa21ac89ef8cfac5365b5d99f2b5:tests/mfa-totp.test.ts:generic-api-key:20
+
+# PR673: verified import of two policy functions, not a credential (SARIF run 45835119483).
+# Only the exact historic finding is excluded; the generic-api-key rule remains active.
+ac81682f22e76fa513d482bd7c21b7a5c46d9c07:app/(app)/developer-api/page.tsx:generic-api-key:5

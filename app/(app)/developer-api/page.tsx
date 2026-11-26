@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { buttonVariants } from '@/components/ui/button';
 import { getVerifiedSession } from '@/lib/auth';
 import { getWorkspace360Access } from '@/lib/workspace-360/access';
-import { apiV1Enabled, apiV1PilotTenantAllowed } from '@/lib/api-v1/policy';
+import * as apiPolicy from '@/lib/api-v1/policy';
 import { mayManageApiV1Credentials } from '@/lib/api-v1/prisma-credential-repository';
 import { ApiV1Card } from '../integrations/api-v1-card';
 
@@ -12,8 +12,8 @@ export default async function DeveloperApiPage() {
   const session = await getVerifiedSession();
   if (!session) redirect('/login');
   if (session.role !== 'developer' || !(await getWorkspace360Access(session)).api) redirect('/dashboard');
-  const enabled = apiV1Enabled(process.env);
-  const pilot = apiV1PilotTenantAllowed(session.tenantId, process.env);
+  const enabled = apiPolicy.apiV1Enabled(process.env);
+  const pilot = apiPolicy.apiV1PilotTenantAllowed(session.tenantId, process.env);
   const allowed = enabled && pilot && await mayManageApiV1Credentials({ userId: session.userId, tenantId: session.tenantId }, session.tenantId);
   return <main className="p-6 max-w-6xl space-y-6">
     <header><h1 className="text-3xl font-bold">API</h1><p className="text-sm text-muted-foreground mt-1">Acesso de sistemas externos aos recursos autorizados do FlipForm.</p></header>
