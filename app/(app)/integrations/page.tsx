@@ -6,8 +6,9 @@ import { can } from '@/lib/rbac';
 import { ClientConnectionOnboarding } from './client-connection-onboarding';
 import { GoogleFunnelCard } from './google-funnel-card';
 import { IntegrationsClient } from './integrations-client';
-import { ApiV1Card } from './api-v1-card';
-import { apiV1Enabled } from '@/lib/api-v1/policy';
+import Link from 'next/link';
+import { getWorkspace360Access } from '@/lib/workspace-360/access';
+import { SYSTEM_CATEGORIES } from '@/lib/universal-connectors/catalog';
 import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
 import { WhatsAppNumbersCard } from './whatsapp-numbers-card';
 import { WhatsAppTemplatesCard } from './whatsapp-templates-card';
@@ -35,11 +36,15 @@ export default async function IntegrationsPage() {
       </div>
     </div>;
   }
+  const access = await getWorkspace360Access(session);
   return <>
+    <section className="p-6 max-w-7xl space-y-3"><h1 className="text-3xl font-bold">Integrações</h1><p className="text-sm text-muted-foreground">Conecte serviços externos ao FlipForm. As conexões existentes permanecem abaixo.</p>
+      {access.api && <Link href="/developer-api" className="text-sm underline">Administrar API e chaves do FlipForm</Link>}
+      {access.universal && <div className="rounded-xl border bg-card p-5 space-y-3"><h2 className="font-semibold">Central de conexões universais</h2><p className="text-sm text-muted-foreground">Catálogo de categorias planejadas. Não representa contas conectadas nem sincronizações ativas.</p><div className="flex flex-wrap gap-2">{SYSTEM_CATEGORIES.map(category => <span key={category} className="rounded-full border px-3 py-1 text-xs">{category}</span>)}</div></div>}
+    </section>
     <ClientConnectionOnboarding />
     <IntegrationsClient />
     {session.role === 'developer' && sandboxAvailable(session.tenantId) && <UniversalSandboxCard />}
-    {session.role === 'developer' && apiV1Enabled(process.env) && <ApiV1Card />}
     <div id="google-funnel" className="scroll-mt-24">
       <GoogleFunnelCard />
     </div>
