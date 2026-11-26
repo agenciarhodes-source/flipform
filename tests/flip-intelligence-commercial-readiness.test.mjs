@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readinessInventory, evaluateCommercialReadiness } from '../lib/flip-intelligence/commercial-readiness.mjs';
+const t="12345678-1234-1234-1234-123456789abc";
+const u="22345678-1234-1234-1234-123456789abc";
+const other="32345678-1234-1234-1234-123456789abc";
+const commit="398e39077913a6b728377be5971c388a746cd00f";
+const nowISO="2026-11-26T06:30:00.000Z";
+const actor={"mode":"fixture","tenantId":"12345678-1234-1234-1234-123456789abc","userId":"22345678-1234-1234-1234-123456789abc","role":"owner","membership":"active","tenantStatus":"active","mfaVerified":true,"planActive":true,"subscriptionStatus":"active","planSlug":"premium-pro"};
+function input(feature="flip_ads_campaigns",overrides={}){
+ return {mode:"fixture",feature,commit,nowISO,actor,pilotEnabled:true,pilotTenantIds:[t],budget:{mode:"fixture",tenantId:t,feature,currency:"USD",verified:true,monthlyLimitMicros:1000000,reservedMicros:100000,nextMaxCostMicros:100000,expiresAt:"2026-11-26T07:00:00.000Z"},evidence:[],...overrides};
+}
+function evidenceFor(feature){
+ const f=readinessInventory().find(x=>x.feature===feature);
+ return [...f.commonEvidence,...f.implementationBlockers].map((key,i)=>({key,mode:"fixture",tenantId:t,feature,commit,environment:"isolated_staging",status:"pass",receiptId:"42345678-1234-1234-1234-"+String(i+1).padStart(12,"0"),observedAt:nowISO}));
+}
+test("inventory covers all new capability groups; only Ads plan established", ()=>{const a=readinessInventory();assert.equal(a.length,10);assert.equal(a.filter(x=>x.planRule==="premium-pro").length,2);assert.ok(a.every(x=>x.status==="not_released"&&x.implementationBlockers.length>0));const b=readinessInventory();a[0].implementationBlockers.length=0;assert.ok(b[0].implementationBlockers.length>0);});
+test("complete synthetic evidence cannot authorize launch or billing", ()=>{const a=evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:evidenceFor("flip_ads_campaigns")}));assert.equal(a.syntheticChecklistComplete,true);assert.equal(a.decision,"NO_GO");assert.equal(a.productionReady,false);assert.equal(a.activationAuthorized,false);assert.equal(a.dispatchAuthorized,false);assert.equal(a.billingChangeAuthorized,false);assert.equal(a.automaticMergeAuthorized,false);});
+test("owner, MFA, active subscription, Premium Pro and undefined plans", ()=>{for(const change of [{role:"developer"},{mfaVerified:false},{membership:"inactive"},{tenantStatus:"suspended"},{planSlug:"premium"},{subscriptionStatus:"trialing"}])assert.equal(evaluateCommercialReadiness(input("flip_ads_campaigns",{actor:{...actor,...change},evidence:evidenceFor("flip_ads_campaigns")})).syntheticChecklistComplete,false);assert.ok(evaluateCommercialReadiness(input("executive_whatsapp",{evidence:evidenceFor("executive_whatsapp")})).reasons.includes("COMMERCIAL_PLAN_UNDEFINED"));});
+test("pilot and budget fail closed without changing anything", ()=>{for(const ids of [[],[other],[t,t],["*"]])assert.ok(evaluateCommercialReadiness(input("flip_ads_campaigns",{pilotTenantIds:ids})).reasons.includes("PILOT_NOT_AUTHORIZED"));const b=input().budget;for(const change of [{tenantId:other},{verified:false},{currency:"BRL"},{nextMaxCostMicros:0},{reservedMicros:950000},{expiresAt:nowISO}])assert.ok(evaluateCommercialReadiness(input("flip_ads_campaigns",{budget:{...b,...change}})).reasons.includes("BUDGET_NOT_VERIFIED"));});
+test("scope-bound evidence exact commit, tenant, feature and staging", ()=>{const e=evidenceFor("flip_ads_campaigns");for(const change of [{tenantId:other},{feature:"data_hub"},{commit:"a".repeat(40)},{environment:"production"},{mode:"live"},{observedAt:"2026-11-27T00:00:00.000Z"}])assert.throws(()=>evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:[{...e[0],...change}]})));assert.throws(()=>evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:[e[0],e[0]]})));});
+test("CI alone, stale or failed evidence, live mode never accepted", ()=>{const e=evidenceFor("flip_ads_campaigns");assert.ok(evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:[e[0]]})).missingEvidence.length>0);assert.ok(evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:[{...e[0],observedAt:"2026-11-01T00:00:00.000Z"}]})).missingEvidence.includes(e[0].key));assert.ok(evaluateCommercialReadiness(input("flip_ads_campaigns",{evidence:[{...e[0],status:"fail"}]})).missingEvidence.includes(e[0].key));assert.throws(()=>evaluateCommercialReadiness(input("flip_ads_campaigns",{mode:"live"})));});

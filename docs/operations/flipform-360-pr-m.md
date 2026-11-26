@@ -1,0 +1,23 @@
+# PR-M — Commercial readiness and release blockers
+Base 398e39077913a6b728377be5971c388a746cd00f; PR-L #670 merged. Current verdict **NO-GO** for the new 360° capability groups, not a prohibition on existing FlipForm functionality. Merged PR count is not production readiness. The current PR-A..L foundations are not complete operational integrations. Passing CI or Vercel build alone cannot remove implementation blockers.
+## Release inventory
+| PR | Capability | Plan rule | Outstanding implementation/evidence |
+|---|---|---|---|
+| B | universal_connections | Undecided | trusted_connector_runtime; provider_account_verification; credential_rotation_revocation; sandbox_e2e |
+| C | data_hub | Undecided | durable_real_ingestion; schema_and_migration_rehearsal; reconciliation_coverage; retention_approval |
+| D/F | flip_ads_reporting | premium-pro | provider_oauth_and_transport; verified_reporting_coverage; account_scope_e2e |
+| E | flip_ads_campaigns | premium-pro | authenticated_ui_api; postgres_concurrency_e2e; provider_policy_validation; publication_approval_and_transport |
+| G | organic_reporting | Undecided | google_oauth_and_transport; provider_data_use_review; verified_reporting_coverage |
+| H | enterprise_data | Undecided | erp_crm_adapter_selection; live_adapters_and_storage; reconciliation_coverage |
+| I | flip_intelligence | Undecided | verified_real_sources; authenticated_dashboard; native_pipeline_metrics; forecast_validation |
+| J | executive_advice | Undecided | trusted_session_and_entitlements; verified_real_sources; approved_model_integration; grounded_output_validation |
+| K | executive_whatsapp | Undecided | dedicated_asset_and_router; durable_binding_and_mfa; isolated_outbox_and_idempotency; authorized_message_e2e |
+| L | executive_proactivity | Undecided | durable_scheduler_and_outbox; approved_templates_and_consent; atomic_budget_and_quota; authorized_calendar_e2e; executive_voice_provider_e2e |
+Existing PR-E explicitly gates Ads drafts on active Premium Pro subscription; preserve that rule and use it for new Ads reporting as a conservative proposal consistent with product direction. No new plans, prices, Stripe changes, grants or subscriptions. All other new commercial entitlements remain undefined; no implicit Premium/Premium Pro grant. Existing outbound API v1 separate policy (premium/premium-pro, developer key administration) is not changed. Existing production maintenance, developer privileges, lead/CRM behavior and Flip Voice remain untouched.
+## Common gates
+Exact candidate commit CI and regression, two-tenant security E2E, isolated staging target attestation, backup/restore rehearsal, retention/privacy approval, explicit operator release authorization, rollback plan. Do not interpret a merge or CI receipt as authorization to deploy, migrate, activate flags, spend, send or publish. Require actual trusted evidence and separate permission for any external action. Synthetic budget in USD micros, no prices or charges; must implement atomic reservations/reconciliation, currency policy and real quota checks before use. Seven-day evidence freshness is a conservative fixture heuristic, not an operational SLA. Synthetic evidence only, scoped by tenant/feature/commit/staging, unique keys; all successful synthetic receipts still NO-GO. No authentication, no runtime entitlement enforcement, no policy wiring, no DB or external I/O. No source/credential or user data in outputs. A new reviewed implementation and release decision is mandatory to supersede this gate. 
+## Next PR-N
+Inspect actual workflow files and available Actions/rules. Add explicit commands for every new offline suite, existing Python static tests, TS tests (including applicable server-only conditions), Node tests, typecheck, Prisma validation, build, disposable PostgreSQL migration/schema/isolation rehearsal and Playwright as supported by workflows. Run existing security checks (Gitleaks, Semgrep, offline SQL, data safety) without touching production, avoid maintenance/repair jobs. Do not use paid external API calls. Re-enable Actions only under operator control; no automatic merge, no use of live credentials. Record each check's exact SHA and status; absent/skipped is not pass. Separate code-level homologation from unresolved commercial readiness. If checks fail, fix or report; never issue real credentials or activate features based on CI. Operational integration follow-up is required even after PR-N.
+## Validation
+node --test tests/flip-intelligence-commercial-readiness.test.mjs
+Six case functions executed in isolated JS before commit. Node runner and Vercel pending. No manual Actions run or automatic merge.
