@@ -23,7 +23,7 @@ def test_rejects_other_tenant_host_redirect_and_wrong_prefix():
     assert not worker.valid_url(good,"b",False,ENV)
     assert not worker.valid_url(good.replace(".r2.cloudflarestorage.com",".evil.example"),"a",False,ENV)
     assert not worker.valid_url(good,"a",True,ENV)
-    assert not worker.valid_url(good.replace("/whatsapp/","/gojus-temp/"),"a",False,ENV)
+    assert not worker.valid_url(good.replace("/whatsapp/","/flip-pdf-temp/"),"a",False,ENV)
     assert not worker.valid_url(good+"&extra=1","a",False,ENV)
     assert worker.NoRedirect().redirect_request(None,None,None,None,None) is None
 
@@ -32,7 +32,9 @@ def test_real_pdf_conversion_with_mocked_private_r2_get_and_put():
     Image.new("RGB",(100,150),"white").save(b,"PNG")
     image=b.getvalue()
     source=url("tenants/a/whatsapp/id")
-    target=url("tenants/a/gojus-temp/12345678-1234-1234-1234-123456789abc.pdf",True)
+    target=url("flip-pdf-temp/a/12345678-1234-4234-8234-123456789abc.pdf",True)
+    assert not worker.valid_url(target,"b",True,ENV)
+    assert not worker.valid_url(url("tenants/a/gojus-temp/12345678-1234-4234-8234-123456789abc.pdf",True),"a",True,ENV)
     manifest={"tenantId":"a","files":[{"url":source,"mime":"image/png","size":len(image)}],"outputUrl":target}
     class Response(BytesIO):
         def __init__(self,data):

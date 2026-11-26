@@ -17,3 +17,6 @@ def test_gojus_bundle_scopes_and_fail_closed():
     assert "GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1'" in s
     assert "downloadUrl:result.url" in r
     assert "content:bytes.toString('base64')" not in s
+
+    assert "flip-pdf-temp/${input.tenantId}/" in s
+    assert "digest.digest('hex')!==result.sha256" in s
