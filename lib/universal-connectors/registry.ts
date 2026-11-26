@@ -20,7 +20,7 @@ const serializable = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
 export async function listConnections(actor: UniversalActor, db: PrismaClient = prisma) {
   return db.$transaction(async tx => {
     await assertOwner(tx, actor);
-    return tx.universalConnection.findMany({ where: { tenantId: actor.tenantId }, select: safeSelect, orderBy: { createdAt: 'desc' }, take: 100 });
+    return tx.universalConnection.findMany({ where: { tenantId: actor.tenantId, providerId: { not: 'gojus_browser' } }, select: safeSelect, orderBy: { createdAt: 'desc' }, take: 100 });
   }, serializable);
 }
 
@@ -40,7 +40,7 @@ export async function registerConnection(actor: UniversalActor, descriptor: Conn
 export async function replaceCredential(actor: UniversalActor, connectionId: string, secret: string, db: PrismaClient = prisma) {
   return db.$transaction(async tx => {
     await assertOwner(tx, actor);
-    const row = await tx.universalConnection.findFirst({ where: { id: connectionId, tenantId: actor.tenantId, revokedAt: null, enabled: false }, select: { id: true, providerId: true } });
+    const row = await tx.universalConnection.findFirst({ where: { id: connectionId, tenantId: actor.tenantId, providerId: { not: 'gojus_browser' }, revokedAt: null, enabled: false }, select: { id: true, providerId: true } });
     if (!row) throw new Error('Connection unavailable');
     const envelope = sealCredential(secret, { tenantId: actor.tenantId, connectionId: row.id, providerId: row.providerId }, currentVaultKey());
     const data = { keyId: envelope.keyId, ciphertext: envelope.ciphertext };
@@ -56,7 +56,7 @@ export async function replaceCredential(actor: UniversalActor, connectionId: str
 export async function revokeConnection(actor: UniversalActor, connectionId: string, db: PrismaClient = prisma) {
   return db.$transaction(async tx => {
     await assertOwner(tx, actor);
-    const result = await tx.universalConnection.updateMany({ where: { tenantId: actor.tenantId, id: connectionId, revokedAt: null }, data: { enabled: false, revokedAt: new Date() } });
+    const result = await tx.universalConnection.updateMany({ where: { tenantId: actor.tenantId, id: connectionId, providerId: { not: 'gojus_browser' }, revokedAt: null }, data: { enabled: false, revokedAt: new Date() } });
     if (result.count !== 1) throw new Error('Connection unavailable');
     await tx.universalConnectionCredential.deleteMany({ where: { tenantId: actor.tenantId, connectionId } });
     await tx.universalConnectionAudit.create({ data: { tenantId: actor.tenantId, connectionId, actorUserId: actor.userId, action: 'revoked.local' } });
