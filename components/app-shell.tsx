@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { can, ROLE_LABELS_PT_BR, type PermissionKey, type RoleName } from "@/lib/rbac";
+import { type Workspace360Access, NO_WORKSPACE_360 } from "@/lib/workspace-360/policy";
 import { INBOX_PLAN_PAGES } from "@/lib/billing/inbox-plan-rules";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -41,6 +42,9 @@ import {
   MessageCircle,
   Instagram,
   Sparkles,
+  Brain,
+  Megaphone,
+  Code2,
 } from "lucide-react";
 import { FlipNavBadge } from "@/components/flip/alerts-board";
 import { DailyBriefingPopup } from "@/components/flip/daily-briefing";
@@ -95,6 +99,9 @@ const NAV: NavItem[] = [
     icon: UserCog,
     permission: "USERS_VIEW",
   },
+  { href: "/flip-intelligence", label: "Flip Intelligence", icon: Brain },
+  { href: "/flip-ads", label: "Flip Ads", icon: Megaphone },
+  { href: "/developer-api", label: "API", icon: Code2 },
   {
     href: "/integrations",
     label: "Integrações",
@@ -115,8 +122,8 @@ const NAV_SECTIONS: Array<{ title: string; hrefs: string[] }> = [
   { title: "Atendimento", hrefs: ["/inbox", "/direct", "/suporte-atendimento", "/automations"] },
   { title: "Inteligência artificial", hrefs: ["/flip-ai", "/whatsapp-ai", "/instagram-ai"] },
   { title: "Captação", hrefs: ["/forms", "/domains"] },
-  { title: "Análise", hrefs: ["/reports"] },
-  { title: "Administração", hrefs: ["/integrations", "/users", "/billing", "/settings", "/settings/suporte-atendimento"] },
+  { title: "Análise", hrefs: ["/reports", "/flip-intelligence", "/flip-ads"] },
+  { title: "Administração", hrefs: ["/integrations", "/developer-api", "/users", "/billing", "/settings", "/settings/suporte-atendimento"] },
 ];
 
 function navSections<T extends { href: string }>(items: T[]) {
@@ -155,6 +162,7 @@ export function AppShell({
   isBusinessGroupAnchor = false,
   inboxOnly = false,
   supportKnowledgeEnabled = false,
+  workspace360 = NO_WORKSPACE_360,
 }: {
   children: React.ReactNode;
   session: SessionPayload;
@@ -166,6 +174,7 @@ export function AppShell({
   inboxOnly?: boolean;
   /** Consulta do Suporte somente para Atendentes com associação ativa ao tenant. */
   supportKnowledgeEnabled?: boolean;
+  workspace360?: Workspace360Access;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -195,6 +204,9 @@ export function AppShell({
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
+      && (item.href !== "/developer-api" || workspace360.api)
+      && (item.href !== "/flip-intelligence" || workspace360.intelligence)
+      && (item.href !== "/flip-ads" || workspace360.ads)
       && (item.href !== "/suporte-atendimento" || supportKnowledgeEnabled)
       && !(item.href === "/team" && !hasCurrentTenantMembership)
       && (!inboxOnly || inGroupView || isBusinessGroupAnchor || inboxPlanMenu.has(item.href)),

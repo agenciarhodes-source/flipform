@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/app-shell";
+import { getWorkspace360Access } from "@/lib/workspace-360/access";
+import { NO_WORKSPACE_360 } from "@/lib/workspace-360/policy";
 import { canReadTenantSupportKnowledge } from "@/lib/suporte-atendimento/access";
 import { isTenantSupportActive } from "@/lib/suporte-atendimento/tenant-knowledge";
 import { requireBillingAccess } from "@/lib/billing-access";
@@ -72,8 +74,12 @@ export default async function AppGroupLayout({
     canReadTenantSupportKnowledge(session) &&
     await isTenantSupportActive(session.tenantId);
 
+  const workspace360 = !isBusinessGroupAnchor && !inboxOnly && billingAccess.allowAccess
+    ? await getWorkspace360Access(session) : NO_WORKSPACE_360;
+
   return (
     <AppShell
+      workspace360={workspace360}
       supportKnowledgeEnabled={supportKnowledgeEnabled}
       session={session}
       businessGroups={groupState.accesses.map((group) => ({ id: group.id, name: group.name, role: group.role }))}
