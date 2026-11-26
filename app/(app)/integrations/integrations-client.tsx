@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { normalizeIntegrationSettings } from '@/lib/integration-settings-client';
 import { getFinalTrackingLogs } from '@/lib/tracking/logs';
 import { MetaAssetSelector } from './meta-asset-selector';
+import { notifyCatalogConnectionChanged } from './connection-events';
 
 const providers = [
   { value: 'meta', label: 'Meta' },
@@ -113,6 +114,7 @@ export function IntegrationsClient() {
       const response = await fetch('/api/integrations/meta/connection', { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Não foi possível desconectar a conta Meta.');
+      notifyCatalogConnectionChanged();
       toast.success('Conta Meta desconectada deste tenant.');
       await load();
     } catch (error: any) {
@@ -226,7 +228,7 @@ export function IntegrationsClient() {
 
   return <div className="p-6 space-y-6 max-w-7xl">
     <div>
-      <h1 className="text-3xl font-bold">Integrações</h1>
+      <h2 className="text-xl font-semibold">Meta, Google e eventos</h2>
       <p className="text-sm text-muted-foreground mt-1">Configure os pixels e eventos para otimizar suas campanhas com base no avanço real dos leads no funil.</p>
     </div>
 
