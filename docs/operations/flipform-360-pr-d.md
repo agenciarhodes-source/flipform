@@ -1,0 +1,12 @@
+# FlipForm 360° — PR-D: Flip Ads / leitura
+Base bbb37adff2019a5c45c53d3ff33dc964fc212ed2; PR-A/B/C integrados. Escopo parcial e offline, sem ativação.
+- Meta Insights: GET por conta e nível campaign/adset/ad, janela diária de até 31 dias; cursor opaco, campos fixos.
+- Google Ads Search: POST de consulta GAQL fixa (não é mutate), por campaign/ad_group/ad_group_ad; versão selecionada por configuração futura homologada. Não confundir Data Manager de conversões com Google Ads Reporting.
+- Projeção tipada diária, hierarquia, moeda, gasto em micros, cliques, impressões, origem por tenant/provider/conta; verificação explícita do vínculo e rejeição de conta compartilhada. Sem dados pessoais, token ou payload bruto.
+- CTR/CPC calculados; CPL/CPA/ROAS só com resultados CRM reconciliados da mesma conta/período/moeda. Sem deduzir vendas de estágios, conversões de plataforma ou nomes UTM. Agregar somente nível campanha, sem misturar moedas ou contas. Janela observada não garante cobertura completa: exigir páginas concluídas e período conciliado antes de publicar indicadores.
+- Não altera os diagnósticos Meta existentes, pixels, eventos Google, carteira Flip AI, leads, GoJus, banco, permissões, workflows ou rotas existentes.
+## Limites e próximos gates
+Não existe transporte HTTP novo, conexão OAuth funcional, tela, worker, persistência de Ads no Data Hub ou reconciliação CRM. Planos de consulta e normalizadores são blocos de código testáveis offline. Antes de conectar: aprovar conta teste, OAuth/escopos, vínculo MFA por empresa, quotas, egress/DNS/TLS e proibição de redirects, limites de corpo e páginas, versão compatível, cobertura e paginação completa, timezone, atualização de atribuição e retenção. Nunca aceitar grant, URL, GAQL, token ou cursor desvinculado do contexto de um cliente via body. Meta insights não inclui campanhas sem entrega; catálogo/status Meta e inventário completo exigem consultas separadas. Performance Max pode não ter hierarquia convencional; não tratar ausência como zero.
+## Testes
+Com dependências locais: npx tsx --test tests/flip-ads-read.test.ts. GitHub Actions: não acionar manualmente. Build Vercel não prova consulta real. Não cadastrar secrets, não realizar chamadas externas nem aplicar migrações.
+Referências técnicas: https://developers.facebook.com/docs/marketing-api/insights/ ; https://developers.google.com/google-ads/api/rest/common/search ; https://developers.google.com/google-ads/api/docs/reporting/example .
