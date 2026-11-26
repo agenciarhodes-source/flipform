@@ -3,6 +3,7 @@
 Call only from a resource-limited, isolated worker with a server-authorized manifest.
 The input sequence is the approved order, never paths/URLs from a customer.
 """
+from contextlib import closing
 from dataclasses import dataclass
 from hashlib import sha256
 from io import BytesIO
@@ -100,12 +101,12 @@ def build_bundle(sources: list[Source]) -> Bundle:
                         raise BundleError("Quantidade de páginas inválida.")
                     document.init_forms()
                     for index in range(len(document)):
-                        with document[index] as page:
+                        with closing(document[index]) as page:
                             width, height = page.get_size()
                             if not (0 < width <= 14400 and 0 < height <= 14400):
                                 raise BundleError("Dimensão de página inválida.")
                             scale = min(DPI / 72, (MAX_RENDER_PIXELS / (width * height)) ** 0.5)
-                            with page.render(scale=scale, draw_annots=True) as bitmap:
+                            with closing(page.render(scale=scale, draw_annots=True)) as bitmap:
                                 # Rasterize visible content; do not import forms, actions or embedded files.
                                 add_page(image_pdf(bitmap.to_pil().copy()))
             elif source.mime in ("image/jpeg", "image/png"):
