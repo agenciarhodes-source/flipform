@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { getVerifiedSession } from '@/lib/auth';
 import { getWorkspace360Access } from '@/lib/workspace-360/access';
 import { apiV1Enabled, apiV1PilotTenantAllowed } from '@/lib/api-v1/policy';
@@ -24,7 +25,7 @@ export default async function DeveloperApiPage() {
     <section className="rounded-xl border bg-card p-5 space-y-3"><h2 className="font-semibold">Escopos disponíveis na interface</h2>
       <ul className="list-disc pl-5 text-sm space-y-1"><li>integrations.read — diagnóstico</li><li>pipelines.read — pipelines</li><li>forms.read — formulários</li><li>pipelines.metrics.read — contagens por etapa</li><li>leads.metadata.read — metadados operacionais</li></ul>
       <p className="text-sm text-muted-foreground">Não são permissões para movimentar ou apagar leads, enviar mensagens ou consultar documentos.</p>
-      <Link href="/integrations" className="text-sm underline">Conexões com sistemas externos</Link>
+      <Link href="/integrations" className={buttonVariants({ variant: "outline", size: "sm" })}>Conexões com sistemas externos</Link>
     </section>
   </main>;
 }

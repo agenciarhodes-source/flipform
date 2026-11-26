@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { buttonVariants } from '@/components/ui/button';
 import { getVerifiedSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWorkspace360Access } from '@/lib/workspace-360/access';
@@ -25,6 +26,6 @@ export default async function FlipIntelligencePage() {
       {metrics ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{labels.map((label,i)=><div key={label} className="rounded-xl border bg-card p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="text-3xl font-semibold mt-2">{metrics[i].toLocaleString('pt-BR')}</p></div>)}</div> : <p role="alert" className="rounded-xl border p-4 text-sm">Não foi possível consultar os dados agora. Nenhum valor foi estimado.</p>}
     </section>
     <section className="grid gap-3 md:grid-cols-3">{['Financeiro e ERP','Marketing e publicidade','Previsões e recomendações'].map(name=><div key={name} className="rounded-xl border bg-card p-5 space-y-2"><h2 className="font-semibold">{name}</h2><p className="text-sm text-muted-foreground">Dados ainda não homologados nesta seção. Indicadores serão exibidos quando houver fonte e cobertura verificadas.</p></div>)}</section>
-    <Link href="/dashboard" className="text-sm underline">Abrir dashboard existente</Link>
+    <Link href="/dashboard" className={buttonVariants({ variant: "outline", size: "sm" })}>Abrir dashboard existente</Link>
   </main>;
 }
