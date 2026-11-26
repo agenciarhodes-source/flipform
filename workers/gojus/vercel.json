@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "functions": {
+    "api/pdf.py": {
+      "maxDuration": 120,
+      "includeFiles": "pdf_bundle.py"
+    }
+  }
+}

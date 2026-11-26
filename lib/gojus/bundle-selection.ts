@@ -13,5 +13,5 @@ export function selectLatestCaseFiles(keys:readonly string[],documents:readonly 
   }
   return new Set(result).size===result.length?result:null;
 }
-export const GOJUS_DOWNLOAD_LIMIT=4*1024*1024;
+export const GOJUS_OUTPUT_LIMIT=24*1024*1024;
 export const GOJUS_INPUT_LIMIT=20*1024*1024;
