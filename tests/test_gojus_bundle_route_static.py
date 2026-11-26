@@ -13,4 +13,7 @@ def test_gojus_bundle_scopes_and_fail_closed():
     assert "canEditLead(session.role,lead,session.userId)" in r
     assert "tenantHasFeature(session.tenantId,'gojus_sheet')" in r
     assert "private, no-store" in r and "gojus.pdf_generated" in r
-    assert "GOJUS_DOWNLOAD_LIMIT" in s
+    assert "GOJUS_OUTPUT_LIMIT" in s
+    assert "GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1'" in s
+    assert "downloadUrl:result.url" in r
+    assert "content:bytes.toString('base64')" not in s

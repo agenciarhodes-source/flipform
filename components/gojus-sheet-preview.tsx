@@ -37,10 +37,11 @@ export function GoJusSheetPreview({leadId}:{leadId:string}){
     try{
       const res=await fetch('/api/leads/'+encodeURIComponent(leadId)+'/gojus-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversationId:chosen.conversationId,confirmed:true}),cache:'no-store'});
       if(!res.ok){const data=await res.json().catch(()=>null);throw Error(data?.error||'Não foi possível gerar o PDF.');}
-      if(res.headers.get('content-type')!=='application/pdf')throw Error('Resposta inválida.');
-      const blob=await res.blob();
-      const url=URL.createObjectURL(blob);
-      try{const a=document.createElement('a');a.href=url;a.download='documentacao_completa.pdf';a.click();}finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000);}
+      const data=await res.json();
+      if(typeof data.downloadUrl!=='string')throw Error('Resposta inválida.');
+      const url=new URL(data.downloadUrl);
+      if(url.protocol!=='https:'||!/^([a-f0-9]{32})\\.r2\\.cloudflarestorage\\.com$/.test(url.hostname)||url.username||url.password||url.port)throw Error('Endereço de download inválido.');
+      const a=document.createElement('a');a.href=url.href;a.rel='noreferrer';a.download='documentacao_completa.pdf';a.click();
     }catch(e){toast.error(e instanceof Error?e.message:'Não foi possível gerar o PDF.');}finally{setPdfBusy(false);}
   }
   return <section className="rounded-lg border p-3 space-y-3">

@@ -24,8 +24,10 @@ export const POST=withPermission('LEADS_VIEW',async(req,session,ctx:{params:{id:
   try{
     const result=await generateGoJusPdf({tenantId:session.tenantId,leadId:lead.id,conversationId:body.conversationId});
     if(!await tenantHasFeature(session.tenantId,'gojus_sheet'))return json('Recurso não disponível.',403);
+    const current=await prisma.lead.findFirst({where:{...getLeadScopeForRole(session),id:lead.id,tenantId:session.tenantId},select:{id:true,assignedTo:true}});
+    if(!current||!canEditLead(session.role,current,session.userId))return json('Sem permissão.',403);
     await prisma.auditLog.create({data:{tenantId:session.tenantId,userId:session.userId,entityType:'lead',entityId:lead.id,action:'gojus.pdf_generated',metadata:{fileCount:result.count,outputSha256:result.hash}}});
-    return new NextResponse(new Uint8Array(result.pdf),{headers:{...headers,'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="documentacao_completa.pdf"'}});
+    return NextResponse.json({downloadUrl:result.url},{headers});
   }catch(error){
     if(error instanceof GoJusBundleError){
       if(error.code==='too_large')return json('Documentação acima do limite de geração ou download. Revise manualmente.',413);

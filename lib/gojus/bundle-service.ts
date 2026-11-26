@@ -1,22 +1,22 @@
 import 'server-only';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {prisma} from '@/lib/prisma';
 import {tenantHasFeature} from '@/lib/billing/tenant-features';
 import {signedClosingReview} from '@/lib/closing-documents/signed-review';
-import {createAttachmentDownloadUrl,resolveAttachmentStorage,type AttachmentStorageConfig} from '@/lib/storage/attachment-storage';
+import {createAttachmentDownloadUrl,deleteAttachmentObject,presignS3Url,resolveAttachmentStorage,type AttachmentStorageConfig} from '@/lib/storage/attachment-storage';
 import {planGoJusBundle,type BundleFile} from './pre-registration-rules';
-import {selectLatestCaseFiles,GOJUS_DOWNLOAD_LIMIT,GOJUS_INPUT_LIMIT} from './bundle-selection';
+import {selectLatestCaseFiles,GOJUS_OUTPUT_LIMIT,GOJUS_INPUT_LIMIT} from './bundle-selection';
 
 type Identity={tenantId:string;leadId:string;conversationId:string};
 export class GoJusBundleError extends Error{
   constructor(public readonly code:'disabled'|'incomplete'|'unavailable'|'too_large'|'changed'){super(code);}
 }
 function workerConfig(){
-  if(process.env.GOJUS_PDF_WORKER_ENABLED!=='1')return null;
+  if(process.env.GOJUS_PDF_WORKER_ENABLED!=='1'||process.env.GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1')return null;
   const token=process.env.GOJUS_PDF_WORKER_TOKEN||'';
   try{
     const url=new URL(process.env.GOJUS_PDF_WORKER_URL||'');
-    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/v1/pdf'||token.length<32)return null;
+    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/api/pdf'||token.length<32)return null;
     return {url:url.href,token};
   }catch{return null;}
 }
@@ -58,38 +58,36 @@ async function selectManifest(input:Identity){
   const ordered=plan.files.map(id=>selected.find(a=>a.id===id)!);
   return {sentId:review.sentId,ordered,fingerprint:createHash('sha256').update(JSON.stringify([review.sentId,ordered])).digest('hex')};
 }
-async function boundedBytes(response:Response,max:number){
-  if(!response.ok||!response.body)throw new GoJusBundleError('unavailable');
-  const declared=response.headers.get('content-length');
-  if(declared!==null&&(!/^\d+$/.test(declared)||Number(declared)>max))throw new GoJusBundleError('too_large');
-  const reader=response.body.getReader();const chunks:Uint8Array[]=[];let n=0;
-  try{while(true){const next=await reader.read();if(next.done)break;n+=next.value.byteLength;if(n>max)throw new GoJusBundleError('too_large');chunks.push(next.value);}}
-  finally{await reader.cancel().catch(()=>undefined);}
-  return Buffer.concat(chunks,n);
+function signedUrl(config:AttachmentStorageConfig,method:'GET'|'PUT'|'HEAD',key:string){
+  return presignS3Url({method,host:config.accountId+'.r2.cloudflarestorage.com',path:'/'+config.bucket+'/'+key,accessKeyId:config.accessKeyId,secretAccessKey:config.secretAccessKey,region:'auto',expiresSeconds:180,...(method==='PUT'?{signedHeaders:{'content-type':'application/pdf'}}:{})});
 }
-async function readOriginal(config:AttachmentStorageConfig,key:string,size:number,signal:AbortSignal){
-  const response=await fetch(createAttachmentDownloadUrl(config,{key}),{method:'GET',cache:'no-store',redirect:'error',signal});
-  const bytes=await boundedBytes(response,size);
-  if(bytes.length!==size)throw new GoJusBundleError('changed');
-  return bytes;
+async function boundedJson(response:Response){
+  if(!response.ok||!response.body||response.headers.get('content-type')?.split(';')[0]!=='application/json')throw new GoJusBundleError('unavailable');
+  const reader=response.body.getReader();const chunks:Uint8Array[]=[];let length=0;
+  try{while(true){const item=await reader.read();if(item.done)break;length+=item.value.byteLength;if(length>2048)throw new GoJusBundleError('unavailable');chunks.push(item.value);}}
+  finally{await reader.cancel().catch(()=>undefined);}
+  return JSON.parse(Buffer.concat(chunks,length).toString('utf8'));
 }
 export async function generateGoJusPdf(input:Identity){
   const worker=workerConfig();const storage=resolveAttachmentStorage();
   if(!worker||!storage.ready)throw new GoJusBundleError('unavailable');
   const manifest=await selectManifest(input);
-  const signal=AbortSignal.timeout(75_000);
-  const files=[];
-  for(const a of manifest.ordered){
-    const bytes=await readOriginal(storage.config,a.objectKey,a.sizeBytes,signal);
-    files.push({mime:a.mimeType,sha256:createHash('sha256').update(bytes).digest('hex'),content:bytes.toString('base64')});
+  const signal=AbortSignal.timeout(100_000);
+  const key=`tenants/${input.tenantId}/gojus-temp/${randomUUID()}.pdf`;
+  const files=manifest.ordered.map(a=>({url:signedUrl(storage.config,'GET',a.objectKey),mime:a.mimeType,size:a.sizeBytes}));
+  try{
+    const response=await fetch(worker.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${worker.token}`},body:JSON.stringify({tenantId:input.tenantId,files,outputUrl:signedUrl(storage.config,'PUT',key)}),cache:'no-store',redirect:'error',signal});
+    if(response.status===413)throw new GoJusBundleError('too_large');
+    const result=await boundedJson(response);
+    if(typeof result?.sha256!=='string'||!/^[a-f0-9]{64}$/.test(result.sha256)||!Number.isSafeInteger(result.size)||result.size<=0||result.size>GOJUS_OUTPUT_LIMIT||!Number.isSafeInteger(result.pages)||result.pages<1||result.pages>120)throw new GoJusBundleError('unavailable');
+    const head=await fetch(signedUrl(storage.config,'HEAD',key),{method:'HEAD',cache:'no-store',redirect:'error',signal});
+    if(!head.ok||head.headers.get('content-type')!=='application/pdf'||Number(head.headers.get('content-length'))!==result.size)throw new GoJusBundleError('unavailable');
+    const current=await selectManifest(input);
+    if(current.fingerprint!==manifest.fingerprint)throw new GoJusBundleError('changed');
+    return {url:createAttachmentDownloadUrl(storage.config,{key,downloadName:'documentacao_completa.pdf'}),hash:result.sha256 as string,count:manifest.ordered.length};
+  }catch(error){
+    // Best-effort cleanup, with independently verified R2 lifecycle as a backstop.
+    await deleteAttachmentObject(storage.config,{key,fetchImpl:(url,init)=>fetch(url,{...init,redirect:'error',signal:AbortSignal.timeout(5000)})}).catch(()=>undefined);
+    throw error;
   }
-  const response=await fetch(worker.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${worker.token}`},body:JSON.stringify({files}),cache:'no-store',redirect:'error',signal});
-  if(response.status===413)throw new GoJusBundleError('too_large');
-  if(response.headers.get('content-type')!=='application/pdf')throw new GoJusBundleError('unavailable');
-  const pdf=await boundedBytes(response,GOJUS_DOWNLOAD_LIMIT);
-  const hash=createHash('sha256').update(pdf).digest('hex');
-  if(!pdf.subarray(0,5).equals(Buffer.from('%PDF-'))||response.headers.get('x-pdf-sha256')!==hash)throw new GoJusBundleError('unavailable');
-  const current=await selectManifest(input);
-  if(current.fingerprint!==manifest.fingerprint)throw new GoJusBundleError('changed');
-  return {pdf,hash,count:manifest.ordered.length};
 }
