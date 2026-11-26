@@ -44,7 +44,6 @@ import {
   Sparkles,
   Brain,
   Megaphone,
-  Code2,
 } from "lucide-react";
 import { FlipNavBadge } from "@/components/flip/alerts-board";
 import { DailyBriefingPopup } from "@/components/flip/daily-briefing";
@@ -101,10 +100,9 @@ const NAV: NavItem[] = [
   },
   { href: "/flip-intelligence", label: "Flip Intelligence", icon: Brain },
   { href: "/flip-ads", label: "Flip Ads", icon: Megaphone },
-  { href: "/developer-api", label: "API", icon: Code2 },
   {
     href: "/integrations",
-    label: "Integrações",
+    label: "Integrações e API",
     icon: PlugZap,
     permission: "INTEGRATIONS_VIEW",
   },
@@ -123,7 +121,7 @@ const NAV_SECTIONS: Array<{ title: string; hrefs: string[] }> = [
   { title: "Inteligência artificial", hrefs: ["/flip-ai", "/whatsapp-ai", "/instagram-ai"] },
   { title: "Captação", hrefs: ["/forms", "/domains"] },
   { title: "Análise", hrefs: ["/reports", "/flip-intelligence", "/flip-ads"] },
-  { title: "Administração", hrefs: ["/integrations", "/developer-api", "/users", "/billing", "/settings", "/settings/suporte-atendimento"] },
+  { title: "Administração", hrefs: ["/integrations", "/users", "/billing", "/settings", "/settings/suporte-atendimento"] },
 ];
 
 function navSections<T extends { href: string }>(items: T[]) {
@@ -204,7 +202,6 @@ export function AppShell({
     (item) =>
       (!item.permission || can(session.role, item.permission))
       && (!item.show || item.show(session.role))
-      && (item.href !== "/developer-api" || workspace360.api)
       && (item.href !== "/flip-intelligence" || workspace360.intelligence)
       && (item.href !== "/flip-ads" || workspace360.ads)
       && (item.href !== "/suporte-atendimento" || supportKnowledgeEnabled)
