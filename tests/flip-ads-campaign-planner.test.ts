@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { normalizeCampaignPlan,campaignDigest,nextDraftState,budgetAdvice,planInput } from '../lib/flip-ads/campaign-planner';
+const scope={tenantId:'12345678-1234-1234-1234-123456789abc',provider:'meta_ads',accountId:'act_123'} as const;
+const grants=[scope];
+const cap={currency:'BRL',maxDailyMinor:20000,maxTotalMinor:100000} as const;
+const input={name:'Campanha teste',objective:'leads',channel:'meta_social',currency:'BRL',dailyMinor:10000,start:'2026-12-01',end:'2026-12-05',regions:['PI','MA'],creatives:[{assetRef:'asset-test-1',headline:'Texto de teste'}]};
+test('budget, geography, dates and scope fail closed',()=>{
+  const p=normalizeCampaignPlan(scope,grants,cap,input);
+  assert.equal(p.totalMinor,50000);assert.deepEqual(p.regions,['MA','PI']);
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,cap,{...input,dailyMinor:30000}));
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,{...cap,maxTotalMinor:40000},input));
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,cap,{...input,regions:['US']}));
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,cap,{...input,customAudience:['cpf']}));
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,cap,{...input,creatives:[{assetRef:'https://evil.test',headline:'x'}]}));
+  assert.throws(()=>normalizeCampaignPlan({...scope,accountId:'act_999'},grants,cap,input));
+  assert.throws(()=>normalizeCampaignPlan(scope,grants,cap,{...input,end:'2026-12-31',dailyMinor:20000}));
+});
+test('approval binds revision, tenant/account and normalized plan; edit resets approval',()=>{
+  const p=normalizeCampaignPlan(scope,grants,cap,input);
+  const d=campaignDigest(scope,1,p);
+  assert.equal(d,campaignDigest(scope,1,normalizeCampaignPlan(scope,grants,cap,planInput(p))));
+  assert.notEqual(d,campaignDigest(scope,2,p));
+  assert.notEqual(d,campaignDigest({...scope,accountId:'act_999'},1,p));
+  assert.notEqual(d,campaignDigest(scope,1,{...p,dailyMinor:9000}));
+  assert.equal(nextDraftState('draft','submit'),'review');
+  assert.equal(nextDraftState('review','approve'),'approved');
+  assert.equal(nextDraftState('approved','edit'),'draft');
+  assert.equal(nextDraftState('review','reject'),'rejected');
+  assert.throws(()=>nextDraftState('draft','approve'));
+  assert.throws(()=>nextDraftState('approved','submit'));
+});
+test('recommendation is advisory and requires complete contract evidence',()=>{
+  const sample={complete:true,spendMinor:10000,contracts:5,targetCpaMinor:1000,minContracts:3};
+  assert.equal(budgetAdvice(sample),'review_cost');
+  assert.equal(budgetAdvice({...sample,spendMinor:1000}),'maintain_review');
+  assert.equal(budgetAdvice({...sample,complete:false}),'insufficient_data');
+  assert.equal(budgetAdvice({...sample,contracts:null}),'insufficient_data');
+  assert.equal(budgetAdvice({...sample,contracts:1}),'insufficient_data');
+});

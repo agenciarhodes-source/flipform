@@ -43,7 +43,8 @@ DEVELOPER_INVERSE = {
 POST_VOICE_MODELS = {"LeadPersonalDocument": "lead_personal_documents"}
 UNIVERSAL_MODELS = {"UniversalConnection": "universal_connections", "UniversalConnectionCredential": "universal_connection_credentials", "UniversalConnectionAudit": "universal_connection_audits"}
 SYNC_MODELS = {"UniversalSyncRun": "universal_sync_runs", "UniversalDataRecord": "universal_data_records"}
-CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS) + len(SYNC_MODELS)
+ADS_MODELS = {"FlipAdsCampaignDraft": "flip_ads_campaign_drafts", "FlipAdsDraftAudit": "flip_ads_draft_audits"}
+CURRENT_MODEL_COUNT = 111 + len(UNIVERSAL_MODELS) + len(POST_VOICE_MODELS) + len(SYNC_MODELS) + len(ADS_MODELS)
 PROFILE_INVERSE = {"lines FlipVoiceLine[]"}
 CALL_INVERSE = {"line FlipVoiceLine?", "contactPermission FlipVoiceContactPermission?"}
 
@@ -72,7 +73,25 @@ def historical_pr01_candidate(current_schema: str) -> str:
         lines = [" ".join(line.split()) for line in block.group(1).splitlines()]
         if any(lines.count(field) != 1 for field in required):
             raise ValueError(f"Missing or altered PR-C relation: {model}")
-    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS, **SYNC_MODELS}.items():
+    # PR-E: verify the exact additive relation chain before projecting it out.
+    ads_relations = {
+        "Tenant": {"flipAdsDrafts FlipAdsCampaignDraft[]"},
+        "FlipAdsCampaignDraft": {
+            'tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, map: "fad_tenant_fk")',
+            "audits FlipAdsDraftAudit[]",
+        },
+        "FlipAdsDraftAudit": {
+            'draft FlipAdsCampaignDraft @relation(fields: [tenantId, draftId], references: [tenantId, id], onDelete: Restrict, map: "fad_audit_draft_fk")',
+        },
+    }
+    for model, required in ads_relations.items():
+        block = re.search(rf"(?ms)^model\s+{model}\s*\{{(.*?)^\}}", projected)
+        if not block:
+            raise ValueError(f"Missing PR-E model: {model}")
+        lines = [" ".join(line.split()) for line in block.group(1).splitlines()]
+        if any(lines.count(field) != 1 for field in required):
+            raise ValueError(f"Missing or altered PR-E relation: {model}")
+    for model, table in {**POST_VOICE_MODELS, **UNIVERSAL_MODELS, **SYNC_MODELS, **ADS_MODELS}.items():
         pattern = rf"(?ms)^model\s+{re.escape(model)}\s*\{{(.*?)^\}}\n?"
         match = re.search(pattern, projected)
         if not match or match.group(1).count(f'@@map("{table}")') != 1:
@@ -82,6 +101,9 @@ def historical_pr01_candidate(current_schema: str) -> str:
         projected, count = re.subn(pattern, "", projected, count=1)
         if count != 1:
             raise ValueError(f"Could not isolate exactly one {model}")
+    projected, count = re.subn(r"(?m)^\s+flipAdsDrafts\s+FlipAdsCampaignDraft\[\]\s*\n", "", projected)
+    if count != 1:
+        raise ValueError("Missing or duplicate FlipAdsCampaignDraft inverse")
     projected, count = re.subn(r"(?m)^\s+universalConnections UniversalConnection\[\]\s*\n", "", projected)
     if count != 1:
         raise ValueError("Missing or duplicate UniversalConnection inverse")

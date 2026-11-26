@@ -169,6 +169,7 @@ model Tenant {
   apiV1EntitlementGrants TenantEntitlementGrant[]
   apiV1CredentialAudits ApiCredentialAudit[]
   universalConnections UniversalConnection[]
+  flipAdsDrafts FlipAdsCampaignDraft[]
 
   @@index([accountKind])
   @@map("tenants")
@@ -2810,4 +2811,42 @@ model UniversalDataRecord {
   @@unique([tenantId, connectionId, kind, sourceId], map: "uc_data_source_key")
   @@index([tenantId, kind, sourceUpdatedAt], map: "uc_data_scope_time_idx")
   @@map("universal_data_records")
+}
+
+/// PR-E internal planning only; approval is never an external execution grant.
+model FlipAdsCampaignDraft {
+  id          String   @id @default(uuid())
+  tenantId    String   @map("tenant_id")
+  provider    String
+  accountId   String   @map("account_id")
+  state       String   @default("draft")
+  revision    Int      @default(1)
+  plan        Json
+  digest      String
+  createdBy   String   @map("created_by")
+  approvedBy  String?  @map("approved_by")
+  approvedAt  DateTime? @map("approved_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, map: "fad_tenant_fk")
+  audits      FlipAdsDraftAudit[]
+
+  @@unique([tenantId, id], map: "fad_scope_key")
+  @@index([tenantId, state, updatedAt], map: "fad_state_idx")
+  @@map("flip_ads_campaign_drafts")
+}
+
+model FlipAdsDraftAudit {
+  id        String   @id @default(uuid())
+  tenantId  String   @map("tenant_id")
+  draftId   String   @map("draft_id")
+  actorId   String   @map("actor_id")
+  action    String
+  revision  Int
+  digest    String
+  createdAt DateTime @default(now()) @map("created_at")
+  draft     FlipAdsCampaignDraft @relation(fields: [tenantId, draftId], references: [tenantId, id], onDelete: Restrict, map: "fad_audit_draft_fk")
+
+  @@index([tenantId, draftId, createdAt], map: "fad_audit_scope_idx")
+  @@map("flip_ads_draft_audits")
 }
