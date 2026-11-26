@@ -435,7 +435,7 @@ Confirme a identidade da pessoa antes (por exemplo, por videochamada ou pelo e-m
 
       <Tabs defaultValue="plan">
         <TabsList>
-          <TabsTrigger value="plan">Plano & Cobrança</TabsTrigger>
+          <TabsTrigger value="plan">Plano &amp; Cobrança</TabsTrigger>
           <TabsTrigger value="users">Usuários ({tenant.tenantUsers.length})</TabsTrigger>
           <TabsTrigger value="flip-ai-wallet">Carteira Flip AI</TabsTrigger>
           <TabsTrigger value="flip-ai-usage">Consumo IA</TabsTrigger>
