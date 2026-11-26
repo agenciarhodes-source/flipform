@@ -28,8 +28,8 @@ export default function CatalogAdminPage(){
     setReady(false);
     try{const r=await fetch('/api/admin/integrations/catalog',{cache:'no-store'});const d=await r.json();
       if(!r.ok||!d.available)throw Error('Catálogo indisponível. Verifique a migração do banco.');
-      setApps(d.apps);setHistory(d.history);setReady(true);
-    }catch(e){setMessage(e instanceof Error?e.message:'Falha ao carregar.');}
+      setApps(d.apps);setHistory(d.history);setReady(true);return true;
+    }catch(e){setMessage(e instanceof Error?e.message:'Falha ao carregar.');return false;}
   }
   useEffect(()=>{void load();},[]);
   function change(p:Partial<Draft>){setDraft(current=>current?{...current,...p}:current);}
@@ -37,7 +37,7 @@ export default function CatalogAdminPage(){
     if(!draft||!ready)return;setBusy(true);setMessage('');
     try{const r=await fetch('/api/admin/integrations/catalog',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft)});const d=await r.json();
       if(!r.ok)throw Error(d.error||'Falha ao salvar.');
-      setDraft(null);await load();setMessage('Catálogo salvo. As empresas verão a atualização na próxima consulta.');
+      setDraft(null);if(await load())setMessage('Catálogo salvo. As empresas verão a atualização na próxima consulta.');
     }catch(e){setMessage(e instanceof Error?e.message:'Falha ao salvar.');}finally{setBusy(false);}
   }
   const current=apps.find(a=>a.id===draft?.id);

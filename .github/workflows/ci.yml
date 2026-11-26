@@ -276,6 +276,14 @@ jobs:
           psql_local=(psql -X -h 127.0.0.1 -p 5432 -U postgres -d flipform_360_sql -v ON_ERROR_STOP=1)
           "${psql_local[@]}" --single-transaction -f tests/sql/flipform-360-predecessor.sql -f prisma/migrations/20261124210000_universal_connect_foundation/migration.sql -f prisma/migrations/20261126001000_universal_sync_fixture/migration.sql -f prisma/migrations/20261126040000_flip_ads_campaign_drafts/migration.sql -f tests/sql/flipform-360-constraints.sql
 
+      - name: Global catalog additive SQL rehearsal (disposable PostgreSQL)
+        run: |
+          set -euo pipefail
+          node scripts/assert-ci-local-db.mjs flipform_ci --require-direct
+          sudo -u postgres createdb flipform_catalog_sql
+          export PGPASSWORD=postgres
+          psql -X -h 127.0.0.1 -p 5432 -U postgres -d flipform_catalog_sql -v ON_ERROR_STOP=1 --single-transaction -f prisma/migrations/20261126170000_platform_integration_catalog/migration.sql -f tests/sql/platform-catalog-constraints.sql
+
       # PR01 Phase 2: synthetic-only isolation on the runner's disposable PostgreSQL.
       # Never use Neon, Vercel, or external integrations in this suite.
       - name: PR01 M2M persistence and tenant isolation (disposable PostgreSQL)
