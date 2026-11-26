@@ -1,0 +1,6 @@
+# Operational navigation — first delivery
+- Dedicated API, Flip Intelligence, Flip Ads pages, existing integrations enhanced with a clearly planned catalog. Native CRM aggregate counts, scoped to the verified tenant only; no simulated data.
+- Menu and server routes use direct active membership and plan/subscription alignment. Manual non-billable courtesy recognized for workspace navigation only. Premium/Premium Pro technical pages and Intelligence, Premium Pro Ads. Developer/owner/manager permissions distinct; manager Ads remains denied until explicit permission. Existing group/inbox restrictions retained.
+- Existing API key authorization, scopes, MFA, allowlist and entitlement code remain unchanged. API screen displays reasons for unavailable access and hides key controls when denied. Courtesy API key administration is NOT enabled by this PR. Existing authorized API exceptions preserved.
+- Existing connectors preserved. No new provider transport, campaigns, synchronization or production schema/mutations. Ads shows honest readiness state. Financial and AI metrics not yet integrated.
+- Automated tests: policy, static page gates and existing CI. Dedicated browser and real pilot validation pending. No production flags or automatic merge.

@@ -21,7 +21,8 @@ async function apiFetch<T>(url: string, method = 'GET', payload?: unknown): Prom
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
   if (!response.ok) {
-    if (response.status === 403) throw new Error('Somente o proprietário com plano elegível pode administrar a API.');
+    if (response.status === 403) throw new Error('Acesso recusado. Confira seu vínculo de Desenvolvedor, MFA, plano elegível e autorização da empresa para a API.');
+    if (response.status === 404) throw new Error('API indisponível neste ambiente ou recurso não encontrado.');
     if (response.status === 429) throw new Error('Limite de credenciais atingido.');
     if (response.status === 503) throw new Error('API ainda não está pronta neste ambiente.');
     throw new Error('A operação não foi autorizada ou não pôde ser concluída.');
@@ -41,15 +42,22 @@ export function ApiV1Card() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   const refresh = useCallback(async () => {
-    const response = await apiFetch<{ integrations: ApiIntegration[] }>(ROOT);
-    setIntegrations(response.integrations);
-    const views = await Promise.all(response.integrations.map(async item => {
-      const result = await apiFetch<{ keys: ApiKey[] }>(ROOT + '/' + item.id + '/keys');
-      return [item.id, result.keys] as const;
-    }));
-    setKeys(Object.fromEntries(views));
+    try {
+      const response = await apiFetch<{ integrations: ApiIntegration[] }>(ROOT);
+      const views = await Promise.all(response.integrations.map(async item => {
+        const result = await apiFetch<{ keys: ApiKey[] }>(ROOT + '/' + item.id + '/keys');
+        return [item.id, result.keys] as const;
+      }));
+      setIntegrations(response.integrations);
+      setKeys(Object.fromEntries(views));
+      setReady(true);
+    } catch (error) {
+      setIntegrations([]); setKeys({}); setReady(false);
+      throw error;
+    }
   }, []);
 
   useEffect(() => {
@@ -127,7 +135,7 @@ export function ApiV1Card() {
         </p>
       </div>
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-      {loading ? <p className="text-sm">Carregando...</p> : (
+      {loading ? <p className="text-sm">Carregando...</p> : !ready ? <p className="text-sm text-muted-foreground">Atualize a página após regularizar o acesso.</p> : (
         <>
           <div className="flex flex-wrap gap-2 items-center">
             <input aria-label="Nome da integração" value={newName} maxLength={80}

@@ -83,7 +83,7 @@ jobs:
 
       # PR01 Phase 1: pure M2M policies/credential verification, NO database connections.
       - name: PR01 API v1 security foundation tests (offline)
-        run: npx tsx --test tests/pr01-api-foundation.test.ts
+        run: npx tsx --test tests/pr01-api-foundation.test.ts tests/workspace-360-policy.test.ts
 
       # PR02: bounded parser and cross-tenant denial, no DB or outbound I/O.
       - name: PR02 read-only catalog policy tests (offline)
