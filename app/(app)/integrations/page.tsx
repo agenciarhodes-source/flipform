@@ -15,6 +15,8 @@ import { WhatsAppEmbeddedSignupCard } from './whatsapp-embedded-signup-card';
 import { WhatsAppNumbersCard } from './whatsapp-numbers-card';
 import { WhatsAppTemplatesCard } from './whatsapp-templates-card';
 import { InstagramBusinessLoginCard } from './instagram-business-login-card';
+import { GoJusIntegrationCard } from './gojus-integration-card';
+import { tenantHasFeature } from '@/lib/billing/tenant-features';
 import { tenantPlanSlug } from '@/lib/session-access';
 import { isInboxOnlyPlan } from '@/lib/billing/inbox-plan-rules';
 
@@ -46,9 +48,12 @@ export default async function IntegrationsPage() {
     </section>
     {access.api && <div className="px-6 max-w-7xl"><NativeApiPanel session={session} /></div>}
     <ClientConnectionOnboarding />
-    <div id="meta-google-settings" className="scroll-mt-24"><IntegrationsClient /></div>
-    {sandbox && <div id="universal-sandbox" className="scroll-mt-24"><UniversalSandboxCard /></div>}
-    <div id="google-funnel" className="scroll-mt-24"><GoogleFunnelCard /></div>
+    <IntegrationsClient />
+    {session.role === 'developer' && await tenantHasFeature(session.tenantId, 'gojus_robot') && <GoJusIntegrationCard />}
+    {session.role === 'developer' && sandboxAvailable(session.tenantId) && <UniversalSandboxCard />}
+    <div id="google-funnel" className="scroll-mt-24">
+      <GoogleFunnelCard />
+    </div>
     <div id="whatsapp-connection" className="scroll-mt-24">
       <WhatsAppEmbeddedSignupCard />
       <WhatsAppNumbersCard />
