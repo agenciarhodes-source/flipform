@@ -855,8 +855,8 @@ export function InboxClient({
     }
   }
 
-  /** Sends a document, photo or video: uploaded straight to the private storage, then sent. */
-  async function sendFile(file: File) {
+  /** Sends file via authenticated binary request, without R2. */
+  async function sendFile(file: File, idempotencyKey: string) {
     if (!selected || selected.channel !== 'whatsapp' || !canSendWhatsApp) return false;
     const conversationId = selected.id;
     const base = `/api/conversations/${encodeURIComponent(conversationId)}/messages/whatsapp-file`;
@@ -869,13 +869,11 @@ export function InboxClient({
         body: JSON.stringify({ name: file.name, mimeType: file.type, sizeBytes: file.size }),
       });
       const upload = await prepared.json().catch(() => ({}));
-      if (!prepared.ok || !upload.fileId || !upload.uploadUrl) throw new Error(upload.error || 'Não foi possível preparar o envio do arquivo.');
-      const stored = await fetch(upload.uploadUrl, { method: 'PUT', headers: upload.headers || {}, body: file }).catch(() => null);
-      if (!stored?.ok) throw new Error('Não foi possível carregar o arquivo. Verifique a internet e tente de novo.');
+      if (!prepared.ok || upload.ready!==true) throw new Error(upload.error || 'Não foi possível preparar o envio do arquivo.');
       const response = await fetch(base, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileId: upload.fileId, idempotencyKey: createIdempotencyKey() }),
+        headers: {'Content-Type':file.type,'X-File-Name':encodeURIComponent(file.name),'X-File-Size':String(file.size),'X-Idempotency-Key':idempotencyKey},
+        body:file,redirect:'error',
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 202) throw new Error(data.error || 'Não foi possível enviar o arquivo.');
@@ -1290,7 +1288,7 @@ export function InboxClient({
                         disabled={sending}
                       />
                       {selected.channel === 'whatsapp' ? (
-                        <FileAttachButton disabled={sending || !canSendWhatsApp} onSend={sendFile} onError={(message) => setError(message)} />
+                        <FileAttachButton key={selected.id} disabled={sending || !canSendWhatsApp} onSend={sendFile} onError={(message) => setError(message)} />
                       ) : null}
                       {selected.channel === 'whatsapp' ? <VoiceRecorder disabled={sending || !canSendWhatsApp} onSend={sendAudio} /> : null}
                       <Button

@@ -20,13 +20,22 @@ def test_routes_need_permission_plan_and_rate_limit():
     assert "pauseConversationAi(" in read(f"{BASE}/route.ts")
 
 
-def test_file_is_checked_before_sending_and_bound_to_the_person():
+def test_file_is_checked_before_sending_without_r2():
     lib = read("lib/inbox/outbound-file.ts")
-    assert "sessionRef: sessionRefOf(input.userId)" in lib
-    assert "fileMatchesType(bytes, row.mimeType)" in lib
-    assert "bytes.byteLength !== row.sizeBytes" in lib
-    assert "deleteAttachmentObject(" in lib
-
+    assert "fileMatchesType(bytes,check.mimeType)" in lib
+    assert "bytes.byteLength!==check.sizeBytes" in lib
+    assert "requestedByUserId:input.userId" in lib
+    assert "size>check.sizeBytes" in lib
+    for forbidden in ("createAttachmentUploadUrl","resolveAttachmentStorage","chatAttachment","deleteAttachmentObject","readAttachmentObject"):
+        assert forbidden not in lib
+    route=read(f"{BASE}/route.ts")
+    assert route.index("findAccessibleInboxConversation(session,ctx.params.id)") < route.index("body:req.body")
+    assert "x-idempotency-key" in route
+    assert "createAttachmentUploadUrl" not in read(f"{BASE}/upload/route.ts")
+    inbox=read("app/(app)/inbox/inbox-client.tsx")
+    assert "upload.uploadUrl" not in inbox
+    assert "body:file" in inbox
+    assert "onSend(file,key.current)" in read("components/inbox/file-attach-button.tsx")
 
 def test_person_send_checks_the_requester_like_text_and_audio():
     outbound = read("lib/meta/whatsapp-outbound.ts")

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { checkOutboundFile, cleanOutboundFileName, fileMatchesType, outboundFileLabel } from '../lib/inbox/outbound-file-rules';
+import { checkOutboundFile, checkDirectFile, directFileTransportLimit, DIRECT_FILE_STANDARD_BYTES, DIRECT_FILE_LARGE_BYTES, cleanOutboundFileName, fileMatchesType, outboundFileLabel } from '../lib/inbox/outbound-file-rules';
 
 const MB = 1024 * 1024;
 
@@ -48,3 +48,5 @@ test('rótulo da mensagem no Inbox', () => {
   assert.equal(outboundFileLabel('image', 'fachada.jpg'), '🖼️ fachada.jpg');
   assert.equal(outboundFileLabel('video', 'tour.mp4'), '🎬 tour.mp4');
 });
+
+test('direct transfer defaults to 4 MiB; large beta needs both flags',()=>{const file={name:'tour.mp4',mimeType:'video/mp4',sizeBytes:16*MB};assert.equal(directFileTransportLimit({}),DIRECT_FILE_STANDARD_BYTES);assert.equal(checkDirectFile(file,DIRECT_FILE_STANDARD_BYTES).ok,false);assert.equal(directFileTransportLimit({VERCEL_SUPPORT_LARGE_REQUEST_BODY:'1'}),DIRECT_FILE_STANDARD_BYTES);assert.equal(directFileTransportLimit({VERCEL_SUPPORT_LARGE_REQUEST_BODY:'1',INBOX_DIRECT_LARGE_MEDIA_VERIFIED:'1'}),DIRECT_FILE_LARGE_BYTES);assert.equal(checkDirectFile(file,DIRECT_FILE_LARGE_BYTES).ok,true);assert.equal(checkDirectFile({...file,sizeBytes:17*MB},DIRECT_FILE_LARGE_BYTES).ok,false);});
