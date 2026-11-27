@@ -82,6 +82,9 @@ GUARDED = {
     "health/route.ts": "GET",
     # PR629 temporary diagnostics: preview-only, exact branch, expiring bearer and QA database target.
     "pr629-qa/db-target/route.ts": "isPr629DbAttestationAllowed(process.env)",
+    # Fixed synthetic diagnostic: protected immutable Vercel staging hostname, flags fail closed,
+    # no customer input or database/R2 access; independent token remains server-only.
+    "diagnostics/flip-pdf/route.ts": "stagingPdfDiagnosticAllowed(process.env,req.nextUrl.hostname)",
     # PR01 Phase 1: always 404 when OFF; 503 when no M2M repository exists.
     "v1/status/route.ts": "apiV1Enabled(process.env)",
     # M2M route: bearer identity, tenant entitlement and distributed quota on every GET.
@@ -184,3 +187,24 @@ def test_global_catalog_icon_guard_precedes_database_read():
     assert "checked.iconDigest!==row?.iconDigest" in source
     assert "'Content-Type':'image/png'" in source and "'X-Content-Type-Options':'nosniff'" in source
     assert not re.search(r"export (?:async )?function (POST|PUT|PATCH|DELETE)\b|export const (POST|PUT|PATCH|DELETE)\s*=", source)
+
+
+def test_flip_pdf_diagnostic_is_staging_only_and_does_not_access_customer_data():
+    route = (API / "diagnostics/flip-pdf/route.ts").read_text(encoding="utf-8")
+    guard = (ROOT / "lib/gojus/worker-transport.ts").read_text(encoding="utf-8").split("export function stagingPdfDiagnosticAllowed", 1)[1]
+    assert "if(!stagingPdfDiagnosticAllowed(process.env,req.nextUrl.hostname))" in route
+    assert route.index("if(!stagingPdfDiagnosticAllowed") < route.index("await fetch(")
+    assert "if(!url||!headers)" in route
+    assert route.index("if(!url||!headers)") < route.index("await fetch(")
+    assert "host!=='flip-pdf-staging.vercel.app'" in route
+    assert "req.headers.get('x-vercel-oidc-token')" in route
+    assert "redirect:'error'" in route and "AbortSignal.timeout(" in route
+    assert "randomBytes(16)" in route and "result?.nonce!==nonce" in route
+    assert "r2Tested:false" in route
+    assert "prisma" not in route and "resolveAttachmentStorage" not in route
+    assert "req.json(" not in route and "req.text(" not in route
+    assert "FLIP_PDF_TRANSPORT_TEST_ENABLED==='1'" in guard
+    assert "GOJUS_PDF_WORKER_ENABLED!=='1'" in guard
+    assert "GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1'" in guard
+    assert "VERCEL_ENV==='production'" in guard
+    assert "flipform-staging-" in guard and "hostname===env.VERCEL_URL" in guard

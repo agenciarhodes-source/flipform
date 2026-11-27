@@ -106,6 +106,18 @@ def process(payload, env=os.environ, opener=None):
             raise BundleError("Upload failed")
     return {"sha256":result.output_sha256, "size":len(result.pdf), "pages":result.page_count}
 
+def diagnostic_enabled(env):
+    return (env.get("FLIP_PDF_TRANSPORT_TEST_ENABLED") == "1"
+            and env.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1"
+            and env.get("VERCEL") == "1"
+            and env.get("VERCEL_ENV") == "production"
+            and re.fullmatch(r"flip-pdf-staging-[a-z0-9]+-agenciarhodes-2076s-projects\.vercel\.app", env.get("VERCEL_URL", "")) is not None)
+
+def diagnostic_response(payload):
+    if not isinstance(payload, dict) or set(payload) != {"diagnostic", "nonce"} or payload["diagnostic"] != "flip-pdf-transport-v1" or not isinstance(payload["nonce"], str) or not re.fullmatch(r"[a-f0-9]{32}", payload["nonce"]):
+        raise BundleError("Invalid diagnostic")
+    return {"ok": True, "synthetic": True, "nonce": payload["nonce"]}
+
 class handler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
         pass
@@ -121,7 +133,8 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         token = os.environ.get("GOJUS_PDF_WORKER_TOKEN", "")
-        if os.environ.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1" or len(token) < 32 or not hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()):
+        diagnostic = diagnostic_enabled(os.environ)
+        if (not diagnostic and os.environ.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1") or len(token) < 32 or not hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()):
             return self.reply(403, {"error":"unavailable"})
         if self.headers.get("Content-Type") != "application/json" or self.headers.get("Transfer-Encoding"):
             return self.reply(400, {"error":"invalid_request"})
@@ -129,12 +142,13 @@ class handler(BaseHTTPRequestHandler):
             return self.reply(503, {"error":"busy"})
         try:
             n = int(self.headers.get("Content-Length", "0"))
-            if not 0 < n <= MAX_MANIFEST:
+            if not 0 < n <= (256 if diagnostic else MAX_MANIFEST):
                 return self.reply(413, {"error":"limit"})
             raw = self.rfile.read(n)
             if len(raw) != n:
                 return self.reply(400, {"error":"invalid_request"})
-            result = process(json.loads(raw))
+            payload = json.loads(raw)
+            result = diagnostic_response(payload) if diagnostic else process(payload)
             return self.reply(200, result)
         except OverflowError:
             return self.reply(413, {"error":"limit"})
