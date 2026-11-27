@@ -20,3 +20,9 @@ def test_gojus_bundle_scopes_and_fail_closed():
 
     assert "flip-pdf-temp/${input.tenantId}/" in s
     assert "digest.digest('hex')!==result.sha256" in s
+
+    assert "req.headers.get('x-vercel-oidc-token')" in r
+    assert "GOJUS_PDF_WORKER_HOST" in s
+    assert "trustedPdfHeaders" in s
+    assert "if(!headers)throw new GoJusBundleError('unavailable')" in s
+    assert "x-vercel-trusted-oidc-idp-token" in read("lib/gojus/worker-transport.ts")
