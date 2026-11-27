@@ -11,10 +11,11 @@ import { checkOutboundFile, OUTBOUND_FILE_ACCEPT } from '@/lib/inbox/outbound-fi
  */
 export function FileAttachButton({ disabled, onSend, onError }: {
   disabled?: boolean;
-  onSend: (file: File) => Promise<boolean>;
+  onSend: (file: File, idempotencyKey: string) => Promise<boolean>;
   onError: (message: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const key=useRef<string>('');
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -26,15 +27,14 @@ export function FileAttachButton({ disabled, onSend, onError }: {
       onError(check.error);
       return;
     }
+    key.current=crypto.randomUUID();
     setFile(chosen);
   }
 
   async function send() {
-    if (!file) return;
+    if (!file||sending||disabled) return;
     setSending(true);
-    const sent = await onSend(file);
-    setSending(false);
-    if (sent) setFile(null);
+    try{if(await onSend(file,key.current))setFile(null);}finally{setSending(false);}
   }
 
   const size = file ? (file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`) : '';
@@ -60,11 +60,11 @@ export function FileAttachButton({ disabled, onSend, onError }: {
             <div>
               <p className="font-semibold">Enviar arquivo ao cliente?</p>
               <p className="mt-1 break-all text-sm">{file.name}</p>
-              <p className="text-xs text-muted-foreground">{size} · vai pelo WhatsApp da empresa e fica guardado na conversa</p>
+              <p className="text-xs text-muted-foreground">{size} · vai ao WhatsApp da empresa, sem cópia no R2</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" disabled={sending} onClick={() => setFile(null)}>Cancelar</Button>
-              <Button type="button" disabled={sending} onClick={() => void send()}>
+              <Button type="button" disabled={sending||disabled} onClick={() => void send()}>
                 {sending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {sending ? 'Enviando...' : 'Enviar'}
               </Button>
