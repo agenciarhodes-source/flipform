@@ -70,3 +70,12 @@ export function requestedRange(header: string | null, size: number): { start: nu
   if (start >= size || end < start) return 'invalid';
   return { start, end };
 }
+
+/** Chunked audio transport avoids expiring playback links and the Vercel response ceiling. */
+export const AUDIO_CHUNK_BYTES=2*1024*1024;
+export const AUDIO_PLAYBACK_MAX_BYTES=32*1024*1024;
+export function audioChunkRange(header:string|null,size:number){
+  if(!header||!/^bytes=\d+-\d+$/.test(header)||!Number.isSafeInteger(size)||size<1||size>AUDIO_PLAYBACK_MAX_BYTES)return null;
+  const range=requestedRange(header,size);
+  return range&&range!=='invalid'&&Number.isSafeInteger(range.start)&&Number.isSafeInteger(range.end)&&range.end-range.start+1<=AUDIO_CHUNK_BYTES?range:null;
+}

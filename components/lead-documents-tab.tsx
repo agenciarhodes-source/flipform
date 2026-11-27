@@ -96,7 +96,7 @@ export function LeadDocumentsTab({ leadId }: { leadId: string }) {
           </div>
         );
       })}
-      <p className="text-xs text-muted-foreground">O FlipForm guarda uma cópia dos arquivos por 7 dias (aparecem também em Flip AI › Arquivos). Depois disso, o arquivo ainda abre pela Meta por até 30 dias. Baixe o que precisar manter.</p>
+      <p className="text-xs text-muted-foreground">O backup operacional de WhatsApp fica disponível por até 30 dias; o chat do site, por 7 dias. A disponibilidade na Meta é independente. Baixe o que precisar manter.</p>
     </div>
   );
 }

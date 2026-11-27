@@ -1,9 +1,11 @@
 import 'server-only';
 
 import { Prisma } from '@prisma/client';
+import { backupWindow, effectiveAttachmentExpiry } from '@/lib/storage/attachment-retention';
 import { prisma } from '@/lib/prisma';
 import {
   createAttachmentDownloadUrl,
+  attachmentObjectExists,
   deleteAttachmentObject,
   resolveAttachmentStorage,
 } from '@/lib/storage/attachment-storage';
@@ -54,10 +56,11 @@ export async function listLeadChatAttachments(input: { tenantId: string; leadId:
         conversationId: { in: conversationIds },
         status: 'ready',
         expiresAt: { gt: now },
+        AND: [backupWindow(now)],
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true, expiresAt: true },
+      select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true, expiresAt: true, sessionRef: true },
     });
     return rows.map((row) => ({
       id: row.id,
@@ -65,7 +68,7 @@ export async function listLeadChatAttachments(input: { tenantId: string; leadId:
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
       createdAt: row.createdAt.toISOString(),
-      expiresAt: row.expiresAt.toISOString(),
+      expiresAt: effectiveAttachmentExpiry(row).toISOString(),
     }));
   } catch (error) {
     if (isSchemaPending(error)) return [];
@@ -84,6 +87,7 @@ async function findLeadChatAttachment(input: { tenantId: string; leadId: string;
       conversationId: { in: conversationIds },
       status: 'ready',
       expiresAt: { gt: input.now },
+      AND: [backupWindow(input.now)],
     },
     select: { id: true, objectKey: true, name: true, mimeType: true, sizeBytes: true },
   });
@@ -99,7 +103,7 @@ export async function createLeadChatAttachmentDownload(input: {
   const storage = resolveAttachmentStorage();
   if (!storage.ready) return null;
   const file = await findLeadChatAttachment({ ...input, now: input.now || new Date() });
-  if (!file) return null;
+  if (!file || !await attachmentObjectExists(storage.config, {key:file.objectKey, sizeBytes:file.sizeBytes})) return null;
   return {
     id: file.id,
     name: file.name,

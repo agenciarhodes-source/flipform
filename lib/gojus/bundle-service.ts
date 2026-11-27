@@ -1,4 +1,5 @@
 import 'server-only';
+import { backupCutoff } from '@/lib/storage/attachment-retention';
 import {createHash,randomUUID} from 'node:crypto';
 import {prisma} from '@/lib/prisma';
 import {tenantHasFeature} from '@/lib/billing/tenant-features';
@@ -44,7 +45,7 @@ async function selectManifest(input:Identity){
   if(!caseIds)throw new GoJusBundleError('incomplete');
   const ids=[...caseIds,...signedIds];
   if(ids.length>40||new Set(ids).size!==ids.length)throw new GoJusBundleError('incomplete');
-  const attachments=await prisma.chatAttachment.findMany({where:{tenantId:input.tenantId,conversationId:input.conversationId,clientMessageId:{in:ids},status:'ready',expiresAt:{gt:new Date()}},select:{id:true,clientMessageId:true,objectKey:true,mimeType:true,sizeBytes:true}});
+  const attachments=await prisma.chatAttachment.findMany({where:{tenantId:input.tenantId,conversationId:input.conversationId,clientMessageId:{in:ids},status:'ready',expiresAt:{gt:new Date()},createdAt:{gt:backupCutoff(new Date())}},select:{id:true,clientMessageId:true,objectKey:true,mimeType:true,sizeBytes:true}});
   if(attachments.length!==ids.length||new Set(attachments.map(a=>a.clientMessageId)).size!==ids.length)throw new GoJusBundleError('incomplete');
   const map=new Map(attachments.map(a=>[a.clientMessageId,a]));
   const selected=ids.map((id,order)=>{

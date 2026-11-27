@@ -4,17 +4,17 @@ import { createHash, randomUUID } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { createAttachmentUploadUrl, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
 import { archiveMimeType } from './media-type-rules';
+import { WHATSAPP_BACKUP_DAYS } from '@/lib/storage/attachment-retention';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { downloadWhatsAppMedia } from '@/lib/meta/whatsapp-media';
 
 /**
- * Documents the customer sent are part of the case: the copy is kept for 5 years (as the signed
- * contracts), even if the customer deletes the message on WhatsApp.
+ * Operational backup of received media for 30 days, independent of deletion on WhatsApp.
  */
-export const WHATSAPP_MEDIA_RETENTION_DAYS = 5 * 365;
+export const WHATSAPP_MEDIA_RETENTION_DAYS = WHATSAPP_BACKUP_DAYS;
 /** WhatsApp files are larger than the ones sent in the site chat; the R2 copy accepts up to this. */
-const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 32 * 1024 * 1024;
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/heic': 'heic', 'image/heif': 'heif', 'application/pdf': 'pdf',
   'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/webm': 'webm',
@@ -25,7 +25,7 @@ export type WhatsAppMediaToArchive = { tenantId: string; connectionId: string; c
 
 /**
  * Keeps a copy of a photo, PDF or voice message the customer sent on WhatsApp in the same private
- * storage (R2) as the files of the site chat, kept for 5 years. It shows on the lead card with the
+ * storage (R2) as the files of the site chat, kept for 30 days. It shows on the lead card with the
  * chat files; the copy is made when the file arrives, so deleting it on WhatsApp later changes nothing.
  */
 export async function archiveWhatsAppMedia(input: WhatsAppMediaToArchive) {
@@ -57,8 +57,8 @@ export async function archiveWhatsAppMedia(input: WhatsAppMediaToArchive) {
     || (await getPlatformWhatsAppRuntimeCredentials())?.systemUserAccessToken;
   if (!accessToken) return { archived: false, reason: 'no_token' };
 
-  const media = await downloadWhatsAppMedia({ mediaId, accessToken });
-  if (media.bytes.byteLength > MAX_ARCHIVE_BYTES) return { archived: false, reason: 'too_large' };
+  const media = await downloadWhatsAppMedia({ mediaId, accessToken, maxBytes: MAX_ARCHIVE_BYTES });
+  if (media.bytes.byteLength === 0 || media.bytes.byteLength > MAX_ARCHIVE_BYTES) return { archived: false, reason: 'too_large' };
   // Photos (also HEIC from iPhones), PDFs and audio, read from the file itself; anything else stays only on WhatsApp.
   const mimeType = archiveMimeType(media.bytes, message.type);
   if (!mimeType) return { archived: false, reason: 'type_not_kept' };

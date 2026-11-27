@@ -206,3 +206,20 @@ export async function deleteAttachmentObject(config: AttachmentStorageConfig, in
   if (!response.ok && response.status !== 404) throw new Error(`attachment_storage_delete_${response.status}`);
   return true;
 }
+
+/** Verify existence and exact recorded size without downloading the object. */
+export async function attachmentObjectExists(config:AttachmentStorageConfig,input:{key:string;sizeBytes:number;fetchImpl?:typeof fetch}){
+  const res=await (input.fetchImpl||fetch)(objectUrl(config,{method:'HEAD',key:input.key,expiresSeconds:60}),{method:'HEAD',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
+  return res.ok&&res.headers.get('content-length')===String(input.sizeBytes);
+}
+/** Fetch one bounded range, requiring exact range and size. Never use a partial 200 as a 206. */
+export async function readAttachmentRange(config:AttachmentStorageConfig,input:{key:string;size:number;start:number;end:number;fetchImpl?:typeof fetch}){
+  const {size,start,end}=input;const length=end-start+1;
+  if(![size,start,end].every(Number.isSafeInteger)||start<0||end>=size||length<1||length>2*1024*1024)return null;
+  const res=await (input.fetchImpl||fetch)(objectUrl(config,{method:'GET',key:input.key,expiresSeconds:60}),{method:'GET',headers:{Range:`bytes=${start}-${end}`},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(15000)});
+  if(res.status!==206||res.headers.get('content-range')!==`bytes ${start}-${end}/${size}`||res.headers.get('content-length')!==String(length)||!res.body){await res.body?.cancel().catch(()=>undefined);return null;}
+  const reader=res.body.getReader();const parts:Uint8Array[]=[];let count=0;
+  try{while(true){const item=await reader.read();if(item.done)break;count+=item.value.byteLength;if(count>length)return null;parts.push(item.value);}}
+  finally{await reader.cancel().catch(()=>undefined);}
+  return count===length?new Uint8Array(Buffer.concat(parts,count)):null;
+}

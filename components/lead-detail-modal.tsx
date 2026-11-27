@@ -687,47 +687,7 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
               </section>
             )}
 
-            {lead.chatAttachments?.length > 0 && (
-              <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                <div>
-                  <h3 className="font-heading text-sm font-semibold">Documentos enviados</h3>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Arquivos e áudios que o lead enviou na conversa. Ficam disponíveis por 7 dias e depois são apagados; baixe o que precisar guardar.
-                  </div>
-                </div>
-                <ul className="space-y-2">
-                  {lead.chatAttachments.map((attachment: any) => (
-                    <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-sm">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{attachment.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {attachment.mimeType === 'application/pdf' ? 'PDF' : String(attachment.mimeType).startsWith('audio/') ? '\u00c1udio' : 'Imagem'} • {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
-                          {' '}• enviado em {formatDateTime(attachment.createdAt)} • disponível até {formatDateTime(attachment.expiresAt)}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <a
-                          href={`/api/leads/${lead.id}/attachments/${attachment.id}`}
-                          className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
-                        >
-                          Baixar
-                        </a>
-                        {lead.canDeleteChatAttachments && (
-                          <button
-                            type="button"
-                            disabled={deletingAttachment === attachment.id}
-                            onClick={() => void deleteChatAttachment(attachment)}
-                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                          >
-                            Apagar
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+
 
             {!(lead.flipAiQualifications?.length > 0) && lead.flipAiConversation?.messages?.length > 0 && (
               <section className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
@@ -925,7 +885,48 @@ export function LeadDetailModal({ leadId, stages, onClose, onChange }: { leadId:
             )}
           </TabsContent>
 
-          <TabsContent value="documents" className="pb-6">
+          <TabsContent value="documents" className="pb-6 space-y-4">
+            {lead.chatAttachments?.length > 0 && (
+              <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <div>
+                  <h3 className="font-heading text-sm font-semibold">Documentos enviados</h3>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Backup dos arquivos da conversa: WhatsApp por 30 dias, chat do site por 7 dias. Baixe o que precisar guardar.
+                  </div>
+                </div>
+                <ul className="space-y-2">
+                  {lead.chatAttachments.map((attachment: any) => (
+                    <li key={attachment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{attachment.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {attachment.mimeType === 'application/pdf' ? 'PDF' : String(attachment.mimeType).startsWith('audio/') ? '\u00c1udio' : 'Imagem'} • {(attachment.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                          {' '}• enviado em {formatDateTime(attachment.createdAt)} • disponível até {formatDateTime(attachment.expiresAt)}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <a
+                          href={`/api/leads/${lead.id}/attachments/${attachment.id}`}
+                          className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                        >
+                          Baixar
+                        </a>
+                        {lead.canDeleteChatAttachments && (
+                          <button
+                            type="button"
+                            disabled={deletingAttachment === attachment.id}
+                            onClick={() => void deleteChatAttachment(attachment)}
+                            className="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Apagar
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             <LeadDocumentsTab leadId={leadId} />
           </TabsContent>
 

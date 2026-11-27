@@ -22,6 +22,7 @@ import { ConversationActions } from './conversation-actions';
 import { LeadDetailModal } from '@/components/lead-detail-modal';
 import { VoiceRecorder } from '@/components/inbox/voice-recorder';
 import { FileAttachButton } from '@/components/inbox/file-attach-button';
+import { CompleteAudio } from '@/components/inbox/complete-audio';
 import { MessageCorrectionDialog, MessageEditHistoryDialog } from '@/components/inbox/message-correction';
 import { isCorrectionText } from '@/lib/inbox/correction-rules';
 import { toast } from 'sonner';
@@ -284,7 +285,7 @@ function MessageMedia({ message, outbound }: { message: InboxMessage; outbound: 
   if (message.type === 'audio') {
     return (
       <div className="mb-1">
-        <audio controls preload="none" src={src} onError={() => setFailed(true)} className="h-10 w-64 max-w-full" />
+        <CompleteAudio key={message.id} src={src} onError={() => setFailed(true)} />
         <div className="mt-1">{save}</div>
       </div>
     );

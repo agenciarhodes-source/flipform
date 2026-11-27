@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const { aiCandidates, mediaToArchive, ...counts } = result;
     console.info('Meta WhatsApp webhook processed', { ...counts, aiCandidates: aiCandidates.length, mediaToArchive: mediaToArchive.length });
 
-    // A 7-day copy of the files in the private storage, shown on the lead card like the chat files.
+    // A 30-day copy of the files in the private storage, shown on the lead card like the chat files.
     for (const media of mediaToArchive) {
       const work = archiveWhatsAppMedia(media)
         .catch((error) => console.error('WhatsApp media archive failed', { errorType: error instanceof Error ? error.name : 'unknown' }));

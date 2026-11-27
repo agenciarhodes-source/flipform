@@ -381,7 +381,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
     ignored: 0,
     /** Conversations the Flip AI may answer after the quiet period (numbers with the AI on). */
     aiCandidates: [] as Array<{ tenantId: string; conversationId: string; inboundMessageId: string }>,
-    /** Photos, PDFs and voice messages to copy to the private storage for 7 days (numbers with the AI on). */
+    /** Photos, PDFs and voice messages to copy to private storage for 30 days, even with AI off. */
     mediaToArchive: [] as Array<{ tenantId: string; connectionId: string; conversationId: string; messageId: string }>,
   };
 
@@ -556,7 +556,7 @@ export async function processWhatsAppCloudWebhook(payload: any) {
               inboundMessageId: persisted.message.id,
             });
           }
-          // The kept copy (5 years) of what the customer sends, for every company, AI or not.
+          // The kept copy (30 days) of what the customer sends, for every company, AI or not.
           if (['image', 'document', 'audio'].includes(persisted.message.type)) {
             result.mediaToArchive.push({
               tenantId: connection.tenantId,
