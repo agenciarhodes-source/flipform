@@ -32,3 +32,11 @@ test('diagnostic guard denies production, aliases and active document processing
   assert.equal(stagingPdfDiagnosticAllowed({...env,VERCEL_URL:'flipform-abc123-agenciarhodes-2076s-projects.vercel.app'},hostname),false);
   assert.equal(stagingPdfDiagnosticAllowed({},hostname),false);
 });
+
+test('R2 diagnostic is restricted to the dedicated QA bucket and lifecycle',async()=>{
+  const {stagingPdfR2DiagnosticAllowed}=await import('../lib/gojus/worker-transport');
+  const hostname='flipform-staging-abc123-agenciarhodes-2076s-projects.vercel.app';
+  const env={FLIP_PDF_R2_TEST_ENABLED:'1',FLIP_PDF_QA_LIFECYCLE_VERIFIED:'1',FLIP_PDF_QA_R2_BUCKET:'flip-pdf-qa',VERCEL:'1',VERCEL_ENV:'production',VERCEL_URL:hostname};
+  assert.equal(stagingPdfR2DiagnosticAllowed(env,hostname),true);
+  for(const change of [{FLIP_PDF_QA_R2_BUCKET:'flipform-anexos'},{FLIP_PDF_QA_LIFECYCLE_VERIFIED:'0'},{GOJUS_PDF_WORKER_ENABLED:'1'},{GOJUS_PDF_R2_LIFECYCLE_VERIFIED:'1'},{FLIP_PDF_TRANSPORT_TEST_ENABLED:'1'},{VERCEL_URL:'flipform-abc123-agenciarhodes-2076s-projects.vercel.app'}])assert.equal(stagingPdfR2DiagnosticAllowed({...env,...change},hostname),false);
+});

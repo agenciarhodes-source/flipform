@@ -69,3 +69,36 @@ def test_transport_diagnostic_is_staging_only_and_rejects_real_manifests():
     assert worker.diagnostic_response({"diagnostic":"flip-pdf-transport-v1","nonce":nonce})=={"ok":True,"synthetic":True,"nonce":nonce}
     with pytest.raises(ValueError):worker.diagnostic_response({"tenantId":"a","files":[],"outputUrl":"https://example.com"})
     with pytest.raises(ValueError):worker.diagnostic_response({"diagnostic":"flip-pdf-transport-v1","nonce":nonce,"extra":"data"})
+
+def test_r2_qa_isolated_bucket_scope_and_fixture():
+    env={"FLIP_PDF_R2_TEST_ENABLED":"1","FLIP_PDF_QA_LIFECYCLE_VERIFIED":"1","FLIP_PDF_QA_R2_BUCKET":"flip-pdf-qa","FLIP_PDF_QA_R2_ACCOUNT_ID":"a"*32,"VERCEL":"1","VERCEL_ENV":"production","VERCEL_URL":"flip-pdf-staging-abc123-agenciarhodes-2076s-projects.vercel.app"}
+    assert worker.r2_qa_enabled(env)
+    for change in ({"FLIP_PDF_QA_R2_BUCKET":"flipform-anexos"},{"GOJUS_PDF_R2_LIFECYCLE_VERIFIED":"1"},{"FLIP_PDF_TRANSPORT_TEST_ENABLED":"1"},{"FLIP_PDF_QA_LIFECYCLE_VERIFIED":"0"}):
+        assert not worker.r2_qa_enabled(dict(env,**change))
+    from base64 import b64decode
+    fixture=b64decode("iVBORw0KGgoAAAANSUhEUgAAAGQAAAB4CAIAAACLlMDjAAABEElEQVR4nO3QwQ3AIBDAsNL9dz5WIC+EZE8QZc3Mx5n/dsBLzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzAo2Z64D7TCw2rEAAAAASUVORK5CYII=")
+    assert len(fixture)==worker.QA_FIXTURE_SIZE and sha256(fixture).hexdigest()==worker.QA_FIXTURE_SHA256
+    tenant="qa-12345678-1234-4234-8234-123456789abc"
+    key="12345678-1234-4234-8234-123456789abd"
+    source=url("tenants/"+tenant+"/whatsapp/"+key).replace("/test-bucket/","/flip-pdf-qa/")
+    target=url("flip-pdf-temp/"+tenant+"/"+key+".pdf",True).replace("/test-bucket/","/flip-pdf-qa/")
+    manifest={"tenantId":tenant,"files":[{"url":source,"mime":"image/png","size":len(fixture)}],"outputUrl":target}
+    class Response(BytesIO):
+        def __init__(self,data):
+            super().__init__(data)
+            self.status=200
+            self.headers={"Content-Length":str(len(data))}
+    class Fake:
+        def __init__(self,data):self.data=data;self.uploaded=None
+        def open(self,request,timeout):
+            if request.get_method()=="GET":
+                assert request.full_url==source
+                return Response(self.data)
+            assert request.get_method()=="PUT" and request.full_url==target
+            self.uploaded=request.data
+            return Response(b"")
+    fake=Fake(fixture)
+    assert worker.process_qa(manifest,env,fake)["pages"]==1
+    assert fake.uploaded.startswith(b"%PDF-")
+    with pytest.raises(ValueError):worker.process_qa(manifest,env,Fake(b"x"*len(fixture)))
+    with pytest.raises(ValueError):worker.process_qa(dict(manifest,outputUrl=target.replace("/flip-pdf-qa/","/flipform-anexos/")),env,fake)

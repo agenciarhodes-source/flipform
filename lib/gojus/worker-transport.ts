@@ -23,3 +23,12 @@ export function stagingPdfDiagnosticAllowed(env:Record<string,string|undefined>,
     &&/^flipform-staging-[a-z0-9]+-agenciarhodes-2076s-projects\.vercel\.app$/.test(env.VERCEL_URL||'')
     &&hostname===env.VERCEL_URL;
 }
+
+/** QA accepts only the dedicated bucket, not the operational attachment storage configuration. */
+export function stagingPdfR2DiagnosticAllowed(env:Record<string,string|undefined>,hostname:string){
+  return env.FLIP_PDF_R2_TEST_ENABLED==='1'
+    &&env.FLIP_PDF_QA_LIFECYCLE_VERIFIED==='1'
+    &&env.FLIP_PDF_TRANSPORT_TEST_ENABLED!=='1'
+    &&env.FLIP_PDF_QA_R2_BUCKET==='flip-pdf-qa'
+    &&stagingPdfDiagnosticAllowed({...env,FLIP_PDF_TRANSPORT_TEST_ENABLED:'1'},hostname);
+}

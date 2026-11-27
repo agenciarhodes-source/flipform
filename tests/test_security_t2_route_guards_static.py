@@ -85,6 +85,7 @@ GUARDED = {
     # Fixed synthetic diagnostic: protected immutable Vercel staging hostname, flags fail closed,
     # no customer input or database/R2 access; independent token remains server-only.
     "diagnostics/flip-pdf/route.ts": "stagingPdfDiagnosticAllowed(process.env,req.nextUrl.hostname)",
+    "diagnostics/flip-pdf-r2/route.ts": "stagingPdfR2DiagnosticAllowed(process.env,req.nextUrl.hostname)",
     # PR01 Phase 1: always 404 when OFF; 503 when no M2M repository exists.
     "v1/status/route.ts": "apiV1Enabled(process.env)",
     # M2M route: bearer identity, tenant entitlement and distributed quota on every GET.
@@ -208,3 +209,16 @@ def test_flip_pdf_diagnostic_is_staging_only_and_does_not_access_customer_data()
     assert "GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1'" in guard
     assert "VERCEL_ENV==='production'" in guard
     assert "flipform-staging-" in guard and "hostname===env.VERCEL_URL" in guard
+
+def test_r2_qa_does_not_use_operational_storage_or_customer_input():
+    route=(API/"diagnostics/flip-pdf-r2/route.ts").read_text(encoding="utf-8")
+    qa=(ROOT/"lib/gojus/r2-qa.ts").read_text(encoding="utf-8")
+    assert route.index("if(!stagingPdfR2DiagnosticAllowed") < route.index("await runR2Qa(")
+    assert "req.nextUrl.searchParams.get('run')!=='1'" in route
+    assert "req.headers.get('x-vercel-oidc-token')" in route
+    assert "prisma" not in route and "prisma" not in qa
+    assert "config.bucket!=='flip-pdf-qa'" in qa and "FLIP_PDF_QA_R2_SECRET_ACCESS_KEY" in qa
+    assert "env.R2_ACCESS_KEY_ID" not in qa and "env.R2_SECRET_ACCESS_KEY" not in qa
+    assert "randomUUID()" in qa and "digest(original)!==FIXTURE_HASH" in qa
+    assert "digest(output)!==result.sha256" in qa
+    assert "head.status===404" in qa and "Promise.allSettled" in qa
