@@ -13,3 +13,13 @@ export function trustedPdfHeaders(input:{workerToken:string;oidcToken:string|nul
   if(!vercelRuntime||workerToken.length<32||workerToken.length>256||!/^[A-Za-z0-9_-]+$/.test(workerToken)||!oidcToken||oidcToken.length>8192||!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(oidcToken))return null;
   return {'Content-Type':'application/json','Authorization':`Bearer ${workerToken}`,'x-vercel-trusted-oidc-idp-token':oidcToken};
 }
+
+/** Strictly limited to the isolated staging deployment; aliases/custom hosts are rejected. */
+export function stagingPdfDiagnosticAllowed(env:Record<string,string|undefined>,hostname:string){
+  return env.FLIP_PDF_TRANSPORT_TEST_ENABLED==='1'
+    &&env.GOJUS_PDF_WORKER_ENABLED!=='1'
+    &&env.GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1'
+    &&env.VERCEL==='1'&&env.VERCEL_ENV==='production'
+    &&/^flipform-staging-[a-z0-9]+-agenciarhodes-2076s-projects\.vercel\.app$/.test(env.VERCEL_URL||'')
+    &&hostname===env.VERCEL_URL;
+}

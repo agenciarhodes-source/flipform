@@ -57,3 +57,15 @@ def test_real_pdf_conversion_with_mocked_private_r2_get_and_put():
     assert result=={"size":len(fake.uploaded),"sha256":sha256(fake.uploaded).hexdigest(),"pages":1}
     with pytest.raises(ValueError):
         worker.validate_manifest(dict(manifest,files=manifest["files"]*2),ENV)
+
+
+def test_transport_diagnostic_is_staging_only_and_rejects_real_manifests():
+    env={"FLIP_PDF_TRANSPORT_TEST_ENABLED":"1","VERCEL":"1","VERCEL_ENV":"production","VERCEL_URL":"flip-pdf-staging-abc123-agenciarhodes-2076s-projects.vercel.app"}
+    assert worker.diagnostic_enabled(env)
+    assert not worker.diagnostic_enabled(dict(env,GOJUS_PDF_R2_LIFECYCLE_VERIFIED="1"))
+    assert not worker.diagnostic_enabled(dict(env,VERCEL_URL="flip-pdf-production-abc123-agenciarhodes-2076s-projects.vercel.app"))
+    assert not worker.diagnostic_enabled({})
+    nonce="a"*32
+    assert worker.diagnostic_response({"diagnostic":"flip-pdf-transport-v1","nonce":nonce})=={"ok":True,"synthetic":True,"nonce":nonce}
+    with pytest.raises(ValueError):worker.diagnostic_response({"tenantId":"a","files":[],"outputUrl":"https://example.com"})
+    with pytest.raises(ValueError):worker.diagnostic_response({"diagnostic":"flip-pdf-transport-v1","nonce":nonce,"extra":"data"})
