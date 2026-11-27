@@ -22,7 +22,7 @@ export const POST=withPermission('LEADS_VIEW',async(req,session,ctx:{params:{id:
   const limit=await rateLimit({key:`gojus-pdf:${session.tenantId}`,limit:4,windowMs:60_000});
   if(!limit.allowed)return json('Muitas solicitações. Tente novamente depois.',429);
   try{
-    const result=await generateGoJusPdf({tenantId:session.tenantId,leadId:lead.id,conversationId:body.conversationId});
+    const result=await generateGoJusPdf({tenantId:session.tenantId,leadId:lead.id,conversationId:body.conversationId},req.headers.get('x-vercel-oidc-token'));
     if(!await tenantHasFeature(session.tenantId,'gojus_sheet'))return json('Recurso não disponível.',403);
     const current=await prisma.lead.findFirst({where:{...getLeadScopeForRole(session),id:lead.id,tenantId:session.tenantId},select:{id:true,assignedTo:true}});
     if(!current||!canEditLead(session.role,current,session.userId))return json('Sem permissão.',403);

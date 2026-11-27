@@ -6,6 +6,7 @@ import {signedClosingReview} from '@/lib/closing-documents/signed-review';
 import {createAttachmentDownloadUrl,deleteAttachmentObject,presignS3Url,resolveAttachmentStorage,type AttachmentStorageConfig} from '@/lib/storage/attachment-storage';
 import {planGoJusBundle,type BundleFile} from './pre-registration-rules';
 import {selectLatestCaseFiles,GOJUS_OUTPUT_LIMIT,GOJUS_INPUT_LIMIT} from './bundle-selection';
+import {trustedPdfEndpoint,trustedPdfHeaders} from './worker-transport';
 
 type Identity={tenantId:string;leadId:string;conversationId:string};
 export class GoJusBundleError extends Error{
@@ -14,11 +15,9 @@ export class GoJusBundleError extends Error{
 function workerConfig(){
   if(process.env.GOJUS_PDF_WORKER_ENABLED!=='1'||process.env.GOJUS_PDF_R2_LIFECYCLE_VERIFIED!=='1')return null;
   const token=process.env.GOJUS_PDF_WORKER_TOKEN||'';
-  try{
-    const url=new URL(process.env.GOJUS_PDF_WORKER_URL||'');
-    if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||url.pathname!=='/api/pdf'||token.length<32)return null;
-    return {url:url.href,token};
-  }catch{return null;}
+  const url=trustedPdfEndpoint(process.env.GOJUS_PDF_WORKER_URL||'',process.env.GOJUS_PDF_WORKER_HOST||'');
+  if(!url||token.length<32||token.length>256||!/^[A-Za-z0-9_-]+$/.test(token))return null;
+  return {url,token};
 }
 export function gojusPdfWorkerConfigured(){return workerConfig()!==null;}
 
@@ -68,15 +67,17 @@ async function boundedJson(response:Response){
   finally{await reader.cancel().catch(()=>undefined);}
   return JSON.parse(Buffer.concat(chunks,length).toString('utf8'));
 }
-export async function generateGoJusPdf(input:Identity){
+export async function generateGoJusPdf(input:Identity,oidcToken:string|null){
   const worker=workerConfig();const storage=resolveAttachmentStorage();
   if(!worker||!storage.ready)throw new GoJusBundleError('unavailable');
+  const headers=trustedPdfHeaders({workerToken:worker.token,oidcToken,vercelRuntime:process.env.VERCEL==='1'});
+  if(!headers)throw new GoJusBundleError('unavailable');
   const manifest=await selectManifest(input);
   const signal=AbortSignal.timeout(100_000);
   const key=`flip-pdf-temp/${input.tenantId}/${randomUUID()}.pdf`;
   const files=manifest.ordered.map(a=>({url:signedUrl(storage.config,'GET',a.objectKey),mime:a.mimeType,size:a.sizeBytes}));
   try{
-    const response=await fetch(worker.url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${worker.token}`},body:JSON.stringify({tenantId:input.tenantId,files,outputUrl:signedUrl(storage.config,'PUT',key)}),cache:'no-store',redirect:'error',signal});
+    const response=await fetch(worker.url,{method:'POST',headers,body:JSON.stringify({tenantId:input.tenantId,files,outputUrl:signedUrl(storage.config,'PUT',key)}),cache:'no-store',redirect:'error',signal});
     if(response.status===413)throw new GoJusBundleError('too_large');
     const result=await boundedJson(response);
     if(typeof result?.sha256!=='string'||!/^[a-f0-9]{64}$/.test(result.sha256)||!Number.isSafeInteger(result.size)||result.size<=0||result.size>GOJUS_OUTPUT_LIMIT||!Number.isSafeInteger(result.pages)||result.pages<1||result.pages>120)throw new GoJusBundleError('unavailable');
