@@ -5,8 +5,9 @@ import { findAccessibleInboxConversation } from '@/lib/inbox/access';
 import { connectionAccessToken } from '@/lib/meta/whatsapp-connection-token';
 import { getPlatformWhatsAppRuntimeCredentials } from '@/lib/meta/platform-settings';
 import { downloadWhatsAppMedia, WhatsAppMediaError } from '@/lib/meta/whatsapp-media';
-import { createAttachmentDownloadUrl, readAttachmentObject, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
-import { contentDisposition, mediaDownloadName, requestedRange, SERVE_INLINE_MAX_BYTES } from '@/lib/inbox/media-file-rules';
+import { attachmentObjectExists, readAttachmentRange, createAttachmentDownloadUrl, readAttachmentObject, resolveAttachmentStorage } from '@/lib/storage/attachment-storage';
+import { backupWindow } from '@/lib/storage/attachment-retention';
+import { audioChunkRange, contentDisposition, mediaDownloadName, requestedRange, SERVE_INLINE_MAX_BYTES, AUDIO_PLAYBACK_MAX_BYTES } from '@/lib/inbox/media-file-rules';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -47,7 +48,7 @@ function fileResponse(req: NextRequest, bytes: Uint8Array, input: { mimeType: st
 
 /**
  * The photo, audio, video or document of one WhatsApp message, for whoever may see that
- * conversation in the Inbox. The kept copy (private storage, 5 years) comes first, so the file
+ * conversation in the Inbox. The kept copy (private storage, 30 days) comes first, so the file
  * still opens after Meta drops it (30 days) or the customer deletes it; otherwise it is read from
  * Meta. `?download=1` saves it with a proper name, on any phone or computer.
  */
@@ -62,27 +63,38 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
 
   const metadata = metadataOf(message.metadata);
   const download = req.nextUrl.searchParams.get('download') === '1';
+  const chunkedAudio=message.type==='audio'&&req.nextUrl.searchParams.get('audioChunk')==='1';
   const givenName = typeof metadata.mediaFileName === 'string' ? metadata.mediaFileName : null;
 
   // The copy kept in the private storage.
   const storage = resolveAttachmentStorage();
   const copy = storage.ready
     ? await prisma.chatAttachment.findFirst({
-      where: { tenantId: session.tenantId, conversationId: message.conversationId, clientMessageId: message.id, status: 'ready', expiresAt: { gt: new Date() } },
+      where: { tenantId: session.tenantId, conversationId: message.conversationId, clientMessageId: message.id, status: 'ready', expiresAt: { gt: new Date() }, AND: [backupWindow(new Date())] },
       select: { objectKey: true, mimeType: true, sizeBytes: true },
     }).catch(() => null)
     : null;
   if (copy && storage.ready) {
     const name = mediaDownloadName({ type: message.type, fileName: givenName, mimeType: copy.mimeType, sentAt: message.createdAt });
+    if(chunkedAudio){
+      if(copy.sizeBytes>AUDIO_PLAYBACK_MAX_BYTES)return NextResponse.json({error:'Áudio acima do limite.'},{status:413});
+      const range=audioChunkRange(req.headers.get('range'),copy.sizeBytes);
+      if(!range)return NextResponse.json({error:'Intervalo inválido.'},{status:416});
+      const bytes=await readAttachmentRange(storage.config,{key:copy.objectKey,size:copy.sizeBytes,...range}).catch(()=>null);
+      if(bytes)return new NextResponse(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength) as ArrayBuffer,{status:206,headers:{'Content-Type':copy.mimeType,'Content-Range':`bytes ${range.start}-${range.end}/${copy.sizeBytes}`,'Content-Length':String(bytes.byteLength),'Accept-Ranges':'bytes','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+    }else{
     // Voice notes, photos and small files go out from FlipForm itself: a link of the storage
     // expires in one minute, and a player asking for the rest of an audio later got nothing.
     if (copy.sizeBytes <= SERVE_INLINE_MAX_BYTES) {
       const bytes = await readAttachmentObject(storage.config, { key: copy.objectKey, maxBytes: SERVE_INLINE_MAX_BYTES }).catch(() => null);
-      if (bytes) return fileResponse(req, bytes, { mimeType: copy.mimeType, disposition: contentDisposition(download ? 'attachment' : 'inline', name) });
+      if (bytes && bytes.byteLength === copy.sizeBytes) return fileResponse(req, bytes, { mimeType: copy.mimeType, disposition: contentDisposition(download ? 'attachment' : 'inline', name) });
     }
+    if(await attachmentObjectExists(storage.config,{key:copy.objectKey,sizeBytes:copy.sizeBytes}).catch(()=>false)){
     const url = createAttachmentDownloadUrl(storage.config, { key: copy.objectKey, ...(download ? { downloadName: name } : {}) });
     // Large files (long videos): straight from the storage. The link lasts one minute and is never cached.
     return NextResponse.redirect(url, { status: 302, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    }
   }
 
   const mediaId = typeof metadata.mediaId === 'string' ? metadata.mediaId : '';
@@ -101,8 +113,10 @@ export const GET = withPermission('INBOX_VIEW', async (req: NextRequest, session
   if (!accessToken) return NextResponse.json({ error: 'WhatsApp não conectado para esta empresa.' }, { status: 409 });
 
   try {
-    const media = await downloadWhatsAppMedia({ mediaId, accessToken });
+    const media = await downloadWhatsAppMedia({ mediaId, accessToken, ...(chunkedAudio?{maxBytes:AUDIO_PLAYBACK_MAX_BYTES}:{}) });
     const name = mediaDownloadName({ type: message.type, fileName: givenName, mimeType: media.mimeType, sentAt: message.createdAt });
+    if(chunkedAudio&&!audioChunkRange(req.headers.get('range'),media.bytes.byteLength))return NextResponse.json({error:'Intervalo inválido.'},{status:416});
+    if(!chunkedAudio&&media.bytes.byteLength>SERVE_INLINE_MAX_BYTES&&(!requestedRange(req.headers.get('range'),media.bytes.byteLength)||requestedRange(req.headers.get('range'),media.bytes.byteLength)==='invalid'))return NextResponse.json({error:'Arquivo grande; use o backup quando disponível.'},{status:413});
     return fileResponse(req, media.bytes, { mimeType: media.mimeType, disposition: contentDisposition(download ? 'attachment' : 'inline', name) });
   } catch (error) {
     if (error instanceof WhatsAppMediaError && error.code === 'NOT_FOUND') {

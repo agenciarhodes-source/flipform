@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { requestedRange, SERVE_INLINE_MAX_BYTES } from '../lib/inbox/media-file-rules';
+import { requestedRange, SERVE_INLINE_MAX_BYTES, audioChunkRange, AUDIO_CHUNK_BYTES } from '../lib/inbox/media-file-rules';
 
 test('sem pedido de parte, o arquivo vai inteiro', () => {
   assert.equal(requestedRange(null, 1000), null);
@@ -28,3 +28,5 @@ test('parte fora do arquivo é recusada', () => {
 test('arquivos pequenos saem pelo FlipForm, abaixo do limite de resposta do servidor', () => {
   assert.ok(SERVE_INLINE_MAX_BYTES < 4.5 * 1024 * 1024);
 });
+
+test('audio chunks are bounded, including the last part',()=>{assert.deepEqual(audioChunkRange('bytes=0-'+(AUDIO_CHUNK_BYTES-1),AUDIO_CHUNK_BYTES+5),{start:0,end:AUDIO_CHUNK_BYTES-1});assert.deepEqual(audioChunkRange('bytes='+AUDIO_CHUNK_BYTES+'-'+(2*AUDIO_CHUNK_BYTES-1),AUDIO_CHUNK_BYTES+5),{start:AUDIO_CHUNK_BYTES,end:AUDIO_CHUNK_BYTES+4});assert.equal(audioChunkRange('bytes=0-',999),null);assert.equal(audioChunkRange('bytes=0-'+AUDIO_CHUNK_BYTES,2*AUDIO_CHUNK_BYTES),null);});

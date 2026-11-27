@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   buildAttachmentObjectKey,
+  readAttachmentRange, attachmentObjectExists,
   createAttachmentDownloadUrl,
   createAttachmentUploadUrl,
   deleteAttachmentObject,
@@ -96,3 +97,5 @@ test('link de download força o nome do arquivo e a assinatura cobre esse parâm
   assert.match(url, /response-content-disposition=attachment%3B%20filename%3D%22comprovante%20endere_o\.pdf%22%3B%20filename%2A%3DUTF-8%27%27comprovante%2520endere%25C3%25A7o\.pdf/);
   assert.match(url, /X-Amz-Signature=0ecabcd6346aeab9994ef8d793d2b801c65fbd13c58b62611da9550340c91e4f$/);
 });
+
+test('range reads reject truncation and mismatched responses',async()=>{const input={key:'k',size:8,start:2,end:4};const good=(async()=>new Response(new Uint8Array([2,3,4]),{status:206,headers:{'content-range':'bytes 2-4/8','content-length':'3'}})) as typeof fetch;assert.deepEqual(await readAttachmentRange(config,{...input,fetchImpl:good}),new Uint8Array([2,3,4]));const bad=(async()=>new Response(new Uint8Array([2,3]),{status:206,headers:{'content-range':'bytes 2-4/8','content-length':'3'}})) as typeof fetch;assert.equal(await readAttachmentRange(config,{...input,fetchImpl:bad}),null);const head=(async()=>new Response(null,{status:200,headers:{'content-length':'8'}})) as typeof fetch;assert.equal(await attachmentObjectExists(config,{key:'k',sizeBytes:8,fetchImpl:head}),true);assert.equal(await attachmentObjectExists(config,{key:'k',sizeBytes:9,fetchImpl:head}),false);});
