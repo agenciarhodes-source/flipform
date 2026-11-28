@@ -109,8 +109,8 @@ def process(payload, env=os.environ, opener=None, expected_input_sha256=None):
             raise BundleError("Upload failed")
     return {"sha256":result.output_sha256, "size":len(result.pdf), "pages":result.page_count}
 
-QA_FIXTURE_SHA256 = "1fc478b876c24eba5daffb5c2cddb7cdbaa748795ad8fede80bc1c04aee21682"
-QA_FIXTURE_SIZE = 329
+QA_FIXTURE_SHA256 = "c00cf2cc0bdba6ec502e7330a2c4b54e792d4d0135adf2e965d4573b57ddf234"
+QA_FIXTURE_SIZE = 98
 QA_UUID = r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"
 
 def r2_qa_enabled(env):

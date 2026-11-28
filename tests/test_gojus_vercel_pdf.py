@@ -76,7 +76,7 @@ def test_r2_qa_isolated_bucket_scope_and_fixture():
     for change in ({"FLIP_PDF_QA_R2_BUCKET":"flipform-anexos"},{"GOJUS_PDF_R2_LIFECYCLE_VERIFIED":"1"},{"FLIP_PDF_TRANSPORT_TEST_ENABLED":"1"},{"FLIP_PDF_QA_LIFECYCLE_VERIFIED":"0"}):
         assert not worker.r2_qa_enabled(dict(env,**change))
     from base64 import b64decode
-    fixture=b64decode("iVBORw0KGgoAAAANSUhEUgAAAGQAAAB4CAIAAACLlMDjAAABEElEQVR4nO3QwQ3AIBDAsNL9dz5WIC+EZE8QZc3Mx5n/dsBLzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzAo2Z64D7TCw2rEAAAAASUVORK5CYII=")
+    fixture=b64decode("iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKUlEQVR4nO3NMQEAAAjDMMC/52ECvlRA00nqs3m9AwAAAAAAAAAAgMMWx/EDPS4YA2MAAAAASUVORK5CYII=")
     assert len(fixture)==worker.QA_FIXTURE_SIZE and sha256(fixture).hexdigest()==worker.QA_FIXTURE_SHA256
     tenant="qa-12345678-1234-4234-8234-123456789abc"
     key="12345678-1234-4234-8234-123456789abd"

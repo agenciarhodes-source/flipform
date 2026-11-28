@@ -2,8 +2,8 @@ import 'server-only';
 import {createHash,randomUUID} from 'node:crypto';
 import {presignS3Url,resolveAttachmentStorage,type AttachmentStorageConfig} from '@/lib/storage/attachment-storage';
 
-const FIXTURE=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAGQAAAB4CAIAAACLlMDjAAABEElEQVR4nO3QwQ3AIBDAsNL9dz5WIC+EZE8QZc3Mx5n/dsBLzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzArMCswKzAo2Z64D7TCw2rEAAAAASUVORK5CYII=','base64');
-const FIXTURE_HASH='1fc478b876c24eba5daffb5c2cddb7cdbaa748795ad8fede80bc1c04aee21682';
+const FIXTURE=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKUlEQVR4nO3NMQEAAAjDMMC/52ECvlRA00nqs3m9AwAAAAAAAAAAgMMWx/EDPS4YA2MAAAAASUVORK5CYII=','base64');
+const FIXTURE_HASH='c00cf2cc0bdba6ec502e7330a2c4b54e792d4d0135adf2e965d4573b57ddf234';
 const MAX_RESULT=512*1024;
 function digest(bytes:Uint8Array){return createHash('sha256').update(bytes).digest('hex');}
 
@@ -31,7 +31,7 @@ async function bounded(response:Response,max:number){
   return Buffer.concat(chunks,size);
 }
 export async function runR2Qa(config:AttachmentStorageConfig,url:string,headers:Record<string,string>){
-  if(config.bucket!=='flip-pdf-qa'||url!=='https://flip-pdf-staging.vercel.app/api/pdf'||FIXTURE.length!==329||digest(FIXTURE)!==FIXTURE_HASH)return {ok:false,step:'config',cleanup:true};
+  if(config.bucket!=='flip-pdf-qa'||url!=='https://flip-pdf-staging.vercel.app/api/pdf'||FIXTURE.length!==98||digest(FIXTURE)!==FIXTURE_HASH)return {ok:false,step:'config',cleanup:true};
   const tenant='qa-'+randomUUID();
   const source=`tenants/${tenant}/whatsapp/${randomUUID()}`;
   const target=`flip-pdf-temp/${tenant}/${randomUUID()}.pdf`;
