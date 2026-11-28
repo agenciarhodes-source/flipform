@@ -73,7 +73,7 @@ def validate_manifest(payload, env):
         raise OverflowError("Input limit")
     return files, payload["outputUrl"]
 
-def process(payload, env=os.environ, opener=None):
+def process(payload, env=os.environ, opener=None, expected_input_sha256=None):
     files, output = validate_manifest(payload, env)
     opener = opener or build_opener(ProxyHandler({}), NoRedirect())
     deadline = time.monotonic() + 85
@@ -97,7 +97,10 @@ def process(payload, env=os.environ, opener=None):
             if len(data) != f["size"]:
                 raise BundleError("Object changed")
             raw = bytes(data)
-            sources.append(Source(raw, f["mime"], sha256(raw).hexdigest()))
+            actual = sha256(raw).hexdigest()
+            if expected_input_sha256 is not None and actual != expected_input_sha256:
+                raise BundleError("Invalid synthetic fixture")
+            sources.append(Source(raw, f["mime"], actual))
     result = build_bundle(sources)
     if len(result.pdf) > MAX_OUTPUT:
         raise OverflowError("Output limit")
@@ -106,8 +109,37 @@ def process(payload, env=os.environ, opener=None):
             raise BundleError("Upload failed")
     return {"sha256":result.output_sha256, "size":len(result.pdf), "pages":result.page_count}
 
+QA_FIXTURE_SHA256 = "c00cf2cc0bdba6ec502e7330a2c4b54e792d4d0135adf2e965d4573b57ddf234"
+QA_FIXTURE_SIZE = 98
+QA_UUID = r"[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"
+
+def r2_qa_enabled(env):
+    return (env.get("FLIP_PDF_R2_TEST_ENABLED") == "1"
+            and env.get("FLIP_PDF_QA_LIFECYCLE_VERIFIED") == "1"
+            and env.get("FLIP_PDF_TRANSPORT_TEST_ENABLED") != "1"
+            and env.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1"
+            and env.get("VERCEL") == "1"
+            and env.get("VERCEL_ENV") == "production"
+            and re.fullmatch(r"flip-pdf-staging-[a-z0-9]+-agenciarhodes-2076s-projects\.vercel\.app", env.get("VERCEL_URL", "")) is not None
+            and re.fullmatch(r"[a-f0-9]{32}", env.get("FLIP_PDF_QA_R2_ACCOUNT_ID", "")) is not None
+            and env.get("FLIP_PDF_QA_R2_BUCKET") == "flip-pdf-qa")
+
+def process_qa(payload, env, opener=None):
+    if not r2_qa_enabled(env):
+        raise BundleError("QA disabled")
+    scoped = {"R2_ACCOUNT_ID": env["FLIP_PDF_QA_R2_ACCOUNT_ID"], "R2_ATTACHMENTS_BUCKET": "flip-pdf-qa"}
+    files, _ = validate_manifest(payload, scoped)
+    tenant = payload["tenantId"]
+    if not re.fullmatch("qa-" + QA_UUID, tenant) or len(files) != 1:
+        raise BundleError("Invalid QA scope")
+    item = files[0]
+    if item["mime"] != "image/png" or item["size"] != QA_FIXTURE_SIZE or not re.fullmatch(QA_UUID, urlsplit(item["url"]).path.rsplit("/", 1)[-1]):
+        raise BundleError("Invalid QA fixture")
+    return process(payload, scoped, opener, expected_input_sha256=QA_FIXTURE_SHA256)
+
 def diagnostic_enabled(env):
     return (env.get("FLIP_PDF_TRANSPORT_TEST_ENABLED") == "1"
+            and env.get("FLIP_PDF_R2_TEST_ENABLED") != "1"
             and env.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1"
             and env.get("VERCEL") == "1"
             and env.get("VERCEL_ENV") == "production"
@@ -134,7 +166,9 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         token = os.environ.get("GOJUS_PDF_WORKER_TOKEN", "")
         diagnostic = diagnostic_enabled(os.environ)
-        if (not diagnostic and os.environ.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1") or len(token) < 32 or not hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()):
+        qa = r2_qa_enabled(os.environ)
+        test_requested = os.environ.get("FLIP_PDF_R2_TEST_ENABLED") == "1" or os.environ.get("FLIP_PDF_TRANSPORT_TEST_ENABLED") == "1"
+        if (test_requested and not (qa or diagnostic)) or (not (qa or diagnostic) and os.environ.get("GOJUS_PDF_R2_LIFECYCLE_VERIFIED") != "1") or len(token) < 32 or not hmac.compare_digest(self.headers.get("Authorization", "").encode(), ("Bearer " + token).encode()):
             return self.reply(403, {"error":"unavailable"})
         if self.headers.get("Content-Type") != "application/json" or self.headers.get("Transfer-Encoding"):
             return self.reply(400, {"error":"invalid_request"})
@@ -142,13 +176,13 @@ class handler(BaseHTTPRequestHandler):
             return self.reply(503, {"error":"busy"})
         try:
             n = int(self.headers.get("Content-Length", "0"))
-            if not 0 < n <= (256 if diagnostic else MAX_MANIFEST):
+            if not 0 < n <= (256 if diagnostic else 8192 if qa else MAX_MANIFEST):
                 return self.reply(413, {"error":"limit"})
             raw = self.rfile.read(n)
             if len(raw) != n:
                 return self.reply(400, {"error":"invalid_request"})
             payload = json.loads(raw)
-            result = diagnostic_response(payload) if diagnostic else process(payload)
+            result = diagnostic_response(payload) if diagnostic else process_qa(payload, os.environ) if qa else process(payload)
             return self.reply(200, result)
         except OverflowError:
             return self.reply(413, {"error":"limit"})
