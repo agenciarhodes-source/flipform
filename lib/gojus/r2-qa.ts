@@ -11,11 +11,12 @@ function digest(bytes:Uint8Array){return createHash('sha256').update(bytes).dige
 export function qaStorage(env:NodeJS.ProcessEnv){
   if(env.FLIP_PDF_QA_R2_BUCKET!=='flip-pdf-qa')return null;
   const result=resolveAttachmentStorage({
+    NODE_ENV:env.NODE_ENV,
     R2_ACCOUNT_ID:env.FLIP_PDF_QA_R2_ACCOUNT_ID,
     R2_ATTACHMENTS_BUCKET:'flip-pdf-qa',
     R2_ACCESS_KEY_ID:env.FLIP_PDF_QA_R2_ACCESS_KEY_ID,
     R2_SECRET_ACCESS_KEY:env.FLIP_PDF_QA_R2_SECRET_ACCESS_KEY,
-  } as NodeJS.ProcessEnv);
+  });
   return result.ready?result.config:null;
 }
 function sign(config:AttachmentStorageConfig,method:'GET'|'PUT'|'HEAD'|'DELETE',key:string,headers?:Record<string,string>){
